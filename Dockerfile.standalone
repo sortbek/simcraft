@@ -1,0 +1,48 @@
+# --- Stage 1: Build the Frontend ---
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY frontend/ .
+ENV DESKTOP_BUILD=1
+ENV NEXT_PUBLIC_API_URL=""
+RUN npm run build
+
+# --- Stage 2: Build the Backend ---
+FROM rust:1.88-bookworm AS backend-builder
+WORKDIR /build
+COPY backend/Cargo.toml ./
+COPY backend/core/ core/
+COPY backend/server/ server/
+RUN cargo build --release -p simhammer-server
+
+# --- Stage 3: Final Runtime ---
+FROM debian:bookworm-slim
+# Install runtime & build dependencies for SimC and data fetching
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl jq git make g++ libcurl4-openssl-dev libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy built frontend
+COPY --from=frontend-builder /app/out /app/frontend
+
+# Copy compiled backend
+COPY --from=backend-builder /build/target/release/simhammer-server /usr/local/bin/simhammer-server
+
+# Support dynamic data copying
+COPY backend/core/season-config.json /app/default_season_config.json
+COPY standalone-entrypoint.sh /app/standalone-entrypoint.sh
+RUN chmod +x /app/standalone-entrypoint.sh
+
+ENV DATA_DIR=/app/resources/data
+ENV BIND_HOST=0.0.0.0
+ENV PORT=8000
+ENV FRONTEND_DIR=/app/frontend
+
+EXPOSE 8000
+VOLUME ["/app/resources/data", "/app/resources/simc_repo", "/app/db"]
+
+ENTRYPOINT ["/app/standalone-entrypoint.sh"]
+CMD ["simhammer-server"]

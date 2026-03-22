@@ -4,4 +4,4 @@
 export const API_URL =
   typeof window !== "undefined" && window.electronAPI
     ? "http://127.0.0.1:17384"
-    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
