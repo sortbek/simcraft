@@ -2,6 +2,17 @@ name: Desktop Build
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to build (all, windows, linux, macos)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - windows
+          - linux
+          - macos
   push:
     tags:
       - "v*"
@@ -26,6 +37,10 @@ jobs:
             simc_binary: simc
 
     runs-on: ${{ matrix.os }}
+    if: >-
+      github.event_name == 'push' ||
+      inputs.platform == 'all' ||
+      inputs.platform == matrix.platform
 
     steps:
       - uses: actions/checkout@v4
