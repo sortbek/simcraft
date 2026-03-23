@@ -6,8 +6,7 @@
     "web": "docker compose up --build",
     "desktop:dev": "npm run kill && cd desktop && npm run dev",
     "desktop:build": "cd desktop && npm run build",
-    "desktop:build:linux": "docker compose --profile build-linux up build-linux --build",
-    "desktop:publish": "cd desktop && npm run publish",
+"desktop:publish": "cd desktop && npm run publish",
     "kill": "node scripts/kill-ports.js",
     "build:simc": "cd desktop && npm run build:simc"
   }

@@ -41,7 +41,7 @@ RUN git clone --depth 1 https://github.com/simulationcraft/simc.git /tmp/simc \
     && cd /tmp/simc \
     && if [ "$SIMC_VERSION" != "HEAD" ]; then git fetch --depth 1 origin "$SIMC_VERSION" && git checkout FETCH_HEAD; fi \
     && cd engine \
-    && make LTO=1 NO_DEBUG=1 -j$(nproc) OPENSSL=0 OPTS="-ffast-math -fomit-frame-pointer" \
+    && make LTO=1 NO_DEBUG=1 SC_NO_NETWORKING=1 -j$(nproc) OPTS="-ffast-math -fomit-frame-pointer" \
     && cp simc /usr/local/bin/simc \
     && rm -rf /tmp/simc
 

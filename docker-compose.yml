@@ -36,15 +36,6 @@ services:
       - ./backend/resources/simc:/mount/simc
     entrypoint: ["sh", "-c", "cp -r /out/data/* /mount/data/ && cp -r /out/simc/* /mount/simc/ && echo 'Resources ready.'"]
 
-  build-linux:
-    profiles: ["build-linux"]
-    build:
-      context: .
-      dockerfile: desktop/Dockerfile.linux
-      args:
-        - SIMC_VERSION=${SIMC_VERSION:-HEAD}
-    volumes:
-      - ./desktop/dist/linux:/dist
 
 volumes:
   simhammer-db:

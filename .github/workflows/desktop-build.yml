@@ -12,6 +12,7 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -67,7 +68,7 @@ jobs:
         shell: bash
         run: |
           cd "${{ runner.temp }}/simc/engine"
-          make LTO=1 NO_DEBUG=1 -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) OPENSSL=0 OPTS="-ffast-math -fomit-frame-pointer"
+          make LTO=1 NO_DEBUG=1 SC_NO_NETWORKING=1 -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) OPTS="-ffast-math -fomit-frame-pointer"
 
       - name: Install SimC binary
         shell: bash
