@@ -51,22 +51,22 @@ jobs:
 
       # -- SimC --
       - name: Clone SimC
-        run: |
-          git clone --depth 1 https://github.com/simulationcraft/simc.git /tmp/simc
         shell: bash
+        run: git clone --depth 1 https://github.com/simulationcraft/simc.git "${{ runner.temp }}/simc"
 
       - name: Build SimC (Windows)
         if: matrix.platform == 'windows'
         shell: cmd
         run: |
-          cd /tmp/simc
+          cd "${{ runner.temp }}\simc"
           cmake -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_GUI=OFF -DBUILD_TESTING=OFF -DCMAKE_CXX_FLAGS_RELEASE="/O2 /Ob3 /GL /fp:fast /DNDEBUG" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="/LTCG"
           cmake --build build --config Release --target simc
 
       - name: Build SimC (Unix)
         if: matrix.platform != 'windows'
+        shell: bash
         run: |
-          cd /tmp/simc/engine
+          cd "${{ runner.temp }}/simc/engine"
           make LTO=1 NO_DEBUG=1 -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) OPENSSL=0 OPTS="-ffast-math -fomit-frame-pointer"
 
       - name: Install SimC binary
@@ -74,9 +74,9 @@ jobs:
         run: |
           mkdir -p backend/resources/simc
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            cp /tmp/simc/build/Release/simc.exe backend/resources/simc/simc.exe
+            cp "${{ runner.temp }}/simc/build/Release/simc.exe" backend/resources/simc/simc.exe
           else
-            cp /tmp/simc/engine/simc backend/resources/simc/simc
+            cp "${{ runner.temp }}/simc/engine/simc" backend/resources/simc/simc
           fi
 
       # -- Game Data --
