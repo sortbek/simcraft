@@ -1,0 +1,11 @@
+name: Desktop Build (macOS)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    uses: ./.github/workflows/desktop-build-platform.yml
+    with:
+      platform: macos
+      os: macos-latest

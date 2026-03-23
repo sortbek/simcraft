@@ -1,0 +1,11 @@
+name: Desktop Build (Windows)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    uses: ./.github/workflows/desktop-build-platform.yml
+    with:
+      platform: windows
+      os: windows-latest

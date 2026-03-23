@@ -1,0 +1,11 @@
+name: Desktop Build (Linux)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    uses: ./.github/workflows/desktop-build-platform.yml
+    with:
+      platform: linux
+      os: ubuntu-latest

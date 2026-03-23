@@ -1,46 +1,21 @@
-name: Desktop Build
+name: Desktop Build (Platform)
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       platform:
-        description: "Platform to build (all, windows, linux, macos)"
-        required: false
-        default: "all"
-        type: choice
-        options:
-          - all
-          - windows
-          - linux
-          - macos
-  push:
-    tags:
-      - "v*"
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
 
 env:
   SIMC_VERSION: HEAD
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-            simc_binary: simc.exe
-          - os: ubuntu-latest
-            platform: linux
-            simc_binary: simc
-          - os: macos-latest
-            platform: macos
-            simc_binary: simc
-
-    runs-on: ${{ matrix.os }}
-    if: >-
-      github.event_name == 'push' ||
-      inputs.platform == 'all' ||
-      inputs.platform == matrix.platform
+    runs-on: ${{ inputs.os }}
 
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +46,7 @@ jobs:
         run: git clone --depth 1 https://github.com/simulationcraft/simc.git "${{ runner.temp }}/simc"
 
       - name: Build SimC (Windows)
-        if: matrix.platform == 'windows'
+        if: inputs.platform == 'windows'
         shell: cmd
         run: |
           cd "${{ runner.temp }}\simc"
@@ -79,7 +54,7 @@ jobs:
           cmake --build build --config Release --target simc
 
       - name: Build SimC (Unix)
-        if: matrix.platform != 'windows'
+        if: inputs.platform != 'windows'
         shell: bash
         run: |
           cd "${{ runner.temp }}/simc/engine"
@@ -89,7 +64,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p backend/resources/simc
-          if [ "${{ matrix.platform }}" = "windows" ]; then
+          if [ "${{ inputs.platform }}" = "windows" ]; then
             cp "${{ runner.temp }}/simc/build/Release/simc.exe" backend/resources/simc/simc.exe
           else
             cp "${{ runner.temp }}/simc/engine/simc" backend/resources/simc/simc
@@ -106,7 +81,6 @@ jobs:
             echo "  $f"
             curl -sL -o "$f" "https://www.raidbots.com/static/data/live/$f"
           done
-          # Copy season-config.json
           cp ../../core/season-config.json ./season-config.json 2>/dev/null || true
 
       # -- Frontend --
@@ -132,28 +106,10 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: simhammer-${{ matrix.platform }}
+          name: simhammer-${{ inputs.platform }}
           path: |
             desktop/dist/*.exe
             desktop/dist/*.dmg
             desktop/dist/*.AppImage
             desktop/dist/*.deb
           if-no-files-found: error
-
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*
-          generate_release_notes: true
