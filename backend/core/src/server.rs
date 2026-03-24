@@ -430,7 +430,14 @@ async fn create_sim(
         store_clone.update_progress(&job_id_clone, 20, "Simulating", "");
         match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options).await {
             Ok(output) => {
-                let parsed = result_parser::parse_simc_result(&output.json);
+                let mut parsed = result_parser::parse_simc_result(&output.json);
+                // Inject realm from simc input into parsed result
+                for line in simc_input.lines() {
+                    if let Some(val) = line.trim().strip_prefix("server=") {
+                        parsed["realm"] = json!(val);
+                        break;
+                    }
+                }
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
                 store_clone.set_result(&job_id_clone, result_str, raw_str);
@@ -601,11 +608,31 @@ async fn create_droptimizer_sim(
     })
 }
 
+#[derive(Debug, Deserialize)]
+struct ListSimsQuery {
+    #[serde(default)]
+    player: String,
+    #[serde(default)]
+    realm: String,
+}
+
 #[cfg(feature = "desktop")]
 async fn list_sims(
     store: web::Data<Arc<dyn JobStorage>>,
 ) -> HttpResponse {
-    let summaries = store.list_recent(20);
+    let summaries = store.list_recent(20, None, None);
+    HttpResponse::Ok().json(summaries)
+}
+
+#[cfg(not(feature = "desktop"))]
+async fn list_sims_filtered(
+    query: web::Query<ListSimsQuery>,
+    store: web::Data<Arc<dyn JobStorage>>,
+) -> HttpResponse {
+    if query.player.is_empty() || query.realm.is_empty() {
+        return HttpResponse::BadRequest().json(json!({"detail": "player and realm are required"}));
+    }
+    let summaries = store.list_recent(20, Some(&query.player), Some(&query.realm));
     HttpResponse::Ok().json(summaries)
 }
 
@@ -1110,6 +1137,10 @@ pub async fn start_with_storage_bind(
             app = app
                 .route("/api/sims", web::get().to(list_sims))
                 .route("/api/system-stats", web::get().to(system_stats));
+        }
+        #[cfg(not(feature = "desktop"))]
+        {
+            app = app.route("/api/sims", web::get().to(list_sims_filtered));
         }
 
         // Serve static frontend files in production (not in dev mode)
