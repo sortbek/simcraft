@@ -154,7 +154,7 @@ impl JobStorage for PostgresStorage {
                 // Garbage collect oldest jobs beyond limit
                 client.execute(
                     "DELETE FROM jobs WHERE id NOT IN (SELECT id FROM jobs ORDER BY created_at DESC LIMIT $1)",
-                    &[&(super::MAX_JOBS as i64)],
+                    &[&(*super::MAX_JOBS as i64)],
                 ).await.ok();
             });
         });
