@@ -10,12 +10,39 @@ SimulationCraft made simple. Run sims from your browser or download the desktop 
 - **Top Gear** — Find the best gear combination from your bags, bank, and vault
 - **Drop Finder** — Find the best dungeon/raid drops for your character
 - **Stat Weights** — See which stats matter most for your character
+- **Sim History** — Browse recent simulation results (desktop: all sims, web: per character)
+- **Expert Mode** — Inject custom SimC at specific points in the generated profile
 - **Desktop App** — Run everything locally with all your CPU cores, no server needed
 
-## Prerequisites
+## Quick Start
 
-- **Docker** — required for both web deployment and desktop development
-- **Node.js** 20+ and **Rust** — additionally required for desktop development
+### Option 1: Pre-built Docker image (recommended)
+
+```bash
+docker run -p 8000:8000 \
+  -v simhammer-data:/app/resources/data \
+  -v simhammer-data-full:/app/resources/data_full \
+  -v simhammer-simc:/app/resources/simc \
+  -v simhammer-db:/app/db \
+  ghcr.io/sortbek/simcraft:latest
+```
+
+Visit **http://localhost:8000** — everything runs from a single container.
+
+### Option 2: Build from source
+
+```bash
+git clone https://github.com/sortbek/simcraft.git
+cd simcraft
+docker compose -f docker-compose.dev.yml up --build
+```
+
+- Frontend: http://localhost:3000
+- API: http://localhost:8000
+
+### Option 3: Desktop app
+
+Grab the latest installer from [GitHub Releases](https://github.com/sortbek/simcraft/releases/latest).
 
 ## Project Structure
 
@@ -26,63 +53,44 @@ backend/               Cargo workspace (Rust)
   server/              simhammer-server binary (--desktop flag for desktop mode)
   resources/           Runtime resources (data/, simc/, frontend/) — gitignored
 desktop/               Electron app (main process, preload, build scripts)
-docker-compose.yml     Web deployment (two-container: frontend + backend)
+docker-compose.dev.yml Web development (three-container: frontend + backend + postgres)
 Dockerfile.standalone  Single-image build (frontend + backend in one container)
+Makefile               Build shortcuts
 ```
-
-## Web
-
-### Quick Start
-
-```bash
-git clone https://github.com/sortbek/simcraft.git
-cd simcraft
-docker compose -f docker-compose.dev.yml up --build
-```
-
-Docker handles everything automatically — compiles the Rust backend, builds SimC from source, fetches game data from Raidbots, and builds the Next.js frontend.
-
-- Frontend: http://localhost:3000
-- API: http://localhost:8000
-
-### Deploy to a VPS
-
-1. Clone the repo on your server
-2. Run `docker compose up -d --build`
-3. Set up nginx as reverse proxy (port 80 → 3000 for frontend, /api/ → 8000 for backend)
 
 ## Standalone Docker Image
 
-A single self-contained Docker image that serves both the frontend and backend from one container on one port — no Docker Compose, no nginx, no separate frontend container needed.
+A single self-contained Docker image published to **GitHub Container Registry** on every push to master. Serves both the frontend and backend from one container on one port.
 
-### Build
-
-```bash
-make build-standalone
-```
-
-### Run
+### Pull and run
 
 ```bash
-make run-standalone
-```
-
-Or manually with explicit volume paths:
-
-```bash
-docker run -it -p 8000:8000 \
+docker run -p 8000:8000 \
   -v simhammer-data:/app/resources/data \
   -v simhammer-data-full:/app/resources/data_full \
   -v simhammer-simc:/app/resources/simc \
   -v simhammer-db:/app/db \
-  simhammer-standalone
+  ghcr.io/sortbek/simcraft:latest
 ```
 
-Visit **http://localhost:8000** — the Rust server handles everything.
+Or use the Makefile shortcuts:
+
+```bash
+make build-standalone   # Build locally
+make run-standalone     # Run with persistent volumes
+```
+
+### Using PostgreSQL instead of SQLite
+
+```bash
+docker run -p 8000:8000 \
+  -e DATABASE_URL=postgres://user:pass@host/simhammer \
+  ghcr.io/sortbek/simcraft:latest
+```
+
+The server auto-detects the database type from the URL prefix.
 
 ### How it works
-
-The standard web deployment uses two containers (frontend + backend) and requires a reverse proxy to stitch them together. The standalone image eliminates all of that:
 
 **At build time** — Docker produces a single **Alpine-based** image containing:
 - The Next.js frontend compiled as a **static export** (`out/` folder of HTML/JS/CSS)
@@ -101,11 +109,7 @@ The standard web deployment uses two containers (frontend + backend) and require
 - `GET /_next/*` — served as static files from the baked-in `out/` folder
 - Everything else — falls back to the appropriate static HTML page (SPA routing)
 
-Because the frontend is built with `NEXT_PUBLIC_API_URL=""`, all API calls compile to relative URLs (e.g. `/api/sim`), so the browser talks to the same origin it loaded the UI from — no CORS, no proxy needed.
-
 ### Persistent volumes
-
-The volumes cache the heavy work across container restarts:
 
 | Volume | Contents | Without it |
 |--------|----------|------------|
@@ -114,16 +118,24 @@ The volumes cache the heavy work across container restarts:
 | `simhammer-simc` | Persistent cache for the `simc` binary + digest | Re-downloaded from Docker Hub on every start |
 | `simhammer-db` | SQLite job history | Lost on every restart |
 
-### Trade-offs vs. two-container setup
+## Web (two-container)
 
-| | Standalone | Two-container |
-|---|---|---|
-| Containers | 1 | 2 (+ nginx) |
-| First start | **Fast** (Registry download, ~30 sec) | Fast (SimC baked in at image build) |
-| Subsequent starts | Fast (cached volumes) | Fast |
-| Game data freshness | Always latest (fetched at start) | Pinned to image build time |
-| SimC freshness | Auto-updates from Docker Hub | Pinned to image build time |
-| Image build time | **Very Fast** (Alpine-based, no C++ compile) | ~10 min (includes SimC compile) |
+### Development
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Docker handles everything — compiles the Rust backend, builds SimC from source, fetches game data from Raidbots, and builds the Next.js frontend.
+
+- Frontend: http://localhost:3000
+- API: http://localhost:8000
+
+### Deploy to a VPS
+
+1. Clone the repo on your server
+2. Run `docker compose up -d --build`
+3. Set up nginx as reverse proxy (port 80 → 3000 for frontend, /api/ → 8000 for backend)
 
 ## Desktop
 
@@ -180,15 +192,15 @@ Output goes to `desktop/dist/`.
 
 ## Architecture
 
-### Web (two-container)
-```
-Browser → Next.js (3000) → Rust/Actix-web (8000) → SQLite → simc subprocess
-```
-
 ### Standalone (single container)
 ```
 Browser → Rust/Actix-web (8000) ─── static files (frontend/out/)
                                 └── API handlers → SQLite → simc subprocess
+```
+
+### Web (two-container)
+```
+Browser → Next.js (3000) → Rust/Actix-web (8000) → SQLite/PostgreSQL → simc subprocess
 ```
 
 ### Desktop
@@ -196,7 +208,13 @@ Browser → Rust/Actix-web (8000) ─── static files (frontend/out/)
 Electron → Next.js → Rust/Actix-web (17384) → MemoryStorage → simc subprocess
 ```
 
-Both web modes and the desktop app use the same Next.js frontend and the same Rust core library (`simhammer-core`). The core provides API routes, addon parsing, profileset generation, and simc process management. Storage is abstracted via a `JobStorage` trait — the web server uses `SqliteStorage`, the desktop app uses `MemoryStorage`.
+All three modes use the same Next.js frontend and the same Rust core library (`simhammer-core`). The core provides API routes, addon parsing, profileset generation, and simc process management. Storage is abstracted via a `JobStorage` trait — web uses `SqliteStorage` or `PostgresStorage`, desktop uses `MemoryStorage`.
+
+### Job retention
+
+Jobs are automatically garbage collected on insert. Defaults:
+- **Desktop**: last 50 sims
+- **Web**: last 200 sims
 
 ## Environment Variables
 
@@ -204,8 +222,13 @@ Both web modes and the desktop app use the same Next.js frontend and the same Ru
 |----------|---------|-------------|
 | `SIMC_PATH` | `/usr/local/bin/simc` | Path to SimulationCraft binary |
 | `DATA_DIR` | `./resources/data` | Path to game data JSON files |
-| `DATABASE_URL` | `simhammer.db` | SQLite database path (web only) |
+| `DATABASE_URL` | `simhammer.db` | SQLite path or `postgres://` URL (web only) |
 | `PORT` | `8000` | Server port |
 | `BIND_HOST` | `0.0.0.0` | Server bind address |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API URL (frontend build-time) |
 | `FRONTEND_DIR` | _(unset)_ | Path to static frontend files (standalone mode only) |
+
+## CI/CD
+
+- **Desktop builds** — GitHub Actions builds Windows (NSIS), macOS (DMG with code signing + notarization), and Linux (AppImage/deb) on tagged releases
+- **Docker image** — Automatically published to `ghcr.io/sortbek/simcraft` on push to master (multi-arch: amd64 + arm64)
