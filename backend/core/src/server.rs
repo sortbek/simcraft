@@ -601,6 +601,13 @@ async fn create_droptimizer_sim(
     })
 }
 
+async fn list_sims(
+    store: web::Data<Arc<dyn JobStorage>>,
+) -> HttpResponse {
+    let summaries = store.list_recent(20);
+    HttpResponse::Ok().json(summaries)
+}
+
 async fn get_sim_status(
     path: web::Path<String>,
     store: web::Data<Arc<dyn JobStorage>>,
@@ -1077,6 +1084,7 @@ pub async fn start_with_storage_bind(
         #[cfg(feature = "desktop")]
         { app = app.app_data(stats_data.clone()); }
         let mut app = app
+            .route("/api/sims", web::get().to(list_sims))
             .route("/api/sim", web::post().to(create_sim))
             .route("/api/top-gear/sim", web::post().to(create_top_gear_sim))
             .route("/api/sim/{id}", web::get().to(get_sim_status))

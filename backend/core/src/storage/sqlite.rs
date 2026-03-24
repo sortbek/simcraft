@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use rusqlite::{params, Connection};
 
-use crate::models::{Job, JobStatus};
+use crate::models::{Job, JobStatus, JobSummary, extract_result_summary};
 use super::JobStorage;
 
 pub struct SqliteStorage {
@@ -127,6 +127,31 @@ impl JobStorage for SqliteStorage {
             params![id],
             Self::row_to_job,
         ).ok()
+    }
+
+    fn list_recent(&self, limit: usize) -> Vec<JobSummary> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json
+             FROM jobs ORDER BY created_at DESC LIMIT ?1"
+        ).unwrap();
+        stmt.query_map(params![limit as u32], |row| {
+            let status_str: String = row.get(1)?;
+            let result_json: Option<String> = row.get(7)?;
+            let (player_name, player_class, dps) = extract_result_summary(&result_json);
+            Ok(JobSummary {
+                id: row.get(0)?,
+                status: Self::str_to_status(&status_str),
+                sim_type: row.get(2)?,
+                created_at: row.get(3)?,
+                fight_style: row.get(4)?,
+                iterations: row.get::<_, u32>(5)?,
+                error_message: row.get(6)?,
+                player_name,
+                player_class,
+                dps,
+            })
+        }).unwrap().filter_map(|r| r.ok()).collect()
     }
 
     fn update_status(&self, id: &str, status: JobStatus) {

@@ -38,13 +38,25 @@ const simTypes = [
     ),
     matchPaths: ["/drop-finder"],
   },
+  {
+    href: "/history",
+    label: "History",
+    description: "View your recent simulation results.",
+    icon: (
+      <svg className="w-5 h-5 text-gold" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="8" r="6.5" />
+        <path d="M8 4.5V8l2.5 2.5" />
+      </svg>
+    ),
+    matchPaths: ["/history"],
+  },
 ];
 
 export default function SimTypeCards() {
   const pathname = usePathname();
 
   return (
-    <div className="grid grid-cols-3 gap-3 mb-8">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
       {simTypes.map((sim) => {
         const isActive = sim.matchPaths.some(
           (p) => pathname === p || pathname.startsWith(p + "/")

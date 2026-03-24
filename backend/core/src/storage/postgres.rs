@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use tokio_postgres::{Client, NoTls};
 
-use crate::models::{Job, JobStatus};
+use crate::models::{Job, JobStatus, JobSummary, extract_result_summary};
 use super::JobStorage;
 
 pub struct PostgresStorage {
@@ -164,6 +164,36 @@ impl JobStorage for PostgresStorage {
                      FROM jobs WHERE id = $1",
                     &[&id],
                 ).await.ok().flatten().map(|row| Self::row_to_job(&row))
+            })
+        })
+    }
+
+    fn list_recent(&self, limit: usize) -> Vec<JobSummary> {
+        self.blocking(|client| {
+            self.rt.block_on(async {
+                let rows = client.query(
+                    "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json
+                     FROM jobs ORDER BY created_at DESC LIMIT $1",
+                    &[&(limit as i64)],
+                ).await.unwrap_or_default();
+                rows.iter().map(|row| {
+                    let status_str: String = row.get(1);
+                    let iterations: i32 = row.get(5);
+                    let result_json: Option<String> = row.get(7);
+                    let (player_name, player_class, dps) = extract_result_summary(&result_json);
+                    JobSummary {
+                        id: row.get(0),
+                        status: Self::str_to_status(&status_str),
+                        sim_type: row.get(2),
+                        created_at: row.get(3),
+                        fight_style: row.get(4),
+                        iterations: iterations as u32,
+                        error_message: row.get(6),
+                        player_name,
+                        player_class,
+                        dps,
+                    }
+                }).collect()
             })
         })
     }

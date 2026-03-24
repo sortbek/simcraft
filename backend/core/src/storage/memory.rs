@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::models::{Job, JobStatus};
+use crate::models::{Job, JobStatus, JobSummary, extract_result_summary};
 use super::JobStorage;
 
 pub struct MemoryStorage {
@@ -23,6 +23,28 @@ impl JobStorage for MemoryStorage {
 
     fn get(&self, id: &str) -> Option<Job> {
         self.jobs.lock().unwrap().get(id).cloned()
+    }
+
+    fn list_recent(&self, limit: usize) -> Vec<JobSummary> {
+        let jobs = self.jobs.lock().unwrap();
+        let mut entries: Vec<&Job> = jobs.values().collect();
+        entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        entries.truncate(limit);
+        entries.iter().map(|j| {
+            let (player_name, player_class, dps) = extract_result_summary(&j.result_json);
+            JobSummary {
+                id: j.id.clone(),
+                status: j.status.clone(),
+                sim_type: j.sim_type.clone(),
+                created_at: j.created_at.clone(),
+                fight_style: j.fight_style.clone(),
+                iterations: j.iterations,
+                error_message: j.error_message.clone(),
+                player_name,
+                player_class,
+                dps,
+            }
+        }).collect()
     }
 
     fn update_status(&self, id: &str, status: JobStatus) {
