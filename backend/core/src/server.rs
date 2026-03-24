@@ -601,6 +601,7 @@ async fn create_droptimizer_sim(
     })
 }
 
+#[cfg(feature = "desktop")]
 async fn list_sims(
     store: web::Data<Arc<dyn JobStorage>>,
 ) -> HttpResponse {
@@ -1084,7 +1085,6 @@ pub async fn start_with_storage_bind(
         #[cfg(feature = "desktop")]
         { app = app.app_data(stats_data.clone()); }
         let mut app = app
-            .route("/api/sims", web::get().to(list_sims))
             .route("/api/sim", web::post().to(create_sim))
             .route("/api/top-gear/sim", web::post().to(create_top_gear_sim))
             .route("/api/sim/{id}", web::get().to(get_sim_status))
@@ -1106,7 +1106,11 @@ pub async fn start_with_storage_bind(
             .route("/api/instances/{id}/drops", web::get().to(get_instance_drops))
             .route("/health", web::get().to(health_check));
         #[cfg(feature = "desktop")]
-        { app = app.route("/api/system-stats", web::get().to(system_stats)); }
+        {
+            app = app
+                .route("/api/sims", web::get().to(list_sims))
+                .route("/api/system-stats", web::get().to(system_stats));
+        }
 
         // Serve static frontend files in production (not in dev mode)
         if let Some(ref dir) = frontend {
