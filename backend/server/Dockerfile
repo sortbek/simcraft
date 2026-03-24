@@ -53,7 +53,9 @@ RUN git clone --depth 1 https://github.com/simulationcraft/simc.git /tmp/simc \
 # --- Runtime ---
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl locales && rm -rf /var/lib/apt/lists/* \
+    && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
 
 COPY --from=builder /build/target/release/simhammer-server /usr/local/bin/simhammer-server
 COPY --from=simc-builder /usr/local/bin/simc /usr/local/bin/simc
