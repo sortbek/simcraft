@@ -6,6 +6,10 @@ pub mod postgres;
 
 use crate::models::{Job, JobStatus, JobSummary};
 
+/// Maximum number of jobs to retain. Oldest jobs are deleted on insert.
+/// Override at compile time with: RUSTFLAGS='--cfg max_jobs="500"'
+pub const MAX_JOBS: usize = if cfg!(feature = "desktop") { 50 } else { 200 };
+
 /// Trait for job persistence — implemented by in-memory store (desktop) and SQLite (web).
 pub trait JobStorage: Send + Sync {
     fn insert(&self, job: Job);

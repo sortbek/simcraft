@@ -115,6 +115,12 @@ impl JobStorage for SqliteStorage {
                 job.created_at,
             ],
         ).expect("Failed to insert job");
+
+        // Garbage collect oldest jobs beyond limit
+        conn.execute(
+            "DELETE FROM jobs WHERE id NOT IN (SELECT id FROM jobs ORDER BY created_at DESC LIMIT ?1)",
+            params![super::MAX_JOBS as u32],
+        ).ok();
     }
 
     fn get(&self, id: &str) -> Option<Job> {
