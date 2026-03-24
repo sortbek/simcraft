@@ -2,10 +2,15 @@ name: Deploy to Hetzner
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Publish Docker Image"]
+    types: [completed]
+    branches: [master]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
@@ -14,19 +19,19 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd ~/simhammer
-            git pull origin master
+            docker pull ghcr.io/sortbek/simcraft:latest
 
-            # Check latest simc commit and only rebuild if changed
-            LATEST_SIMC=$(git ls-remote https://github.com/simulationcraft/simc.git HEAD | cut -f1)
-            CURRENT_SIMC=$(cat .simc-version 2>/dev/null || echo "")
-            if [ "$LATEST_SIMC" != "$CURRENT_SIMC" ]; then
-              echo "SimC updated: $CURRENT_SIMC -> $LATEST_SIMC"
-              export SIMC_VERSION="$LATEST_SIMC"
-              echo "$LATEST_SIMC" > .simc-version
-            else
-              echo "SimC unchanged, using cached build"
-            fi
+            # Stop existing container if running
+            docker stop simhammer 2>/dev/null || true
+            docker rm simhammer 2>/dev/null || true
 
-            docker compose up -d --build
+            # Run standalone image
+            docker run -d --name simhammer --restart unless-stopped \
+              -p 8000:8000 \
+              -v simhammer-data:/app/resources/data \
+              -v simhammer-data-full:/app/resources/data_full \
+              -v simhammer-simc:/app/resources/simc \
+              -v simhammer-db:/app/db \
+              ghcr.io/sortbek/simcraft:latest
+
             docker image prune -f
