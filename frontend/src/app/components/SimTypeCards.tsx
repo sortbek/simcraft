@@ -1,19 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
-interface SimType {
-  href: string;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  matchPaths: string[];
-  desktopOnly?: boolean;
-}
-
-const simTypes: SimType[] = [
+const simTypes = [
   {
     href: "/quick-sim",
     label: "Quick Sim",
@@ -59,20 +49,15 @@ const simTypes: SimType[] = [
       </svg>
     ),
     matchPaths: ["/history"],
-    desktopOnly: true,
   },
 ];
 
 export default function SimTypeCards() {
   const pathname = usePathname();
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => { setIsDesktop(!!window.electronAPI); }, []);
-
-  const visible = simTypes.filter((s) => !s.desktopOnly || isDesktop);
 
   return (
-    <div className={`grid gap-3 mb-8 ${visible.length > 3 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
-      {visible.map((sim) => {
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+      {simTypes.map((sim) => {
         const isActive = sim.matchPaths.some(
           (p) => pathname === p || pathname.startsWith(p + "/")
         );
