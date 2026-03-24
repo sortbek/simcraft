@@ -341,6 +341,16 @@ fn apply_talent_override(simc_input: &str, talents: &str) -> String {
     }
 }
 
+/// Extract server= (realm) from a simc input string and inject it into a parsed result.
+fn inject_realm(parsed: &mut Value, simc_input: &str) {
+    for line in simc_input.lines() {
+        if let Some(val) = line.trim().strip_prefix("server=") {
+            parsed["realm"] = json!(val);
+            break;
+        }
+    }
+}
+
 /// Spawn a staged (top-gear / droptimizer) simulation in a background task.
 fn spawn_staged_sim(
     store: Arc<dyn JobStorage>,
@@ -380,7 +390,8 @@ fn spawn_staged_sim(
                     .and_then(|v| v.get("_combo_metadata").cloned())
                     .and_then(|v| serde_json::from_value(v).ok());
 
-                let parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
+                let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
+                inject_realm(&mut parsed, &simc_input);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
                 store.set_result(&job_id, result_str, raw_str);
@@ -431,13 +442,7 @@ async fn create_sim(
         match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options).await {
             Ok(output) => {
                 let mut parsed = result_parser::parse_simc_result(&output.json);
-                // Inject realm from simc input into parsed result
-                for line in simc_input.lines() {
-                    if let Some(val) = line.trim().strip_prefix("server=") {
-                        parsed["realm"] = json!(val);
-                        break;
-                    }
-                }
+                inject_realm(&mut parsed, &simc_input);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
                 store_clone.set_result(&job_id_clone, result_str, raw_str);
