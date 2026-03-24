@@ -168,19 +168,23 @@ impl JobStorage for PostgresStorage {
         })
     }
 
-    fn list_recent(&self, limit: usize) -> Vec<JobSummary> {
+    fn list_recent(&self, limit: usize, player: Option<&str>, realm: Option<&str>) -> Vec<JobSummary> {
+        let player = player.map(String::from);
+        let realm = realm.map(String::from);
         self.blocking(|client| {
             self.rt.block_on(async {
+                let fetch_limit = if player.is_some() || realm.is_some() { 200i64 } else { limit as i64 };
                 let rows = client.query(
-                    "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json
+                    "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json, simc_input
                      FROM jobs ORDER BY created_at DESC LIMIT $1",
-                    &[&(limit as i64)],
+                    &[&fetch_limit],
                 ).await.unwrap_or_default();
-                rows.iter().map(|row| {
+                let all: Vec<JobSummary> = rows.iter().map(|row| {
                     let status_str: String = row.get(1);
                     let iterations: i32 = row.get(5);
                     let result_json: Option<String> = row.get(7);
-                    let (player_name, player_class, dps) = extract_result_summary(&result_json);
+                    let simc_input: String = row.get::<_, Option<String>>(8).unwrap_or_default();
+                    let s = extract_result_summary(&result_json, &simc_input);
                     JobSummary {
                         id: row.get(0),
                         status: Self::str_to_status(&status_str),
@@ -189,11 +193,24 @@ impl JobStorage for PostgresStorage {
                         fight_style: row.get(4),
                         iterations: iterations as u32,
                         error_message: row.get(6),
-                        player_name,
-                        player_class,
-                        dps,
+                        player_name: s.player_name,
+                        player_class: s.player_class,
+                        realm: s.realm,
+                        dps: s.dps,
                     }
-                }).collect()
+                }).collect();
+                if player.is_none() && realm.is_none() {
+                    return all;
+                }
+                all.into_iter().filter(|j| {
+                    if let Some(ref p) = player {
+                        if j.player_name.as_deref() != Some(p) { return false; }
+                    }
+                    if let Some(ref r) = realm {
+                        if j.realm.as_deref() != Some(r) { return false; }
+                    }
+                    true
+                }).take(limit).collect()
             })
         })
     }

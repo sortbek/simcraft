@@ -25,14 +25,21 @@ impl JobStorage for MemoryStorage {
         self.jobs.lock().unwrap().get(id).cloned()
     }
 
-    fn list_recent(&self, limit: usize) -> Vec<JobSummary> {
+    fn list_recent(&self, limit: usize, player: Option<&str>, realm: Option<&str>) -> Vec<JobSummary> {
         let jobs = self.jobs.lock().unwrap();
         let mut entries: Vec<&Job> = jobs.values().collect();
         entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        entries.truncate(limit);
-        entries.iter().map(|j| {
-            let (player_name, player_class, dps) = extract_result_summary(&j.result_json);
-            JobSummary {
+        let mut results: Vec<JobSummary> = Vec::new();
+        for j in entries {
+            if results.len() >= limit { break; }
+            let s = extract_result_summary(&j.result_json, &j.simc_input);
+            if let Some(p) = player {
+                if s.player_name.as_deref() != Some(p) { continue; }
+            }
+            if let Some(r) = realm {
+                if s.realm.as_deref() != Some(r) { continue; }
+            }
+            results.push(JobSummary {
                 id: j.id.clone(),
                 status: j.status.clone(),
                 sim_type: j.sim_type.clone(),
@@ -40,11 +47,13 @@ impl JobStorage for MemoryStorage {
                 fight_style: j.fight_style.clone(),
                 iterations: j.iterations,
                 error_message: j.error_message.clone(),
-                player_name,
-                player_class,
-                dps,
-            }
-        }).collect()
+                player_name: s.player_name,
+                player_class: s.player_class,
+                realm: s.realm,
+                dps: s.dps,
+            });
+        }
+        results
     }
 
     fn update_status(&self, id: &str, status: JobStatus) {
