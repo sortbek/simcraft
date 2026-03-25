@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSimContext } from "../components/SimContext";
-import { detectClass } from "../lib/parseAddonString";
 import { API_URL } from "../lib/api";
+import type { SeasonConfigResponse, DifficultyDef, DungeonCategory } from "../lib/types";
 
 interface Instance {
   id: number;
@@ -54,56 +54,15 @@ const QUALITY_COLORS: Record<number, string> = {
   6: "text-amber-300",
 };
 
-type Category = "raids" | "normal-dungeons" | "mplus";
+type Category = "raids" | string; // "raids" or dungeon category keys like "mplus", "normal-dungeons"
 
-type Difficulty = "lfr" | "normal" | "heroic" | "mythic";
-
-const RAID_DIFFICULTIES: { value: Difficulty; label: string }[] = [
-  { value: "lfr", label: "Raid Finder" },
-  { value: "normal", label: "Normal" },
-  { value: "heroic", label: "Heroic" },
-  { value: "mythic", label: "Mythic" },
-];
-
-const MPLUS_DIFFICULTIES = [
-  { value: "heroic", label: "Heroic" },
-  { value: "mythic", label: "Mythic 0" },
-  { value: "mythic+2", label: "+2" },
-  { value: "mythic+3", label: "+3" },
-  { value: "mythic+4", label: "+4" },
-  { value: "mythic+5", label: "+5" },
-  { value: "mythic+6", label: "+6" },
-  { value: "mythic+7", label: "+7" },
-  { value: "mythic+8", label: "+8" },
-  { value: "mythic+9", label: "+9" },
-  { value: "mythic+10", label: "+10" },
-];
-
-const NORMAL_DUNGEON_DIFFICULTIES = [
-  { value: "normal", label: "Normal" },
-  { value: "heroic", label: "Heroic" },
-  { value: "mythic", label: "Mythic" },
-];
-
-function getTrackInfo(item: DropItem, raidDiff: Difficulty, dungeonDiff: string): TrackInfo | null {
+function getTrackInfo(item: DropItem, raidDiff: string, dungeonDiff: string): TrackInfo | null {
   return item.dungeon_info?.[dungeonDiff] ?? item.difficulty_info?.[raidDiff] ?? null;
-}
-
-function effectiveIlvl(item: DropItem, raidDiff: Difficulty, dungeonDiff: string): number {
-  return getTrackInfo(item, raidDiff, dungeonDiff)?.ilvl ?? item.ilevel;
-}
-
-function effectiveQuality(item: DropItem, raidDiff: Difficulty, dungeonDiff: string): number {
-  return getTrackInfo(item, raidDiff, dungeonDiff)?.quality ?? item.quality;
-}
-
-function effectiveBonusId(item: DropItem, raidDiff: Difficulty, dungeonDiff: string): number | undefined {
-  return getTrackInfo(item, raidDiff, dungeonDiff)?.bonus_id;
 }
 
 function resolveUpgrade(
   item: DropItem,
-  raidDiff: Difficulty,
+  raidDiff: string,
   dungeonDiff: string,
   upgradeLevel: number,
   tracks: UpgradeTracks
@@ -117,14 +76,15 @@ function resolveUpgrade(
     };
   }
   const trackLevels = tracks[base.track];
-  if (!trackLevels) {
-    return { ilvl: base.ilvl, bonus_id: base.bonus_id, quality: base.quality };
-  }
+  if (!trackLevels) return { ilvl: base.ilvl, bonus_id: base.bonus_id, quality: base.quality };
   const target = trackLevels.find((t) => t.level === upgradeLevel);
-  if (!target) {
-    return { ilvl: base.ilvl, bonus_id: base.bonus_id, quality: base.quality };
-  }
+  if (!target) return { ilvl: base.ilvl, bonus_id: base.bonus_id, quality: base.quality };
   return { ilvl: target.ilvl, bonus_id: target.bonus_id, quality: target.quality };
+}
+
+function detectClass(simcInput: string): string | null {
+  const m = simcInput.match(/^(warrior|paladin|hunter|rogue|priest|death_knight|deathknight|shaman|mage|warlock|monk|demon_hunter|demonhunter|druid|evoker)\s*=/m);
+  return m ? m[1] : null;
 }
 
 function detectSpec(simcInput: string): string | null {
@@ -135,25 +95,32 @@ function detectSpec(simcInput: string): string | null {
 export default function DropFinderPage() {
   const { simcInput, fightStyle, threads, selectedTalent, targetCount, fightLength, customApl, simcHeader, simcBasePlayer, simcRaidActors, simcPostCombos, simcFooter } = useSimContext();
   const [instances, setInstances] = useState<Instance[]>([]);
+  const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string>("");
   const [drops, setDrops] = useState<Record<string, DropItem[]> | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [difficulty, setDifficulty] = useState<Difficulty>("heroic");
+  const [difficulty, setDifficulty] = useState<string>("heroic");
   const [dungeonDiff, setDungeonDiff] = useState("mythic+10");
   const [upgradeTracks, setUpgradeTracks] = useState<UpgradeTracks>({});
-  const [upgradeLevel, setUpgradeLevel] = useState<number>(0); // 0 = use base level from difficulty
+  const [upgradeLevel, setUpgradeLevel] = useState<number>(0);
 
   const className = useMemo(() => detectClass(simcInput), [simcInput]);
   const specName = useMemo(() => detectSpec(simcInput), [simcInput]);
   const hasCharacter = simcInput.trim().length >= 10;
 
+  // Load season config + instances + upgrade tracks
+  useEffect(() => {
+    fetch(`${API_URL}/api/season-config`).then((r) => r.json()).then(setSeasonConfig).catch(() => {});
+    fetch(`${API_URL}/api/instances`).then((r) => r.json()).then(setInstances).catch(() => {});
+    fetch(`${API_URL}/api/upgrade-tracks`).then((r) => r.json()).then(setUpgradeTracks).catch(() => {});
+  }, []);
+
   // Determine available upgrade levels from the current difficulty's track
   const currentTrackInfo = useMemo(() => {
     if (!drops) return null;
-    // Find the track from the first item with track info
     for (const items of Object.values(drops)) {
       for (const item of items) {
         const info = getTrackInfo(item, difficulty, dungeonDiff);
@@ -165,97 +132,98 @@ export default function DropFinderPage() {
     return null;
   }, [drops, difficulty, dungeonDiff, upgradeTracks]);
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/instances`)
-      .then((r) => r.json())
-      .then(setInstances)
-      .catch(() => {});
-    fetch(`${API_URL}/api/upgrade-tracks`)
-      .then((r) => r.json())
-      .then(setUpgradeTracks)
-      .catch(() => {});
-  }, []);
+  // Categorize instances using season config
+  const { raids, dungeonCats } = useMemo(() => {
+    if (!seasonConfig) return { raids: [] as Instance[], dungeonCats: [] as { cat: DungeonCategory; instances: Instance[] }[] };
 
-  useEffect(() => {
-    if (!selectedId) {
-      setDrops(null);
-      setSelected(new Set());
-      return;
+    const poolMap = new Map<number, Set<number>>();
+    for (const cat of seasonConfig.dungeon_categories) {
+      const meta = instances.find((i) => i.id === cat.poolInstanceId);
+      if (meta) {
+        poolMap.set(cat.poolInstanceId, new Set(meta.encounters.map((e) => e.id)));
+      }
     }
+
+    const raids: Instance[] = [];
+    const dungeonCats: { cat: DungeonCategory; instances: Instance[] }[] = seasonConfig.dungeon_categories.map(cat => ({ cat, instances: [] }));
+
+    for (const inst of instances) {
+      if (inst.type === "raid" && inst.id > 0) {
+        raids.push(inst);
+      } else if (inst.type === "dungeon") {
+        let placed = false;
+        for (const dc of dungeonCats) {
+          const pool = poolMap.get(dc.cat.poolInstanceId);
+          if (pool?.has(inst.id)) {
+            dc.instances.push(inst);
+            placed = true;
+            break;
+          }
+        }
+        if (!placed && dungeonCats.length > 0) {
+          // Default to first dungeon category
+          dungeonCats[dungeonCats.length - 1].instances.push(inst);
+        }
+      }
+    }
+    raids.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const dc of dungeonCats) {
+      dc.instances.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return { raids, dungeonCats };
+  }, [instances, seasonConfig]);
+
+  // Load drops when instance selection changes
+  useEffect(() => {
+    if (!selectedId) { setDrops(null); setSelected(new Set()); return; }
     setLoading(true);
     setSelected(new Set());
     const params = new URLSearchParams();
     if (className) params.set("class_name", className);
     if (specName) params.set("spec", specName);
     const qs = params.toString();
-    // "type:raid" -> /api/instances/type/raid/drops, else /api/instances/{id}/drops
     const url = selectedId.startsWith("type:")
       ? `${API_URL}/api/instances/type/${selectedId.slice(5)}/drops`
       : `${API_URL}/api/instances/${selectedId}/drops`;
     fetch(`${url}${qs ? `?${qs}` : ""}`)
       .then((r) => r.json())
-      .then((data) => {
-        setDrops(data.detail ? null : data);
-      })
+      .then((data) => { setDrops(data.detail ? null : data); })
       .catch(() => setDrops(null))
       .finally(() => setLoading(false));
   }, [selectedId, className, specName]);
 
   function toggleItem(itemId: number) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemId)) next.delete(itemId);
-      else next.add(itemId);
-      return next;
-    });
+    setSelected((prev) => { const next = new Set(prev); if (next.has(itemId)) next.delete(itemId); else next.add(itemId); return next; });
   }
-
   function selectAll() {
     if (!drops) return;
     const all = new Set<number>();
-    for (const items of Object.values(drops)) {
-      for (const item of items) all.add(item.item_id);
-    }
+    for (const items of Object.values(drops)) for (const item of items) all.add(item.item_id);
     setSelected(all);
   }
-
-  function selectNone() {
-    setSelected(new Set());
-  }
+  function selectNone() { setSelected(new Set()); }
 
   async function handleSubmit() {
     if (!drops || selected.size === 0) return;
     setError("");
     setSubmitting(true);
     try {
-      // Collect selected items with difficulty-adjusted ilvl
       const dropItems: DropItem[] = [];
       for (const items of Object.values(drops)) {
         for (const item of items) {
           if (selected.has(item.item_id)) {
             const resolved = resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks);
-            dropItems.push({
-              ...item,
-              ilevel: resolved.ilvl,
-              quality: resolved.quality,
-              bonus_ids: resolved.bonus_id ? [resolved.bonus_id] : [],
-            });
+            dropItems.push({ ...item, ilevel: resolved.ilvl, quality: resolved.quality, bonus_ids: resolved.bonus_id ? [resolved.bonus_id] : [] });
           }
         }
       }
-
       const res = await fetch(`${API_URL}/api/droptimizer/sim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          simc_input: simcInput,
-          drop_items: dropItems,
-          iterations: 10000,
-          fight_style: fightStyle,
-          target_error: 0.1,
-          desired_targets: targetCount,
-          max_time: fightLength,
-          threads,
+          simc_input: simcInput, drop_items: dropItems, iterations: 10000,
+          fight_style: fightStyle, target_error: 0.1, desired_targets: targetCount,
+          max_time: fightLength, threads,
           ...(selectedTalent ? { talents: selectedTalent } : {}),
           ...(customApl ? { custom_apl: customApl } : {}),
           ...(simcHeader ? { simc_header: simcHeader } : {}),
@@ -265,89 +233,62 @@ export default function DropFinderPage() {
           ...(simcFooter ? { simc_footer: simcFooter } : {}),
         }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `Server error ${res.status}`);
-      }
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.detail || `Server error ${res.status}`); }
       const data = await res.json();
       window.location.href = `/sim/${data.id}`;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to submit sim");
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   }
-
-  // Build 3 categories from instance data
-  const { raids, normalDungeons, mplusDungeons } = useMemo(() => {
-    const mplusMeta = instances.find((i) => i.id === -1);
-    const normalMeta = instances.find((i) => i.id === -32);
-    const mplusIds = new Set(mplusMeta?.encounters.map((e) => e.id) ?? []);
-    const normalIds = new Set(normalMeta?.encounters.map((e) => e.id) ?? []);
-
-    const raids: Instance[] = [];
-    const normalDungeons: Instance[] = [];
-    const mplusDungeons: Instance[] = [];
-
-    for (const inst of instances) {
-      if (inst.type === "raid" && inst.id > 0) {
-        raids.push(inst);
-      } else if (inst.type === "dungeon") {
-        if (mplusIds.has(inst.id)) mplusDungeons.push(inst);
-        else if (normalIds.has(inst.id)) normalDungeons.push(inst);
-        else normalDungeons.push(inst); // default to normal
-      }
-    }
-    raids.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    normalDungeons.sort((a, b) => a.name.localeCompare(b.name));
-    mplusDungeons.sort((a, b) => a.name.localeCompare(b.name));
-    return { raids, normalDungeons, mplusDungeons };
-  }, [instances]);
 
   const [category, setCategory] = useState<Category | "">("");
 
+  const isRaid = category === "raids";
+  const activeDungeonCat = dungeonCats.find(dc => dc.cat.key === category);
+  const isDungeon = !!activeDungeonCat;
   const selectedInstance = selectedId && !selectedId.startsWith("type:")
     ? instances.find((i) => String(i.id) === selectedId)
     : null;
-  const isRaid = category === "raids";
-  const isDungeon = category === "normal-dungeons" || category === "mplus";
-  const totalItems = drops
-    ? Object.values(drops).reduce((n, items) => n + items.length, 0)
-    : 0;
+  const totalItems = drops ? Object.values(drops).reduce((n, items) => n + items.length, 0) : 0;
+
+  // Get difficulty list for current category from season config
+  const activeDifficulties: DifficultyDef[] = useMemo(() => {
+    if (!seasonConfig) return [];
+    if (isRaid) return seasonConfig.raid_difficulties;
+    if (activeDungeonCat) return activeDungeonCat.cat.difficulties;
+    return [];
+  }, [seasonConfig, isRaid, activeDungeonCat]);
+
+  // Category tabs: raids + all dungeon categories from season config
+  const categoryTabs = useMemo(() => {
+    const tabs: { key: string; label: string; icon: string }[] = [
+      { key: "raids", label: "Raids", icon: "M8 1l2 4 4.5.7-3.2 3.1.8 4.5L8 11l-4.1 2.3.8-4.5L1.5 5.7 6 5z" },
+    ];
+    for (const dc of dungeonCats) {
+      const icon = dc.cat.key === "mplus"
+        ? "M8 1v14M1 8h14M4 4l8 8M12 4l-8 8"
+        : "M2 2h12v12H2zM5 5h6M5 8h6M5 11h3";
+      tabs.push({ key: dc.cat.key, label: dc.cat.label, icon });
+    }
+    return tabs;
+  }, [dungeonCats]);
 
   return (
     <div className="space-y-6">
       {/* Category selector */}
       <div className="grid grid-cols-3 gap-3">
-        {([
-          { key: "raids" as Category, label: "Raids", icon: "M8 1l2 4 4.5.7-3.2 3.1.8 4.5L8 11l-4.1 2.3.8-4.5L1.5 5.7 6 5z" },
-          { key: "normal-dungeons" as Category, label: "Dungeons", icon: "M2 2h12v12H2zM5 5h6M5 8h6M5 11h3" },
-          { key: "mplus" as Category, label: "Mythic+", icon: "M8 1v14M1 8h14M4 4l8 8M12 4l-8 8" },
-        ]).map((cat) => (
+        {categoryTabs.map((cat) => (
           <button
             key={cat.key}
-            onClick={() => {
-              setCategory(cat.key);
-              setSelectedId("");
-              setDrops(null);
-              setSelected(new Set());
-            }}
-            className={`card p-4 text-center transition-all ${
-              category === cat.key
-                ? "border-gold/50 bg-gold/[0.03]"
-                : "hover:border-gold/20"
-            }`}
+            onClick={() => { setCategory(cat.key); setSelectedId(""); setDrops(null); setSelected(new Set()); }}
+            className={`card p-4 text-center transition-all ${category === cat.key ? "border-gold/50 bg-gold/[0.03]" : "hover:border-gold/20"}`}
           >
-            <div className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center mb-2 ${
-              category === cat.key ? "bg-gold/20" : "bg-gold/10"
-            }`}>
+            <div className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center mb-2 ${category === cat.key ? "bg-gold/20" : "bg-gold/10"}`}>
               <svg className="w-5 h-5 text-gold" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d={cat.icon} />
               </svg>
             </div>
-            <p className={`text-[13px] font-semibold transition-colors ${
-              category === cat.key ? "text-gold" : "text-white"
-            }`}>
+            <p className={`text-[13px] font-semibold transition-colors ${category === cat.key ? "text-gold" : "text-white"}`}>
               {cat.label}
             </p>
           </button>
@@ -358,30 +299,20 @@ export default function DropFinderPage() {
       {category && (
         <div className="card p-5">
           <label className="label-text">
-            {category === "raids" ? "Select Raid" : category === "mplus" ? "Select Dungeon" : "Select Dungeon"}
+            {isRaid ? "Select Raid" : "Select Dungeon"}
           </label>
           <div className="flex flex-wrap gap-2">
-            {/* All button */}
             <button
-              onClick={() => {
-                setSelectedId(
-                  category === "raids" ? "type:raid" : "type:dungeon"
-                );
-              }}
+              onClick={() => setSelectedId(isRaid ? "type:raid" : "type:dungeon")}
               className={`px-4 py-2 rounded-lg text-[13px] font-medium transition-all border ${
                 selectedId === "type:raid" || selectedId === "type:dungeon"
                   ? "bg-white text-black border-white"
                   : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
               }`}
             >
-              All {category === "raids" ? "Raids" : "Dungeons"}
+              All {isRaid ? "Raids" : "Dungeons"}
             </button>
-            {(category === "raids"
-              ? raids
-              : category === "mplus"
-              ? mplusDungeons
-              : normalDungeons
-            ).map((inst) => (
+            {(isRaid ? raids : activeDungeonCat?.instances ?? []).map((inst) => (
               <button
                 key={inst.id}
                 onClick={() => setSelectedId(String(inst.id))}
@@ -398,46 +329,30 @@ export default function DropFinderPage() {
         </div>
       )}
 
-      {/* Difficulty selector for raids */}
-      {isRaid && selectedId && (
-        <div className="card p-5">
-          <label className="label-text">Difficulty</label>
-          <div className="flex gap-1.5">
-            {RAID_DIFFICULTIES.map((d) => (
-              <button
-                key={d.value}
-                onClick={() => { setDifficulty(d.value); setUpgradeLevel(0); }}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
-                  difficulty === d.value
-                    ? "bg-white text-black border-white"
-                    : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Dungeon difficulty selector */}
-      {isDungeon && selectedId && (
+      {/* Difficulty selector */}
+      {(isRaid || isDungeon) && selectedId && activeDifficulties.length > 0 && (
         <div className="card p-5">
           <label className="label-text">Difficulty</label>
           <div className="flex gap-1.5 flex-wrap">
-            {(category === "mplus" ? MPLUS_DIFFICULTIES : NORMAL_DUNGEON_DIFFICULTIES).map((d) => (
-              <button
-                key={d.value}
-                onClick={() => { setDungeonDiff(d.value); setUpgradeLevel(0); }}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
-                  dungeonDiff === d.value
-                    ? "bg-white text-black border-white"
-                    : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
+            {activeDifficulties.map((d) => {
+              const currentDiff = isRaid ? difficulty : dungeonDiff;
+              return (
+                <button
+                  key={d.key}
+                  onClick={() => {
+                    if (isRaid) { setDifficulty(d.key); } else { setDungeonDiff(d.key); }
+                    setUpgradeLevel(0);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
+                    currentDiff === d.key
+                      ? "bg-white text-black border-white"
+                      : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -450,9 +365,7 @@ export default function DropFinderPage() {
             <button
               onClick={() => setUpgradeLevel(0)}
               className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
-                upgradeLevel === 0
-                  ? "bg-white text-black border-white"
-                  : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
+                upgradeLevel === 0 ? "bg-white text-black border-white" : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
               }`}
             >
               Base
@@ -462,9 +375,7 @@ export default function DropFinderPage() {
                 key={lvl.level}
                 onClick={() => setUpgradeLevel(lvl.level)}
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
-                  upgradeLevel === lvl.level
-                    ? "bg-white text-black border-white"
-                    : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
+                  upgradeLevel === lvl.level ? "bg-white text-black border-white" : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
                 }`}
               >
                 {currentTrackInfo.name} {lvl.level}/{lvl.max_level}
@@ -476,15 +387,10 @@ export default function DropFinderPage() {
       )}
 
       {/* Filtering info */}
-      {className && (
-        <p className="text-xs text-gold">
-          Filtering for {specName || ""} {className.replace("_", " ")}
-        </p>
-      )}
-      {!className && (
-        <p className="text-xs text-muted">
-          Paste a SimC export above to filter drops for your class.
-        </p>
+      {className ? (
+        <p className="text-xs text-gold">Filtering for {specName || ""} {className.replace("_", " ")}</p>
+      ) : (
+        <p className="text-xs text-muted">Paste a SimC export above to filter drops for your class.</p>
       )}
 
       {/* Loading */}
@@ -499,9 +405,7 @@ export default function DropFinderPage() {
 
       {/* No drops */}
       {!loading && selectedId && !drops && (
-        <p className="text-sm text-muted text-center py-6">
-          No equippable drops found for this instance.
-        </p>
+        <p className="text-sm text-muted text-center py-6">No equippable drops found for this instance.</p>
       )}
 
       {/* Drops grouped by slot */}
@@ -509,26 +413,12 @@ export default function DropFinderPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted">
-              {selectedInstance?.name || (selectedId.startsWith("type:") ? `All ${category === "raids" ? "Raids" : "Dungeons"}` : "")} &mdash; {totalItems} items
-              {selected.size > 0 && (
-                <span className="text-gold ml-1.5">
-                  ({selected.size} selected)
-                </span>
-              )}
+              {selectedInstance?.name || (selectedId.startsWith("type:") ? `All ${isRaid ? "Raids" : "Dungeons"}` : "")} &mdash; {totalItems} items
+              {selected.size > 0 && <span className="text-gold ml-1.5">({selected.size} selected)</span>}
             </p>
             <div className="flex gap-2">
-              <button
-                onClick={selectAll}
-                className="text-[11px] text-gray-500 hover:text-white transition-colors"
-              >
-                Select all
-              </button>
-              <button
-                onClick={selectNone}
-                className="text-[11px] text-gray-500 hover:text-white transition-colors"
-              >
-                Clear
-              </button>
+              <button onClick={selectAll} className="text-[11px] text-gray-500 hover:text-white transition-colors">Select all</button>
+              <button onClick={selectNone} className="text-[11px] text-gray-500 hover:text-white transition-colors">Clear</button>
             </div>
           </div>
 
@@ -536,41 +426,33 @@ export default function DropFinderPage() {
             <div key={slot} className="card p-4">
               <h3 className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-3">
                 {slot}
-                <span className="text-gray-600 ml-1.5 normal-case tracking-normal font-normal">
-                  ({items.length})
-                </span>
+                <span className="text-gray-600 ml-1.5 normal-case tracking-normal font-normal">({items.length})</span>
               </h3>
               <div className="flex flex-wrap gap-2">
                 {items.map((item) => {
                   const isSelected = selected.has(item.item_id);
+                  const resolved = resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks);
+                  const effectiveBonusId = getTrackInfo(item, difficulty, dungeonDiff)?.bonus_id;
                   return (
                     <button
                       key={item.item_id}
                       onClick={() => toggleItem(item.item_id)}
                       className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-all border ${
-                        isSelected
-                          ? "bg-gold/10 border-gold/40"
-                          : "bg-surface-2 border-border hover:border-gray-500"
+                        isSelected ? "bg-gold/10 border-gold/40" : "bg-surface-2 border-border hover:border-gray-500"
                       }`}
                     >
-                      <img
-                        src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`}
-                        alt=""
-                        className="w-6 h-6 rounded"
-                      />
+                      <img src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`} alt="" className="w-6 h-6 rounded" />
                       <a
                         href={`https://www.wowhead.com/item=${item.item_id}`}
-                        data-wowhead={`item=${item.item_id}${effectiveBonusId(item, difficulty, dungeonDiff) ? `&bonus=${effectiveBonusId(item, difficulty, dungeonDiff)}` : ""}`}
+                        data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ""}`}
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className={`text-[12px] font-medium ${QUALITY_COLORS[resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks).quality] || "text-gray-400"}`}
+                        className={`text-[12px] font-medium ${QUALITY_COLORS[resolved.quality] || "text-gray-400"}`}
                       >
                         {item.name}
                       </a>
-                      <span className="text-[11px] text-gray-600 tabular-nums">
-                        {resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks).ilvl}
-                      </span>
+                      <span className="text-[11px] text-gray-600 tabular-nums">{resolved.ilvl}</span>
                     </button>
                   );
                 })}
@@ -578,14 +460,10 @@ export default function DropFinderPage() {
             </div>
           ))}
 
-          {/* Error */}
           {error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
-              {error}
-            </div>
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{error}</div>
           )}
 
-          {/* Simulate button */}
           <button
             onClick={handleSubmit}
             disabled={submitting || selected.size === 0 || !hasCharacter}
@@ -599,13 +477,9 @@ export default function DropFinderPage() {
                 </svg>
                 Starting sim…
               </>
-            ) : !hasCharacter ? (
-              "Paste SimC export to simulate"
-            ) : selected.size === 0 ? (
-              "Select items to simulate"
-            ) : (
-              `Find Upgrades (${selected.size} items)`
-            )}
+            ) : !hasCharacter ? "Paste SimC export to simulate"
+              : selected.size === 0 ? "Select items to simulate"
+              : `Find Upgrades (${selected.size} items)`}
           </button>
 
           {/* Sticky side button */}
@@ -633,9 +507,7 @@ export default function DropFinderPage() {
 
       {/* Empty state */}
       {!selectedId && !loading && !category && (
-        <p className="text-sm text-muted text-center py-6">
-          Select a category to get started.
-        </p>
+        <p className="text-sm text-muted text-center py-6">Select a category to get started.</p>
       )}
     </div>
   );
