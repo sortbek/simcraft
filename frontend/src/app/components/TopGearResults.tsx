@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useItemInfo, useEnchantInfo, useGemInfo, getIconUrl, getWowheadUrl, getWowheadData, QUALITY_COLORS } from "../lib/useItemInfo";
 import type { ItemInfo, EnchantInfo, GemInfo, ItemQuery } from "../lib/useItemInfo";
-import { SLOT_LABELS } from "../lib/parseAddonString";
+import { SLOT_LABELS } from "../lib/types";
 import { useWowheadTooltips } from "../lib/useWowheadTooltips";
 
 interface ResultItem {

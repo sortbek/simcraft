@@ -2,7 +2,7 @@ use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use crate::addon_parser::title_case;
+use crate::types::class_data::title_case;
 
 fn extract_version(raw: &Value) -> String {
     let version = raw.get("version").and_then(|v| v.as_str()).unwrap_or("");

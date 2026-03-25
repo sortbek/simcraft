@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useSimContext } from "./SimContext";
-import { parseTalentLoadouts } from "../lib/parseAddonString";
+import { parseTalentLoadouts } from "../lib/types";
 
 export default function TalentPicker() {
   const { simcInput, selectedTalent, setSelectedTalent } = useSimContext();

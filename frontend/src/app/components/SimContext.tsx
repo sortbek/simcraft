@@ -48,8 +48,13 @@ function readStored(key: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function readSessionString(key: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  return sessionStorage.getItem(key) ?? fallback;
+}
+
 export function SimProvider({ children }: { children: ReactNode }) {
-  const [simcInput, setSimcInput] = useState("");
+  const [simcInput, _setSimcInput] = useState(() => readSessionString("simhammer_simc_input", ""));
   const [fightStyle, setFightStyle] = useState("Patchwerk");
   const [threads, _setThreads] = useState(() => readStored("simhammer_threads", 0));
   const [maxCombinations, _setMaxCombinations] = useState(() => readStored("simhammer_max_combinations", 500));
@@ -62,6 +67,11 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [simcRaidActors, setSimcRaidActors] = useState("");
   const [simcPostCombos, setSimcPostCombos] = useState("");
   const [simcFooter, setSimcFooter] = useState("");
+
+  const setSimcInput = useCallback((v: string) => {
+    _setSimcInput(v);
+    try { sessionStorage.setItem("simhammer_simc_input", v); } catch {}
+  }, []);
 
   const setThreads = useCallback((v: number) => {
     _setThreads(v);
