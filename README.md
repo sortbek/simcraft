@@ -229,6 +229,7 @@ Jobs are automatically garbage collected on insert. Defaults:
 | `FRONTEND_DIR` | _(unset)_ | Path to static frontend files (standalone mode only) |
 | `MAX_JOBS` | `50` / `200` | Max jobs to retain (desktop / web). Oldest are deleted on insert |
 | `MAX_COMBINATIONS` | `500` | Max gear combinations for Top Gear sims |
+| `SIMC_TIMEOUT` | `600` | Timeout in seconds for simc progress (per line) |
 
 ## CI/CD
 

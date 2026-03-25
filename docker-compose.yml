@@ -15,6 +15,7 @@ services:
       - DATA_DIR=/app/resources/data
       - DATABASE_URL=/app/db/simhammer.db
       - PORT=8000
+      - SIMC_TIMEOUT=${SIMC_TIMEOUT:-600}
 
   frontend:
     build:

@@ -84,7 +84,12 @@ fn set_process_affinity(pid: u32, threads: u32) {
     }
 }
 
-const SIMC_TIMEOUT_SECS: u64 = 600;
+fn get_simc_timeout() -> u64 {
+    std::env::var("SIMC_TIMEOUT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(600)
+}
 
 fn max_threads() -> u32 {
     std::thread::available_parallelism()
@@ -281,10 +286,11 @@ async fn run_simc_subprocess(
     if let Some(err_stream) = stderr {
         let mut reader = BufReader::new(err_stream);
         let mut line_buf = String::new();
+        let timeout_secs = get_simc_timeout();
         loop {
             line_buf.clear();
             match tokio::time::timeout(
-                std::time::Duration::from_secs(SIMC_TIMEOUT_SECS),
+                std::time::Duration::from_secs(timeout_secs),
                 reader.read_line(&mut line_buf),
             )
             .await
@@ -295,7 +301,7 @@ async fn run_simc_subprocess(
                     // Timeout — kill the child
                     unregister_process(job_id);
                     let _ = child.kill().await;
-                    return Err(format!("simc timed out after {}s", SIMC_TIMEOUT_SECS));
+                    return Err(format!("simc timed out after {}s", timeout_secs));
                 }
                 Ok(Ok(_)) => {
                     let line = line_buf.trim_end().to_string();
