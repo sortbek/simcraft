@@ -1,4 +1,60 @@
 {
+  "season": "Midnight Season 2",
+
+  "raidDifficulties": [
+    { "key": "lfr",    "label": "Raid Finder", "track": "Veteran",  "sortOrder": 1 },
+    { "key": "normal", "label": "Normal",      "track": "Champion", "sortOrder": 2 },
+    { "key": "heroic", "label": "Heroic",      "track": "Hero",     "sortOrder": 3 },
+    { "key": "mythic", "label": "Mythic",      "track": "Myth",     "sortOrder": 4 }
+  ],
+
+  "dungeonCategories": [
+    {
+      "key": "mplus",
+      "label": "Mythic+",
+      "poolInstanceId": -1,
+      "defaultDifficulty": "mythic+10",
+      "difficulties": [
+        { "key": "heroic",    "label": "Heroic",    "track": "Adventurer", "level": 2, "sortOrder": 1 },
+        { "key": "mythic",    "label": "Mythic 0",  "track": "Champion",   "level": 1, "sortOrder": 2 },
+        { "key": "mythic+2",  "label": "+2",        "track": "Champion",   "level": 2, "sortOrder": 3 },
+        { "key": "mythic+3",  "label": "+3",        "track": "Champion",   "level": 2, "sortOrder": 4 },
+        { "key": "mythic+4",  "label": "+4",        "track": "Champion",   "level": 3, "sortOrder": 5 },
+        { "key": "mythic+5",  "label": "+5",        "track": "Champion",   "level": 4, "sortOrder": 6 },
+        { "key": "mythic+6",  "label": "+6",        "track": "Champion",   "level": 5, "sortOrder": 7 },
+        { "key": "mythic+7",  "label": "+7",        "track": "Hero",       "level": 1, "sortOrder": 8 },
+        { "key": "mythic+8",  "label": "+8",        "track": "Hero",       "level": 2, "sortOrder": 9 },
+        { "key": "mythic+9",  "label": "+9",        "track": "Hero",       "level": 2, "sortOrder": 10 },
+        { "key": "mythic+10", "label": "+10",        "track": "Hero",       "level": 3, "sortOrder": 11 }
+      ]
+    },
+    {
+      "key": "normal-dungeons",
+      "label": "Dungeons",
+      "poolInstanceId": -32,
+      "defaultDifficulty": "heroic",
+      "difficulties": [
+        { "key": "normal",  "label": "Normal",  "track": null, "level": 0, "sortOrder": 1, "fixedIlvl": 214, "fixedQuality": 3 },
+        { "key": "heroic",  "label": "Heroic",  "track": "Adventurer", "level": 2, "sortOrder": 2 },
+        { "key": "mythic",  "label": "Mythic",  "track": "Champion",   "level": 1, "sortOrder": 3 }
+      ]
+    }
+  ],
+
+  "encounterOverrides": [
+    { "encounterId": 2733, "upgradeLevel": 1 },
+    { "encounterId": 2734, "upgradeLevel": 2 },
+    { "encounterId": 2736, "upgradeLevel": 2 },
+    { "encounterId": 2735, "upgradeLevel": 3 },
+    { "encounterId": 2737, "upgradeLevel": 3 },
+    { "encounterId": 2738, "upgradeLevel": 4 },
+    { "encounterId": 2795, "upgradeLevel": 2 },
+    { "encounterId": 2739, "upgradeLevel": 3 },
+    { "encounterId": 2740, "upgradeLevel": 4 }
+  ],
+
+  "instanceOverrides": [],
+
   "raidDifficultyTracks": {
     "lfr": "Veteran",
     "normal": "Champion",
@@ -6,31 +62,21 @@
     "mythic": "Myth"
   },
   "encounterUpgradeLevel": {
-    "2733": 1,
-    "2734": 2,
-    "2736": 2,
-    "2735": 3,
-    "2737": 3,
-    "2738": 4,
-    "2795": 2,
-    "2739": 3,
-    "2740": 4
+    "2733": 1, "2734": 2, "2736": 2, "2735": 3,
+    "2737": 3, "2738": 4, "2795": 2, "2739": 3, "2740": 4
   },
-  "dungeonNormal": {
-    "ilvl": 214,
-    "quality": 3
-  },
+  "dungeonNormal": { "ilvl": 214, "quality": 3 },
   "dungeonDifficultyTracks": {
-    "heroic": { "track": "Adventurer", "level": 2 },
-    "mythic": { "track": "Champion", "level": 1 },
-    "mythic+2": { "track": "Champion", "level": 2 },
-    "mythic+3": { "track": "Champion", "level": 2 },
-    "mythic+4": { "track": "Champion", "level": 3 },
-    "mythic+5": { "track": "Champion", "level": 4 },
-    "mythic+6": { "track": "Champion", "level": 5 },
-    "mythic+7": { "track": "Hero", "level": 1 },
-    "mythic+8": { "track": "Hero", "level": 2 },
-    "mythic+9": { "track": "Hero", "level": 2 },
-    "mythic+10": { "track": "Hero", "level": 3 }
+    "heroic":    { "track": "Adventurer", "level": 2 },
+    "mythic":    { "track": "Champion",   "level": 1 },
+    "mythic+2":  { "track": "Champion",   "level": 2 },
+    "mythic+3":  { "track": "Champion",   "level": 2 },
+    "mythic+4":  { "track": "Champion",   "level": 3 },
+    "mythic+5":  { "track": "Champion",   "level": 4 },
+    "mythic+6":  { "track": "Champion",   "level": 5 },
+    "mythic+7":  { "track": "Hero",       "level": 1 },
+    "mythic+8":  { "track": "Hero",       "level": 2 },
+    "mythic+9":  { "track": "Hero",       "level": 2 },
+    "mythic+10": { "track": "Hero",       "level": 3 }
   }
 }
