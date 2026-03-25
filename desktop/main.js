@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
@@ -116,6 +116,22 @@ function createWindow() {
 
   mainWindow.on("unmaximize", () => {
     mainWindow.webContents.send("window:maximized-changed", false);
+  });
+
+  // Open external links in the system browser instead of Electron
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) {
+      return { action: "allow" };
+    }
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith("http://127.0.0.1") && !url.startsWith("http://localhost")) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
   });
 
   mainWindow.on("closed", () => {
