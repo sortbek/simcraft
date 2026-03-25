@@ -1,4 +1,7 @@
+pub mod types;
+pub mod item_db;
 pub mod addon_parser;
+pub mod gear_resolver;
 pub mod game_data;
 pub mod models;
 pub mod profileset_generator;
