@@ -1,43 +1,9 @@
 use regex::Regex;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::addon_parser::GEAR_SLOTS;
+use crate::types::class_data::{self, GEAR_SLOTS, ARMOR_SLOTS, UNIQUE_SLOT_PAIRS};
 use crate::game_data;
-
-/// Armor-type-restricted slots (head, shoulder, chest, wrist, hands, waist, legs, feet).
-/// Slots like neck, back, finger, trinket, and weapons are NOT armor-type restricted.
-const ARMOR_SLOTS: &[&str] = &[
-    "head", "shoulder", "chest", "wrist", "hands", "waist", "legs", "feet",
-];
-
-/// Returns the maximum armor subclass for a given WoW class name.
-/// 1=Cloth, 2=Leather, 3=Mail, 4=Plate.
-/// Classes can wear their type and anything lighter (e.g. Mail can also wear Leather/Cloth).
-fn class_max_armor_subclass(class_name: &str) -> Option<u64> {
-    match class_name.to_lowercase().as_str() {
-        "priest" | "mage" | "warlock" => Some(1),
-        "rogue" | "monk" | "druid" | "demon_hunter" | "demonhunter" => Some(2),
-        "hunter" | "shaman" | "evoker" => Some(3),
-        "warrior" | "paladin" | "death_knight" | "deathknight" => Some(4),
-        _ => None,
-    }
-}
-
-/// Parse the character class from a base profile string.
-/// Looks for the class="Name" line, e.g. `warrior="Sørtbek"`.
-fn detect_class(base_profile: &str) -> Option<String> {
-    let class_re = Regex::new(
-        r#"^(warrior|paladin|hunter|rogue|priest|death_knight|deathknight|shaman|mage|warlock|monk|demon_hunter|demonhunter|druid|evoker)\s*="#
-    ).unwrap();
-    for line in base_profile.lines() {
-        let trimmed = line.trim();
-        if let Some(caps) = class_re.captures(trimmed) {
-            return Some(caps[1].to_string());
-        }
-    }
-    None
-}
 
 use once_cell::sync::Lazy;
 
@@ -49,10 +15,20 @@ pub static MAX_COMBINATIONS: Lazy<usize> = Lazy::new(|| {
     500
 });
 
-const UNIQUE_SLOT_PAIRS: &[(&str, &str)] = &[
-    ("finger1", "finger2"),
-    ("trinket1", "trinket2"),
-];
+/// Build a UID from a legacy item JSON Value, matching gear_resolver::make_uid format:
+/// "item_id:sorted_bonus_ids:origin:slot"
+fn make_item_uid(item: &Value) -> String {
+    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+    let mut bonus_ids: Vec<u64> = item.get("bonus_ids")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
+        .unwrap_or_default();
+    bonus_ids.sort();
+    let bonus_key = bonus_ids.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(":");
+    let origin = item.get("origin").and_then(|v| v.as_str()).unwrap_or("bags");
+    let slot = item.get("slot").and_then(|v| v.as_str()).unwrap_or("");
+    format!("{}:{}:{}:{}", item_id, bonus_key, origin, slot)
+}
 
 /// Generate a simc input string with full-set profilesets for Top Gear.
 ///
@@ -61,78 +37,13 @@ const UNIQUE_SLOT_PAIRS: &[(&str, &str)] = &[
 pub fn generate_top_gear_input(
     base_profile: &str,
     items_by_slot: &HashMap<String, Vec<Value>>,
-    selected_items: &HashMap<String, Vec<usize>>,
+    selected_items: &HashMap<String, Vec<String>>,
     max_combos_override: Option<usize>,
 ) -> Result<(String, usize, HashMap<String, Vec<Value>>), String> {
     // Extract base profile info (non-gear lines) and equipped gear
     let (base_lines, equipped_gear, talents_string, _spec) = parse_base_profile(base_profile);
 
-    // Build the option lists per slot for combination generation
-    let mut slot_item_lists: HashMap<String, Vec<Value>> = HashMap::new();
-
-    for slot in GEAR_SLOTS {
-        let slot = slot.to_string();
-        let slot_items = match items_by_slot.get(&slot) {
-            Some(items) => items,
-            None => continue,
-        };
-
-        let selected_indices = selected_items.get(&slot).cloned().unwrap_or_default();
-
-        // Collect all selected items for this slot
-        let mut candidates: Vec<Value> = Vec::new();
-        for &idx in &selected_indices {
-            if idx < slot_items.len() {
-                candidates.push(slot_items[idx].clone());
-            }
-        }
-
-        // Also always include the equipped item if not already selected
-        let equipped = slot_items
-            .iter()
-            .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false));
-
-        if let Some(eq) = equipped {
-            let already_included = candidates.iter().any(|c| {
-                // Compare by pointer identity isn't possible with Value, compare item_id
-                c.get("item_id") == eq.get("item_id")
-                    && c.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false)
-            });
-            if !already_included {
-                candidates.insert(0, eq.clone());
-            }
-        }
-
-        if !candidates.is_empty() {
-            slot_item_lists.insert(slot, candidates);
-        }
-    }
-
-    // Filter out items whose armor type the character's class can't equip.
-    // Classes can wear their armor type and anything lighter (e.g. Mail can wear Leather/Cloth).
-    if let Some(class_name) = detect_class(base_profile) {
-        if let Some(max_subclass) = class_max_armor_subclass(&class_name) {
-            for slot in ARMOR_SLOTS {
-                let slot = slot.to_string();
-                if let Some(items) = slot_item_lists.get_mut(&slot) {
-                    items.retain(|item| {
-                        // Always keep equipped items (already validated by the game)
-                        if item.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false) {
-                            return true;
-                        }
-                        let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-                        if item_id == 0 {
-                            return true;
-                        }
-                        match game_data::get_item_armor_subclass(item_id) {
-                            Some(subclass) => subclass <= max_subclass || subclass == 0, // 0 = Misc, always OK
-                            None => true, // Item not found in DB, keep it
-                        }
-                    });
-                }
-            }
-        }
-    }
+    let slot_item_lists = build_slot_candidates(base_profile, items_by_slot, selected_items);
 
     // Find slots that have alternatives (more than just equipped)
     let varying_slots: Vec<String> = slot_item_lists
@@ -388,44 +299,7 @@ fn item_meta(item: &Value, slot: &str) -> Value {
     })
 }
 
-/// Specs that can dual wield (equip one-hand weapons in both hands).
-fn can_dual_wield(spec: &str) -> bool {
-    matches!(
-        spec,
-        "fury" | "frost" | "enhancement" | "windwalker" | "brewmaster"
-        | "havoc" | "vengeance"
-        | "outlaw" | "assassination" | "subtlety"
-    )
-}
-
-fn inv_type_to_slots(inv_type: u64, spec: &str) -> Vec<&'static str> {
-    match inv_type {
-        1 => vec!["head"], 2 => vec!["neck"], 3 => vec!["shoulder"],
-        5 | 20 => vec!["chest"], 6 => vec!["waist"], 7 => vec!["legs"],
-        8 => vec!["feet"], 9 => vec!["wrist"], 10 => vec!["hands"],
-        11 => vec!["finger1", "finger2"],
-        12 => vec!["trinket1", "trinket2"],
-        13 => {
-            if can_dual_wield(spec) {
-                vec!["main_hand", "off_hand"]
-            } else {
-                vec!["main_hand"]
-            }
-        }
-        14 => vec!["off_hand"],
-        16 => vec!["back"],
-        17 => {
-            if spec == "fury" {
-                vec!["main_hand", "off_hand"]
-            } else {
-                vec!["main_hand"]
-            }
-        }
-        15 | 26 | 21 => vec!["main_hand"],
-        22 | 23 => vec!["off_hand"],
-        _ => vec![],
-    }
-}
+// can_dual_wield and inv_type_to_slots now live in types::class_data
 
 pub fn generate_droptimizer_input(
     base_profile: &str,
@@ -473,7 +347,7 @@ pub fn generate_droptimizer_input(
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
-        let mut slots = inv_type_to_slots(inv_type, &spec);
+        let mut slots = class_data::inv_type_to_slots(inv_type, &spec);
 
         // If the character has a two-hander equipped, nothing can go in the
         // off-hand — except two-handers for Fury warriors (Titan's Grip).
@@ -531,17 +405,177 @@ pub fn generate_droptimizer_input(
 }
 
 /// Vault constraint: at most one vault item across all slots.
+/// An item and its upgraded copy (same item_id) count as a single vault pick.
 fn validate_vault_constraint(gear_set: &HashMap<String, Value>) -> bool {
-    let mut vault_count = 0;
+    let mut vault_item_ids: HashSet<u64> = HashSet::new();
     for item in gear_set.values() {
         if item.get("origin").and_then(|v| v.as_str()) == Some("vault") {
-            vault_count += 1;
-            if vault_count > 1 {
+            let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+            vault_item_ids.insert(item_id);
+            if vault_item_ids.len() > 1 {
                 return false;
             }
         }
     }
     true
+}
+
+/// Count valid Top Gear combinations without generating the full simc output.
+pub fn count_top_gear_combos(
+    base_profile: &str,
+    items_by_slot: &HashMap<String, Vec<Value>>,
+    selected_items: &HashMap<String, Vec<String>>,
+    max_combos_override: Option<usize>,
+) -> Result<usize, String> {
+    let slot_item_lists = build_slot_candidates(base_profile, items_by_slot, selected_items);
+    count_valid_combos(&slot_item_lists, max_combos_override)
+}
+
+/// Build per-slot candidate lists from items_by_slot and selected UIDs.
+fn build_slot_candidates(
+    base_profile: &str,
+    items_by_slot: &HashMap<String, Vec<Value>>,
+    selected_items: &HashMap<String, Vec<String>>,
+) -> HashMap<String, Vec<Value>> {
+    let mut slot_item_lists: HashMap<String, Vec<Value>> = HashMap::new();
+
+    for slot in GEAR_SLOTS {
+        let slot = slot.to_string();
+        let slot_items = match items_by_slot.get(&slot) {
+            Some(items) => items,
+            None => continue,
+        };
+
+        let selected_uids = selected_items.get(&slot).cloned().unwrap_or_default();
+
+        let mut candidates: Vec<Value> = Vec::new();
+        for item in slot_items {
+            let uid = make_item_uid(item);
+            if selected_uids.contains(&uid) {
+                candidates.push(item.clone());
+            }
+        }
+
+        let equipped = slot_items
+            .iter()
+            .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false));
+
+        if let Some(eq) = equipped {
+            let already_included = candidates.iter().any(|c| {
+                c.get("item_id") == eq.get("item_id")
+                    && c.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false)
+            });
+            if !already_included {
+                candidates.insert(0, eq.clone());
+            }
+        }
+
+        if !candidates.is_empty() {
+            slot_item_lists.insert(slot, candidates);
+        }
+    }
+
+    // Armor type filtering
+    if let Some(class_name) = class_data::detect_class(base_profile) {
+        if let Some(max_subclass) = class_data::class_max_armor(class_name.as_str()) {
+            for slot in ARMOR_SLOTS {
+                let slot = slot.to_string();
+                if let Some(items) = slot_item_lists.get_mut(&slot) {
+                    items.retain(|item| {
+                        if item.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false) {
+                            return true;
+                        }
+                        let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                        if item_id == 0 { return true; }
+                        match game_data::get_item_armor_subclass(item_id) {
+                            Some(subclass) => subclass <= max_subclass || subclass == 0,
+                            None => true,
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    slot_item_lists
+}
+
+/// Count valid combos from slot candidate lists, applying all constraints.
+fn count_valid_combos(
+    slot_item_lists: &HashMap<String, Vec<Value>>,
+    max_combos_override: Option<usize>,
+) -> Result<usize, String> {
+    let mut varying_slots: Vec<String> = slot_item_lists
+        .iter()
+        .filter(|(_, items)| items.len() > 1)
+        .map(|(slot, _)| slot.clone())
+        .collect();
+    varying_slots.sort();
+
+    if varying_slots.is_empty() {
+        return Ok(0);
+    }
+
+    let option_lists: Vec<&Vec<Value>> = varying_slots
+        .iter()
+        .map(|slot| slot_item_lists.get(slot).unwrap())
+        .collect();
+
+    let mut all_combos: Vec<Vec<usize>> = vec![vec![]];
+    for opts in &option_lists {
+        let mut new_combos = Vec::new();
+        for combo in &all_combos {
+            for i in 0..opts.len() {
+                let mut new = combo.clone();
+                new.push(i);
+                new_combos.push(new);
+            }
+        }
+        all_combos = new_combos;
+    }
+
+    let mut count = 0usize;
+    for combo_indices in &all_combos {
+        let mut gear_set: HashMap<String, Value> = HashMap::new();
+        for slot in GEAR_SLOTS {
+            let slot = slot.to_string();
+            if let Some(items) = slot_item_lists.get(&slot) {
+                let default = items
+                    .iter()
+                    .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false))
+                    .unwrap_or(&items[0]);
+                gear_set.insert(slot, default.clone());
+            }
+        }
+
+        for (i, slot) in varying_slots.iter().enumerate() {
+            let item = &option_lists[i][combo_indices[i]];
+            gear_set.insert(slot.clone(), item.clone());
+        }
+
+        if !validate_unique_equipped(&gear_set) { continue; }
+        if !validate_vault_constraint(&gear_set) { continue; }
+
+        let is_baseline = GEAR_SLOTS.iter().all(|slot| {
+            gear_set.get(*slot)
+                .and_then(|item| item.get("is_equipped"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true)
+        });
+        if is_baseline { continue; }
+
+        count += 1;
+    }
+
+    let limit = max_combos_override.unwrap_or(*MAX_COMBINATIONS);
+    if count > limit {
+        return Err(format!(
+            "Too many combinations ({}). Maximum is {}. Please deselect some items.",
+            count, limit
+        ));
+    }
+
+    Ok(count)
 }
 
 fn validate_unique_equipped(gear_set: &HashMap<String, Value>) -> bool {

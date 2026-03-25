@@ -14,6 +14,8 @@ use crate::profileset_generator;
 use crate::result_parser;
 use crate::simc_runner;
 use crate::addon_parser;
+use crate::gear_resolver;
+use crate::types::ResolveGearResponse;
 
 /// Newtype wrapper to avoid colliding with the simc `web::Data<PathBuf>`.
 #[derive(Clone)]
@@ -119,7 +121,7 @@ pub struct SimRequest {
 #[derive(Debug, Deserialize)]
 pub struct TopGearRequest {
     pub simc_input: String,
-    pub selected_items: HashMap<String, Vec<usize>>,
+    pub selected_items: HashMap<String, Vec<String>>,
     pub items_by_slot: Option<HashMap<String, Vec<Value>>>,
     #[serde(default)]
     pub max_upgrade: bool,
@@ -158,6 +160,13 @@ pub struct ItemInfoBatchRequest {
 pub struct BonusIdsQuery {
     #[serde(default)]
     pub bonus_ids: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResolveGearRequest {
+    pub simc_input: String,
+    #[serde(default)]
+    pub max_upgrade: bool,
 }
 
 fn default_iterations() -> u32 { 1000 }
@@ -330,6 +339,40 @@ fn inject_expert_fields(simc_input: &str, options: &SimOptions) -> String {
     result.join("\n")
 }
 
+/// Convert ResolveGearResponse slots into the items_by_slot Value format
+/// used by profileset_generator and game_data functions.
+fn resolve_to_items_by_slot(resolved: &ResolveGearResponse) -> HashMap<String, Vec<Value>> {
+    let mut items_by_slot: HashMap<String, Vec<Value>> = HashMap::new();
+    for (slot, slot_res) in &resolved.slots {
+        let mut items: Vec<Value> = Vec::new();
+        if let Some(eq) = &slot_res.equipped {
+            items.push(resolved_item_to_value(eq, true));
+        }
+        for alt in &slot_res.alternatives {
+            items.push(resolved_item_to_value(alt, false));
+        }
+        if !items.is_empty() {
+            items_by_slot.insert(slot.clone(), items);
+        }
+    }
+    items_by_slot
+}
+
+fn resolved_item_to_value(item: &crate::types::ResolvedItem, is_equipped: bool) -> Value {
+    json!({
+        "slot": item.slot,
+        "simc_string": item.simc_string,
+        "is_equipped": is_equipped,
+        "origin": item.origin.as_str(),
+        "item_id": item.item_id,
+        "ilevel": item.ilevel,
+        "name": item.name,
+        "bonus_ids": item.bonus_ids,
+        "enchant_id": item.enchant_id,
+        "gem_id": item.gem_id,
+    })
+}
+
 /// Replace the talents= line in a simc input string with a new talent string.
 fn apply_talent_override(simc_input: &str, talents: &str) -> String {
     if talents.is_empty() {
@@ -400,7 +443,13 @@ fn spawn_staged_sim(
                 store.set_report_files(&job_id, output.html_report, output.text_output);
             }
             Err(e) => {
-                store.set_error(&job_id, e);
+                // Don't overwrite cancelled status with a generic error
+                let is_cancelled = store.get(&job_id)
+                    .map(|j| j.status == JobStatus::Cancelled)
+                    .unwrap_or(false);
+                if !is_cancelled {
+                    store.set_error(&job_id, e);
+                }
             }
         }
     });
@@ -451,7 +500,12 @@ async fn create_sim(
                 store_clone.set_report_files(&job_id_clone, output.html_report, output.text_output);
             }
             Err(e) => {
-                store_clone.set_error(&job_id_clone, e);
+                let is_cancelled = store_clone.get(&job_id_clone)
+                    .map(|j| j.status == JobStatus::Cancelled)
+                    .unwrap_or(false);
+                if !is_cancelled {
+                    store_clone.set_error(&job_id_clone, e);
+                }
             }
         }
     });
@@ -475,19 +529,14 @@ async fn create_top_gear_sim(
     };
     simc_input = apply_talent_override(&simc_input, &req.options.talents);
 
-    let parsed = addon_parser::parse_addon_string(&simc_input);
-    let base_profile = parsed
-        .get("base_profile")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let resolved = gear_resolver::resolve_gear(&parse_result);
+    let base_profile = resolved.base_profile.clone();
 
     let mut items_by_slot: HashMap<String, Vec<Value>> = if let Some(ref ibs) = req.items_by_slot {
         ibs.clone()
     } else {
-        // Extract from parsed addon string
-        let ibs_val = parsed.get("items_by_slot").cloned().unwrap_or(json!({}));
-        serde_json::from_value(ibs_val).unwrap_or_default()
+        resolve_to_items_by_slot(&resolved)
     };
 
     if req.max_upgrade {
@@ -556,18 +605,48 @@ async fn create_top_gear_sim(
     })
 }
 
+async fn get_top_gear_combo_count(
+    req: web::Json<TopGearRequest>,
+) -> HttpResponse {
+    let mut simc_input = if req.max_upgrade {
+        game_data::upgrade_simc_input(&req.simc_input)
+    } else {
+        req.simc_input.clone()
+    };
+    simc_input = apply_talent_override(&simc_input, &req.options.talents);
+
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let resolved = gear_resolver::resolve_gear(&parse_result);
+    let base_profile = resolved.base_profile.clone();
+
+    let mut items_by_slot = resolve_to_items_by_slot(&resolved);
+
+    if req.max_upgrade {
+        items_by_slot = game_data::upgrade_items_by_slot(&items_by_slot);
+    }
+    if req.copy_enchants {
+        items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
+    }
+
+    match profileset_generator::count_top_gear_combos(
+        &base_profile,
+        &items_by_slot,
+        &req.selected_items,
+        req.max_combinations,
+    ) {
+        Ok(count) => HttpResponse::Ok().json(json!({ "combo_count": count })),
+        Err(e) => HttpResponse::Ok().json(json!({ "combo_count": 0, "error": e })),
+    }
+}
+
 async fn create_droptimizer_sim(
     req: web::Json<DroptimizerRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
     simc_path: web::Data<PathBuf>,
 ) -> HttpResponse {
     let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
-    let parsed = addon_parser::parse_addon_string(&simc_input);
-    let base_profile = parsed
-        .get("base_profile")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let base_profile = parse_result.base_profile.clone();
 
     let (generated_input, combo_count, combo_metadata) =
         profileset_generator::generate_droptimizer_input(&base_profile, &req.drop_items);
@@ -661,6 +740,7 @@ async fn get_sim_status(
         JobStatus::Running => "running",
         JobStatus::Done => "done",
         JobStatus::Failed => "failed",
+        JobStatus::Cancelled => "cancelled",
     };
 
     let progress = match job.status {
@@ -686,6 +766,30 @@ async fn get_sim_status(
         "result": parsed_result,
         "error": job.error_message,
     }))
+}
+
+async fn cancel_sim(
+    path: web::Path<String>,
+    store: web::Data<Arc<dyn JobStorage>>,
+) -> HttpResponse {
+    let job_id = path.into_inner();
+    let job = match store.get(&job_id) {
+        Some(j) => j,
+        None => return HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
+    };
+
+    match job.status {
+        JobStatus::Pending | JobStatus::Running => {
+            // Mark as cancelled first so the error handler doesn't overwrite
+            store.update_status(&job_id, JobStatus::Cancelled);
+            // Kill the simc process if running
+            simc_runner::kill_job(&job_id);
+            HttpResponse::Ok().json(json!({"status": "cancelled"}))
+        }
+        _ => {
+            HttpResponse::BadRequest().json(json!({"detail": "Job is not running"}))
+        }
+    }
 }
 
 async fn get_sim_input(
@@ -1010,6 +1114,41 @@ async fn system_stats(stats: web::Data<Arc<Mutex<SystemStats>>>) -> HttpResponse
     }))
 }
 
+async fn resolve_gear(
+    req: web::Json<ResolveGearRequest>,
+) -> HttpResponse {
+    let simc_input = if req.max_upgrade {
+        game_data::upgrade_simc_input(&req.simc_input)
+    } else {
+        req.simc_input.clone()
+    };
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let resolved = gear_resolver::resolve_gear(&parse_result);
+    HttpResponse::Ok().json(resolved)
+}
+
+async fn get_season_config() -> HttpResponse {
+    use crate::types::season::*;
+    let cfg = crate::item_db::season_cfg();
+
+    // Parse the new typed fields from the season config JSON
+    let season = cfg.get("season").and_then(|s| s.as_str()).unwrap_or("").to_string();
+
+    let raid_difficulties: Vec<DifficultyDef> = cfg.get("raidDifficulties")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let dungeon_categories: Vec<DungeonCategory> = cfg.get("dungeonCategories")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    HttpResponse::Ok().json(SeasonConfigResponse {
+        season,
+        raid_difficulties,
+        dungeon_categories,
+    })
+}
+
 async fn list_instances() -> HttpResponse {
     HttpResponse::Ok().json(game_data::get_instances())
 }
@@ -1122,7 +1261,9 @@ pub async fn start_with_storage_bind(
         let mut app = app
             .route("/api/sim", web::post().to(create_sim))
             .route("/api/top-gear/sim", web::post().to(create_top_gear_sim))
+            .route("/api/top-gear/combo-count", web::post().to(get_top_gear_combo_count))
             .route("/api/sim/{id}", web::get().to(get_sim_status))
+            .route("/api/sim/{id}/cancel", web::post().to(cancel_sim))
             .route("/api/sim/{id}/raw", web::get().to(get_sim_raw))
             .route("/api/sim/{id}/input", web::get().to(get_sim_input))
             .route("/api/sim/{id}/html", web::get().to(get_sim_html))
@@ -1135,6 +1276,8 @@ pub async fn start_with_storage_bind(
             .route("/api/max-upgrade-ilevels", web::post().to(get_max_upgrade_ilevels))
             .route("/api/upgrade-options", web::get().to(get_upgrade_options))
             .route("/api/upgrade-tracks", web::get().to(list_upgrade_tracks))
+            .route("/api/gear/resolve", web::post().to(resolve_gear))
+            .route("/api/season-config", web::get().to(get_season_config))
             .route("/api/droptimizer/sim", web::post().to(create_droptimizer_sim))
             .route("/api/instances", web::get().to(list_instances))
             .route("/api/instances/type/{type}/drops", web::get().to(get_drops_by_type))
