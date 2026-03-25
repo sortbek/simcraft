@@ -93,30 +93,33 @@ The server auto-detects the database type from the URL prefix.
 ### How it works
 
 **At build time** — Docker produces a single **Alpine-based** image containing:
+
 - The Next.js frontend compiled as a **static export** (`out/` folder of HTML/JS/CSS)
 - The compiled `simhammer-server` Rust binary (musl-native)
 - The `compact-data.js` compaction script
 - Minimal runtime dependencies (`libcurl`, `libstdc++`, `bash`) — no C++ build tools needed!
 
 **At startup** — the entrypoint script (`standalone-entrypoint.sh`) runs before the server:
+
 1. Fetches the latest game data from Raidbots and compacts it (~67% size reduction)
 2. Fetches the latest `simc` binary from **`SimulationCraft/simc:latest`** on Docker Hub directly via the Registry HTTP API (requires only `curl`/`jq`/`tar` — no Docker daemon needed)
 3. Caches the layer digest locally; only re-downloads if the upstream image is updated
 4. Hands off to `simhammer-server`
 
 **At request time** — the Rust server handles everything on port 8000:
+
 - `GET /api/*` — served by Rust API handlers
 - `GET /_next/*` — served as static files from the baked-in `out/` folder
 - Everything else — falls back to the appropriate static HTML page (SPA routing)
 
 ### Persistent volumes
 
-| Volume | Contents | Without it |
-|--------|----------|------------|
-| `simhammer-data` | Compacted game data JSONs | Re-downloaded & re-compacted on every start |
-| `simhammer-data-full` | Raw Raidbots downloads | Re-downloaded on every start |
-| `simhammer-simc` | Persistent cache for the `simc` binary + digest | Re-downloaded from Docker Hub on every start |
-| `simhammer-db` | SQLite job history | Lost on every restart |
+| Volume                | Contents                                        | Without it                                   |
+| --------------------- | ----------------------------------------------- | -------------------------------------------- |
+| `simhammer-data`      | Compacted game data JSONs                       | Re-downloaded & re-compacted on every start  |
+| `simhammer-data-full` | Raw Raidbots downloads                          | Re-downloaded on every start                 |
+| `simhammer-simc`      | Persistent cache for the `simc` binary + digest | Re-downloaded from Docker Hub on every start |
+| `simhammer-db`        | SQLite job history                              | Lost on every restart                        |
 
 ## Web (two-container)
 
@@ -130,6 +133,17 @@ Docker handles everything — compiles the Rust backend, builds SimC from source
 
 - Frontend: http://localhost:3000
 - API: http://localhost:8000
+
+### Local backend with live reload
+
+For local (non-Docker) backend development, use `cargo watch` so Rust changes auto-restart the server.
+
+```bash
+cargo install cargo-watch --locked   # one-time
+npm run backend:dev
+```
+
+This watches `backend/core/src`, `backend/server/src`, and related Cargo manifests, then reruns `simhammer-server` automatically.
 
 ### Deploy to a VPS
 
@@ -161,6 +175,7 @@ npm run desktop:dev
 On first run, this automatically uses Docker to fetch game data from Raidbots and compile SimulationCraft from source (stored in `backend/resources/`). On subsequent runs, this step is skipped since the resources already exist.
 
 After resources are ready, it:
+
 1. Builds the Rust backend in debug mode
 2. Starts the Next.js dev server on port 3000
 3. Launches the Electron app
@@ -177,11 +192,11 @@ Builds the frontend (static export), compiles the Rust backend in release mode, 
 
 Output goes to `desktop/dist/`.
 
-| Platform | Target |
-|----------|--------|
+| Platform | Target         |
+| -------- | -------------- |
 | Windows  | NSIS installer |
-| macOS    | DMG |
-| Linux    | AppImage, deb |
+| macOS    | DMG            |
+| Linux    | AppImage, deb  |
 
 ## Getting a SimC Addon String
 
@@ -193,17 +208,20 @@ Output goes to `desktop/dist/`.
 ## Architecture
 
 ### Standalone (single container)
+
 ```
 Browser → Rust/Actix-web (8000) ─── static files (frontend/out/)
                                 └── API handlers → SQLite → simc subprocess
 ```
 
 ### Web (two-container)
+
 ```
 Browser → Next.js (3000) → Rust/Actix-web (8000) → SQLite/PostgreSQL → simc subprocess
 ```
 
 ### Desktop
+
 ```
 Electron → Next.js → Rust/Actix-web (17384) → MemoryStorage → simc subprocess
 ```
@@ -213,22 +231,23 @@ All three modes use the same Next.js frontend and the same Rust core library (`s
 ### Job retention
 
 Jobs are automatically garbage collected on insert. Defaults:
+
 - **Desktop**: last 50 sims
 - **Web**: last 200 sims
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SIMC_PATH` | `/usr/local/bin/simc` | Path to SimulationCraft binary |
-| `DATA_DIR` | `./resources/data` | Path to game data JSON files |
-| `DATABASE_URL` | `simhammer.db` | SQLite path or `postgres://` URL (web only) |
-| `PORT` | `8000` | Server port |
-| `BIND_HOST` | `0.0.0.0` | Server bind address |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API URL (frontend build-time) |
-| `FRONTEND_DIR` | _(unset)_ | Path to static frontend files (standalone mode only) |
-| `MAX_JOBS` | `50` / `200` | Max jobs to retain (desktop / web). Oldest are deleted on insert |
-| `MAX_COMBINATIONS` | `500` | Max gear combinations for Top Gear sims |
+| Variable              | Default                 | Description                                                      |
+| --------------------- | ----------------------- | ---------------------------------------------------------------- |
+| `SIMC_PATH`           | `/usr/local/bin/simc`   | Path to SimulationCraft binary                                   |
+| `DATA_DIR`            | `./resources/data`      | Path to game data JSON files                                     |
+| `DATABASE_URL`        | `simhammer.db`          | SQLite path or `postgres://` URL (web only)                      |
+| `PORT`                | `8000`                  | Server port                                                      |
+| `BIND_HOST`           | `0.0.0.0`               | Server bind address                                              |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API URL (frontend build-time)                            |
+| `FRONTEND_DIR`        | _(unset)_               | Path to static frontend files (standalone mode only)             |
+| `MAX_JOBS`            | `50` / `200`            | Max jobs to retain (desktop / web). Oldest are deleted on insert |
+| `MAX_COMBINATIONS`    | `500`                   | Max gear combinations for Top Gear sims                          |
 
 ## CI/CD
 
