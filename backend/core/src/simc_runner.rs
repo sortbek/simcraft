@@ -37,7 +37,9 @@ pub fn kill_job(job_id: &str) -> bool {
     if let Some(pid) = pid {
         #[cfg(unix)]
         {
-            unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output();
         }
         #[cfg(windows)]
         {

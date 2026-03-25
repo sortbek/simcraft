@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+#[cfg(feature = "desktop")]
+use std::sync::Mutex;
 
 use crate::game_data;
 use crate::models::{Job, JobStatus};
@@ -635,7 +637,15 @@ async fn get_top_gear_combo_count(
         req.max_combinations,
     ) {
         Ok(count) => HttpResponse::Ok().json(json!({ "combo_count": count })),
-        Err(e) => HttpResponse::Ok().json(json!({ "combo_count": 0, "error": e })),
+        Err(e) => {
+            // Extract the count from the error message so the frontend can still display it
+            let count: usize = e.split('(')
+                .nth(1)
+                .and_then(|s| s.split(')').next())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            HttpResponse::Ok().json(json!({ "combo_count": count, "error": e }))
+        }
     }
 }
 
@@ -695,6 +705,7 @@ async fn create_droptimizer_sim(
     })
 }
 
+#[cfg(not(feature = "desktop"))]
 #[derive(Debug, Deserialize)]
 struct ListSimsQuery {
     #[serde(default)]

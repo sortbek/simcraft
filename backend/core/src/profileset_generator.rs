@@ -521,6 +521,19 @@ fn count_valid_combos(
         .map(|slot| slot_item_lists.get(slot).unwrap())
         .collect();
 
+    // Early check: bail before allocating if the raw cartesian product is too large
+    let limit = max_combos_override.unwrap_or(*MAX_COMBINATIONS);
+    let raw_total: usize = option_lists
+        .iter()
+        .try_fold(1usize, |acc, opts| acc.checked_mul(opts.len()))
+        .unwrap_or(usize::MAX);
+    if raw_total > limit * 10 {
+        return Err(format!(
+            "Too many gear combinations to evaluate ({}). Maximum is {}. Please deselect some items.",
+            raw_total, limit
+        ));
+    }
+
     let mut all_combos: Vec<Vec<usize>> = vec![vec![]];
     for opts in &option_lists {
         let mut new_combos = Vec::new();
@@ -567,7 +580,6 @@ fn count_valid_combos(
         count += 1;
     }
 
-    let limit = max_combos_override.unwrap_or(*MAX_COMBINATIONS);
     if count > limit {
         return Err(format!(
             "Too many combinations ({}). Maximum is {}. Please deselect some items.",

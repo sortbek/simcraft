@@ -125,7 +125,7 @@ export default function TopGearPage() {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(async () => {
+    (async () => {
       try {
         const res = await fetch(`${API_URL}/api/top-gear/combo-count`, {
           method: "POST",
@@ -140,18 +140,23 @@ export default function TopGearPage() {
           }),
           signal: controller.signal,
         });
+        if (!res.ok) {
+          setComboCount(0);
+          setComboError("Failed to calculate combinations. Try selecting fewer items.");
+          return;
+        }
         const data = await res.json();
         setComboCount(data.combo_count ?? 0);
         setComboError(data.error ?? "");
       } catch (e: unknown) {
         if (e instanceof Error && e.name !== "AbortError") {
           setComboCount(0);
-          setComboError("");
+          setComboError("Failed to calculate combinations. Try selecting fewer items.");
         }
       }
-    }, 200);
+    })();
 
-    return () => { clearTimeout(timer); controller.abort(); };
+    return () => { controller.abort(); };
   }, [selectedUids, resolved, localItems, maxUpgrade, copyEnchants, maxCombinations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit() {
