@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { useSimContext } from './SimContext';
-import FightStyleSelector from './FightStyleSelector';
-import TalentPicker from './TalentPicker';
+import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useSimContext } from "./SimContext";
+import FightStyleSelector from "./FightStyleSelector";
+import ScenarioBuilder from "./ScenarioBuilder";
+import TalentPicker from "./TalentPicker";
 
 function parseCharacterInfo(input: string) {
   if (!input) return null;
@@ -14,72 +15,58 @@ function parseCharacterInfo(input: string) {
   // Save last character to localStorage for history page
   const realmMatch = input.match(/^server=(.+)$/m);
   if (nameMatch[2] && realmMatch?.[1]) {
-    try {
-      localStorage.setItem(
-        'simhammer_last_character',
-        JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] })
-      );
-    } catch {}
+    try { localStorage.setItem("simhammer_last_character", JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] })); } catch {}
   }
   return {
     className: nameMatch[1],
     name: nameMatch[2],
-    spec: specMatch?.[1] || 'unknown',
+    spec: specMatch?.[1] || "unknown",
   };
 }
 
 const EXPERT_TABS = [
   {
-    key: 'header',
-    label: 'Header',
-    desc: 'Injected before the base actor. Use for global options and initial overrides.',
+    key: "header",
+    label: "Header",
+    desc: "Injected before the base actor. Use for global options and initial overrides.",
   },
   {
-    key: 'base_player',
-    label: 'Base Player',
-    desc: 'Injected after the base actor definition. Use for custom APL (actions=...) or player-specific overrides.',
+    key: "base_player",
+    label: "Base Player",
+    desc: "Injected after the base actor definition. Use for custom APL (actions=...) or player-specific overrides.",
   },
   {
-    key: 'raid_actors',
-    label: 'Raid Actors',
-    desc: 'Extremely experimental! Adds additional raid actors. Disables single_actor_batch when used.',
+    key: "raid_actors",
+    label: "Raid Actors",
+    desc: "Extremely experimental! Adds additional raid actors. Disables single_actor_batch when used.",
   },
   {
-    key: 'post_combos',
-    label: 'Post Combos',
-    desc: 'Injected after all profileset combinations. Use for additional actors after gear combos.',
+    key: "post_combos",
+    label: "Post Combos",
+    desc: "Injected after all profileset combinations. Use for additional actors after gear combos.",
   },
   {
-    key: 'footer',
-    label: 'Footer',
-    desc: 'Injected at the very end. Use for dungeon routes, fight overrides, or custom enemy configs.',
+    key: "footer",
+    label: "Footer",
+    desc: "Injected at the very end. Use for dungeon routes, fight overrides, or custom enemy configs.",
   },
 ] as const;
 
-type ExpertTabKey = (typeof EXPERT_TABS)[number]['key'];
+type ExpertTabKey = (typeof EXPERT_TABS)[number]["key"];
 
 function AdvancedOptions() {
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<ExpertTabKey>('footer');
+  const [activeTab, setActiveTab] = useState<ExpertTabKey>("footer");
   const {
-    fightStyle,
-    setFightStyle,
-    targetCount,
-    setTargetCount,
-    fightLength,
-    setFightLength,
-    customApl,
-    setCustomApl,
-    simcHeader,
-    setSimcHeader,
-    simcBasePlayer,
-    setSimcBasePlayer,
-    simcRaidActors,
-    setSimcRaidActors,
-    simcPostCombos,
-    setSimcPostCombos,
-    simcFooter,
-    setSimcFooter,
+    fightStyle, setFightStyle,
+    targetCount, setTargetCount,
+    fightLength, setFightLength,
+    customApl, setCustomApl,
+    simcHeader, setSimcHeader,
+    simcBasePlayer, setSimcBasePlayer,
+    simcRaidActors, setSimcRaidActors,
+    simcPostCombos, setSimcPostCombos,
+    simcFooter, setSimcFooter,
   } = useSimContext();
 
   const expertValues: Record<ExpertTabKey, string> = {
@@ -99,12 +86,7 @@ function AdvancedOptions() {
   };
 
   const hasExpertContent = Object.values(expertValues).some((v) => v.trim());
-  const isDefault =
-    fightStyle === 'Patchwerk' &&
-    targetCount === 1 &&
-    fightLength === 300 &&
-    !customApl &&
-    !hasExpertContent;
+  const isDefault = fightStyle === "Patchwerk" && targetCount === 1 && fightLength === 300 && !customApl && !hasExpertContent;
   const activeTabInfo = EXPERT_TABS.find((t) => t.key === activeTab)!;
 
   return (
@@ -112,16 +94,18 @@ function AdvancedOptions() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-5 py-3 transition-colors hover:bg-white/[0.02]"
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-300">Advanced Options</span>
           {!open && !isDefault && (
-            <span className="rounded bg-gold/10 px-1.5 py-0.5 text-[11px] text-gold">Modified</span>
+            <span className="text-[11px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+              Modified
+            </span>
           )}
         </div>
         <svg
-          className={`h-4 w-4 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
@@ -133,7 +117,7 @@ function AdvancedOptions() {
         </svg>
       </button>
       {open && (
-        <div className="space-y-4 border-t border-border px-5 pb-5">
+        <div className="px-5 pb-5 space-y-4 border-t border-border">
           <div className="pt-4">
             <label className="label-text mb-2 block">Fight Style</label>
             <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
@@ -150,9 +134,7 @@ function AdvancedOptions() {
                   onChange={(e) => setTargetCount(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="w-6 text-right font-mono text-sm tabular-nums text-white">
-                  {targetCount}
-                </span>
+                <span className="text-sm font-mono text-white tabular-nums w-6 text-right">{targetCount}</span>
               </div>
             </div>
             <div className="space-y-2">
@@ -167,12 +149,12 @@ function AdvancedOptions() {
                   onChange={(e) => setFightLength(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="w-16 text-right font-mono text-sm tabular-nums text-white">
-                  {Math.floor(fightLength / 60)}:{String(fightLength % 60).padStart(2, '0')}
-                </span>
+                <span className="text-sm font-mono text-white tabular-nums w-16 text-right">{Math.floor(fightLength / 60)}:{String(fightLength % 60).padStart(2, "0")}</span>
               </div>
             </div>
           </div>
+
+          <ScenarioBuilder />
 
           {/* Custom APL */}
           <div className="space-y-2">
@@ -181,11 +163,10 @@ function AdvancedOptions() {
               value={customApl}
               onChange={(e) => setCustomApl(e.target.value)}
               placeholder="Custom APL or expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list=1)..."
-              className="input-field h-28 resize-y font-mono text-xs"
+              className="input-field h-28 font-mono text-xs resize-y"
             />
             <p className="text-[11px] text-gray-600">
-              Override action priority lists or set expansion-specific options. Injected after the
-              base actor.
+              Override action priority lists or set expansion-specific options. Injected after the base actor.
             </p>
           </div>
 
@@ -222,56 +203,64 @@ function ExpertToggle({
   const [open, setOpen] = useState(hasContent);
 
   return (
-    <div className="space-y-3 border-t border-border pt-2">
-      <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-2">
+    <div className="pt-2 border-t border-border space-y-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2"
+      >
         <div
-          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-            open ? 'bg-gold' : 'border border-border bg-surface-2'
+          className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+            open ? "bg-gold" : "bg-surface-2 border border-border"
           }`}
         >
           <div
-            className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-              open ? 'left-[18px] bg-black' : 'left-0.5 bg-gray-500'
+            className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${
+              open ? "left-[18px] bg-black" : "left-0.5 bg-gray-500"
             }`}
           />
         </div>
         <span className="text-sm font-medium text-gray-300">Expert Mode</span>
         {!open && hasContent && (
-          <span className="rounded bg-gold/10 px-1.5 py-0.5 text-[11px] text-gold">Modified</span>
+          <span className="text-[11px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+            Modified
+          </span>
         )}
       </button>
       {open && (
         <div className="space-y-3">
           <div className="flex gap-1 overflow-x-auto">
-            {EXPERT_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-[12px] font-medium transition-all ${
-                  activeTab === tab.key
-                    ? 'border-white bg-white text-black'
-                    : expertValues[tab.key].trim()
-                      ? 'border-gold/30 bg-gold/10 text-gold hover:border-gold/50'
-                      : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
-                }`}
-              >
-                {tab.label}
-                {expertValues[tab.key].trim() && activeTab !== tab.key && (
-                  <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-gold" />
-                )}
-              </button>
-            ))}
+              {EXPERT_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border whitespace-nowrap ${
+                    activeTab === tab.key
+                      ? "bg-white text-black border-white"
+                      : expertValues[tab.key].trim()
+                      ? "bg-gold/10 text-gold border-gold/30 hover:border-gold/50"
+                      : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
+                  }`}
+                >
+                  {tab.label}
+                  {expertValues[tab.key].trim() && activeTab !== tab.key && (
+                    <span className="ml-1 w-1.5 h-1.5 rounded-full bg-gold inline-block" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={expertValues[activeTab]}
+              onChange={(e) => expertSetters[activeTab](e.target.value)}
+              placeholder={`Paste ${activeTabInfo.label.toLowerCase()} SimC input here...`}
+              className="input-field h-32 font-mono text-xs resize-y"
+            />
+            <p className="text-[11px] text-gray-600">
+              {activeTabInfo.desc}
+            </p>
           </div>
-          <textarea
-            value={expertValues[activeTab]}
-            onChange={(e) => expertSetters[activeTab](e.target.value)}
-            placeholder={`Paste ${activeTabInfo.label.toLowerCase()} SimC input here...`}
-            className="input-field h-32 resize-y font-mono text-xs"
-          />
-          <p className="text-[11px] text-gray-600">{activeTabInfo.desc}</p>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
   );
 }
 
@@ -279,26 +268,26 @@ export default function SimSharedConfig() {
   const pathname = usePathname();
   const { simcInput, setSimcInput } = useSimContext();
 
-  const showConfig =
-    pathname === '/quick-sim' || pathname === '/top-gear' || pathname === '/drop-finder';
+  const showConfig = pathname === "/quick-sim" || pathname === "/top-gear" || pathname === "/drop-finder";
   if (!showConfig) return null;
 
   const detectedInfo = parseCharacterInfo(simcInput);
 
   return (
-    <div className="mb-6 space-y-6">
-      <div className="card space-y-3 p-5">
+    <div className="space-y-6 mb-6">
+      <div className="card p-5 space-y-3">
         <label className="label-text">SimC Addon Export</label>
         <textarea
           value={simcInput}
           onChange={(e) => setSimcInput(e.target.value)}
           placeholder="Paste your SimC addon export here..."
-          className="input-field h-44 resize-y font-mono text-xs"
+          className="input-field h-44 font-mono text-xs resize-y"
         />
         {detectedInfo && (
           <div className="flex items-center justify-between">
             <p className="text-xs text-gold">
-              {detectedInfo.name} &middot; {detectedInfo.spec} {detectedInfo.className}
+              {detectedInfo.name} &middot; {detectedInfo.spec}{" "}
+              {detectedInfo.className}
             </p>
             <TalentPicker />
           </div>

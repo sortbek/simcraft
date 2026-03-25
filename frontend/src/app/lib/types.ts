@@ -50,6 +50,14 @@ export interface ResolveGearResponse {
   talent_loadouts: TalentLoadout[];
 }
 
+// Fight scenario for multi-sim
+export interface FightScenario {
+  id: string;
+  fightStyle: string;
+  targetCount: number;
+  fightLength: number;
+}
+
 // Season config types
 
 export interface DifficultyDef {
