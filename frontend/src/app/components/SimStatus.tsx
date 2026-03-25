@@ -11,6 +11,9 @@ interface SimStatusProps {
   stagesCompleted?: string[];
   jobId?: string;
   onCancelled?: () => void;
+  logLines?: string[];
+  showLogs?: boolean;
+  onToggleLogs?: () => void;
 }
 
 /**
@@ -65,6 +68,69 @@ function useCpuUsage(isRunning: boolean): number | null {
   return cpu;
 }
 
+function classifyLine(line: string): string {
+  if (line.startsWith("SimulationCraft ")) return "text-gold/70";
+  if (line.startsWith("Simulating...")) return "text-gray-500";
+  if (line.startsWith("Generating Baseline:") || line.startsWith("Generating Profileset:"))
+    return "text-gray-500";
+  if (line.startsWith("Implementation Not Yet Verified"))
+    return "text-amber-500/60 italic";
+  if (
+    line.startsWith("Generating reports") ||
+    line.startsWith("DPS Ranking:") ||
+    line.startsWith("Profilesets (") ||
+    line.startsWith("HPS Ranking:") ||
+    line.startsWith("Baseline Performance:")
+  )
+    return "text-gray-300";
+  if (/^\s+\d+\.\d+\s*:\s*Combo\s/.test(line)) return "text-gray-500";
+  return "text-gray-500";
+}
+
+function LogConsole({ lines }: { lines: string[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isAutoScroll = useRef(true);
+
+  useEffect(() => {
+    if (isAutoScroll.current && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [lines]);
+
+  function handleScroll() {
+    if (!containerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    isAutoScroll.current = scrollHeight - scrollTop - clientHeight < 30;
+  }
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface border border-border border-b-0 rounded-t-lg">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-gold/60 animate-pulse" />
+          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">
+            SimC Output
+          </span>
+        </div>
+        <span className="text-[10px] text-gray-600 font-mono tabular-nums">
+          {lines.length} lines
+        </span>
+      </div>
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="max-h-[320px] overflow-y-auto bg-[#0c0c0e] border border-border rounded-b-lg p-3 font-mono text-[11px] leading-[1.7]"
+      >
+        {lines.map((line, i) => (
+          <div key={i} className={`whitespace-pre-wrap break-all ${classifyLine(line)}`}>
+            {line || "\u00A0"}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SimStatus({
   status,
   progress,
@@ -73,6 +139,9 @@ export default function SimStatus({
   stagesCompleted,
   jobId,
   onCancelled,
+  logLines,
+  showLogs,
+  onToggleLogs,
 }: SimStatusProps) {
   const isRunning = status === "running";
   const isPending = status === "pending";
@@ -126,13 +195,31 @@ export default function SimStatus({
       </div>
 
       {jobId && (isRunning || isPending) && (
-        <button
-          onClick={handleCancel}
-          disabled={cancelling}
-          className="text-[12px] text-gray-500 hover:text-red-400 transition-colors px-3 py-1 rounded-lg hover:bg-red-500/10"
-        >
-          {cancelling ? "Cancelling..." : "Cancel Sim"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="text-[12px] text-gray-500 hover:text-red-400 transition-colors px-3 py-1 rounded-lg hover:bg-red-500/10"
+          >
+            {cancelling ? "Cancelling..." : "Cancel Sim"}
+          </button>
+          {onToggleLogs && (
+            <button
+              onClick={onToggleLogs}
+              className="flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-gray-300 transition-colors px-3 py-1 rounded-lg hover:bg-white/5"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="12" height="10" rx="1.5" />
+                <path d="M5 7l2 2 2-2" />
+              </svg>
+              {showLogs ? "Hide Logs" : "Show Logs"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {showLogs && logLines && logLines.length > 0 && (
+        <LogConsole lines={logLines} />
       )}
 
       {hasStages && (

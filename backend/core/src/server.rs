@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::game_data;
+use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
 use crate::storage::JobStorage;
 use crate::profileset_generator;
@@ -406,6 +407,7 @@ fn spawn_staged_sim(
     job_id: String,
     simc_input: String,
     combo_count: usize,
+    log_buffer: Arc<LogBuffer>,
 ) {
     tokio::spawn(async move {
         store.update_status(&job_id, JobStatus::Running);
@@ -413,6 +415,8 @@ fn spawn_staged_sim(
         let store_stages = store.clone();
         let jid_progress = job_id.clone();
         let jid_stages = job_id.clone();
+        let logs = log_buffer.clone();
+        let jid_logs = job_id.clone();
         match simc_runner::run_simc_staged(
             &simc,
             &job_id,
@@ -424,6 +428,9 @@ fn spawn_staged_sim(
             },
             move |summary| {
                 store_stages.complete_stage(&jid_stages, summary);
+            },
+            move |line| {
+                logs.push_line(&jid_logs, line.to_string());
             },
         )
         .await
@@ -454,6 +461,7 @@ fn spawn_staged_sim(
                 }
             }
         }
+        log_buffer.remove(&job_id);
     });
 }
 
@@ -463,6 +471,7 @@ async fn create_sim(
     req: web::Json<SimRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
     simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
@@ -488,11 +497,17 @@ async fn create_sim(
     let simc = simc_path.get_ref().clone();
     let options = req.options.to_json_with_sim_type(&req.sim_type);
     let job_id_clone = job_id.clone();
+    let logs = log_buffer.get_ref().clone();
+    let jid_logs = job_id.clone();
 
     tokio::spawn(async move {
         store_clone.update_status(&job_id_clone, JobStatus::Running);
         store_clone.update_progress(&job_id_clone, 20, "Simulating", "");
-        match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options).await {
+        let logs_cb = logs.clone();
+        let jid_cb = jid_logs.clone();
+        match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options, move |line| {
+            logs_cb.push_line(&jid_cb, line.to_string());
+        }).await {
             Ok(output) => {
                 let mut parsed = result_parser::parse_simc_result(&output.json);
                 inject_realm(&mut parsed, &simc_input);
@@ -510,6 +525,7 @@ async fn create_sim(
                 }
             }
         }
+        logs.remove(&jid_logs);
     });
 
     HttpResponse::Ok().json(SimResponse {
@@ -523,6 +539,7 @@ async fn create_top_gear_sim(
     req: web::Json<TopGearRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
     simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
@@ -598,6 +615,7 @@ async fn create_top_gear_sim(
         job_id.clone(),
         generated_input,
         combo_count,
+        log_buffer.get_ref().clone(),
     );
 
     HttpResponse::Ok().json(SimResponse {
@@ -653,6 +671,7 @@ async fn create_droptimizer_sim(
     req: web::Json<DroptimizerRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
     simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
     let parse_result = addon_parser::parse_simc_input(&simc_input);
@@ -696,6 +715,7 @@ async fn create_droptimizer_sim(
         job_id.clone(),
         generated_input,
         combo_count,
+        log_buffer.get_ref().clone(),
     );
 
     HttpResponse::Ok().json(SimResponse {
@@ -776,6 +796,25 @@ async fn get_sim_status(
         "stages_completed": job.stages_completed,
         "result": parsed_result,
         "error": job.error_message,
+    }))
+}
+
+#[derive(Deserialize)]
+struct LogsQuery {
+    #[serde(default)]
+    after: usize,
+}
+
+async fn get_sim_logs(
+    path: web::Path<String>,
+    query: web::Query<LogsQuery>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
+) -> HttpResponse {
+    let job_id = path.into_inner();
+    let (lines, next) = log_buffer.get_lines_after(&job_id, query.after);
+    HttpResponse::Ok().json(json!({
+        "lines": lines,
+        "next": next,
     }))
 }
 
@@ -1250,6 +1289,7 @@ pub async fn start_with_storage_bind(
 ) -> u16 {
     let store_data = web::Data::new(storage);
     let simc_data = web::Data::new(simc_path);
+    let log_data = web::Data::new(Arc::new(LogBuffer::new()));
     #[cfg(feature = "desktop")]
     let stats_data = web::Data::new(Arc::new(Mutex::new(SystemStats::new())));
     let frontend = frontend_dir.clone();
@@ -1266,7 +1306,8 @@ pub async fn start_with_storage_bind(
         let mut app = App::new()
             .wrap(cors)
             .app_data(store_data.clone())
-            .app_data(simc_data.clone());
+            .app_data(simc_data.clone())
+            .app_data(log_data.clone());
         #[cfg(feature = "desktop")]
         { app = app.app_data(stats_data.clone()); }
         let mut app = app
@@ -1274,6 +1315,7 @@ pub async fn start_with_storage_bind(
             .route("/api/top-gear/sim", web::post().to(create_top_gear_sim))
             .route("/api/top-gear/combo-count", web::post().to(get_top_gear_combo_count))
             .route("/api/sim/{id}", web::get().to(get_sim_status))
+            .route("/api/sim/{id}/logs", web::get().to(get_sim_logs))
             .route("/api/sim/{id}/cancel", web::post().to(cancel_sim))
             .route("/api/sim/{id}/raw", web::get().to(get_sim_raw))
             .route("/api/sim/{id}/input", web::get().to(get_sim_input))

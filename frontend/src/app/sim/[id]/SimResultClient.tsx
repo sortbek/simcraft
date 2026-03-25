@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ResultsChart from "../../components/ResultsChart";
 import SimStatus from "../../components/SimStatus";
 import StatWeightsTable from "../../components/StatWeightsTable";
@@ -83,6 +83,9 @@ export default function SimResultClient() {
 
   const [job, setJob] = useState<JobData | null>(null);
   const [fetchError, setFetchError] = useState("");
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [showLogs, setShowLogs] = useState(true);
+  const logCursorRef = useRef(0);
 
   useEffect(() => {
     if (!id || id === "_") return;
@@ -107,6 +110,36 @@ export default function SimResultClient() {
     poll();
     return () => { active = false; };
   }, [id]);
+
+  // Poll logs only when the log console is expanded and the sim is active
+  useEffect(() => {
+    if (!showLogs || !id || id === "_") return;
+    if (job?.status !== "pending" && job?.status !== "running") return;
+    let active = true;
+    async function pollLogs() {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/sim/${id}/logs?after=${logCursorRef.current}`
+        );
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        if (data.lines.length > 0) {
+          setLogLines((prev) => {
+            const merged = [...prev, ...data.lines];
+            return merged.length > 1000 ? merged.slice(-1000) : merged;
+          });
+          logCursorRef.current = data.next;
+        }
+      } catch {
+        /* ignore */
+      }
+      if (active) setTimeout(pollLogs, 1000);
+    }
+    pollLogs();
+    return () => { active = false; };
+  }, [showLogs, id, job?.status]);
+
+  const handleToggleLogs = useCallback(() => setShowLogs((v) => !v), []);
 
   if (fetchError) {
     return (
@@ -156,6 +189,9 @@ export default function SimResultClient() {
         stagesCompleted={job.stages_completed}
         jobId={id}
         onCancelled={() => setJob({ ...job, status: "cancelled" })}
+        logLines={logLines}
+        showLogs={showLogs}
+        onToggleLogs={handleToggleLogs}
       />
     );
   }
