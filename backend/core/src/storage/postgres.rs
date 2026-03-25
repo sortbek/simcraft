@@ -80,6 +80,7 @@ impl PostgresStorage {
             JobStatus::Running => "running",
             JobStatus::Done => "done",
             JobStatus::Failed => "failed",
+            JobStatus::Cancelled => "cancelled",
         }
     }
 
@@ -88,6 +89,7 @@ impl PostgresStorage {
             "running" => JobStatus::Running,
             "done" => JobStatus::Done,
             "failed" => JobStatus::Failed,
+            "cancelled" => JobStatus::Cancelled,
             _ => JobStatus::Pending,
         }
     }

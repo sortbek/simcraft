@@ -2,6 +2,7 @@ use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
 use tempfile::TempDir;
 
 /// Output from a simc subprocess, including all generated report files.
@@ -13,6 +14,46 @@ pub struct SimcOutput {
 
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+
+// ---- Process Registry (for cancellation) ----
+
+use once_cell::sync::Lazy;
+
+/// Maps job_id -> child process PID. Used to kill running sims.
+static RUNNING_PROCESSES: Lazy<Mutex<HashMap<String, u32>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn register_process(job_id: &str, pid: u32) {
+    RUNNING_PROCESSES.lock().unwrap().insert(job_id.to_string(), pid);
+}
+
+fn unregister_process(job_id: &str) {
+    RUNNING_PROCESSES.lock().unwrap().remove(job_id);
+}
+
+/// Kill the simc process for a job. Returns true if a process was found and killed.
+pub fn kill_job(job_id: &str) -> bool {
+    let pid = RUNNING_PROCESSES.lock().unwrap().remove(job_id);
+    if let Some(pid) = pid {
+        #[cfg(unix)]
+        {
+            unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+        }
+        #[cfg(windows)]
+        {
+            // Use taskkill /T to kill the process tree (simc may spawn child threads)
+            use std::os::windows::process::CommandExt;
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output();
+        }
+        println!("Killed simc process {} for job {}", pid, job_id);
+        true
+    } else {
+        false
+    }
+}
 
 #[cfg(windows)]
 extern "system" {
@@ -212,9 +253,10 @@ async fn run_simc_subprocess(
         .spawn()
         .map_err(|e| format!("Failed to run simc at '{}': {}", simc_path.display(), e))?;
 
-    // Limit CPU affinity so simc can only use the requested number of cores.
-    #[cfg(windows)]
+    // Register for cancellation + limit CPU affinity
     if let Some(pid) = child.id() {
+        register_process(job_id, pid);
+        #[cfg(windows)]
         set_process_affinity(pid, threads);
     }
 
@@ -249,6 +291,7 @@ async fn run_simc_subprocess(
                 Ok(Err(_)) => break,  // read error
                 Err(_) => {
                     // Timeout — kill the child
+                    unregister_process(job_id);
                     let _ = child.kill().await;
                     return Err(format!("simc timed out after {}s", SIMC_TIMEOUT_SECS));
                 }
@@ -275,6 +318,8 @@ async fn run_simc_subprocess(
         .wait()
         .await
         .map_err(|e| format!("Failed to wait for simc: {}", e))?;
+
+    unregister_process(job_id);
 
     let stdout_bytes = stdout_task.await.unwrap_or_default();
 

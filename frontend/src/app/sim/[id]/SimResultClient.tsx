@@ -125,6 +125,14 @@ export default function SimResultClient() {
     );
   }
 
+  if (job.status === "cancelled") {
+    return (
+      <div className="card border-amber-500/20 p-6 text-center">
+        <p className="text-sm font-medium text-amber-400">Simulation Cancelled</p>
+      </div>
+    );
+  }
+
   if (job.status === "failed") {
     return (
       <div className="card border-red-500/20 p-6">
@@ -146,6 +154,8 @@ export default function SimResultClient() {
         progressStage={job.progress_stage}
         progressDetail={job.progress_detail}
         stagesCompleted={job.stages_completed}
+        jobId={id}
+        onCancelled={() => setJob({ ...job, status: "cancelled" })}
       />
     );
   }

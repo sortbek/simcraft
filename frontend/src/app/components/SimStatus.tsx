@@ -9,6 +9,8 @@ interface SimStatusProps {
   progressStage?: string;
   progressDetail?: string;
   stagesCompleted?: string[];
+  jobId?: string;
+  onCancelled?: () => void;
 }
 
 /**
@@ -69,12 +71,29 @@ export default function SimStatus({
   progressStage,
   progressDetail,
   stagesCompleted,
+  jobId,
+  onCancelled,
 }: SimStatusProps) {
   const isRunning = status === "running";
+  const isPending = status === "pending";
+  const [cancelling, setCancelling] = useState(false);
   const displayProgress = useSmoothedProgress(progress);
   const cpuUsage = useCpuUsage(isRunning);
-  const title = progressStage || (status === "pending" ? "Queued" : "Simulating");
+  const title = progressStage || (isPending ? "Queued" : "Simulating");
   const hasStages = stagesCompleted && stagesCompleted.length > 0;
+
+  async function handleCancel() {
+    if (!jobId || cancelling) return;
+    setCancelling(true);
+    try {
+      await fetch(`${API_URL}/api/sim/${jobId}/cancel`, { method: "POST" });
+      onCancelled?.();
+    } catch {
+      // ignore
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <div className="flex flex-col items-center justify-center py-16 space-y-6">
@@ -105,6 +124,16 @@ export default function SimStatus({
           )}
         </div>
       </div>
+
+      {jobId && (isRunning || isPending) && (
+        <button
+          onClick={handleCancel}
+          disabled={cancelling}
+          className="text-[12px] text-gray-500 hover:text-red-400 transition-colors px-3 py-1 rounded-lg hover:bg-red-500/10"
+        >
+          {cancelling ? "Cancelling..." : "Cancel Sim"}
+        </button>
+      )}
 
       {hasStages && (
         <div className="w-72 space-y-1 pt-2">
