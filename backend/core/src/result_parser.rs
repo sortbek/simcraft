@@ -31,6 +31,58 @@ fn extract_version(raw: &Value) -> String {
     }
 }
 
+/// Extract ability stats from a player or pet stats array into the abilities list.
+/// If `pet_name` is Some, abilities are prefixed with the pet name.
+fn extract_stats_into(abilities: &mut Vec<Value>, stats: Option<&Value>, pet_name: Option<&str>) {
+    let stats = match stats.and_then(|s| s.as_array()) {
+        Some(s) => s,
+        None => return,
+    };
+    for stat in stats {
+        let raw_name = stat.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        let dps_contribution = if let Some(portion_aps) = stat.get("portion_aps") {
+            if let Some(obj) = portion_aps.as_object() {
+                obj.get("mean").and_then(|m| m.as_f64()).unwrap_or(0.0)
+            } else {
+                portion_aps.as_f64().unwrap_or(0.0)
+            }
+        } else {
+            0.0
+        };
+        let school = stat
+            .get("school")
+            .and_then(|s| s.as_str())
+            .unwrap_or("physical");
+
+        if !raw_name.is_empty() && dps_contribution > 0.0 {
+            let display_name = match pet_name {
+                Some(pn) => format!("{}: {}", title_case(&pn.replace('_', " ")), raw_name),
+                None => raw_name.to_string(),
+            };
+            let spell_id = stat.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+            let mut ability = json!({
+                "name": display_name,
+                "portion_dps": round1(dps_contribution),
+                "school": school,
+            });
+            if spell_id > 0 {
+                ability["spell_id"] = json!(spell_id);
+            }
+            if spell_id == 0 {
+                if let Some(children) = stat.get("children").and_then(|c| c.as_array()) {
+                    if let Some(child) = children.first() {
+                        let child_id = child.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+                        if child_id > 0 {
+                            ability["spell_id"] = json!(child_id);
+                        }
+                    }
+                }
+            }
+            abilities.push(ability);
+        }
+    }
+}
+
 /// Extract key metrics from raw simc JSON output.
 pub fn parse_simc_result(raw: &Value) -> Value {
     let empty = json!({});
@@ -92,52 +144,21 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         "elapsed_time_seconds": round2(elapsed_time),
         "target_error": target_error,
         "simc_version": extract_version(raw),
+        "simc_git_revision": raw.get("git_revision").and_then(|v| v.as_str()).unwrap_or(""),
     });
 
-    // Ability breakdown
-    let stats = player.get("stats").and_then(|s| s.as_array());
-    if let Some(stats) = stats {
-        let mut abilities: Vec<Value> = Vec::new();
-        for stat in stats {
-            let name = stat.get("name").and_then(|n| n.as_str()).unwrap_or("");
-            let dps_contribution = if let Some(portion_aps) = stat.get("portion_aps") {
-                if let Some(obj) = portion_aps.as_object() {
-                    obj.get("mean").and_then(|m| m.as_f64()).unwrap_or(0.0)
-                } else {
-                    portion_aps.as_f64().unwrap_or(0.0)
-                }
-            } else {
-                0.0
-            };
-            let school = stat
-                .get("school")
-                .and_then(|s| s.as_str())
-                .unwrap_or("physical");
+    // Ability breakdown (player + pets)
+    let mut abilities: Vec<Value> = Vec::new();
+    extract_stats_into(&mut abilities, player.get("stats"), None);
 
-            if !name.is_empty() && dps_contribution > 0.0 {
-                let spell_id = stat.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                let mut ability = json!({
-                    "name": name,
-                    "portion_dps": round1(dps_contribution),
-                    "school": school,
-                });
-                if spell_id > 0 {
-                    ability["spell_id"] = json!(spell_id);
-                }
-                // Check children for spell_id if parent has none (e.g. moonlight_chakram wrapper)
-                if spell_id == 0 {
-                    if let Some(children) = stat.get("children").and_then(|c| c.as_array()) {
-                        if let Some(child) = children.first() {
-                            let child_id = child.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                            if child_id > 0 {
-                                ability["spell_id"] = json!(child_id);
-                            }
-                        }
-                    }
-                }
-                abilities.push(ability);
-            }
+    // Pet abilities (simc stores these as stats_pets: { pet_name: [stats...] })
+    if let Some(stats_pets) = player.get("stats_pets").and_then(|p| p.as_object()) {
+        for (pet_name, pet_stats) in stats_pets {
+            extract_stats_into(&mut abilities, Some(pet_stats), Some(pet_name));
         }
+    }
+
+    if !abilities.is_empty() {
         abilities.sort_by(|a, b| {
             let a_dps = a["portion_dps"].as_f64().unwrap_or(0.0);
             let b_dps = b["portion_dps"].as_f64().unwrap_or(0.0);
