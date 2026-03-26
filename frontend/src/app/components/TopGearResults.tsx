@@ -1,9 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useItemInfo, useEnchantInfo, useGemInfo, getIconUrl, getWowheadUrl, getWowheadData, QUALITY_COLORS } from "../lib/useItemInfo";
-import type { ItemInfo, EnchantInfo, GemInfo, ItemQuery } from "../lib/useItemInfo";
 import { SLOT_LABELS } from "../lib/types";
+import type {
+  EnchantInfo,
+  GemInfo,
+  ItemInfo,
+  ItemQuery,
+} from "../lib/useItemInfo";
+import {
+  getIconUrl,
+  getWowheadData,
+  getWowheadUrl,
+  QUALITY_COLORS,
+  useEnchantInfo,
+  useGemInfo,
+  useItemInfo,
+} from "../lib/useItemInfo";
 import { useWowheadTooltips } from "../lib/useWowheadTooltips";
 
 interface ResultItem {
@@ -17,6 +30,7 @@ interface ResultItem {
   is_kept?: boolean;
   encounter?: string;
   origin?: string;
+  upgrade_levels?: number;
 }
 
 interface TopGearResult {
@@ -36,9 +50,22 @@ interface TopGearResultsProps {
 
 // WoW character sheet order: left column, right column, then weapons
 const GEAR_ORDER_LEFT = ["head", "neck", "shoulder", "back", "chest", "wrist"];
-const GEAR_ORDER_RIGHT = ["hands", "waist", "legs", "feet", "finger1", "finger2", "trinket1", "trinket2"];
+const GEAR_ORDER_RIGHT = [
+  "hands",
+  "waist",
+  "legs",
+  "feet",
+  "finger1",
+  "finger2",
+  "trinket1",
+  "trinket2",
+];
 const GEAR_ORDER_BOTTOM = ["main_hand", "off_hand"];
-const ALL_SLOTS = [...GEAR_ORDER_LEFT, ...GEAR_ORDER_RIGHT, ...GEAR_ORDER_BOTTOM];
+const ALL_SLOTS = [
+  ...GEAR_ORDER_LEFT,
+  ...GEAR_ORDER_RIGHT,
+  ...GEAR_ORDER_BOTTOM,
+];
 
 export default function TopGearResults({
   playerName,
@@ -51,7 +78,9 @@ export default function TopGearResults({
   const bestResult = results.length > 0 ? results[0] : null;
 
   // Droptimizer grouping — only available when items have encounter data
-  const hasEncounterData = results.some((r) => r.items.some((it) => it.encounter));
+  const hasEncounterData = results.some((r) =>
+    r.items.some((it) => it.encounter),
+  );
   type GroupMode = "rank" | "encounter";
   const [groupMode, setGroupMode] = useState<GroupMode>("rank");
 
@@ -117,7 +146,9 @@ export default function TopGearResults({
 
   const allEnchantIds = useMemo(() => {
     const ids = new Set<number>();
-    const addEnchant = (id?: number) => { if (id && id > 0) ids.add(id); };
+    const addEnchant = (id?: number) => {
+      if (id && id > 0) ids.add(id);
+    };
     for (const r of results) {
       for (const it of r.items) addEnchant(it.enchant_id);
     }
@@ -131,7 +162,9 @@ export default function TopGearResults({
 
   const allGemIds = useMemo(() => {
     const ids = new Set<number>();
-    const addGem = (id?: number) => { if (id && id > 0) ids.add(id); };
+    const addGem = (id?: number) => {
+      if (id && id > 0) ids.add(id);
+    };
     for (const r of results) {
       for (const it of r.items) addGem(it.gem_id);
     }
@@ -197,7 +230,9 @@ export default function TopGearResults({
                   key={slot}
                   slot={slot}
                   item={bestGearSet[slot]}
-                  isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                  isUpgrade={
+                    (bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade
+                  }
                   itemInfoMap={itemInfoMap}
                   enchantInfoMap={enchantInfoMap}
                   gemInfoMap={gemInfoMap}
@@ -211,7 +246,9 @@ export default function TopGearResults({
                   key={slot}
                   slot={slot}
                   item={bestGearSet[slot]}
-                  isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                  isUpgrade={
+                    (bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade
+                  }
                   itemInfoMap={itemInfoMap}
                   enchantInfoMap={enchantInfoMap}
                   gemInfoMap={gemInfoMap}
@@ -226,7 +263,9 @@ export default function TopGearResults({
                 key={slot}
                 slot={slot}
                 item={bestGearSet[slot]}
-                isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                isUpgrade={
+                  (bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade
+                }
                 itemInfoMap={itemInfoMap}
                 enchantInfoMap={enchantInfoMap}
                 gemInfoMap={gemInfoMap}
@@ -245,7 +284,12 @@ export default function TopGearResults({
           <div className="flex items-center gap-3">
             {hasEncounterData && (
               <div className="flex gap-1">
-                {([["rank", "By Rank"], ["encounter", "By Boss"]] as const).map(([mode, label]) => (
+                {(
+                  [
+                    ["rank", "By Rank"],
+                    ["encounter", "By Boss"],
+                  ] as const
+                ).map(([mode, label]) => (
                   <button
                     key={mode}
                     onClick={() => setGroupMode(mode)}
@@ -271,8 +315,12 @@ export default function TopGearResults({
             {groupedResults.map(([encounter, group]) => (
               <div key={encounter}>
                 <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-border/50">
-                  <span className="text-[12px] font-semibold text-gray-300">{encounter}</span>
-                  <span className="text-[10px] text-muted font-mono">{group.length} items</span>
+                  <span className="text-[12px] font-semibold text-gray-300">
+                    {encounter}
+                  </span>
+                  <span className="text-[10px] text-muted font-mono">
+                    {group.length} items
+                  </span>
                 </div>
                 <div className="space-y-1">
                   {group.map((result) => (
@@ -292,21 +340,21 @@ export default function TopGearResults({
             ))}
           </div>
         ) : (
-        <div className="space-y-1">
-          {results.map((result, idx) => (
-            <ResultRow
-              key={idx}
-              result={result}
-              rank={idx + 1}
-              maxDps={maxDps}
-              baseDps={baseDps}
-              isBest={idx === 0 && result.delta > 0}
-              itemInfoMap={itemInfoMap}
-              enchantInfoMap={enchantInfoMap}
-              gemInfoMap={gemInfoMap}
-            />
-          ))}
-        </div>
+          <div className="space-y-1">
+            {results.map((result, idx) => (
+              <ResultRow
+                key={idx}
+                result={result}
+                rank={idx + 1}
+                maxDps={maxDps}
+                baseDps={baseDps}
+                isBest={idx === 0 && result.delta > 0}
+                itemInfoMap={itemInfoMap}
+                enchantInfoMap={enchantInfoMap}
+                gemInfoMap={gemInfoMap}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -333,16 +381,13 @@ function ResultRow({
   gemInfoMap: Record<number, GemInfo>;
 }) {
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
-  const isEquipped = result.items.length === 0 || result.name === "Currently Equipped";
+  const isEquipped =
+    result.items.length === 0 || result.name === "Currently Equipped";
 
   return (
     <div
       className={`relative rounded-lg overflow-hidden ${
-        isBest
-          ? "ring-1 ring-gold/20"
-          : isEquipped
-          ? "ring-1 ring-white/5"
-          : ""
+        isBest ? "ring-1 ring-gold/20" : isEquipped ? "ring-1 ring-white/5" : ""
       }`}
     >
       <div
@@ -358,24 +403,22 @@ function ResultRow({
           )}
 
           {isEquipped ? (
-            <span className="text-[12px] text-muted">
-              Currently Equipped
-            </span>
+            <span className="text-[12px] text-muted">Currently Equipped</span>
           ) : (
             <div className="flex items-center gap-1 min-w-0 flex-wrap">
-              {result.items.filter(it => !it.is_kept).map((it, i) => (
-                <ItemTag
-                  key={i}
-                  item={it}
-                  info={
-                    it.item_id > 0
-                      ? itemInfoMap[it.item_id]
-                      : undefined
-                  }
-                  enchant={it.enchant_id ? enchantInfoMap[it.enchant_id] : undefined}
-                  gem={it.gem_id ? gemInfoMap[it.gem_id] : undefined}
-                />
-              ))}
+              {result.items
+                .filter((it) => !it.is_kept)
+                .map((it, i) => (
+                  <ItemTag
+                    key={i}
+                    item={it}
+                    info={it.item_id > 0 ? itemInfoMap[it.item_id] : undefined}
+                    enchant={
+                      it.enchant_id ? enchantInfoMap[it.enchant_id] : undefined
+                    }
+                    gem={it.gem_id ? gemInfoMap[it.gem_id] : undefined}
+                  />
+                ))}
             </div>
           )}
 
@@ -391,20 +434,21 @@ function ResultRow({
               result.delta > 0
                 ? "text-emerald-400"
                 : result.delta < 0
-                ? "text-red-400"
-                : "text-muted"
+                  ? "text-red-400"
+                  : "text-muted"
             }`}
           >
             <span>
               {result.delta > 0
                 ? `+${Math.round(result.delta).toLocaleString()}`
                 : result.delta < 0
-                ? Math.round(result.delta).toLocaleString()
-                : "—"}
+                  ? Math.round(result.delta).toLocaleString()
+                  : "—"}
             </span>
             {result.delta !== 0 && baseDps > 0 && (
               <span className="text-xs opacity-70">
-                ({result.delta > 0 ? "+" : ""}{((result.delta / baseDps) * 100).toFixed(1)}%)
+                ({result.delta > 0 ? "+" : ""}
+                {((result.delta / baseDps) * 100).toFixed(1)}%)
               </span>
             )}
           </span>
@@ -437,7 +481,9 @@ function GearSlotRow({
       <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
         <div className="w-7 h-7 shrink-0 rounded bg-white/[0.03] border border-border" />
         <div>
-          <p className="text-[11px] text-gray-600">{SLOT_LABELS[slot] || slot}</p>
+          <p className="text-[11px] text-gray-600">
+            {SLOT_LABELS[slot] || slot}
+          </p>
           <p className="text-[9px] text-gray-700">Empty</p>
         </div>
       </div>
@@ -450,7 +496,15 @@ function GearSlotRow({
   const qc = info ? QUALITY_COLORS[info.quality] || "#fff" : "#fff";
   const name = info?.name || item.name || `Item ${item.item_id}`;
   const icon = info?.icon || "inv_misc_questionmark";
-  const whData = item.item_id > 0 ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id) : undefined;
+  const whData =
+    item.item_id > 0
+      ? getWowheadData(
+          item.bonus_ids,
+          item.ilevel,
+          item.enchant_id,
+          item.gem_id,
+        )
+      : undefined;
 
   return (
     <div
@@ -487,30 +541,61 @@ function GearSlotRow({
               New
             </span>
           )}
-          {item.origin === "vault" && (
-            <span className="shrink-0 text-[8px] uppercase tracking-wider font-bold text-amber-400 bg-amber-400/10 px-1 py-px rounded">
-              Vault
-            </span>
-          )}
+            {(item.upgrade_levels ?? 0) > 0 && (
+              <span className="shrink-0 text-[9px] font-semibold text-gold bg-gold/15 px-1 py-px rounded">
+                +{item.upgrade_levels} LvL
+              </span>
+            )}
+            {item.origin === "vault" && (
+              <span className="shrink-0 text-[8px] uppercase tracking-wider font-bold text-amber-400 bg-amber-400/10 px-1 py-px rounded">
+                Vault
+              </span>
+            )}
         </div>
         <p className="text-[9px] text-muted truncate">
           {SLOT_LABELS[slot] || slot}
           {item.ilevel > 0 && ` · ${item.ilevel}`}
           {info?.tag && ` · ${info.tag}`}
-          {gem?.name ? <span className="text-sky-400/70"> · {gem.name}</span> : (info?.sockets ?? 0) > 0 && <span className="text-sky-400/70"> · Socket</span>}
-          {enchant?.name && <span className="text-emerald-400/70"> · {enchant.name}</span>}
+          {gem?.name ? (
+            <span className="text-sky-400/70"> · {gem.name}</span>
+          ) : (
+            (info?.sockets ?? 0) > 0 && (
+              <span className="text-sky-400/70"> · Socket</span>
+            )
+          )}
+          {enchant?.name && (
+            <span className="text-emerald-400/70"> · {enchant.name}</span>
+          )}
         </p>
       </div>
     </div>
   );
 }
 
-function ItemTag({ item, info, enchant, gem }: { item: ResultItem; info?: ItemInfo; enchant?: EnchantInfo; gem?: GemInfo }) {
+function ItemTag({
+  item,
+  info,
+  enchant,
+  gem,
+}: {
+  item: ResultItem;
+  info?: ItemInfo;
+  enchant?: EnchantInfo;
+  gem?: GemInfo;
+}) {
   const qc = info ? QUALITY_COLORS[info.quality] || "#fff" : "#fff";
   const name = info?.name || item.name || `Item ${item.item_id}`;
   const icon = info?.icon || "inv_misc_questionmark";
   const kept = item.is_kept;
-  const whData = item.item_id > 0 ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id) : undefined;
+  const whData =
+    item.item_id > 0
+      ? getWowheadData(
+          item.bonus_ids,
+          item.ilevel,
+          item.enchant_id,
+          item.gem_id,
+        )
+      : undefined;
 
   return (
     <div
@@ -540,11 +625,21 @@ function ItemTag({ item, info, enchant, gem }: { item: ResultItem; info?: ItemIn
       >
         {name}
       </a>
-      {item.origin === "vault" && (
-        <span className="text-[8px] font-bold text-amber-400 uppercase tracking-wider shrink-0">V</span>
+      {item.ilevel > 0 && (
+        <span className="text-[10px] font-mono text-gray-200 bg-white/[0.08] px-1 py-px rounded shrink-0">
+          {item.ilevel}
+        </span>
       )}
+        {item.origin === "vault" && (
+          <span className="text-[8px] font-bold text-amber-400 uppercase tracking-wider shrink-0">
+            V
+          </span>
+        )}
       {enchant?.name && (
-        <span className="text-[9px] text-emerald-400/70 truncate max-w-[70px]" title={enchant.name}>
+        <span
+          className="text-[9px] text-emerald-400/70 truncate max-w-[70px]"
+          title={enchant.name}
+        >
           {enchant.name}
         </span>
       )}

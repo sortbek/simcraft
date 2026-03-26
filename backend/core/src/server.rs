@@ -855,7 +855,7 @@ async fn get_upgrade_compare_combo_count(
         let item_id = equipped.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
         let mut upgraded_items: Vec<Value> = Vec::new();
 
-        for (_, target_bonus_id) in slot_upgrades {
+        for (target_level, target_bonus_id) in slot_upgrades {
             let new_bonus_ids: Vec<u64> = old_bonus_ids
                 .iter()
                 .map(|bid| if *bid == current_bonus_id { target_bonus_id } else { *bid })
@@ -868,6 +868,7 @@ async fn get_upgrade_compare_combo_count(
             let mut upgraded = equipped.clone();
             upgraded["is_equipped"] = json!(false);
             upgraded["bonus_ids"] = json!(new_bonus_ids.clone());
+            upgraded["upgrade_levels"] = json!(target_level.saturating_sub(current_level));
 
             if let Some(simc) = equipped.get("simc_string").and_then(|s| s.as_str()) {
                 let new_simc = bonus_re
@@ -1043,7 +1044,7 @@ async fn create_upgrade_compare_sim(
         let item_id = equipped.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
         let mut upgraded_items: Vec<Value> = Vec::new();
 
-        for (_, target_bonus_id) in slot_upgrades {
+        for (target_level, target_bonus_id) in slot_upgrades {
             let new_bonus_ids: Vec<u64> = old_bonus_ids
                 .iter()
                 .map(|bid| if *bid == current_bonus_id { target_bonus_id } else { *bid })
@@ -1056,6 +1057,7 @@ async fn create_upgrade_compare_sim(
             let mut upgraded = equipped.clone();
             upgraded["is_equipped"] = json!(false);
             upgraded["bonus_ids"] = json!(new_bonus_ids.clone());
+            upgraded["upgrade_levels"] = json!(target_level.saturating_sub(current_level));
 
             if let Some(simc) = equipped.get("simc_string").and_then(|s| s.as_str()) {
                 let new_simc = bonus_re

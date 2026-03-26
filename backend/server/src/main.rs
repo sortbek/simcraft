@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use simhammer_core::game_data;
+use simhammer_core::profileset_generator::MAX_COMBINATIONS;
 use simhammer_core::server;
 use simhammer_core::storage::JobStorage;
 
@@ -31,6 +32,7 @@ async fn main() {
 
     println!("Loading game data from {:?}", data_dir);
     game_data::load(&data_dir);
+    println!("MAX_COMBINATIONS = {}", *MAX_COMBINATIONS);
 
     let storage: Arc<dyn JobStorage> = if desktop_mode {
         println!("Starting SimHammer in desktop mode on {}:{}", bind_host, port);

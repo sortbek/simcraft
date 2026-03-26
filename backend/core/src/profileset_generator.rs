@@ -426,6 +426,9 @@ pub fn generate_upgrade_compare_input(
                 let mut meta = item_meta(item, slot);
                 meta["is_kept"] = json!(false);
                 meta["upgrade_costs"] = item.get("upgrade_costs").cloned().unwrap_or(json!({}));
+                if let Some(levels) = item.get("upgrade_levels") {
+                    meta["upgrade_levels"] = levels.clone();
+                }
                 meta_items.push(meta);
             }
 
