@@ -1,7 +1,13 @@
-'use client';
+"use client";
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import type { FightScenario } from '../lib/types';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 interface SimContextType {
   simcInput: string;
@@ -10,8 +16,8 @@ interface SimContextType {
   setFightStyle: (v: string) => void;
   threads: number;
   setThreads: (v: number) => void;
-  maxCombinations: number;
-  setMaxCombinations: (v: number) => void;
+  maxCombinations: number | undefined;
+  setMaxCombinations: (v: number | undefined) => void;
   selectedTalent: string;
   setSelectedTalent: (v: string) => void;
   targetCount: number;
@@ -31,23 +37,17 @@ interface SimContextType {
   setSimcPostCombos: (v: string) => void;
   simcFooter: string;
   setSimcFooter: (v: string) => void;
-  // Multi-sim scenarios
-  scenarios: FightScenario[];
-  addScenario: () => void;
-  removeScenario: (id: string) => void;
-  clearScenarios: () => void;
 }
 
 const SimContext = createContext<SimContextType | null>(null);
 
 export function useSimContext() {
   const ctx = useContext(SimContext);
-  if (!ctx) throw new Error('useSimContext must be used within SimProvider');
+  if (!ctx) throw new Error("useSimContext must be used within SimProvider");
   return ctx;
 }
 
 function readStored(key: string, fallback: number): number {
-  if (typeof window === 'undefined') return fallback;
   const v = localStorage.getItem(key);
   if (v == null) return fallback;
   const n = parseInt(v, 10);
@@ -55,61 +55,55 @@ function readStored(key: string, fallback: number): number {
 }
 
 function readSessionString(key: string, fallback: string): string {
-  if (typeof window === 'undefined') return fallback;
   return sessionStorage.getItem(key) ?? fallback;
 }
 
 export function SimProvider({ children }: { children: ReactNode }) {
-  const [simcInput, _setSimcInput] = useState(() => readSessionString('simhammer_simc_input', ''));
-  const [fightStyle, setFightStyle] = useState('Patchwerk');
-  const [threads, _setThreads] = useState(() => readStored('simhammer_threads', 0));
-  const [maxCombinations, _setMaxCombinations] = useState(() =>
-    readStored('simhammer_max_combinations', 500)
+  const [simcInput, _setSimcInput] = useState("");
+  const [fightStyle, setFightStyle] = useState("Patchwerk");
+  const [threads, _setThreads] = useState(0);
+  const [maxCombinations, _setMaxCombinations] = useState<number | undefined>(
+    undefined,
   );
-  const [selectedTalent, setSelectedTalent] = useState('');
+  const [selectedTalent, setSelectedTalent] = useState("");
   const [targetCount, setTargetCount] = useState(1);
   const [fightLength, setFightLength] = useState(300);
-  const [customApl, setCustomApl] = useState('');
-  const [simcHeader, setSimcHeader] = useState('');
-  const [simcBasePlayer, setSimcBasePlayer] = useState('');
-  const [simcRaidActors, setSimcRaidActors] = useState('');
-  const [simcPostCombos, setSimcPostCombos] = useState('');
-  const [simcFooter, setSimcFooter] = useState('');
-  const [scenarios, setScenarios] = useState<FightScenario[]>([]);
+  const [customApl, setCustomApl] = useState("");
+  const [simcHeader, setSimcHeader] = useState("");
+  const [simcBasePlayer, setSimcBasePlayer] = useState("");
+  const [simcRaidActors, setSimcRaidActors] = useState("");
+  const [simcPostCombos, setSimcPostCombos] = useState("");
+  const [simcFooter, setSimcFooter] = useState("");
 
-  const addScenario = useCallback(() => {
-    setScenarios((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), fightStyle, targetCount, fightLength },
-    ]);
-  }, [fightStyle, targetCount, fightLength]);
-
-  const removeScenario = useCallback((id: string) => {
-    setScenarios((prev) => prev.filter((s) => s.id !== id));
-  }, []);
-
-  const clearScenarios = useCallback(() => {
-    setScenarios([]);
+  useEffect(() => {
+    try {
+      _setSimcInput(readSessionString("simhammer_simc_input", ""));
+      _setThreads(readStored("simhammer_threads", 0));
+    } catch {}
   }, []);
 
   const setSimcInput = useCallback((v: string) => {
     _setSimcInput(v);
     try {
-      sessionStorage.setItem('simhammer_simc_input', v);
+      sessionStorage.setItem("simhammer_simc_input", v);
     } catch {}
   }, []);
 
   const setThreads = useCallback((v: number) => {
     _setThreads(v);
     try {
-      localStorage.setItem('simhammer_threads', String(v));
+      localStorage.setItem("simhammer_threads", String(v));
     } catch {}
   }, []);
 
-  const setMaxCombinations = useCallback((v: number) => {
+  const setMaxCombinations = useCallback((v: number | undefined) => {
     _setMaxCombinations(v);
     try {
-      localStorage.setItem('simhammer_max_combinations', String(v));
+      if (v == null) {
+        localStorage.removeItem("simhammer_max_combinations");
+      } else {
+        localStorage.setItem("simhammer_max_combinations", String(v));
+      }
     } catch {}
   }, []);
 
@@ -142,10 +136,6 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setSimcPostCombos,
         simcFooter,
         setSimcFooter,
-        scenarios,
-        addScenario,
-        removeScenario,
-        clearScenarios,
       }}
     >
       {children}
