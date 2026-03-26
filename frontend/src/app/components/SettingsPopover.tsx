@@ -19,7 +19,7 @@ export default function SettingsPopover() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const desktop = !!true;
+    const desktop = !!window.electronAPI;
     setIsDesktop(desktop);
     if (!desktop) return;
 
