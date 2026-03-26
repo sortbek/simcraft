@@ -73,6 +73,9 @@ pub struct SimOptions {
     /// Custom APL and SimC expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list).
     #[serde(default)]
     pub custom_apl: String,
+    // Batch grouping
+    #[serde(default)]
+    pub batch_id: Option<String>,
     // Expert Mode injection points
     #[serde(default)]
     pub simc_header: String,
@@ -497,13 +500,14 @@ async fn create_sim(
     simc_input = apply_talent_override(&simc_input, &req.options.talents);
     simc_input = inject_expert_fields(&simc_input, &req.options);
 
-    let job = Job::new(
+    let mut job = Job::new(
         simc_input.clone(),
         req.sim_type.clone(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
     );
+    job.batch_id = req.options.batch_id.clone();
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();
     store.insert(job);
@@ -625,6 +629,7 @@ async fn create_top_gear_sim(
 
     let mut job = job;
     job.combo_metadata_json = Some(meta_json);
+    job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
     spawn_staged_sim(
@@ -724,6 +729,7 @@ async fn create_droptimizer_sim(
 
     let mut job = job;
     job.combo_metadata_json = Some(meta_json);
+    job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
     spawn_staged_sim(

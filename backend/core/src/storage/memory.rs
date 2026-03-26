@@ -74,6 +74,7 @@ impl JobStorage for MemoryStorage {
                 player_class: s.player_class,
                 realm: s.realm,
                 dps: s.dps,
+                batch_id: j.batch_id.clone(),
             });
         }
         results

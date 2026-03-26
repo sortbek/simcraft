@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSimContext } from "../components/SimContext";
 import { API_URL } from "../lib/api";
-import { storeScenarioSiblings } from "../lib/scenario-siblings";
+import { storeScenarioSiblings, clearScenarioSiblings } from "../lib/scenario-siblings";
 
 export default function QuickSimPage() {
   const { simcInput, fightStyle, threads, selectedTalent, targetCount, fightLength, customApl, simcHeader, simcBasePlayer, simcRaidActors, simcPostCombos, simcFooter, scenarios, clearScenarios } = useSimContext();
@@ -18,10 +18,13 @@ export default function QuickSimPage() {
       return;
     }
     setSubmitting(true);
+    clearScenarioSiblings();
     try {
       const configs = scenarios.length > 0
         ? scenarios
         : [{ id: "", fightStyle, targetCount, fightLength }];
+
+      const batchId = scenarios.length > 0 ? crypto.randomUUID() : undefined;
 
       const sharedPayload = {
         simc_input: simcInput,
@@ -29,6 +32,7 @@ export default function QuickSimPage() {
         target_error: 0.1,
         sim_type: "quick",
         threads,
+        ...(batchId ? { batch_id: batchId } : {}),
         ...(selectedTalent ? { talents: selectedTalent } : {}),
         ...(customApl ? { custom_apl: customApl } : {}),
         ...(simcHeader ? { simc_header: simcHeader } : {}),

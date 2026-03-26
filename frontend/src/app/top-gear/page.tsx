@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSimContext } from "../components/SimContext";
 import TopGearItemSelector from "../components/TopGearItemSelector";
 import { API_URL } from "../lib/api";
-import { storeScenarioSiblings } from "../lib/scenario-siblings";
+import { storeScenarioSiblings, clearScenarioSiblings } from "../lib/scenario-siblings";
 import type { ResolveGearResponse, GEAR_SLOTS } from "../lib/types";
 
 export default function TopGearPage() {
@@ -164,6 +164,7 @@ export default function TopGearPage() {
     if (!resolved) return;
     setError("");
     setSubmitting(true);
+    clearScenarioSiblings();
     try {
       const selectedUidsJson = buildSelectedUidsJson();
       const submitInput = buildSubmitInput();
@@ -171,6 +172,8 @@ export default function TopGearPage() {
       const configs = scenarios.length > 0
         ? scenarios
         : [{ id: "", fightStyle, targetCount, fightLength }];
+
+      const batchId = scenarios.length > 0 ? crypto.randomUUID() : undefined;
 
       const sharedPayload = {
         simc_input: submitInput,
@@ -182,6 +185,7 @@ export default function TopGearPage() {
         copy_enchants: copyEnchants,
         max_combinations: maxCombinations,
         threads,
+        ...(batchId ? { batch_id: batchId } : {}),
         ...(selectedTalent ? { talents: selectedTalent } : {}),
         ...(customApl ? { custom_apl: customApl } : {}),
         ...(simcHeader ? { simc_header: simcHeader } : {}),

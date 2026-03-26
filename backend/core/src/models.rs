@@ -32,6 +32,7 @@ pub struct Job {
     pub created_at: String,
     pub html_report: Option<String>,
     pub text_output: Option<String>,
+    pub batch_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +48,7 @@ pub struct JobSummary {
     pub player_class: Option<String>,
     pub realm: Option<String>,
     pub dps: Option<f64>,
+    pub batch_id: Option<String>,
 }
 
 pub struct ResultSummary {
@@ -131,6 +133,7 @@ impl Job {
             created_at: chrono::Utc::now().to_rfc3339(),
             html_report: None,
             text_output: None,
+            batch_id: None,
         }
     }
 }

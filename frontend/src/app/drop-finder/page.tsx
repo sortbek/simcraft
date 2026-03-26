@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSimContext } from "../components/SimContext";
 import { API_URL } from "../lib/api";
-import { storeScenarioSiblings } from "../lib/scenario-siblings";
+import { storeScenarioSiblings, clearScenarioSiblings } from "../lib/scenario-siblings";
 import type { SeasonConfigResponse, DifficultyDef, DungeonCategory } from "../lib/types";
 
 interface Instance {
@@ -208,6 +208,7 @@ export default function DropFinderPage() {
     if (!drops || selected.size === 0) return;
     setError("");
     setSubmitting(true);
+    clearScenarioSiblings();
     try {
       const dropItems: DropItem[] = [];
       for (const items of Object.values(drops)) {
@@ -223,9 +224,12 @@ export default function DropFinderPage() {
         ? scenarios
         : [{ id: "", fightStyle, targetCount, fightLength }];
 
+      const batchId = scenarios.length > 0 ? crypto.randomUUID() : undefined;
+
       const sharedPayload = {
         simc_input: simcInput, drop_items: dropItems, iterations: 10000,
         target_error: 0.1, threads,
+        ...(batchId ? { batch_id: batchId } : {}),
         ...(selectedTalent ? { talents: selectedTalent } : {}),
         ...(customApl ? { custom_apl: customApl } : {}),
         ...(simcHeader ? { simc_header: simcHeader } : {}),

@@ -27,6 +27,12 @@ export function storeScenarioSiblings(siblings: ScenarioSibling[]): void {
   } catch {}
 }
 
+export function clearScenarioSiblings(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {}
+}
+
 export function getScenarioSiblings(): ScenarioSibling[] | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
