@@ -143,6 +143,43 @@ export default function TopGearPage() {
     return result;
   }
 
+  function buildItemsBySlotJson() {
+    if (!resolved) return null;
+
+    return Object.fromEntries(
+      Object.entries(resolved.slots)
+        .map(([slot, slotRes]) => {
+          const items = [
+            ...(slotRes.equipped ? [slotRes.equipped] : []),
+            ...slotRes.alternatives,
+          ].map((item, index) => ({
+            slot: item.slot,
+            item_id: item.item_id,
+            ilevel: item.ilevel,
+            simc_string: item.simc_string,
+            origin: item.origin,
+            bonus_ids: item.bonus_ids,
+            enchant_id: item.enchant_id,
+            gem_id: item.gem_id,
+            name: item.name,
+            icon: item.icon,
+            quality: item.quality,
+            quality_color: item.quality_color,
+            tag: item.tag,
+            upgrade: item.upgrade,
+            sockets: item.sockets,
+            enchant_name: item.enchant_name,
+            gem_name: item.gem_name,
+            gem_icon: item.gem_icon,
+            is_equipped: index === 0 && !!slotRes.equipped,
+          }));
+
+          return [slot, items] as const;
+        })
+        .filter(([, items]) => items.length > 0),
+    );
+  }
+
   // Fetch combo count from backend whenever selection changes
   useEffect(() => {
     const hasSelection = Object.values(selectedUids).some((s) => s.size > 0);
@@ -158,7 +195,7 @@ export default function TopGearPage() {
         const requestBody = {
           simc_input: buildSubmitInput(),
           selected_items: buildSelectedUidsJson(),
-          items_by_slot: null,
+          items_by_slot: buildItemsBySlotJson(),
           max_upgrade: maxUpgrade,
           copy_enchants: copyEnchants,
           ...(maxCombinations != null
@@ -213,7 +250,7 @@ export default function TopGearPage() {
       const requestBody = {
         simc_input: submitInput,
         selected_items: selectedUidsJson,
-        items_by_slot: null,
+        items_by_slot: buildItemsBySlotJson(),
         iterations: 10000,
         fight_style: fightStyle,
         target_error: 0.1,

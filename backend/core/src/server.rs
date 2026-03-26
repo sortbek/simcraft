@@ -689,7 +689,11 @@ async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> HttpRespons
     let resolved = gear_resolver::resolve_gear(&parse_result);
     let base_profile = resolved.base_profile.clone();
 
-    let mut items_by_slot = resolve_to_items_by_slot(&resolved);
+    let mut items_by_slot: HashMap<String, Vec<Value>> = if let Some(ref ibs) = req.items_by_slot {
+        ibs.clone()
+    } else {
+        resolve_to_items_by_slot(&resolved)
+    };
 
     if req.max_upgrade {
         items_by_slot = game_data::upgrade_items_by_slot(&items_by_slot);
