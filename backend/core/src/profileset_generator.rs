@@ -301,6 +301,217 @@ fn item_meta(item: &Value, slot: &str) -> Value {
 
 // can_dual_wield and inv_type_to_slots now live in types::class_data
 
+pub fn generate_upgrade_compare_input(
+    base_profile: &str,
+    upgraded_options_by_slot: &HashMap<String, Vec<Value>>,
+    upgrade_budget: &HashMap<u64, u64>,
+    max_combos_override: Option<usize>,
+) -> Result<(String, usize, HashMap<String, Vec<Value>>), String> {
+    let (base_lines, equipped_gear, talents_string, _spec) = parse_base_profile(base_profile);
+
+    let mut slots: Vec<String> = upgraded_options_by_slot
+        .iter()
+        .filter_map(|(slot, options)| if options.is_empty() { None } else { Some(slot.clone()) })
+        .collect();
+    slots.sort();
+    if slots.is_empty() {
+        return Err("No upgradeable equipped items were selected.".to_string());
+    }
+    let limit = max_combos_override.unwrap_or(*MAX_COMBINATIONS);
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut combo_metadata: HashMap<String, Vec<Value>> = HashMap::new();
+
+    lines.push("# Base Actor".to_string());
+    lines.extend(base_lines);
+    lines.push("### Combo 1".to_string());
+    for slot in GEAR_SLOTS {
+        let slot_name = slot.to_string();
+        if let Some(gear) = equipped_gear.get(&slot_name) {
+            lines.push(format!("{}={}", slot, gear));
+        } else if *slot == "off_hand" {
+            lines.push("off_hand=,".to_string());
+        }
+    }
+    if !talents_string.is_empty() {
+        lines.push(format!("talents={}", talents_string));
+    }
+    lines.push(String::new());
+
+    fn add_costs_in_place(spent: &mut HashMap<u64, u64>, costs: &HashMap<u64, u64>) {
+        for (currency_id, amount) in costs {
+            *spent.entry(*currency_id).or_insert(0) += *amount;
+        }
+    }
+
+    fn remove_costs_in_place(spent: &mut HashMap<u64, u64>, costs: &HashMap<u64, u64>) {
+        for (currency_id, amount) in costs {
+            let entry = spent.entry(*currency_id).or_insert(0);
+            *entry = entry.saturating_sub(*amount);
+            if *entry == 0 {
+                spent.remove(currency_id);
+            }
+        }
+    }
+
+    fn within_budget(
+        spent: &HashMap<u64, u64>,
+        costs: &HashMap<u64, u64>,
+        budget: &HashMap<u64, u64>,
+    ) -> bool {
+        for (currency_id, amount) in costs {
+            let next = spent.get(currency_id).copied().unwrap_or(0) + *amount;
+            let cap = budget.get(currency_id).copied().unwrap_or(0);
+            if next > cap {
+                return false;
+            }
+        }
+        true
+    }
+
+    struct DfsCtx<'a> {
+        slots: &'a [String],
+        options_by_slot: &'a HashMap<String, Vec<Value>>,
+        budget: &'a HashMap<u64, u64>,
+        talents_string: &'a str,
+        limit: usize,
+        valid_count: usize,
+        too_many: bool,
+        lines: &'a mut Vec<String>,
+        combo_metadata: &'a mut HashMap<String, Vec<Value>>,
+    }
+
+    fn dfs_build(
+        idx: usize,
+        spent: &mut HashMap<u64, u64>,
+        selected: &mut Vec<(String, usize)>,
+        ctx: &mut DfsCtx,
+    ) {
+        if ctx.too_many {
+            return;
+        }
+
+        if idx >= ctx.slots.len() {
+            if selected.is_empty() {
+                return;
+            }
+
+            ctx.valid_count += 1;
+            if ctx.valid_count > ctx.limit {
+                ctx.too_many = true;
+                return;
+            }
+
+            let combo_name = format!("Combo {}", ctx.valid_count + 1);
+            ctx.lines.push(format!("### {}", combo_name));
+
+            let mut meta_items: Vec<Value> = Vec::new();
+            for (slot, opt_idx) in selected.iter() {
+                let Some(options) = ctx.options_by_slot.get(slot) else {
+                    continue;
+                };
+                let Some(item) = options.get(*opt_idx) else {
+                    continue;
+                };
+
+                let simc_str = item
+                    .get("simc_string")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("");
+                ctx.lines.push(format!(
+                    "profileset.\"{}\"+={}={}",
+                    combo_name, slot, simc_str
+                ));
+
+                let mut meta = item_meta(item, slot);
+                meta["is_kept"] = json!(false);
+                meta["upgrade_costs"] = item.get("upgrade_costs").cloned().unwrap_or(json!({}));
+                meta_items.push(meta);
+            }
+
+            if !ctx.talents_string.is_empty() {
+                ctx.lines.push(format!(
+                    "profileset.\"{}\"+=talents={}",
+                    combo_name, ctx.talents_string
+                ));
+            }
+            ctx.lines.push(String::new());
+            ctx.combo_metadata.insert(combo_name, meta_items);
+            return;
+        }
+
+        // Option 1: keep current item in this slot.
+        dfs_build(idx + 1, spent, selected, ctx);
+
+        // Option 2: choose one of the available upgrade levels for this slot.
+        let slot = &ctx.slots[idx];
+        let Some(options) = ctx.options_by_slot.get(slot) else {
+            return;
+        };
+
+        for (opt_idx, item) in options.iter().enumerate() {
+            let costs = parse_upgrade_costs(item);
+            if !within_budget(spent, &costs, ctx.budget) {
+                continue;
+            }
+
+            add_costs_in_place(spent, &costs);
+            selected.push((slot.clone(), opt_idx));
+            dfs_build(idx + 1, spent, selected, ctx);
+            selected.pop();
+            remove_costs_in_place(spent, &costs);
+
+            if ctx.too_many {
+                return;
+            }
+        }
+    }
+
+    let mut spent: HashMap<u64, u64> = HashMap::new();
+    let mut selected: Vec<(String, usize)> = Vec::new();
+    let mut ctx = DfsCtx {
+        slots: &slots,
+        options_by_slot: upgraded_options_by_slot,
+        budget: upgrade_budget,
+        talents_string: &talents_string,
+        limit,
+        valid_count: 0,
+        too_many: false,
+        lines: &mut lines,
+        combo_metadata: &mut combo_metadata,
+    };
+    dfs_build(0, &mut spent, &mut selected, &mut ctx);
+    let valid_count = ctx.valid_count;
+
+    if valid_count == 0 {
+        return Err("No valid upgrade combinations fit your upgrade currencies.".to_string());
+    }
+
+    if ctx.too_many || valid_count > limit {
+        return Err(format!(
+            "Too many valid combinations ({}) after filtering by budget. Maximum is {}. Please deselect some items or increase your currencies.",
+            valid_count, limit
+        ));
+    }
+
+    Ok((lines.join("\n"), valid_count, combo_metadata))
+}
+
+fn parse_upgrade_costs(item: &Value) -> HashMap<u64, u64> {
+    item.get("upgrade_costs")
+        .and_then(|v| v.as_object())
+        .map(|obj| {
+            obj.iter()
+                .filter_map(|(k, v)| {
+                    let currency_id = k.parse::<u64>().ok()?;
+                    let amount = v.as_u64()?;
+                    Some((currency_id, amount))
+                })
+                .collect::<HashMap<u64, u64>>()
+        })
+        .unwrap_or_default()
+}
+
 pub fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],

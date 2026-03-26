@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::collections::HashMap;
 
 use crate::types::class_data::{self, GEAR_SLOTS};
 use crate::types::{RawParsedItem, CharacterInfo, ItemOrigin, TalentLoadout, ParseResult};
@@ -204,3 +205,32 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
     }
 }
 
+pub fn parse_upgrade_currencies(simc_input: &str) -> HashMap<u64, u64> {
+    let mut currencies = HashMap::new();
+    let line_re = Regex::new(r"(?i)^#?\s*upgrade_currencies\s*=\s*(.+)$").unwrap();
+    let pair_re = Regex::new(r"(\d+)\s*[:=]\s*(\d+)").unwrap();
+
+    for raw_line in simc_input.lines() {
+        let line = raw_line.trim();
+        let Some(caps) = line_re.captures(line) else {
+            continue;
+        };
+        let rhs = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        for pair in pair_re.captures_iter(rhs) {
+            let currency_id = pair
+                .get(1)
+                .and_then(|m| m.as_str().parse::<u64>().ok())
+                .unwrap_or(0);
+            let amount = pair
+                .get(2)
+                .and_then(|m| m.as_str().parse::<u64>().ok())
+                .unwrap_or(0);
+            if currency_id > 0 {
+                currencies.insert(currency_id, amount);
+            }
+        }
+        break;
+    }
+
+    currencies
+}

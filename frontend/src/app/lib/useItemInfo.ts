@@ -114,10 +114,15 @@ export interface EnchantInfo {
 
 const enchantCache: Record<number, EnchantInfo> = {};
 
-export function useEnchantInfo(enchantIds: number[]): Record<number, EnchantInfo> {
+export function useEnchantInfo(
+  enchantIds: number[],
+): Record<number, EnchantInfo> {
   const [enchants, setEnchants] = useState<Record<number, EnchantInfo>>({});
 
-  const depKey = enchantIds.filter((id) => id > 0).sort().join(",");
+  const depKey = enchantIds
+    .filter((id) => id > 0)
+    .sort()
+    .join(",");
 
   useEffect(() => {
     const unique = new Set(enchantIds.filter((id) => id > 0));
@@ -156,7 +161,9 @@ export function useEnchantInfo(enchantIds: number[]): Record<number, EnchantInfo
       })();
     }
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return enchants;
@@ -174,7 +181,10 @@ const gemCache: Record<number, GemInfo> = {};
 export function useGemInfo(gemIds: number[]): Record<number, GemInfo> {
   const [gems, setGems] = useState<Record<number, GemInfo>>({});
 
-  const depKey = gemIds.filter((id) => id > 0).sort().join(",");
+  const depKey = gemIds
+    .filter((id) => id > 0)
+    .sort()
+    .join(",");
 
   useEffect(() => {
     const unique = new Set(gemIds.filter((id) => id > 0));
@@ -213,10 +223,73 @@ export function useGemInfo(gemIds: number[]): Record<number, GemInfo> {
       })();
     }
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return gems;
+}
+
+export interface CurrencyInfo {
+  currency_id: number;
+  name: string;
+  icon: string;
+}
+
+const currencyInfoCache: Record<number, CurrencyInfo> = {};
+
+export function useCurrencyInfo(
+  currencyIds: number[],
+): Record<number, CurrencyInfo> {
+  const [infos, setInfos] = useState<Record<number, CurrencyInfo>>({});
+
+  const depKey = currencyIds
+    .filter((id) => id > 0)
+    .sort((a, b) => a - b)
+    .join(",");
+
+  useEffect(() => {
+    const cached: Record<number, CurrencyInfo> = {};
+    const toFetch: number[] = [];
+    for (const id of currencyIds) {
+      if (id <= 0) continue;
+      if (currencyInfoCache[id]) {
+        cached[id] = currencyInfoCache[id];
+      } else {
+        toFetch.push(id);
+      }
+    }
+
+    if (Object.keys(cached).length > 0) {
+      setInfos((prev) => ({ ...prev, ...cached }));
+    }
+
+    if (toFetch.length === 0) return;
+
+    let cancelled = false;
+
+    for (const id of toFetch) {
+      (async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/currency-info/${id}`);
+          if (!res.ok || cancelled) return;
+          const info: CurrencyInfo = await res.json();
+          if (cancelled) return;
+          currencyInfoCache[id] = info;
+          setInfos((prev) => ({ ...prev, [id]: info }));
+        } catch {
+          // Silently fail
+        }
+      })();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return infos;
 }
 
 export function getIconUrl(iconName: string): string {
@@ -227,7 +300,12 @@ export function getWowheadUrl(itemId: number): string {
   return `https://www.wowhead.com/item=${itemId}`;
 }
 
-export function getWowheadData(bonusIds?: number[], ilevel?: number, enchantId?: number, gemId?: number): string {
+export function getWowheadData(
+  bonusIds?: number[],
+  ilevel?: number,
+  enchantId?: number,
+  gemId?: number,
+): string {
   const parts: string[] = [];
   if (bonusIds && bonusIds.length > 0) {
     parts.push(`bonus=${bonusIds.join(":")}`);

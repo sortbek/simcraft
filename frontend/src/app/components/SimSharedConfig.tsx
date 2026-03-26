@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { useSimContext } from "./SimContext";
+import { useState } from "react";
 import FightStyleSelector from "./FightStyleSelector";
+import { useSimContext } from "./SimContext";
 import TalentPicker from "./TalentPicker";
 
 function parseCharacterInfo(input: string) {
@@ -14,7 +14,12 @@ function parseCharacterInfo(input: string) {
   // Save last character to localStorage for history page
   const realmMatch = input.match(/^server=(.+)$/m);
   if (nameMatch[2] && realmMatch?.[1]) {
-    try { localStorage.setItem("simhammer_last_character", JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] })); } catch {}
+    try {
+      localStorage.setItem(
+        "simhammer_last_character",
+        JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] }),
+      );
+    } catch {}
   }
   return {
     className: nameMatch[1],
@@ -57,15 +62,24 @@ function AdvancedOptions() {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ExpertTabKey>("footer");
   const {
-    fightStyle, setFightStyle,
-    targetCount, setTargetCount,
-    fightLength, setFightLength,
-    customApl, setCustomApl,
-    simcHeader, setSimcHeader,
-    simcBasePlayer, setSimcBasePlayer,
-    simcRaidActors, setSimcRaidActors,
-    simcPostCombos, setSimcPostCombos,
-    simcFooter, setSimcFooter,
+    fightStyle,
+    setFightStyle,
+    targetCount,
+    setTargetCount,
+    fightLength,
+    setFightLength,
+    customApl,
+    setCustomApl,
+    simcHeader,
+    setSimcHeader,
+    simcBasePlayer,
+    setSimcBasePlayer,
+    simcRaidActors,
+    setSimcRaidActors,
+    simcPostCombos,
+    setSimcPostCombos,
+    simcFooter,
+    setSimcFooter,
   } = useSimContext();
 
   const expertValues: Record<ExpertTabKey, string> = {
@@ -85,7 +99,12 @@ function AdvancedOptions() {
   };
 
   const hasExpertContent = Object.values(expertValues).some((v) => v.trim());
-  const isDefault = fightStyle === "Patchwerk" && targetCount === 1 && fightLength === 300 && !customApl && !hasExpertContent;
+  const isDefault =
+    fightStyle === "Patchwerk" &&
+    targetCount === 1 &&
+    fightLength === 300 &&
+    !customApl &&
+    !hasExpertContent;
   const activeTabInfo = EXPERT_TABS.find((t) => t.key === activeTab)!;
 
   return (
@@ -96,7 +115,9 @@ function AdvancedOptions() {
         className="w-full flex items-center justify-between px-5 py-3 hover:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-300">Advanced Options</span>
+          <span className="text-sm font-medium text-gray-300">
+            Advanced Options
+          </span>
           {!open && !isDefault && (
             <span className="text-[11px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
               Modified
@@ -133,7 +154,9 @@ function AdvancedOptions() {
                   onChange={(e) => setTargetCount(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="text-sm font-mono text-white tabular-nums w-6 text-right">{targetCount}</span>
+                <span className="text-sm font-mono text-white tabular-nums w-6 text-right">
+                  {targetCount}
+                </span>
               </div>
             </div>
             <div className="space-y-2">
@@ -148,7 +171,10 @@ function AdvancedOptions() {
                   onChange={(e) => setFightLength(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="text-sm font-mono text-white tabular-nums w-16 text-right">{Math.floor(fightLength / 60)}:{String(fightLength % 60).padStart(2, "0")}</span>
+                <span className="text-sm font-mono text-white tabular-nums w-16 text-right">
+                  {Math.floor(fightLength / 60)}:
+                  {String(fightLength % 60).padStart(2, "0")}
+                </span>
               </div>
             </div>
           </div>
@@ -163,7 +189,8 @@ function AdvancedOptions() {
               className="input-field h-28 font-mono text-xs resize-y"
             />
             <p className="text-[11px] text-gray-600">
-              Override action priority lists or set expansion-specific options. Injected after the base actor.
+              Override action priority lists or set expansion-specific options.
+              Injected after the base actor.
             </p>
           </div>
 
@@ -227,37 +254,35 @@ function ExpertToggle({
       {open && (
         <div className="space-y-3">
           <div className="flex gap-1 overflow-x-auto">
-              {EXPERT_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border whitespace-nowrap ${
-                    activeTab === tab.key
-                      ? "bg-white text-black border-white"
-                      : expertValues[tab.key].trim()
+            {EXPERT_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border whitespace-nowrap ${
+                  activeTab === tab.key
+                    ? "bg-white text-black border-white"
+                    : expertValues[tab.key].trim()
                       ? "bg-gold/10 text-gold border-gold/30 hover:border-gold/50"
                       : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
-                  }`}
-                >
-                  {tab.label}
-                  {expertValues[tab.key].trim() && activeTab !== tab.key && (
-                    <span className="ml-1 w-1.5 h-1.5 rounded-full bg-gold inline-block" />
-                  )}
-                </button>
-              ))}
-            </div>
-            <textarea
-              value={expertValues[activeTab]}
-              onChange={(e) => expertSetters[activeTab](e.target.value)}
-              placeholder={`Paste ${activeTabInfo.label.toLowerCase()} SimC input here...`}
-              className="input-field h-32 font-mono text-xs resize-y"
-            />
-            <p className="text-[11px] text-gray-600">
-              {activeTabInfo.desc}
-            </p>
+                }`}
+              >
+                {tab.label}
+                {expertValues[tab.key].trim() && activeTab !== tab.key && (
+                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-gold inline-block" />
+                )}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+          <textarea
+            value={expertValues[activeTab]}
+            onChange={(e) => expertSetters[activeTab](e.target.value)}
+            placeholder={`Paste ${activeTabInfo.label.toLowerCase()} SimC input here...`}
+            className="input-field h-32 font-mono text-xs resize-y"
+          />
+          <p className="text-[11px] text-gray-600">{activeTabInfo.desc}</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -265,7 +290,11 @@ export default function SimSharedConfig() {
   const pathname = usePathname();
   const { simcInput, setSimcInput } = useSimContext();
 
-  const showConfig = pathname === "/quick-sim" || pathname === "/top-gear" || pathname === "/drop-finder";
+  const showConfig =
+    pathname === "/quick-sim" ||
+    pathname === "/top-gear" ||
+    pathname === "/drop-finder" ||
+    pathname === "/upgrade-compare";
   if (!showConfig) return null;
 
   const detectedInfo = parseCharacterInfo(simcInput);

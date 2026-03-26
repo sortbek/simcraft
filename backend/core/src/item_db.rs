@@ -20,6 +20,10 @@ static UPGRADE_MAX: OnceCell<HashMap<u64, u64>> = OnceCell::new();
 static INSTANCES: OnceCell<Vec<Value>> = OnceCell::new();
 static DROPS_BY_ENCOUNTER: OnceCell<HashMap<i64, Vec<Value>>> = OnceCell::new();
 static UPGRADE_TRACKS: OnceCell<HashMap<(String, u64, u64), (u64, u64, u64)>> = OnceCell::new();
+// bonus_id -> { currency_id -> amount } for the upgrade step to that bonus_id
+static UPGRADE_STEP_COSTS: OnceCell<HashMap<u64, HashMap<u64, u64>>> = OnceCell::new();
+// currency_id -> { currency_id, name, icon }
+static CURRENCY_INFO: OnceCell<HashMap<u64, Value>> = OnceCell::new();
 static SEASON_CONFIG: OnceCell<Value> = OnceCell::new();
 
 // ---- Load ----
@@ -141,6 +145,38 @@ pub fn load(data_dir: &Path) {
         }
         println!("Indexed {} upgrade track entries", tracks.len());
         let _ = UPGRADE_TRACKS.set(tracks);
+
+        // Collect per-step upgrade costs and currency metadata from bus_raw
+        let mut step_costs: HashMap<u64, HashMap<u64, u64>> = HashMap::new();
+        let mut currency_info: HashMap<u64, Value> = HashMap::new();
+        for entries in bus_raw.values() {
+            for entry in entries {
+                let bonus_id = entry.get("bonusId").and_then(|b| b.as_u64()).unwrap_or(0);
+                if bonus_id == 0 { continue; }
+                let mut by_currency: HashMap<u64, u64> = HashMap::new();
+                if let Some(cost_sets) = entry.get("costs").and_then(|c| c.as_array()) {
+                    for set in cost_sets {
+                        if let Some(amounts) = set.get("amounts").and_then(|a| a.as_array()) {
+                            for amount in amounts {
+                                let cid = amount.get("currencyId").and_then(|v| v.as_u64()).unwrap_or(0);
+                                let val = amount.get("amount").and_then(|v| v.as_u64()).unwrap_or(0);
+                                if cid > 0 {
+                                    if val > 0 { *by_currency.entry(cid).or_insert(0) += val; }
+                                    currency_info.entry(cid).or_insert_with(|| {
+                                        let name = amount.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let icon = amount.get("icon").and_then(|v| v.as_str()).unwrap_or("inv_misc_questionmark").to_string();
+                                        serde_json::json!({ "currency_id": cid, "name": name, "icon": icon })
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                if !by_currency.is_empty() { step_costs.insert(bonus_id, by_currency); }
+            }
+        }
+        let _ = UPGRADE_STEP_COSTS.set(step_costs);
+        let _ = CURRENCY_INFO.set(currency_info);
     }
 
     // instances.json
@@ -318,30 +354,99 @@ pub fn get_item_armor_subclass(item_id: u64) -> Option<u64> {
 
 // ---- Upgrade Functions ----
 
+fn upgrade_step_costs(bonus_id: u64) -> HashMap<u64, u64> {
+    UPGRADE_STEP_COSTS.get().and_then(|m| m.get(&bonus_id).cloned()).unwrap_or_default()
+}
+
+fn add_cost_map(target: &mut HashMap<u64, u64>, add: &HashMap<u64, u64>) {
+    for (cid, amount) in add { *target.entry(*cid).or_insert(0) += *amount; }
+}
+
+pub fn get_currency_info(currency_id: u64) -> Option<Value> {
+    CURRENCY_INFO.get()?.get(&currency_id).cloned()
+}
+
 pub fn get_upgrade_options(bonus_ids: &[u64]) -> Option<Vec<Value>> {
     let um = upgrade_max();
     for bid in bonus_ids {
         if um.contains_key(bid) {
             let bonus = bonuses().get(bid)?;
             let group_id = bonus.get("upgrade")?.get("group")?.as_u64()?;
-            let mut members: Vec<&Value> = bonuses().values()
-                .filter(|b| b.get("upgrade").and_then(|u| u.get("group")).and_then(|g| g.as_u64()) == Some(group_id))
+            let current_level = bonus.get("upgrade").and_then(|u| u.get("level")).and_then(|l| l.as_u64()).unwrap_or(0);
+
+            let mut members: Vec<(u64, &Value)> = bonuses().iter()
+                .filter_map(|(member_id, member)| {
+                    let g = member.get("upgrade").and_then(|u| u.get("group")).and_then(|g| g.as_u64());
+                    if g == Some(group_id) { Some((*member_id, member)) } else { None }
+                })
                 .collect();
-            members.sort_by_key(|b| b.get("upgrade").and_then(|u| u.get("level")).and_then(|l| l.as_u64()).unwrap_or(0));
-            return Some(members.into_iter().filter_map(|b| {
-                let u = b.get("upgrade")?;
+            members.sort_by_key(|(_, m)| m.get("upgrade").and_then(|u| u.get("level")).and_then(|l| l.as_u64()).unwrap_or(0));
+
+            let level_to_bonus: HashMap<u64, u64> = members.iter()
+                .filter_map(|(mid, m)| {
+                    let level = m.get("upgrade").and_then(|u| u.get("level")).and_then(|l| l.as_u64())?;
+                    Some((level, *mid))
+                })
+                .collect();
+
+            return Some(members.into_iter().filter_map(|(member_id, member)| {
+                let u = member.get("upgrade")?;
+                let level = u.get("level")?.as_u64()?;
+                let mut cumulative: HashMap<u64, u64> = HashMap::new();
+                if level > current_level {
+                    for step_level in (current_level + 1)..=level {
+                        if let Some(sbid) = level_to_bonus.get(&step_level) {
+                            add_cost_map(&mut cumulative, &upgrade_step_costs(*sbid));
+                        }
+                    }
+                }
                 Some(serde_json::json!({
-                    "bonus_id": b.get("id")?.as_u64()?,
-                    "level": u.get("level")?.as_u64()?,
+                    "bonus_id": member_id,
+                    "level": level,
                     "max": u.get("max")?.as_u64()?,
                     "name": u.get("name")?.as_str()?,
                     "fullName": u.get("fullName")?.as_str()?,
                     "itemLevel": u.get("itemLevel")?.as_u64()?,
+                    "step_costs": upgrade_step_costs(member_id),
+                    "cumulative_costs": cumulative,
                 }))
             }).collect());
         }
     }
     None
+}
+
+fn upgrade_group_and_level(bonus_ids: &[u64]) -> Option<(u64, u64)> {
+    let um = upgrade_max();
+    for bid in bonus_ids {
+        if !um.contains_key(bid) { continue; }
+        let bonus = bonuses().get(bid)?;
+        let group = bonus.get("upgrade").and_then(|u| u.get("group")).and_then(|g| g.as_u64());
+        let level = bonus.get("upgrade").and_then(|u| u.get("level")).and_then(|l| l.as_u64());
+        if let (Some(g), Some(l)) = (group, level) { return Some((g, l)); }
+    }
+    None
+}
+
+fn bonus_id_for_group_level(group_id: u64, level: u64) -> Option<u64> {
+    bonuses().iter().find_map(|(bid, bonus)| {
+        let g = bonus.get("upgrade").and_then(|u| u.get("group")).and_then(|v| v.as_u64());
+        let l = bonus.get("upgrade").and_then(|u| u.get("level")).and_then(|v| v.as_u64());
+        if g == Some(group_id) && l == Some(level) { Some(*bid) } else { None }
+    })
+}
+
+pub fn get_upgrade_cost_between(old_bonus_ids: &[u64], new_bonus_ids: &[u64]) -> HashMap<u64, u64> {
+    let Some((group_old, level_old)) = upgrade_group_and_level(old_bonus_ids) else { return HashMap::new(); };
+    let Some((group_new, level_new)) = upgrade_group_and_level(new_bonus_ids) else { return HashMap::new(); };
+    if group_old != group_new || level_new <= level_old { return HashMap::new(); }
+    let mut total = HashMap::new();
+    for level in (level_old + 1)..=level_new {
+        if let Some(sbid) = bonus_id_for_group_level(group_old, level) {
+            add_cost_map(&mut total, &upgrade_step_costs(sbid));
+        }
+    }
+    total
 }
 
 pub fn upgrade_bonus_ids_to_max(bonus_ids: &[u64]) -> Vec<u64> {
