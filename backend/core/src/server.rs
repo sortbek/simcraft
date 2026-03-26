@@ -1108,6 +1108,7 @@ async fn create_upgrade_compare_sim(
     req: web::Json<UpgradeCompareRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
     simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let prepared = match prepare_upgrade_compare_request(&req) {
         Ok(prepared) => prepared,
@@ -1152,6 +1153,7 @@ async fn create_upgrade_compare_sim(
         job_id.clone(),
         generated_input,
         combo_count,
+        log_buffer.get_ref().clone(),
     );
 
     HttpResponse::Ok().json(SimResponse {
