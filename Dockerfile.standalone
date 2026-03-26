@@ -53,6 +53,7 @@ ENV FRONTEND_DIR=/app/frontend
 ENV DATABASE_URL=/app/db/simhammer.db
 ENV BIND_HOST=0.0.0.0
 ENV PORT=8000
+ENV MAX_SCENARIOS=10
 
 EXPOSE 8000
 ENTRYPOINT ["/app/standalone-entrypoint.sh"]

@@ -22,6 +22,15 @@ pub static MAX_JOBS: Lazy<usize> = Lazy::new(|| {
     }
 });
 
+/// Maximum scenarios per batch. Set to 0 to disable batch submissions.
+/// Override with MAX_SCENARIOS env var. Default: 10.
+pub static MAX_SCENARIOS: Lazy<usize> = Lazy::new(|| {
+    if let Ok(val) = std::env::var("MAX_SCENARIOS") {
+        if let Ok(n) = val.parse() { return n; }
+    }
+    10
+});
+
 /// Trait for job persistence — implemented by in-memory store (desktop) and SQLite (web).
 pub trait JobStorage: Send + Sync {
     fn insert(&self, job: Job);
@@ -38,4 +47,5 @@ pub trait JobStorage: Send + Sync {
     fn set_result(&self, id: &str, result: String, raw_json: Option<String>);
     fn set_error(&self, id: &str, error: String);
     fn set_report_files(&self, id: &str, html: Option<String>, text: Option<String>);
+    fn count_batch(&self, batch_id: &str) -> usize;
 }

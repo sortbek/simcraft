@@ -14,6 +14,7 @@ use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
+use crate::storage::{self, JobStorage};
 use crate::profileset_generator;
 use crate::result_parser;
 use crate::simc_runner;
@@ -484,6 +485,26 @@ fn spawn_staged_sim(
     });
 }
 
+/// Validate batch_id against MAX_SCENARIOS. Returns an error response if rejected.
+fn validate_batch(batch_id: &Option<String>, store: &dyn JobStorage) -> Option<HttpResponse> {
+    let bid = match batch_id {
+        Some(b) if !b.is_empty() => b,
+        _ => return None,
+    };
+    let max = *storage::MAX_SCENARIOS;
+    if max == 0 {
+        return Some(HttpResponse::BadRequest().json(json!({
+            "detail": "Batch scenarios are disabled on this server."
+        })));
+    }
+    if store.count_batch(bid) >= max {
+        return Some(HttpResponse::BadRequest().json(json!({
+            "detail": format!("Batch limit reached ({max} scenarios max).")
+        })));
+    }
+    None
+}
+
 // ---------- Handlers ----------
 
 async fn create_sim(
@@ -499,6 +520,10 @@ async fn create_sim(
     };
     simc_input = apply_talent_override(&simc_input, &req.options.talents);
     simc_input = inject_expert_fields(&simc_input, &req.options);
+
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
 
     let mut job = Job::new(
         simc_input.clone(),
@@ -610,6 +635,10 @@ async fn create_top_gear_sim(
 
     let generated_input = inject_expert_fields(&generated_input, &req.options);
 
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
     let job = Job::new(
         generated_input.clone(),
         "top_gear".to_string(),
@@ -710,6 +739,10 @@ async fn create_droptimizer_sim(
     }
 
     let generated_input = inject_expert_fields(&generated_input, &req.options);
+
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
 
     let job = Job::new(
         generated_input.clone(),
@@ -1176,6 +1209,12 @@ async fn get_upgrade_options(query: web::Query<BonusIdsQuery>) -> HttpResponse {
     }
 }
 
+async fn get_config() -> HttpResponse {
+    HttpResponse::Ok().json(json!({
+        "max_scenarios": *storage::MAX_SCENARIOS,
+    }))
+}
+
 async fn health_check() -> HttpResponse {
     let threads = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -1412,6 +1451,7 @@ pub async fn start_with_storage_bind(
                 "/api/instances/{id}/drops",
                 web::get().to(get_instance_drops),
             )
+            .route("/api/config", web::get().to(get_config))
             .route("/health", web::get().to(health_check));
         #[cfg(feature = "desktop")]
         {

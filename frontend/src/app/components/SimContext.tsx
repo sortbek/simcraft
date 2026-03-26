@@ -76,10 +76,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [scenarios, setScenarios] = useState<FightScenario[]>([]);
 
   const addScenario = useCallback(() => {
-    setScenarios(prev => {
-      if (prev.length >= 10) return prev;
-      return [...prev, { id: crypto.randomUUID(), fightStyle, targetCount, fightLength }];
-    });
+    setScenarios(prev => [...prev, { id: crypto.randomUUID(), fightStyle, targetCount, fightLength }]);
   }, [fightStyle, targetCount, fightLength]);
 
   const removeScenario = useCallback((id: string) => {

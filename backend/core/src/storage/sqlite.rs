@@ -272,4 +272,13 @@ impl JobStorage for SqliteStorage {
         )
         .ok();
     }
+
+    fn count_batch(&self, batch_id: &str) -> usize {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM jobs WHERE batch_id = ?1",
+            params![batch_id],
+            |row| row.get::<_, usize>(0),
+        ).unwrap_or(0)
+    }
 }

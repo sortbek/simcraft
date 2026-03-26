@@ -59,7 +59,8 @@ impl PostgresStorage {
             .batch_execute(
                 "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS html_report TEXT;
              ALTER TABLE jobs ADD COLUMN IF NOT EXISTS text_output TEXT;
-             ALTER TABLE jobs ADD COLUMN IF NOT EXISTS raw_json TEXT;",
+             ALTER TABLE jobs ADD COLUMN IF NOT EXISTS raw_json TEXT;
+             ALTER TABLE jobs ADD COLUMN IF NOT EXISTS batch_id TEXT;",
             )
             .await;
 
@@ -126,6 +127,7 @@ impl PostgresStorage {
             raw_json: row.get(15),
             html_report: row.get(16),
             text_output: row.get(17),
+            batch_id: row.get(18),
         }
     }
 }
@@ -138,8 +140,8 @@ impl JobStorage for PostgresStorage {
                 client.execute(
                     "INSERT INTO jobs (id, status, sim_type, simc_input, result_json, combo_metadata_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
-                     iterations, fight_style, target_error, created_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                     iterations, fight_style, target_error, created_at, batch_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
                     &[
                         &job.id,
                         &Self::status_to_str(&job.status),
@@ -156,6 +158,7 @@ impl JobStorage for PostgresStorage {
                         &job.fight_style,
                         &job.target_error,
                         &job.created_at,
+                        &job.batch_id,
                     ],
                 ).await.expect("Failed to insert job");
 
@@ -174,7 +177,7 @@ impl JobStorage for PostgresStorage {
                 client.query_opt(
                     "SELECT id, status, sim_type, simc_input, result_json, combo_metadata_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
-                     iterations, fight_style, target_error, created_at, raw_json, html_report, text_output
+                     iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id
                      FROM jobs WHERE id = $1",
                     &[&id],
                 ).await.ok().flatten().map(|row| Self::row_to_job(&row))
@@ -194,7 +197,7 @@ impl JobStorage for PostgresStorage {
             self.rt.block_on(async {
                 let fetch_limit = if player.is_some() || realm.is_some() { 200i64 } else { limit as i64 };
                 let rows = client.query(
-                    "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json, simc_input
+                    "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json, simc_input, batch_id
                      FROM jobs ORDER BY created_at DESC LIMIT $1",
                     &[&fetch_limit],
                 ).await.unwrap_or_default();
@@ -216,6 +219,7 @@ impl JobStorage for PostgresStorage {
                         player_class: s.player_class,
                         realm: s.realm,
                         dps: s.dps,
+                        batch_id: row.get(9),
                     }
                 }).collect();
                 if player.is_none() && realm.is_none() {
@@ -323,5 +327,17 @@ impl JobStorage for PostgresStorage {
                     .ok();
             });
         });
+    }
+
+    fn count_batch(&self, batch_id: &str) -> usize {
+        let bid = batch_id.to_string();
+        self.blocking(|client| {
+            self.rt.block_on(async {
+                client.query_one(
+                    "SELECT COUNT(*)::BIGINT FROM jobs WHERE batch_id = $1",
+                    &[&bid],
+                ).await.map(|row| row.get::<_, i64>(0) as usize).unwrap_or(0)
+            })
+        })
     }
 }

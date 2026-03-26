@@ -121,4 +121,10 @@ impl JobStorage for MemoryStorage {
             job.text_output = text;
         }
     }
+
+    fn count_batch(&self, batch_id: &str) -> usize {
+        self.jobs.lock().unwrap().values()
+            .filter(|j| j.batch_id.as_deref() == Some(batch_id))
+            .count()
+    }
 }

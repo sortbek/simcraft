@@ -1,10 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useSimContext } from "./SimContext";
 import { formatScenarioLabel } from "../lib/scenario-siblings";
+import { API_URL } from "../lib/api";
 
 export default function ScenarioBuilder() {
   const { scenarios, addScenario, removeScenario, clearScenarios } = useSimContext();
+  const [maxScenarios, setMaxScenarios] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/config`)
+      .then((r) => r.json())
+      .then((data) => setMaxScenarios(data.max_scenarios ?? 10))
+      .catch(() => setMaxScenarios(10))
+      .finally(() => setLoaded(true));
+  }, []);
+
+  if (!loaded || maxScenarios === 0) return null;
 
   return (
     <div className="pt-2 border-t border-border space-y-3">
@@ -47,7 +61,7 @@ export default function ScenarioBuilder() {
         <button
           type="button"
           onClick={addScenario}
-          disabled={scenarios.length >= 10}
+          disabled={scenarios.length >= maxScenarios}
           className="text-[12px] font-medium text-gold hover:text-gold/80 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
         >
           + Add current config
