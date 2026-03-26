@@ -4,14 +4,32 @@ import { useEffect, useRef, useState } from "react";
 import { useSimContext } from "../components/SimContext";
 import TopGearItemSelector from "../components/TopGearItemSelector";
 import { API_URL } from "../lib/api";
-import type { ResolveGearResponse, GEAR_SLOTS } from "../lib/types";
+import type { ResolveGearResponse } from "../lib/types";
 
 export default function TopGearPage() {
-  const { simcInput, fightStyle, threads, maxCombinations, selectedTalent, targetCount, fightLength, customApl, simcHeader, simcBasePlayer, simcRaidActors, simcPostCombos, simcFooter } = useSimContext();
+  const {
+    simcInput,
+    fightStyle,
+    threads,
+    maxCombinations,
+    selectedTalent,
+    targetCount,
+    fightLength,
+    customApl,
+    simcHeader,
+    simcBasePlayer,
+    simcRaidActors,
+    simcPostCombos,
+    simcFooter,
+  } = useSimContext();
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
-  const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
+  const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>(
+    {},
+  );
   // Items added locally via the upgrade copy feature (not in the original simc input)
-  const [localItems, setLocalItems] = useState<{ slot: string; simc_string: string; origin: string }[]>([]);
+  const [localItems, setLocalItems] = useState<
+    { slot: string; simc_string: string; origin: string }[]
+  >([]);
   const [maxUpgrade, setMaxUpgrade] = useState(false);
   const [copyEnchants, setCopyEnchants] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -38,58 +56,66 @@ export default function TopGearPage() {
       return;
     }
 
-    const timer = setTimeout(async () => {
-      prevInputRef.current = trimmed;
-      prevUpgradeRef.current = maxUpgrade;
-      setResolving(true);
-      try {
-        const res = await fetch(`${API_URL}/api/gear/resolve`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ simc_input: simcInput, max_upgrade: maxUpgrade }),
-        });
-        if (!res.ok) {
+    const timer = setTimeout(
+      async () => {
+        prevInputRef.current = trimmed;
+        prevUpgradeRef.current = maxUpgrade;
+        setResolving(true);
+        try {
+          const res = await fetch(`${API_URL}/api/gear/resolve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              simc_input: simcInput,
+              max_upgrade: maxUpgrade,
+            }),
+          });
+          if (!res.ok) {
+            setResolved(null);
+            setSelectedUids({});
+            return;
+          }
+          const data: ResolveGearResponse = await res.json();
+
+          const hasAlternatives = Object.values(data.slots).some(
+            (slot) => slot.alternatives.length > 0,
+          );
+          if (!hasAlternatives) {
+            setResolved(null);
+            setSelectedUids({});
+            setLocalItems([]);
+            return;
+          }
+
+          setResolved(data);
+
+          // Only clear selection and local items when the input changes, not when upgrade toggles
+          if (inputChanged) {
+            setSelectedUids({});
+            setLocalItems([]);
+          }
+        } catch {
           setResolved(null);
           setSelectedUids({});
-          return;
+        } finally {
+          setResolving(false);
         }
-        const data: ResolveGearResponse = await res.json();
-
-        const hasAlternatives = Object.values(data.slots).some(
-          (slot) => slot.alternatives.length > 0
-        );
-        if (!hasAlternatives) {
-          setResolved(null);
-          setSelectedUids({});
-          setLocalItems([]);
-          return;
-        }
-
-        setResolved(data);
-
-        // Only clear selection and local items when the input changes, not when upgrade toggles
-        if (inputChanged) {
-          setSelectedUids({});
-          setLocalItems([]);
-        }
-      } catch {
-        setResolved(null);
-        setSelectedUids({});
-      } finally {
-        setResolving(false);
-      }
-    }, inputChanged ? 300 : 0); // No debounce for upgrade toggle
+      },
+      inputChanged ? 300 : 0,
+    ); // No debounce for upgrade toggle
     return () => clearTimeout(timer);
   }, [simcInput, maxUpgrade]);
 
   function buildSubmitInput(): string {
     let result = simcInput;
     if (localItems.length > 0) {
-      const vaultItems = localItems.filter(li => li.origin === "vault");
-      const bagItems = localItems.filter(li => li.origin !== "vault");
+      const vaultItems = localItems.filter((li) => li.origin === "vault");
+      const bagItems = localItems.filter((li) => li.origin !== "vault");
 
       if (vaultItems.length > 0) {
-        const vaultLines = vaultItems.map(li => `# ${li.slot}=${li.simc_string}`).join("\n");
+        const vaultLines = vaultItems
+          .map((li) => `# ${li.slot}=${li.simc_string}`)
+          .join("\n");
         const endMarker = "### End of Weekly Reward Choices";
         if (result.includes(endMarker)) {
           result = result.replace(endMarker, vaultLines + "\n" + endMarker);
@@ -98,7 +124,9 @@ export default function TopGearPage() {
         }
       }
       if (bagItems.length > 0) {
-        const bagLines = bagItems.map(li => `# ${li.slot}=${li.simc_string}`).join("\n");
+        const bagLines = bagItems
+          .map((li) => `# ${li.slot}=${li.simc_string}`)
+          .join("\n");
         result = result + "\n" + bagLines;
       }
     }
@@ -117,7 +145,7 @@ export default function TopGearPage() {
 
   // Fetch combo count from backend whenever selection changes
   useEffect(() => {
-    const hasSelection = Object.values(selectedUids).some(s => s.size > 0);
+    const hasSelection = Object.values(selectedUids).some((s) => s.size > 0);
     if (!resolved || !hasSelection) {
       setComboCount(0);
       setComboError("");
@@ -127,22 +155,27 @@ export default function TopGearPage() {
     const controller = new AbortController();
     (async () => {
       try {
+        const requestBody = {
+          simc_input: buildSubmitInput(),
+          selected_items: buildSelectedUidsJson(),
+          items_by_slot: null,
+          max_upgrade: maxUpgrade,
+          copy_enchants: copyEnchants,
+          ...(maxCombinations != null
+            ? { max_combinations: maxCombinations }
+            : {}),
+        };
         const res = await fetch(`${API_URL}/api/top-gear/combo-count`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            simc_input: buildSubmitInput(),
-            selected_items: buildSelectedUidsJson(),
-            items_by_slot: null,
-            max_upgrade: maxUpgrade,
-            copy_enchants: copyEnchants,
-            max_combinations: maxCombinations,
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal,
         });
         if (!res.ok) {
           setComboCount(0);
-          setComboError("Failed to calculate combinations. Try selecting fewer items.");
+          setComboError(
+            "Failed to calculate combinations. Try selecting fewer items.",
+          );
           return;
         }
         const data = await res.json();
@@ -151,13 +184,24 @@ export default function TopGearPage() {
       } catch (e: unknown) {
         if (e instanceof Error && e.name !== "AbortError") {
           setComboCount(0);
-          setComboError("Failed to calculate combinations. Try selecting fewer items.");
+          setComboError(
+            "Failed to calculate combinations. Try selecting fewer items.",
+          );
         }
       }
     })();
 
-    return () => { controller.abort(); };
-  }, [selectedUids, resolved, localItems, maxUpgrade, copyEnchants, maxCombinations]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      controller.abort();
+    };
+  }, [
+    selectedUids,
+    resolved,
+    localItems,
+    maxUpgrade,
+    copyEnchants,
+    maxCombinations,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit() {
     if (!resolved) return;
@@ -166,31 +210,34 @@ export default function TopGearPage() {
     try {
       const selectedUidsJson = buildSelectedUidsJson();
       const submitInput = buildSubmitInput();
+      const requestBody = {
+        simc_input: submitInput,
+        selected_items: selectedUidsJson,
+        items_by_slot: null,
+        iterations: 10000,
+        fight_style: fightStyle,
+        target_error: 0.1,
+        desired_targets: targetCount,
+        max_time: fightLength,
+        max_upgrade: maxUpgrade,
+        copy_enchants: copyEnchants,
+        ...(maxCombinations != null
+          ? { max_combinations: maxCombinations }
+          : {}),
+        threads,
+        ...(selectedTalent ? { talents: selectedTalent } : {}),
+        ...(customApl ? { custom_apl: customApl } : {}),
+        ...(simcHeader ? { simc_header: simcHeader } : {}),
+        ...(simcBasePlayer ? { simc_base_player: simcBasePlayer } : {}),
+        ...(simcRaidActors ? { simc_raid_actors: simcRaidActors } : {}),
+        ...(simcPostCombos ? { simc_post_combos: simcPostCombos } : {}),
+        ...(simcFooter ? { simc_footer: simcFooter } : {}),
+      };
 
       const res = await fetch(`${API_URL}/api/top-gear/sim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          simc_input: submitInput,
-          selected_items: selectedUidsJson,
-          items_by_slot: null,
-          iterations: 10000,
-          fight_style: fightStyle,
-          target_error: 0.1,
-          desired_targets: targetCount,
-          max_time: fightLength,
-          max_upgrade: maxUpgrade,
-          copy_enchants: copyEnchants,
-          max_combinations: maxCombinations,
-          threads,
-          ...(selectedTalent ? { talents: selectedTalent } : {}),
-          ...(customApl ? { custom_apl: customApl } : {}),
-          ...(simcHeader ? { simc_header: simcHeader } : {}),
-          ...(simcBasePlayer ? { simc_base_player: simcBasePlayer } : {}),
-          ...(simcRaidActors ? { simc_raid_actors: simcRaidActors } : {}),
-          ...(simcPostCombos ? { simc_post_combos: simcPostCombos } : {}),
-          ...(simcFooter ? { simc_footer: simcFooter } : {}),
-        }),
+        body: JSON.stringify(requestBody),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -269,7 +316,12 @@ export default function TopGearPage() {
         selectedUids={selectedUids}
         onSelectionChange={setSelectedUids}
         onResolvedChange={setResolved}
-        onItemAdded={(slot, simcString, origin) => setLocalItems(prev => [...prev, { slot, simc_string: simcString, origin }])}
+        onItemAdded={(slot, simcString, origin) =>
+          setLocalItems((prev) => [
+            ...prev,
+            { slot, simc_string: simcString, origin },
+          ])
+        }
         maxUpgrade={maxUpgrade}
         comboCount={comboCount}
         comboError={comboError}
@@ -288,13 +340,31 @@ export default function TopGearPage() {
       >
         {submitting ? (
           <>
-            <svg className="w-4 h-4 animate-spin" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-              <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <svg
+              className="w-4 h-4 animate-spin"
+              viewBox="0 0 16 16"
+              fill="none"
+            >
+              <circle
+                cx="8"
+                cy="8"
+                r="6"
+                stroke="currentColor"
+                strokeWidth="2"
+                opacity="0.25"
+              />
+              <path
+                d="M14 8a6 6 0 00-6-6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
             </svg>
             Starting sim…
           </>
-        ) : "Find Top Gear"}
+        ) : (
+          "Find Top Gear"
+        )}
       </button>
 
       {/* Sticky side button */}
@@ -304,12 +374,32 @@ export default function TopGearPage() {
         className="group fixed right-4 top-1/2 -translate-y-1/2 z-[90] btn-primary w-10 hover:w-auto py-2.5 px-2.5 hover:px-4 text-sm rounded-full hover:rounded-xl shadow-lg shadow-black/50 flex items-center gap-0 hover:gap-2 transition-all duration-200 overflow-hidden"
       >
         {submitting ? (
-          <svg className="w-4 h-4 shrink-0 animate-spin" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-            <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <svg
+            className="w-4 h-4 shrink-0 animate-spin"
+            viewBox="0 0 16 16"
+            fill="none"
+          >
+            <circle
+              cx="8"
+              cy="8"
+              r="6"
+              stroke="currentColor"
+              strokeWidth="2"
+              opacity="0.25"
+            />
+            <path
+              d="M14 8a6 6 0 00-6-6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
           </svg>
         ) : (
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+          <svg
+            className="w-4 h-4 shrink-0"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+          >
             <path d="M3 2l10 6-10 6V2z" />
           </svg>
         )}
@@ -320,4 +410,3 @@ export default function TopGearPage() {
     </div>
   );
 }
-

@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 interface SimContextType {
   simcInput: string;
@@ -9,8 +16,8 @@ interface SimContextType {
   setFightStyle: (v: string) => void;
   threads: number;
   setThreads: (v: number) => void;
-  maxCombinations: number;
-  setMaxCombinations: (v: number) => void;
+  maxCombinations: number | undefined;
+  setMaxCombinations: (v: number | undefined) => void;
   selectedTalent: string;
   setSelectedTalent: (v: string) => void;
   targetCount: number;
@@ -41,7 +48,6 @@ export function useSimContext() {
 }
 
 function readStored(key: string, fallback: number): number {
-  if (typeof window === "undefined") return fallback;
   const v = localStorage.getItem(key);
   if (v == null) return fallback;
   const n = parseInt(v, 10);
@@ -49,15 +55,16 @@ function readStored(key: string, fallback: number): number {
 }
 
 function readSessionString(key: string, fallback: string): string {
-  if (typeof window === "undefined") return fallback;
   return sessionStorage.getItem(key) ?? fallback;
 }
 
 export function SimProvider({ children }: { children: ReactNode }) {
-  const [simcInput, _setSimcInput] = useState(() => readSessionString("simhammer_simc_input", ""));
+  const [simcInput, _setSimcInput] = useState("");
   const [fightStyle, setFightStyle] = useState("Patchwerk");
-  const [threads, _setThreads] = useState(() => readStored("simhammer_threads", 0));
-  const [maxCombinations, _setMaxCombinations] = useState(() => readStored("simhammer_max_combinations", 500));
+  const [threads, _setThreads] = useState(0);
+  const [maxCombinations, _setMaxCombinations] = useState<number | undefined>(
+    undefined,
+  );
   const [selectedTalent, setSelectedTalent] = useState("");
   const [targetCount, setTargetCount] = useState(1);
   const [fightLength, setFightLength] = useState(300);
@@ -68,24 +75,68 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [simcPostCombos, setSimcPostCombos] = useState("");
   const [simcFooter, setSimcFooter] = useState("");
 
+  useEffect(() => {
+    try {
+      _setSimcInput(readSessionString("simhammer_simc_input", ""));
+      _setThreads(readStored("simhammer_threads", 0));
+    } catch {}
+  }, []);
+
   const setSimcInput = useCallback((v: string) => {
     _setSimcInput(v);
-    try { sessionStorage.setItem("simhammer_simc_input", v); } catch {}
+    try {
+      sessionStorage.setItem("simhammer_simc_input", v);
+    } catch {}
   }, []);
 
   const setThreads = useCallback((v: number) => {
     _setThreads(v);
-    try { localStorage.setItem("simhammer_threads", String(v)); } catch {}
+    try {
+      localStorage.setItem("simhammer_threads", String(v));
+    } catch {}
   }, []);
 
-  const setMaxCombinations = useCallback((v: number) => {
+  const setMaxCombinations = useCallback((v: number | undefined) => {
     _setMaxCombinations(v);
-    try { localStorage.setItem("simhammer_max_combinations", String(v)); } catch {}
+    try {
+      if (v == null) {
+        localStorage.removeItem("simhammer_max_combinations");
+      } else {
+        localStorage.setItem("simhammer_max_combinations", String(v));
+      }
+    } catch {}
   }, []);
 
   return (
     <SimContext.Provider
-      value={{ simcInput, setSimcInput, fightStyle, setFightStyle, threads, setThreads, maxCombinations, setMaxCombinations, selectedTalent, setSelectedTalent, targetCount, setTargetCount, fightLength, setFightLength, customApl, setCustomApl, simcHeader, setSimcHeader, simcBasePlayer, setSimcBasePlayer, simcRaidActors, setSimcRaidActors, simcPostCombos, setSimcPostCombos, simcFooter, setSimcFooter }}
+      value={{
+        simcInput,
+        setSimcInput,
+        fightStyle,
+        setFightStyle,
+        threads,
+        setThreads,
+        maxCombinations,
+        setMaxCombinations,
+        selectedTalent,
+        setSelectedTalent,
+        targetCount,
+        setTargetCount,
+        fightLength,
+        setFightLength,
+        customApl,
+        setCustomApl,
+        simcHeader,
+        setSimcHeader,
+        simcBasePlayer,
+        setSimcBasePlayer,
+        simcRaidActors,
+        setSimcRaidActors,
+        simcPostCombos,
+        setSimcPostCombos,
+        simcFooter,
+        setSimcFooter,
+      }}
     >
       {children}
     </SimContext.Provider>

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { API_URL } from "../lib/api";
 import type { ResolveGearResponse, ResolvedItem } from "../lib/types";
 import { useWowheadTooltips } from "../lib/useWowheadTooltips";
-import { API_URL } from "../lib/api";
 import { useSimContext } from "./SimContext";
 
 interface UpgradeOption {
@@ -58,7 +58,8 @@ function getWowheadUrl(itemId: number): string {
 
 function getWowheadData(item: ResolvedItem): string {
   const parts: string[] = [];
-  if (item.bonus_ids.length > 0) parts.push(`bonus=${item.bonus_ids.join(":")}`);
+  if (item.bonus_ids.length > 0)
+    parts.push(`bonus=${item.bonus_ids.join(":")}`);
   if (item.ilevel > 0) parts.push(`ilvl=${item.ilevel}`);
   if (item.enchant_id > 0) parts.push(`ench=${item.enchant_id}`);
   if (item.gem_id > 0) parts.push(`gems=${item.gem_id}`);
@@ -76,6 +77,7 @@ export default function TopGearItemSelector({
   comboError,
 }: TopGearItemSelectorProps) {
   const { maxCombinations } = useSimContext();
+  const effectiveMaxCombinations = maxCombinations ?? 500;
   const [upgradeMenuFor, setUpgradeMenuFor] = useState<string | null>(null);
   const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOption[]>([]);
   const [loadingUpgrades, setLoadingUpgrades] = useState(false);
@@ -87,7 +89,7 @@ export default function TopGearItemSelector({
     if (!el) return;
     const obs = new IntersectionObserver(
       ([entry]) => setHeaderVisible(entry.isIntersecting),
-      { threshold: 0 }
+      { threshold: 0 },
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -95,64 +97,92 @@ export default function TopGearItemSelector({
 
   useWowheadTooltips([resolved]);
 
-  const openUpgradeMenu = useCallback(async (item: ResolvedItem, key: string) => {
-    if (upgradeMenuFor === key) { setUpgradeMenuFor(null); return; }
-    setUpgradeMenuFor(key);
-    setLoadingUpgrades(true);
-    try {
-      const res = await fetch(`${API_URL}/api/upgrade-options?bonus_ids=${item.bonus_ids.join(",")}`);
-      const data = await res.json();
-      setUpgradeOptions(data.options || []);
-    } catch { setUpgradeOptions([]); }
-    setLoadingUpgrades(false);
-  }, [upgradeMenuFor]);
+  const openUpgradeMenu = useCallback(
+    async (item: ResolvedItem, key: string) => {
+      if (upgradeMenuFor === key) {
+        setUpgradeMenuFor(null);
+        return;
+      }
+      setUpgradeMenuFor(key);
+      setLoadingUpgrades(true);
+      try {
+        const res = await fetch(
+          `${API_URL}/api/upgrade-options?bonus_ids=${item.bonus_ids.join(",")}`,
+        );
+        const data = await res.json();
+        setUpgradeOptions(data.options || []);
+      } catch {
+        setUpgradeOptions([]);
+      }
+      setLoadingUpgrades(false);
+    },
+    [upgradeMenuFor],
+  );
 
-  const addUpgradedCopy = useCallback((item: ResolvedItem, option: UpgradeOption) => {
-    // Find the current upgrade bonus_id to replace
-    const currentUpgradeBonusId = upgradeOptions.find(
-      o => item.bonus_ids.includes(o.bonus_id)
-    )?.bonus_id;
-    if (!currentUpgradeBonusId) return;
+  const addUpgradedCopy = useCallback(
+    (item: ResolvedItem, option: UpgradeOption) => {
+      // Find the current upgrade bonus_id to replace
+      const currentUpgradeBonusId = upgradeOptions.find((o) =>
+        item.bonus_ids.includes(o.bonus_id),
+      )?.bonus_id;
+      if (!currentUpgradeBonusId) return;
 
-    const newBonusIds = item.bonus_ids.map(b => b === currentUpgradeBonusId ? option.bonus_id : b);
-    const newSimcString = item.simc_string.replace(
-      /bonus_id=[0-9/:]+/,
-      `bonus_id=${newBonusIds.join("/")}`
-    );
+      const newBonusIds = item.bonus_ids.map((b) =>
+        b === currentUpgradeBonusId ? option.bonus_id : b,
+      );
+      const newSimcString = item.simc_string.replace(
+        /bonus_id=[0-9/:]+/,
+        `bonus_id=${newBonusIds.join("/")}`,
+      );
 
-    const copy: ResolvedItem = {
-      ...item,
-      uid: `${item.item_id}:${[...newBonusIds].sort((a,b)=>a-b).join(":")}:${item.origin}:${item.slot}`,
-      bonus_ids: newBonusIds,
-      simc_string: newSimcString,
-      ilevel: option.itemLevel,
-      upgrade: option.fullName,
-    };
-
-    // Add copy to the resolved data
-    const updatedSlots = { ...resolved.slots };
-    const slotRes = updatedSlots[item.slot];
-    if (slotRes) {
-      updatedSlots[item.slot] = {
-        ...slotRes,
-        alternatives: [...slotRes.alternatives, copy],
+      const copy: ResolvedItem = {
+        ...item,
+        uid: `${item.item_id}:${[...newBonusIds].sort((a, b) => a - b).join(":")}:${item.origin}:${item.slot}`,
+        bonus_ids: newBonusIds,
+        simc_string: newSimcString,
+        ilevel: option.itemLevel,
+        upgrade: option.fullName,
       };
-    }
-    onResolvedChange({ ...resolved, slots: updatedSlots });
 
-    // Notify parent so the simc string gets appended on submit
-    onItemAdded(item.slot, newSimcString, item.origin);
+      // Add copy to the resolved data
+      const updatedSlots = { ...resolved.slots };
+      const slotRes = updatedSlots[item.slot];
+      if (slotRes) {
+        updatedSlots[item.slot] = {
+          ...slotRes,
+          alternatives: [...slotRes.alternatives, copy],
+        };
+      }
+      onResolvedChange({ ...resolved, slots: updatedSlots });
 
-    setUpgradeMenuFor(null);
-  }, [resolved, selectedUids, upgradeOptions, onResolvedChange, onSelectionChange, onItemAdded]);
+      // Notify parent so the simc string gets appended on submit
+      onItemAdded(item.slot, newSimcString, item.origin);
+
+      setUpgradeMenuFor(null);
+    },
+    [
+      resolved,
+      selectedUids,
+      upgradeOptions,
+      onResolvedChange,
+      onSelectionChange,
+      onItemAdded,
+    ],
+  );
 
   function toggleItem(item: ResolvedItem, group: DisplayGroup) {
-    applyToggle(item, group, { ...Object.fromEntries(
-      Object.entries(selectedUids).map(([k, v]) => [k, new Set(v)])
-    )});
+    applyToggle(item, group, {
+      ...Object.fromEntries(
+        Object.entries(selectedUids).map(([k, v]) => [k, new Set(v)]),
+      ),
+    });
   }
 
-  function applyToggle(item: ResolvedItem, group: DisplayGroup, updated: Record<string, Set<string>>) {
+  function applyToggle(
+    item: ResolvedItem,
+    group: DisplayGroup,
+    updated: Record<string, Set<string>>,
+  ) {
     if (group.slots.length === 1) {
       const slot = item.slot;
       if (!updated[slot]) updated[slot] = new Set();
@@ -167,7 +197,7 @@ export default function TopGearItemSelector({
       for (const slot of group.slots) {
         const slotRes = resolved.slots[slot];
         if (!slotRes) continue;
-        const matching = slotRes.alternatives.find(a => a.uid === item.uid);
+        const matching = slotRes.alternatives.find((a) => a.uid === item.uid);
         if (!matching) continue;
         if (!updated[slot]) updated[slot] = new Set();
         if (isSelected) {
@@ -184,17 +214,23 @@ export default function TopGearItemSelector({
     if (group.slots.length === 1) {
       return selectedUids[item.slot]?.has(item.uid) ?? false;
     }
-    return group.slots.some(slot => {
+    return group.slots.some((slot) => {
       const slotRes = resolved.slots[slot];
       if (!slotRes) return false;
-      const matching = slotRes.alternatives.find(a => a.uid === item.uid);
-      return matching ? (selectedUids[slot]?.has(matching.uid) ?? false) : false;
+      const matching = slotRes.alternatives.find((a) => a.uid === item.uid);
+      return matching
+        ? (selectedUids[slot]?.has(matching.uid) ?? false)
+        : false;
     });
   }
 
   // Build visible groups from resolved data
   const visibleGroups = useMemo(() => {
-    const result: { group: DisplayGroup; equipped: ResolvedItem[]; alternatives: ResolvedItem[] }[] = [];
+    const result: {
+      group: DisplayGroup;
+      equipped: ResolvedItem[];
+      alternatives: ResolvedItem[];
+    }[] = [];
     for (const group of DISPLAY_GROUPS) {
       const equipped: ResolvedItem[] = [];
       const alternatives: ResolvedItem[] = [];
@@ -225,18 +261,20 @@ export default function TopGearItemSelector({
     return (
       <div className="card p-8 text-center">
         <p className="text-sm text-muted">
-          No alternative items found. Make sure your SimC addon exports bag items.
+          No alternative items found. Make sure your SimC addon exports bag
+          items.
         </p>
       </div>
     );
   }
 
   const comboLabel = `${comboCount.toLocaleString()} combo${comboCount !== 1 ? "s" : ""}`;
-  const comboColorClass = comboCount > maxCombinations
-    ? "bg-red-500/10 text-red-400"
-    : comboCount > 0
-    ? "bg-surface-2 text-white"
-    : "bg-surface-2 text-muted";
+  const comboColorClass =
+    comboCount > effectiveMaxCombinations
+      ? "bg-red-500/10 text-red-400"
+      : comboCount > 0
+        ? "bg-surface-2 text-white"
+        : "bg-surface-2 text-muted";
 
   return (
     <div className="space-y-4">
@@ -245,7 +283,9 @@ export default function TopGearItemSelector({
           <p className="text-xs font-medium text-muted uppercase tracking-widest">
             Select Items
           </p>
-          <span className={`text-xs font-mono px-2.5 py-1 rounded-md ${comboColorClass}`}>
+          <span
+            className={`text-xs font-mono px-2.5 py-1 rounded-md ${comboColorClass}`}
+          >
             {comboLabel}
           </span>
         </div>
@@ -254,7 +294,9 @@ export default function TopGearItemSelector({
         <p className="text-xs font-medium text-muted uppercase tracking-widest">
           Select Items
         </p>
-        <span className={`text-xs font-mono px-2.5 py-1 rounded-md ${comboColorClass}`}>
+        <span
+          className={`text-xs font-mono px-2.5 py-1 rounded-md ${comboColorClass}`}
+        >
           {comboLabel}
         </span>
       </div>
@@ -272,14 +314,39 @@ export default function TopGearItemSelector({
                 className="flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-white/[0.03]"
               >
                 <div className="w-5 h-5 rounded-[3px] bg-white/10 flex items-center justify-center shrink-0">
-                  <svg className="w-3 h-3 text-white/40" viewBox="0 0 16 16" fill="none">
-                    <path d="M12 5L6.5 10.5L4 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg
+                    className="w-3 h-3 text-white/40"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                  >
+                    <path
+                      d="M12 5L6.5 10.5L4 8"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </div>
                 <div className="w-8 h-8 shrink-0 rounded overflow-hidden ring-1 ring-white/5">
-                  <img src={getIconUrl(item.icon)} alt="" width={32} height={32} className="w-full h-full" loading="lazy" />
+                  <img
+                    src={getIconUrl(item.icon)}
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="w-full h-full"
+                    loading="lazy"
+                  />
                 </div>
-                <ItemDetails item={item} upgradeMenuKey={item.uid} upgradeMenuFor={upgradeMenuFor} upgradeOptions={upgradeOptions} loadingUpgrades={loadingUpgrades} onUpgradeClick={() => openUpgradeMenu(item, item.uid)} onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)} />
+                <ItemDetails
+                  item={item}
+                  upgradeMenuKey={item.uid}
+                  upgradeMenuFor={upgradeMenuFor}
+                  upgradeOptions={upgradeOptions}
+                  loadingUpgrades={loadingUpgrades}
+                  onUpgradeClick={() => openUpgradeMenu(item, item.uid)}
+                  onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)}
+                />
               </div>
             ))}
 
@@ -296,8 +363,12 @@ export default function TopGearItemSelector({
                   key={`alt-${altIdx}`}
                   className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors group ${
                     checked
-                      ? isVault ? "bg-amber-400/[0.12] ring-2 ring-amber-400/50" : "bg-gold/[0.07]"
-                      : isVault ? "bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:ring-amber-400/50 hover:bg-amber-400/[0.08]" : "hover:bg-white/[0.02]"
+                      ? isVault
+                        ? "bg-amber-400/[0.12] ring-2 ring-amber-400/50"
+                        : "bg-gold/[0.07]"
+                      : isVault
+                        ? "bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:ring-amber-400/50 hover:bg-amber-400/[0.08]"
+                        : "hover:bg-white/[0.02]"
                   }`}
                 >
                   <input
@@ -308,19 +379,48 @@ export default function TopGearItemSelector({
                   />
                   <div
                     className={`w-5 h-5 rounded-[3px] border transition-all shrink-0 flex items-center justify-center ${
-                      checked ? "bg-gold border-gold" : "border-gray-600 group-hover:border-gray-500"
+                      checked
+                        ? "bg-gold border-gold"
+                        : "border-gray-600 group-hover:border-gray-500"
                     }`}
                   >
                     {checked && (
-                      <svg className="w-3 h-3 text-black" viewBox="0 0 16 16" fill="none">
-                        <path d="M12 5L6.5 10.5L4 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <svg
+                        className="w-3 h-3 text-black"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                      >
+                        <path
+                          d="M12 5L6.5 10.5L4 8"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     )}
                   </div>
-                  <div className={`w-8 h-8 shrink-0 rounded overflow-hidden ring-2 ${isVault ? "ring-amber-400/70" : "ring-white/5"}`}>
-                    <img src={getIconUrl(item.icon)} alt="" width={32} height={32} className="w-full h-full" loading="lazy" />
+                  <div
+                    className={`w-8 h-8 shrink-0 rounded overflow-hidden ring-2 ${isVault ? "ring-amber-400/70" : "ring-white/5"}`}
+                  >
+                    <img
+                      src={getIconUrl(item.icon)}
+                      alt=""
+                      width={32}
+                      height={32}
+                      className="w-full h-full"
+                      loading="lazy"
+                    />
                   </div>
-                  <ItemDetails item={item} upgradeMenuKey={item.uid} upgradeMenuFor={upgradeMenuFor} upgradeOptions={upgradeOptions} loadingUpgrades={loadingUpgrades} onUpgradeClick={() => openUpgradeMenu(item, item.uid)} onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)} />
+                  <ItemDetails
+                    item={item}
+                    upgradeMenuKey={item.uid}
+                    upgradeMenuFor={upgradeMenuFor}
+                    upgradeOptions={upgradeOptions}
+                    loadingUpgrades={loadingUpgrades}
+                    onUpgradeClick={() => openUpgradeMenu(item, item.uid)}
+                    onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)}
+                  />
                 </label>
               );
             })}
@@ -352,15 +452,20 @@ function ItemDetails({
   const isMenuOpen = upgradeMenuFor === upgradeMenuKey;
 
   const parts: { text: string; color?: string }[] = [];
-  if (item.origin === "vault") parts.push({ text: "Great Vault", color: "text-amber-400/80" });
+  if (item.origin === "vault")
+    parts.push({ text: "Great Vault", color: "text-amber-400/80" });
   if (item.tag) parts.push({ text: item.tag });
   if (item.upgrade) parts.push({ text: item.upgrade });
   if (item.gem_name) {
     parts.push({ text: item.gem_name, color: "text-sky-400/70" });
   } else if (item.sockets > 0) {
-    parts.push({ text: `${item.sockets > 1 ? item.sockets + " " : ""}Socket${item.sockets > 1 ? "s" : ""}`, color: "text-sky-400/70" });
+    parts.push({
+      text: `${item.sockets > 1 ? item.sockets + " " : ""}Socket${item.sockets > 1 ? "s" : ""}`,
+      color: "text-sky-400/70",
+    });
   }
-  if (item.enchant_name) parts.push({ text: item.enchant_name, color: "text-emerald-400/70" });
+  if (item.enchant_name)
+    parts.push({ text: item.enchant_name, color: "text-emerald-400/70" });
 
   return (
     <>
@@ -397,13 +502,21 @@ function ItemDetails({
                     key={opt.bonus_id}
                     type="button"
                     disabled={isCurrent}
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onUpgradeSelect(opt); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onUpgradeSelect(opt);
+                    }}
                     className={`w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 ${
-                      isCurrent ? "text-muted cursor-default" : "text-gray-300 hover:bg-white/[0.05] hover:text-white"
+                      isCurrent
+                        ? "text-muted cursor-default"
+                        : "text-gray-300 hover:bg-white/[0.05] hover:text-white"
                     }`}
                   >
                     <span>{opt.fullName}</span>
-                    <span className="font-mono tabular-nums text-[10px] text-muted">{opt.itemLevel}</span>
+                    <span className="font-mono tabular-nums text-[10px] text-muted">
+                      {opt.itemLevel}
+                    </span>
                   </button>
                 );
               })
@@ -415,13 +528,26 @@ function ItemDetails({
         {hasUpgrade && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onUpgradeClick(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onUpgradeClick();
+            }}
             className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
-              isMenuOpen ? "bg-gold/20 text-gold" : "text-gray-600 hover:text-gray-400 hover:bg-white/[0.05]"
+              isMenuOpen
+                ? "bg-gold/20 text-gold"
+                : "text-gray-600 hover:text-gray-400 hover:bg-white/[0.05]"
             }`}
             title="Add copy at different upgrade level"
           >
-            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg
+              className="w-3 h-3"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
               <path d="M8 12V4M5 7l3-3 3 3" />
             </svg>
           </button>
