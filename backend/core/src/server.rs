@@ -156,6 +156,37 @@ pub struct UpgradeCompareRequest {
 }
 
 #[derive(Debug, Serialize)]
+pub struct UpgradeCompareDebugSelectedItem {
+    pub slot: String,
+    pub item_name: String,
+    pub current_level: u64,
+    pub total_levels: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpgradeCompareDebugCombinationItem {
+    pub slot: String,
+    pub choice_index: u64,
+    pub total_levels: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpgradeCompareDebugCombination {
+    pub name: String,
+    pub items: Vec<UpgradeCompareDebugCombinationItem>,
+    pub total_costs: HashMap<u64, u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpgradeCompareDebugResponse {
+    pub selected_items: Vec<UpgradeCompareDebugSelectedItem>,
+    pub combo_count: usize,
+    pub combinations: Vec<UpgradeCompareDebugCombination>,
+    pub truncated_count: usize,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct SimResponse {
     pub id: String,
     pub status: String,
@@ -739,15 +770,59 @@ async fn create_droptimizer_sim(
 async fn get_upgrade_compare_combo_count(
     req: web::Json<UpgradeCompareRequest>,
 ) -> HttpResponse {
+    let prepared = match prepare_upgrade_compare_request(&req) {
+        Ok(prepared) => prepared,
+        Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+    };
+
+    match profileset_generator::generate_upgrade_compare_input(
+        &prepared.base_profile,
+        &prepared.upgraded_options_by_slot,
+        &prepared.dawncrest_budget,
+        req.max_combinations,
+    ) {
+        Ok((_, combo_count, _)) => HttpResponse::Ok().json(json!({ "combo_count": combo_count })),
+        Err(e) => {
+            let count = combo_count_from_generation_error(&e);
+            HttpResponse::Ok().json(json!({ "combo_count": count, "error": e }))
+        }
+    }
+}
+
+struct PreparedUpgradeCompare {
+    base_profile: String,
+    upgraded_options_by_slot: HashMap<String, Vec<Value>>,
+    dawncrest_budget: HashMap<u64, u64>,
+    slot_order: Vec<String>,
+    selected_items: Vec<UpgradeCompareDebugSelectedItem>,
+}
+
+fn combo_count_from_generation_error(error: &str) -> usize {
+    error
+        .split('(')
+        .nth(1)
+        .and_then(|s| s.split(')').next())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+fn is_dawncrest_currency(currency_id: u64) -> bool {
+    game_data::get_currency_info(currency_id)
+        .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|s| s.to_ascii_lowercase()))
+        .map(|name| name.contains("dawncrest"))
+        .unwrap_or(false)
+}
+
+fn prepare_upgrade_compare_request(
+    req: &UpgradeCompareRequest,
+) -> Result<PreparedUpgradeCompare, String> {
     let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let resolved = gear_resolver::resolve_gear(&parse_result);
     let upgrade_budget = addon_parser::parse_upgrade_currencies(&simc_input);
 
     if upgrade_budget.is_empty() {
-        return HttpResponse::BadRequest().json(json!({
-            "detail": "No upgrade_currencies found in SimC addon export."
-        }));
+        return Err("No upgrade_currencies found in SimC addon export.".to_string());
     }
 
     let base_profile = resolved.base_profile.clone();
@@ -756,22 +831,23 @@ async fn get_upgrade_compare_combo_count(
     let dawncrest_currency_ids: HashSet<u64> = upgrade_budget
         .keys()
         .copied()
-        .filter(|currency_id| {
-            game_data::get_currency_info(*currency_id)
-                .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|s| s.to_ascii_lowercase()))
-                .map(|name| name.contains("dawncrest"))
-                .unwrap_or(false)
-        })
+        .filter(|currency_id| is_dawncrest_currency(*currency_id))
         .collect();
 
     if dawncrest_currency_ids.is_empty() {
-        return HttpResponse::BadRequest().json(json!({
-            "detail": "No Dawncrest currencies found in upgrade_currencies."
-        }));
+        return Err("No Dawncrest currencies found in upgrade_currencies.".to_string());
     }
+
+    let dawncrest_budget: HashMap<u64, u64> = upgrade_budget
+        .iter()
+        .filter(|(currency_id, _)| dawncrest_currency_ids.contains(currency_id))
+        .map(|(currency_id, amount)| (*currency_id, *amount))
+        .collect();
 
     let bonus_re = regex::Regex::new(r"bonus_id=([0-9/:]+)").unwrap();
     let mut upgraded_options_by_slot: HashMap<String, Vec<Value>> = HashMap::new();
+    let mut selected_items: Vec<UpgradeCompareDebugSelectedItem> = Vec::new();
+    let mut slot_order: Vec<String> = Vec::new();
     let mut seen_slots: HashSet<String> = HashSet::new();
 
     for raw_slot in &req.selected_slots {
@@ -853,6 +929,11 @@ async fn get_upgrade_compare_combo_count(
         }
 
         let item_id = equipped.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+        let item_name = equipped
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| format!("Item {}", item_id));
         let mut upgraded_items: Vec<Value> = Vec::new();
 
         for (target_level, target_bonus_id) in slot_upgrades {
@@ -901,26 +982,126 @@ async fn get_upgrade_compare_combo_count(
         }
 
         if !upgraded_items.is_empty() {
+            selected_items.push(UpgradeCompareDebugSelectedItem {
+                slot: slot.clone(),
+                item_name,
+                current_level: 0,
+                total_levels: upgraded_items.len() as u64,
+            });
+            slot_order.push(slot.clone());
             upgraded_options_by_slot.insert(slot, upgraded_items);
         }
     }
 
-    match profileset_generator::generate_upgrade_compare_input(
-        &base_profile,
-        &upgraded_options_by_slot,
-        &upgrade_budget,
+    Ok(PreparedUpgradeCompare {
+        base_profile,
+        upgraded_options_by_slot,
+        dawncrest_budget,
+        slot_order,
+        selected_items,
+    })
+}
+
+async fn get_upgrade_compare_debug(
+    req: web::Json<UpgradeCompareRequest>,
+) -> HttpResponse {
+    let prepared = match prepare_upgrade_compare_request(&req) {
+        Ok(prepared) => prepared,
+        Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+    };
+
+    let (_, combo_count, combo_metadata) = match profileset_generator::generate_upgrade_compare_input(
+        &prepared.base_profile,
+        &prepared.upgraded_options_by_slot,
+        &prepared.dawncrest_budget,
         req.max_combinations,
     ) {
-        Ok((_, combo_count, _)) => HttpResponse::Ok().json(json!({ "combo_count": combo_count })),
+        Ok(result) => result,
         Err(e) => {
-            let count: usize = e.split('(')
-                .nth(1)
-                .and_then(|s| s.split(')').next())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            HttpResponse::Ok().json(json!({ "combo_count": count, "error": e }))
+            return HttpResponse::Ok().json(UpgradeCompareDebugResponse {
+                selected_items: prepared.selected_items,
+                combo_count: combo_count_from_generation_error(&e),
+                combinations: Vec::new(),
+                truncated_count: 0,
+                error: Some(e),
+            });
         }
-    }
+    };
+
+    let slot_positions: HashMap<String, usize> = prepared
+        .slot_order
+        .iter()
+        .enumerate()
+        .map(|(idx, slot)| (slot.clone(), idx))
+        .collect();
+    let total_levels_by_slot: HashMap<String, u64> = prepared
+        .upgraded_options_by_slot
+        .iter()
+        .map(|(slot, options)| (slot.clone(), options.len() as u64))
+        .collect();
+
+    let mut combinations: Vec<UpgradeCompareDebugCombination> = combo_metadata
+        .into_iter()
+        .map(|(name, items)| {
+            let mut total_costs: HashMap<u64, u64> = HashMap::new();
+            let mut combo_items: Vec<UpgradeCompareDebugCombinationItem> = Vec::new();
+
+            for item in items {
+                if let Some(costs) = item.get("upgrade_costs").and_then(|v| v.as_object()) {
+                    for (currency_id, amount) in costs {
+                        if let (Ok(currency_id), Some(amount)) =
+                            (currency_id.parse::<u64>(), amount.as_u64())
+                        {
+                            *total_costs.entry(currency_id).or_insert(0) += amount;
+                        }
+                    }
+                }
+
+                let Some(slot) = item.get("slot").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let Some(choice_index) = item.get("upgrade_levels").and_then(|v| v.as_u64()) else {
+                    continue;
+                };
+
+                combo_items.push(UpgradeCompareDebugCombinationItem {
+                    slot: slot.to_string(),
+                    choice_index,
+                    total_levels: total_levels_by_slot.get(slot).copied().unwrap_or(0),
+                });
+            }
+
+            combo_items.sort_by_key(|item| {
+                slot_positions
+                    .get(&item.slot)
+                    .copied()
+                    .unwrap_or(usize::MAX)
+            });
+
+            UpgradeCompareDebugCombination {
+                name,
+                items: combo_items,
+                total_costs,
+            }
+        })
+        .collect();
+
+    combinations.sort_by_key(|combo| {
+        combo
+            .name
+            .split_whitespace()
+            .last()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(usize::MAX)
+    });
+
+    HttpResponse::Ok().json(UpgradeCompareDebugResponse {
+        selected_items: prepared.selected_items,
+        combo_count,
+        combinations,
+        truncated_count: 0,
+        error: None,
+    })
 }
 
 async fn create_upgrade_compare_sim(
@@ -928,177 +1109,16 @@ async fn create_upgrade_compare_sim(
     store: web::Data<Arc<dyn JobStorage>>,
     simc_path: web::Data<PathBuf>,
 ) -> HttpResponse {
-    let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
-    let parse_result = addon_parser::parse_simc_input(&simc_input);
-    let resolved = gear_resolver::resolve_gear(&parse_result);
-    let upgrade_budget = addon_parser::parse_upgrade_currencies(&simc_input);
-
-    if upgrade_budget.is_empty() {
-        return HttpResponse::BadRequest().json(json!({
-            "detail": "No upgrade_currencies found in SimC addon export."
-        }));
-    }
-
-    let base_profile = resolved.base_profile.clone();
-    let items_by_slot = resolve_to_items_by_slot(&resolved);
-
-    let dawncrest_currency_ids: HashSet<u64> = upgrade_budget
-        .keys()
-        .copied()
-        .filter(|currency_id| {
-            game_data::get_currency_info(*currency_id)
-                .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|s| s.to_ascii_lowercase()))
-                .map(|name| name.contains("dawncrest"))
-                .unwrap_or(false)
-        })
-        .collect();
-
-    if dawncrest_currency_ids.is_empty() {
-        return HttpResponse::BadRequest().json(json!({
-            "detail": "No Dawncrest currencies found in upgrade_currencies."
-        }));
-    }
-
-    let bonus_re = regex::Regex::new(r"bonus_id=([0-9/:]+)").unwrap();
-    let mut upgraded_options_by_slot: HashMap<String, Vec<Value>> = HashMap::new();
-    let mut seen_slots: HashSet<String> = HashSet::new();
-
-    for raw_slot in &req.selected_slots {
-        let slot = raw_slot.trim().to_lowercase();
-        if slot.is_empty() || !seen_slots.insert(slot.clone()) {
-            continue;
-        }
-
-        let Some(items) = items_by_slot.get(&slot) else {
-            continue;
-        };
-
-        let Some(equipped) = items
-            .iter()
-            .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false))
-        else {
-            continue;
-        };
-
-        let old_bonus_ids: Vec<u64> = equipped
-            .get("bonus_ids")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
-            .unwrap_or_default();
-
-        let Some(options) = game_data::get_upgrade_options(&old_bonus_ids) else {
-            continue;
-        };
-
-        let Some((current_bonus_id, current_level)) = options
-            .iter()
-            .filter_map(|opt| {
-                let bonus_id = opt.get("bonus_id")?.as_u64()?;
-                let level = opt.get("level")?.as_u64()?;
-                if old_bonus_ids.contains(&bonus_id) {
-                    Some((bonus_id, level))
-                } else {
-                    None
-                }
-            })
-            .max_by_key(|(_, level)| *level)
-        else {
-            continue;
-        };
-
-        let mut slot_upgrades: Vec<(u64, u64)> = options
-            .iter()
-            .filter_map(|opt| {
-                let target_bonus_id = opt.get("bonus_id")?.as_u64()?;
-                let level = opt.get("level")?.as_u64()?;
-                if level <= current_level {
-                    return None;
-                }
-
-                let has_dawncrest_cost = opt
-                    .get("cumulative_costs")
-                    .and_then(|v| v.as_object())
-                    .map(|costs| {
-                        costs
-                            .keys()
-                            .filter_map(|k| k.parse::<u64>().ok())
-                            .any(|cid| dawncrest_currency_ids.contains(&cid))
-                    })
-                    .unwrap_or(false);
-
-                if has_dawncrest_cost {
-                    Some((level, target_bonus_id))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        slot_upgrades.sort_by_key(|(level, _)| *level);
-        slot_upgrades.dedup_by_key(|(_, bonus_id)| *bonus_id);
-
-        if slot_upgrades.is_empty() {
-            continue;
-        }
-
-        let item_id = equipped.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-        let mut upgraded_items: Vec<Value> = Vec::new();
-
-        for (target_level, target_bonus_id) in slot_upgrades {
-            let new_bonus_ids: Vec<u64> = old_bonus_ids
-                .iter()
-                .map(|bid| if *bid == current_bonus_id { target_bonus_id } else { *bid })
-                .collect();
-
-            if new_bonus_ids == old_bonus_ids || new_bonus_ids.is_empty() {
-                continue;
-            }
-
-            let mut upgraded = equipped.clone();
-            upgraded["is_equipped"] = json!(false);
-            upgraded["bonus_ids"] = json!(new_bonus_ids.clone());
-            upgraded["upgrade_levels"] = json!(target_level.saturating_sub(current_level));
-
-            if let Some(simc) = equipped.get("simc_string").and_then(|s| s.as_str()) {
-                let new_simc = bonus_re
-                    .replace(simc, |caps: &regex::Captures| {
-                        let raw = &caps[1];
-                        let sep = if raw.contains('/') { "/" } else { ":" };
-                        format!(
-                            "bonus_id={}",
-                            new_bonus_ids
-                                .iter()
-                                .map(|id| id.to_string())
-                                .collect::<Vec<_>>()
-                                .join(sep)
-                        )
-                    })
-                    .to_string();
-                upgraded["simc_string"] = json!(new_simc);
-            }
-
-            if let Some(info) = game_data::get_item_info(item_id, Some(&new_bonus_ids)) {
-                let ilvl = info.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0);
-                if ilvl > 0 {
-                    upgraded["ilevel"] = json!(ilvl);
-                }
-            }
-
-            let costs = game_data::get_upgrade_cost_between(&old_bonus_ids, &new_bonus_ids);
-            upgraded["upgrade_costs"] = json!(costs);
-            upgraded_items.push(upgraded);
-        }
-
-        if !upgraded_items.is_empty() {
-            upgraded_options_by_slot.insert(slot, upgraded_items);
-        }
-    }
+    let prepared = match prepare_upgrade_compare_request(&req) {
+        Ok(prepared) => prepared,
+        Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+    };
 
     let (generated_input, combo_count, combo_metadata) =
         match profileset_generator::generate_upgrade_compare_input(
-            &base_profile,
-            &upgraded_options_by_slot,
-            &upgrade_budget,
+            &prepared.base_profile,
+            &prepared.upgraded_options_by_slot,
+            &prepared.dawncrest_budget,
             req.max_combinations,
         ) {
             Ok(result) => result,
@@ -1743,6 +1763,7 @@ pub async fn start_with_storage_bind(
             .route("/api/top-gear/combo-count", web::post().to(get_top_gear_combo_count))
             .route("/api/upgrade-compare/sim", web::post().to(create_upgrade_compare_sim))
             .route("/api/upgrade-compare/combo-count", web::post().to(get_upgrade_compare_combo_count))
+            .route("/api/upgrade-compare/debug", web::post().to(get_upgrade_compare_debug))
             .route("/api/sim/{id}", web::get().to(get_sim_status))
             .route("/api/sim/{id}/logs", web::get().to(get_sim_logs))
             .route("/api/sim/{id}/cancel", web::post().to(cancel_sim))

@@ -541,16 +541,16 @@ function GearSlotRow({
               New
             </span>
           )}
-            {(item.upgrade_levels ?? 0) > 0 && (
-              <span className="shrink-0 text-[9px] font-semibold text-gold bg-gold/15 px-1 py-px rounded">
-                +{item.upgrade_levels} LvL
-              </span>
-            )}
-            {item.origin === "vault" && (
-              <span className="shrink-0 text-[8px] uppercase tracking-wider font-bold text-amber-400 bg-amber-400/10 px-1 py-px rounded">
-                Vault
-              </span>
-            )}
+          {(item.upgrade_levels ?? 0) > 0 && (
+            <span className="shrink-0 text-[9px] font-semibold text-gold bg-gold/15 px-1 py-px rounded">
+              +{item.upgrade_levels} LvL
+            </span>
+          )}
+          {item.origin === "vault" && (
+            <span className="shrink-0 text-[8px] uppercase tracking-wider font-bold text-amber-400 bg-amber-400/10 px-1 py-px rounded">
+              Vault
+            </span>
+          )}
         </div>
         <p className="text-[9px] text-muted truncate">
           {SLOT_LABELS[slot] || slot}
@@ -630,11 +630,16 @@ function ItemTag({
           {item.ilevel}
         </span>
       )}
-        {item.origin === "vault" && (
-          <span className="text-[8px] font-bold text-amber-400 uppercase tracking-wider shrink-0">
-            V
-          </span>
-        )}
+      {(item.upgrade_levels ?? 0) > 0 && (
+        <span className="text-[9px] font-semibold text-gold bg-gold/15 px-1 py-px rounded shrink-0">
+          +{item.upgrade_levels} LvL
+        </span>
+      )}
+      {item.origin === "vault" && (
+        <span className="text-[8px] font-bold text-amber-400 uppercase tracking-wider shrink-0">
+          V
+        </span>
+      )}
       {enchant?.name && (
         <span
           className="text-[9px] text-emerald-400/70 truncate max-w-[70px]"

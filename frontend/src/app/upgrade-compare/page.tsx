@@ -44,6 +44,33 @@ interface CandidateGroup {
   candidates: UpgradeCandidate[];
 }
 
+interface UpgradeCompareDebugSelectedItem {
+  slot: string;
+  item_name: string;
+  current_level: number;
+  total_levels: number;
+}
+
+interface UpgradeCompareDebugCombinationItem {
+  slot: string;
+  choice_index: number;
+  total_levels: number;
+}
+
+interface UpgradeCompareDebugCombination {
+  name: string;
+  items: UpgradeCompareDebugCombinationItem[];
+  total_costs: CurrencyMap;
+}
+
+interface UpgradeCompareDebugResponse {
+  selected_items: UpgradeCompareDebugSelectedItem[];
+  combo_count: number;
+  combinations: UpgradeCompareDebugCombination[];
+  truncated_count: number;
+  error?: string | null;
+}
+
 function toCostMap(costs?: Record<string, number>): CurrencyMap {
   const out: CurrencyMap = {};
   if (!costs) return out;
@@ -95,6 +122,9 @@ export default function UpgradeComparePage() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [serverComboCount, setServerComboCount] = useState(0);
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [debugData, setDebugData] =
+    useState<UpgradeCompareDebugResponse | null>(null);
   const [error, setError] = useState("");
 
   const infoQueries = useMemo(
@@ -167,6 +197,7 @@ export default function UpgradeComparePage() {
       setCandidates([]);
       setSelectedSlots(new Set());
       setServerComboCount(0);
+      setDebugData(null);
       return;
     }
 
@@ -184,6 +215,7 @@ export default function UpgradeComparePage() {
       setCandidates([]);
       setSelectedSlots(new Set());
       setServerComboCount(0);
+      setDebugData(null);
       return;
     }
 
@@ -255,6 +287,7 @@ export default function UpgradeComparePage() {
           setCandidates([]);
           setSelectedSlots(new Set());
           setServerComboCount(0);
+          setDebugData(null);
         }
       })
       .finally(() => {
@@ -269,20 +302,23 @@ export default function UpgradeComparePage() {
   useEffect(() => {
     if (!simcInput.trim()) {
       setServerComboCount(0);
+      setDebugData(null);
       return;
     }
 
     if (selectedSlots.size === 0 || candidates.length === 0) {
       setServerComboCount(0);
+      setDebugData(null);
       return;
     }
 
     let cancelled = false;
     const selected = [...selectedSlots];
+    setDebugLoading(true);
 
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/api/upgrade-compare/combo-count`, {
+        const res = await fetch(`${API_URL}/api/upgrade-compare/debug`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -298,15 +334,22 @@ export default function UpgradeComparePage() {
 
         if (!res.ok) {
           setServerComboCount(0);
+          setDebugData(null);
           return;
         }
 
         setServerComboCount(
           typeof data.combo_count === "number" ? data.combo_count : 0,
         );
+        setDebugData(data as UpgradeCompareDebugResponse);
       } catch {
         if (!cancelled) {
           setServerComboCount(0);
+          setDebugData(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setDebugLoading(false);
         }
       }
     })();
@@ -531,6 +574,127 @@ export default function UpgradeComparePage() {
           </div>
         )}
       </div>
+
+      {/* Debug Info */}
+      {selectedSlots.size > 0 && (
+        <div className="card p-4 border border-cyan-500/30 bg-cyan-500/[0.03]">
+          <details className="cursor-pointer">
+            <summary className="text-xs font-medium uppercase tracking-widest text-cyan-400 pb-3">
+              🐛 Debug Info - Simulation Combinations ({serverComboCount})
+            </summary>
+            <div className="space-y-3">
+              {debugLoading ? (
+                <p className="text-sm text-muted">Loading debug info...</p>
+              ) : debugData ? (
+                <>
+                  <div>
+                    <p className="text-xs font-medium text-gray-300 mb-2">
+                      Selected Items ({debugData.selected_items.length}):
+                    </p>
+                    <div className="space-y-1">
+                      {debugData.selected_items.map((item) => (
+                        <div
+                          key={item.slot}
+                          className="text-xs text-gray-400 ml-4"
+                        >
+                          <span className="text-gray-500">
+                            {SLOT_LABELS[item.slot]?.toLowerCase() ||
+                              item.slot.toLowerCase()}
+                            :
+                          </span>{" "}
+                          {item.item_name} ({item.current_level}/
+                          {item.total_levels})
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-300 mb-2">
+                      All Combinations ({debugData.combo_count}):
+                    </p>
+                    <div className="bg-black/50 rounded border border-border max-h-96 overflow-y-auto">
+                      {debugData.combinations.length === 0 ? (
+                        <div className="p-2 text-xs text-gray-500">
+                          No combinations to display
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border/50">
+                          {debugData.combinations.map((combo, idx) => (
+                            <div
+                              key={combo.name}
+                              className="px-3 py-2 text-[10px] text-gray-400 hover:bg-cyan-500/10"
+                            >
+                              <div className="font-mono">
+                                Combo {idx + 1}: [
+                                {combo.items
+                                  .map((item) => {
+                                    const abbreviation = (
+                                      SLOT_LABELS[item.slot]?.toLowerCase() ||
+                                      item.slot.toLowerCase()
+                                    ).substring(0, 4);
+                                    return `${abbreviation}:${item.choice_index}/${item.total_levels}`;
+                                  })
+                                  .join(", ")}
+                                ]
+                              </div>
+                              <div className="text-[9px] text-cyan-400/60 mt-1">
+                                Cost:{" "}
+                                {formatCosts(combo.total_costs, currencyInfo)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {debugData.error && (
+                      <p className="text-[10px] text-red-400 mt-2">
+                        {debugData.error}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted">No debug data available.</p>
+              )}
+
+              <div>
+                <p className="text-xs font-medium text-gray-300 mb-2">
+                  Payload Preview:
+                </p>
+                <details>
+                  <summary className="text-xs text-cyan-400/70 cursor-pointer hover:text-cyan-400">
+                    View JSON
+                  </summary>
+                  <pre className="text-[10px] text-gray-500 bg-black/40 rounded p-2 mt-2 overflow-x-auto max-h-64 overflow-y-auto">
+                    {JSON.stringify(
+                      {
+                        selected_slots: [...selectedSlots],
+                        simc_input_length: simcInput.length,
+                        max_combinations: maxCombinations,
+                        threads,
+                        fight_style: fightStyle,
+                        target_error: 0.1,
+                        desired_targets: targetCount,
+                        max_time: fightLength,
+                        iterations: 10000,
+                        ...(selectedTalent ? { talents: selectedTalent } : {}),
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </details>
+              </div>
+
+              <div className="text-[11px] text-gray-400">
+                <span className="text-cyan-400/70">Valid Combinations:</span>{" "}
+                {serverComboCount.toLocaleString()}
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
