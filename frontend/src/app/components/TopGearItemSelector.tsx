@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { API_URL } from "../lib/api";
-import type { ResolveGearResponse, ResolvedItem } from "../lib/types";
-import { useWowheadTooltips } from "../lib/useWowheadTooltips";
-import { useSimContext } from "./SimContext";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
+import { useWowheadTooltips } from '../lib/useWowheadTooltips';
+import { API_URL } from '../lib/api';
+import { useSimContext } from './SimContext';
 
 interface UpgradeOption {
   bonus_id: number;
@@ -32,20 +32,20 @@ interface DisplayGroup {
 }
 
 const DISPLAY_GROUPS: DisplayGroup[] = [
-  { label: "Head", slots: ["head"] },
-  { label: "Neck", slots: ["neck"] },
-  { label: "Shoulder", slots: ["shoulder"] },
-  { label: "Back", slots: ["back"] },
-  { label: "Chest", slots: ["chest"] },
-  { label: "Wrist", slots: ["wrist"] },
-  { label: "Hands", slots: ["hands"] },
-  { label: "Waist", slots: ["waist"] },
-  { label: "Legs", slots: ["legs"] },
-  { label: "Feet", slots: ["feet"] },
-  { label: "Rings", slots: ["finger1", "finger2"] },
-  { label: "Trinkets", slots: ["trinket1", "trinket2"] },
-  { label: "Main Hand", slots: ["main_hand"] },
-  { label: "Off Hand", slots: ["off_hand"] },
+  { label: 'Head', slots: ['head'] },
+  { label: 'Neck', slots: ['neck'] },
+  { label: 'Shoulder', slots: ['shoulder'] },
+  { label: 'Back', slots: ['back'] },
+  { label: 'Chest', slots: ['chest'] },
+  { label: 'Wrist', slots: ['wrist'] },
+  { label: 'Hands', slots: ['hands'] },
+  { label: 'Waist', slots: ['waist'] },
+  { label: 'Legs', slots: ['legs'] },
+  { label: 'Feet', slots: ['feet'] },
+  { label: 'Rings', slots: ['finger1', 'finger2'] },
+  { label: 'Trinkets', slots: ['trinket1', 'trinket2'] },
+  { label: 'Main Hand', slots: ['main_hand'] },
+  { label: 'Off Hand', slots: ['off_hand'] },
 ];
 
 function getIconUrl(iconName: string): string {
@@ -58,12 +58,11 @@ function getWowheadUrl(itemId: number): string {
 
 function getWowheadData(item: ResolvedItem): string {
   const parts: string[] = [];
-  if (item.bonus_ids.length > 0)
-    parts.push(`bonus=${item.bonus_ids.join(":")}`);
+  if (item.bonus_ids.length > 0) parts.push(`bonus=${item.bonus_ids.join(':')}`);
   if (item.ilevel > 0) parts.push(`ilvl=${item.ilevel}`);
   if (item.enchant_id > 0) parts.push(`ench=${item.enchant_id}`);
   if (item.gem_id > 0) parts.push(`gems=${item.gem_id}`);
-  return parts.join("&");
+  return parts.join('&');
 }
 
 export default function TopGearItemSelector({
@@ -87,10 +86,9 @@ export default function TopGearItemSelector({
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setHeaderVisible(entry.isIntersecting),
-      { threshold: 0 },
-    );
+    const obs = new IntersectionObserver(([entry]) => setHeaderVisible(entry.isIntersecting), {
+      threshold: 0,
+    });
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
@@ -107,7 +105,7 @@ export default function TopGearItemSelector({
       setLoadingUpgrades(true);
       try {
         const res = await fetch(
-          `${API_URL}/api/upgrade-options?bonus_ids=${item.bonus_ids.join(",")}`,
+          `${API_URL}/api/upgrade-options?bonus_ids=${item.bonus_ids.join(',')}`
         );
         const data = await res.json();
         setUpgradeOptions(data.options || []);
@@ -116,28 +114,28 @@ export default function TopGearItemSelector({
       }
       setLoadingUpgrades(false);
     },
-    [upgradeMenuFor],
+    [upgradeMenuFor]
   );
 
   const addUpgradedCopy = useCallback(
     (item: ResolvedItem, option: UpgradeOption) => {
       // Find the current upgrade bonus_id to replace
       const currentUpgradeBonusId = upgradeOptions.find((o) =>
-        item.bonus_ids.includes(o.bonus_id),
+        item.bonus_ids.includes(o.bonus_id)
       )?.bonus_id;
       if (!currentUpgradeBonusId) return;
 
       const newBonusIds = item.bonus_ids.map((b) =>
-        b === currentUpgradeBonusId ? option.bonus_id : b,
+        b === currentUpgradeBonusId ? option.bonus_id : b
       );
       const newSimcString = item.simc_string.replace(
         /bonus_id=[0-9/:]+/,
-        `bonus_id=${newBonusIds.join("/")}`,
+        `bonus_id=${newBonusIds.join('/')}`
       );
 
       const copy: ResolvedItem = {
         ...item,
-        uid: `${item.item_id}:${[...newBonusIds].sort((a, b) => a - b).join(":")}:${item.origin}:${item.slot}`,
+        uid: `${item.item_id}:${[...newBonusIds].sort((a, b) => a - b).join(':')}:${item.origin}:${item.slot}`,
         bonus_ids: newBonusIds,
         simc_string: newSimcString,
         ilevel: option.itemLevel,
@@ -160,28 +158,19 @@ export default function TopGearItemSelector({
 
       setUpgradeMenuFor(null);
     },
-    [
-      resolved,
-      selectedUids,
-      upgradeOptions,
-      onResolvedChange,
-      onSelectionChange,
-      onItemAdded,
-    ],
+    [resolved, selectedUids, upgradeOptions, onResolvedChange, onSelectionChange, onItemAdded]
   );
 
   function toggleItem(item: ResolvedItem, group: DisplayGroup) {
     applyToggle(item, group, {
-      ...Object.fromEntries(
-        Object.entries(selectedUids).map(([k, v]) => [k, new Set(v)]),
-      ),
+      ...Object.fromEntries(Object.entries(selectedUids).map(([k, v]) => [k, new Set(v)])),
     });
   }
 
   function applyToggle(
     item: ResolvedItem,
     group: DisplayGroup,
-    updated: Record<string, Set<string>>,
+    updated: Record<string, Set<string>>
   ) {
     if (group.slots.length === 1) {
       const slot = item.slot;
@@ -218,9 +207,7 @@ export default function TopGearItemSelector({
       const slotRes = resolved.slots[slot];
       if (!slotRes) return false;
       const matching = slotRes.alternatives.find((a) => a.uid === item.uid);
-      return matching
-        ? (selectedUids[slot]?.has(matching.uid) ?? false)
-        : false;
+      return matching ? (selectedUids[slot]?.has(matching.uid) ?? false) : false;
     });
   }
 
@@ -241,7 +228,7 @@ export default function TopGearItemSelector({
         if (!slotRes) continue;
         if (slotRes.equipped) equipped.push(slotRes.equipped);
         for (const alt of slotRes.alternatives) {
-          const key = `${alt.item_id}:${[...alt.bonus_ids].sort().join(":")}`;
+          const key = `${alt.item_id}:${[...alt.bonus_ids].sort().join(':')}`;
           if (seenAltKeys.has(key)) continue;
           seenAltKeys.add(key);
           alternatives.push(alt);
@@ -261,64 +248,51 @@ export default function TopGearItemSelector({
     return (
       <div className="card p-8 text-center">
         <p className="text-sm text-muted">
-          No alternative items found. Make sure your SimC addon exports bag
-          items.
+          No alternative items found. Make sure your SimC addon exports bag items.
         </p>
       </div>
     );
   }
 
-  const comboLabel = `${comboCount.toLocaleString()} combo${comboCount !== 1 ? "s" : ""}`;
+  const comboLabel = `${comboCount.toLocaleString()} combo${comboCount !== 1 ? 's' : ''}`;
   const comboColorClass =
     comboCount > effectiveMaxCombinations
-      ? "bg-red-500/10 text-red-400"
+      ? 'bg-red-500/10 text-red-400'
       : comboCount > 0
-        ? "bg-surface-2 text-white"
-        : "bg-surface-2 text-muted";
+        ? 'bg-surface-2 text-white'
+        : 'bg-surface-2 text-muted';
 
   return (
     <div className="space-y-4">
       {!headerVisible && (
-        <div className="fixed top-12 left-0 right-0 z-40 bg-surface/90 backdrop-blur-sm border-b border-border/50 px-4 py-2 flex items-center justify-between">
-          <p className="text-xs font-medium text-muted uppercase tracking-widest">
-            Select Items
-          </p>
-          <span
-            className={`text-xs font-mono px-2.5 py-1 rounded-md ${comboColorClass}`}
-          >
+        <div className="fixed left-0 right-0 top-12 z-40 flex items-center justify-between border-b border-border/50 bg-surface/90 px-4 py-2 backdrop-blur-sm">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted">Select Items</p>
+          <span className={`rounded-md px-2.5 py-1 font-mono text-xs ${comboColorClass}`}>
             {comboLabel}
           </span>
         </div>
       )}
       <div ref={headerRef} className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted uppercase tracking-widest">
-          Select Items
-        </p>
-        <span
-          className={`text-xs font-mono px-2.5 py-1 rounded-md ${comboColorClass}`}
-        >
+        <p className="text-xs font-medium uppercase tracking-widest text-muted">Select Items</p>
+        <span className={`rounded-md px-2.5 py-1 font-mono text-xs ${comboColorClass}`}>
           {comboLabel}
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {visibleGroups.map(({ group, equipped, alternatives }) => (
-          <div key={group.label} className="card p-3.5 space-y-1">
-            <p className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-2">
+          <div key={group.label} className="card space-y-1 p-3.5">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted">
               {group.label}
             </p>
 
             {equipped.map((item, eqIdx) => (
               <div
                 key={`eq-${eqIdx}`}
-                className="flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-white/[0.03]"
+                className="flex items-center gap-2.5 rounded-md bg-white/[0.03] px-2.5 py-2"
               >
-                <div className="w-5 h-5 rounded-[3px] bg-white/10 flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-3 h-3 text-white/40"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                  >
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-white/10">
+                  <svg className="h-3 w-3 text-white/40" viewBox="0 0 16 16" fill="none">
                     <path
                       d="M12 5L6.5 10.5L4 8"
                       stroke="currentColor"
@@ -328,13 +302,13 @@ export default function TopGearItemSelector({
                     />
                   </svg>
                 </div>
-                <div className="w-8 h-8 shrink-0 rounded overflow-hidden ring-1 ring-white/5">
+                <div className="h-8 w-8 shrink-0 overflow-hidden rounded ring-1 ring-white/5">
                   <img
                     src={getIconUrl(item.icon)}
                     alt=""
                     width={32}
                     height={32}
-                    className="w-full h-full"
+                    className="h-full w-full"
                     loading="lazy"
                   />
                 </div>
@@ -351,45 +325,41 @@ export default function TopGearItemSelector({
             ))}
 
             {equipped.length > 0 && alternatives.length > 0 && (
-              <div className="border-t border-border/50 !my-1.5" />
+              <div className="!my-1.5 border-t border-border/50" />
             )}
 
             {alternatives.map((item, altIdx) => {
               const checked = isItemSelected(item, group);
-              const isVault = item.origin === "vault";
+              const isVault = item.origin === 'vault';
 
               return (
                 <label
                   key={`alt-${altIdx}`}
-                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors group ${
+                  className={`group flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors ${
                     checked
                       ? isVault
-                        ? "bg-amber-400/[0.12] ring-2 ring-amber-400/50"
-                        : "bg-gold/[0.07]"
+                        ? 'bg-amber-400/[0.12] ring-2 ring-amber-400/50'
+                        : 'bg-gold/[0.07]'
                       : isVault
-                        ? "bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:ring-amber-400/50 hover:bg-amber-400/[0.08]"
-                        : "hover:bg-white/[0.02]"
+                        ? 'bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:bg-amber-400/[0.08] hover:ring-amber-400/50'
+                        : 'hover:bg-white/[0.02]'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleItem(item, group)}
-                    className="sr-only peer"
+                    className="peer sr-only"
                   />
                   <div
-                    className={`w-5 h-5 rounded-[3px] border transition-all shrink-0 flex items-center justify-center ${
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border transition-all ${
                       checked
-                        ? "bg-gold border-gold"
-                        : "border-gray-600 group-hover:border-gray-500"
+                        ? 'border-gold bg-gold'
+                        : 'border-gray-600 group-hover:border-gray-500'
                     }`}
                   >
                     {checked && (
-                      <svg
-                        className="w-3 h-3 text-black"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                      >
+                      <svg className="h-3 w-3 text-black" viewBox="0 0 16 16" fill="none">
                         <path
                           d="M12 5L6.5 10.5L4 8"
                           stroke="currentColor"
@@ -401,14 +371,14 @@ export default function TopGearItemSelector({
                     )}
                   </div>
                   <div
-                    className={`w-8 h-8 shrink-0 rounded overflow-hidden ring-2 ${isVault ? "ring-amber-400/70" : "ring-white/5"}`}
+                    className={`h-8 w-8 shrink-0 overflow-hidden rounded ring-2 ${isVault ? 'ring-amber-400/70' : 'ring-white/5'}`}
                   >
                     <img
                       src={getIconUrl(item.icon)}
                       alt=""
                       width={32}
                       height={32}
-                      className="w-full h-full"
+                      className="h-full w-full"
                       loading="lazy"
                     />
                   </div>
@@ -452,44 +422,42 @@ function ItemDetails({
   const isMenuOpen = upgradeMenuFor === upgradeMenuKey;
 
   const parts: { text: string; color?: string }[] = [];
-  if (item.origin === "vault")
-    parts.push({ text: "Great Vault", color: "text-amber-400/80" });
+  if (item.origin === 'vault') parts.push({ text: 'Great Vault', color: 'text-amber-400/80' });
   if (item.tag) parts.push({ text: item.tag });
   if (item.upgrade) parts.push({ text: item.upgrade });
   if (item.gem_name) {
-    parts.push({ text: item.gem_name, color: "text-sky-400/70" });
+    parts.push({ text: item.gem_name, color: 'text-sky-400/70' });
   } else if (item.sockets > 0) {
     parts.push({
-      text: `${item.sockets > 1 ? item.sockets + " " : ""}Socket${item.sockets > 1 ? "s" : ""}`,
-      color: "text-sky-400/70",
+      text: `${item.sockets > 1 ? item.sockets + ' ' : ''}Socket${item.sockets > 1 ? 's' : ''}`,
+      color: 'text-sky-400/70',
     });
   }
-  if (item.enchant_name)
-    parts.push({ text: item.enchant_name, color: "text-emerald-400/70" });
+  if (item.enchant_name) parts.push({ text: item.enchant_name, color: 'text-emerald-400/70' });
 
   return (
     <>
-      <div className="flex-1 min-w-0 relative">
+      <div className="relative min-w-0 flex-1">
         <a
           href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
           data-wowhead={item.item_id > 0 ? getWowheadData(item) : undefined}
-          className="text-[13px] leading-tight truncate block no-underline pointer-events-none"
+          className="pointer-events-none block truncate text-[13px] leading-tight no-underline"
           style={{ color: item.quality_color }}
         >
           {item.name}
         </a>
         {parts.length > 0 && (
-          <span className="text-[11px] text-muted truncate block mt-0.5">
+          <span className="mt-0.5 block truncate text-[11px] text-muted">
             {parts.map((p, i) => (
               <span key={i}>
                 {i > 0 && <span className="opacity-40"> · </span>}
-                <span className={p.color || ""}>{p.text}</span>
+                <span className={p.color || ''}>{p.text}</span>
               </span>
             ))}
           </span>
         )}
         {isMenuOpen && (
-          <div className="absolute left-0 top-full mt-1 z-50 bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[180px]">
+          <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-border bg-surface py-1 shadow-xl">
             {loadingUpgrades ? (
               <div className="px-3 py-2 text-[11px] text-muted">Loading...</div>
             ) : upgradeOptions.length === 0 ? (
@@ -507,14 +475,14 @@ function ItemDetails({
                       e.preventDefault();
                       onUpgradeSelect(opt);
                     }}
-                    className={`w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 ${
+                    className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[11px] ${
                       isCurrent
-                        ? "text-muted cursor-default"
-                        : "text-gray-300 hover:bg-white/[0.05] hover:text-white"
+                        ? 'cursor-default text-muted'
+                        : 'text-gray-300 hover:bg-white/[0.05] hover:text-white'
                     }`}
                   >
                     <span>{opt.fullName}</span>
-                    <span className="font-mono tabular-nums text-[10px] text-muted">
+                    <span className="font-mono text-[10px] tabular-nums text-muted">
                       {opt.itemLevel}
                     </span>
                   </button>
@@ -524,7 +492,7 @@ function ItemDetails({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex shrink-0 items-center gap-1">
         {hasUpgrade && (
           <button
             type="button"
@@ -533,15 +501,15 @@ function ItemDetails({
               e.preventDefault();
               onUpgradeClick();
             }}
-            className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+            className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
               isMenuOpen
-                ? "bg-gold/20 text-gold"
-                : "text-gray-600 hover:text-gray-400 hover:bg-white/[0.05]"
+                ? 'bg-gold/20 text-gold'
+                : 'text-gray-600 hover:bg-white/[0.05] hover:text-gray-400'
             }`}
             title="Add copy at different upgrade level"
           >
             <svg
-              className="w-3 h-3"
+              className="h-3 w-3"
               viewBox="0 0 16 16"
               fill="none"
               stroke="currentColor"
@@ -552,7 +520,7 @@ function ItemDetails({
             </svg>
           </button>
         )}
-        <span className="text-xs font-mono tabular-nums text-muted">
+        <span className="font-mono text-xs tabular-nums text-muted">
           {item.ilevel > 0 && item.ilevel}
         </span>
       </div>
