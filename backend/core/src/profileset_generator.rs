@@ -2,15 +2,19 @@ use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
-use crate::types::class_data::{self, GEAR_SLOTS, ARMOR_SLOTS, UNIQUE_SLOT_PAIRS};
 use crate::game_data;
+use crate::types::class_data::{self, ARMOR_SLOTS, GEAR_SLOTS, UNIQUE_SLOT_PAIRS};
 
 use once_cell::sync::Lazy;
+
+type ProfilesetResult = Result<(String, usize, HashMap<String, Vec<Value>>), String>;
 
 /// Maximum gear combinations for Top Gear. Override with MAX_COMBINATIONS env var.
 pub static MAX_COMBINATIONS: Lazy<usize> = Lazy::new(|| {
     if let Ok(val) = std::env::var("MAX_COMBINATIONS") {
-        if let Ok(n) = val.parse() { return n; }
+        if let Ok(n) = val.parse() {
+            return n;
+        }
     }
     500
 });
@@ -19,13 +23,21 @@ pub static MAX_COMBINATIONS: Lazy<usize> = Lazy::new(|| {
 /// "item_id:sorted_bonus_ids:origin:slot"
 fn make_item_uid(item: &Value) -> String {
     let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-    let mut bonus_ids: Vec<u64> = item.get("bonus_ids")
+    let mut bonus_ids: Vec<u64> = item
+        .get("bonus_ids")
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
         .unwrap_or_default();
     bonus_ids.sort();
-    let bonus_key = bonus_ids.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(":");
-    let origin = item.get("origin").and_then(|v| v.as_str()).unwrap_or("bags");
+    let bonus_key = bonus_ids
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    let origin = item
+        .get("origin")
+        .and_then(|v| v.as_str())
+        .unwrap_or("bags");
     let slot = item.get("slot").and_then(|v| v.as_str()).unwrap_or("");
     format!("{}:{}:{}:{}", item_id, bonus_key, origin, slot)
 }
@@ -39,9 +51,9 @@ pub fn generate_top_gear_input(
     items_by_slot: &HashMap<String, Vec<Value>>,
     selected_items: &HashMap<String, Vec<String>>,
     max_combos_override: Option<usize>,
-) -> Result<(String, usize, HashMap<String, Vec<Value>>), String> {
+) -> ProfilesetResult {
     // Extract base profile info (non-gear lines) and equipped gear
-    let (base_lines, equipped_gear, talents_string, _spec) = parse_base_profile(base_profile);
+    let (base_lines, equipped_gear, talents_string, spec) = parse_base_profile(base_profile);
 
     let slot_item_lists = build_slot_candidates(base_profile, items_by_slot, selected_items);
 
@@ -92,7 +104,11 @@ pub fn generate_top_gear_input(
                 // Use equipped item as default
                 let default = items
                     .iter()
-                    .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false))
+                    .find(|it| {
+                        it.get("is_equipped")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(&items[0]);
                 gear_set.insert(slot, default.clone());
             }
@@ -111,6 +127,11 @@ pub fn generate_top_gear_input(
 
         // Vault constraint: only one vault item can be picked
         if !validate_vault_constraint(&gear_set) {
+            continue;
+        }
+
+        // Weapon constraint: two-hander in main_hand cannot pair with off_hand
+        if !validate_weapon_constraint(&gear_set, &spec) {
             continue;
         }
 
@@ -242,7 +263,9 @@ pub fn generate_top_gear_input(
     Ok((lines.join("\n"), combo_count, combo_metadata))
 }
 
-fn parse_base_profile(base_profile: &str) -> (Vec<String>, HashMap<String, String>, String, String) {
+fn parse_base_profile(
+    base_profile: &str,
+) -> (Vec<String>, HashMap<String, String>, String, String) {
     let mut non_gear_lines: Vec<String> = Vec::new();
     let mut equipped_gear: HashMap<String, String> = HashMap::new();
     let mut talents_string = String::new();
@@ -550,10 +573,22 @@ pub fn generate_droptimizer_input(
     for item in drop_items {
         let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
         let ilevel = item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0);
-        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let encounter = item.get("encounter").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let inv_type = item.get("inventory_type").and_then(|v| v.as_u64()).unwrap_or(0);
-        let bonus_ids: Vec<u64> = item.get("bonus_ids")
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let encounter = item
+            .get("encounter")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let inv_type = item
+            .get("inventory_type")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let bonus_ids: Vec<u64> = item
+            .get("bonus_ids")
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
@@ -571,7 +606,11 @@ pub fn generate_droptimizer_input(
 
         let mut base_simc_str = format!(",id={},ilevel={}", item_id, ilevel);
         if !bonus_ids.is_empty() {
-            let bonus_str = bonus_ids.iter().map(|b| b.to_string()).collect::<Vec<_>>().join("/");
+            let bonus_str = bonus_ids
+                .iter()
+                .map(|b| b.to_string())
+                .collect::<Vec<_>>()
+                .join("/");
             base_simc_str.push_str(&format!(",bonus_id={}", bonus_str));
         }
 
@@ -586,26 +625,35 @@ pub fn generate_droptimizer_input(
 
             let combo_name = format!("Combo {}", combo_idx);
             lines.push(format!("### {}", combo_name));
-            lines.push(format!("profileset.\"{}\"+={}={}", combo_name, slot, simc_str));
+            lines.push(format!(
+                "profileset.\"{}\"+={}={}",
+                combo_name, slot, simc_str
+            ));
             if inv_type == 17 && *slot == "main_hand" && spec != "fury" {
                 lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
             }
             if !talents_string.is_empty() {
-                lines.push(format!("profileset.\"{}\"+=talents={}", combo_name, talents_string));
+                lines.push(format!(
+                    "profileset.\"{}\"+=talents={}",
+                    combo_name, talents_string
+                ));
             }
             lines.push(String::new());
 
-            combo_metadata.insert(combo_name.clone(), json!([{
-                "slot": slot,
-                "item_id": item_id,
-                "ilevel": ilevel,
-                "name": name,
-                "bonus_ids": bonus_ids,
-                "enchant_id": 0,
-                "gem_id": 0,
-                "is_kept": false,
-                "encounter": encounter,
-            }]));
+            combo_metadata.insert(
+                combo_name.clone(),
+                json!([{
+                    "slot": slot,
+                    "item_id": item_id,
+                    "ilevel": ilevel,
+                    "name": name,
+                    "bonus_ids": bonus_ids,
+                    "enchant_id": 0,
+                    "gem_id": 0,
+                    "is_kept": false,
+                    "encounter": encounter,
+                }]),
+            );
             combo_idx += 1;
         }
     }
@@ -630,6 +678,41 @@ fn validate_vault_constraint(gear_set: &HashMap<String, Value>) -> bool {
     true
 }
 
+/// Weapon constraint: a two-hander (inventory_type 17) in main_hand cannot be
+/// paired with an off_hand item, unless the spec is fury (Titan's Grip).
+fn validate_weapon_constraint(gear_set: &HashMap<String, Value>, spec: &str) -> bool {
+    if spec == "fury" {
+        return true;
+    }
+    let Some(mh) = gear_set.get("main_hand") else {
+        return true;
+    };
+    let mh_item_id = mh.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+    if mh_item_id == 0 {
+        return true;
+    }
+    let mh_bonus_ids: Vec<u64> = mh
+        .get("bonus_ids")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
+        .unwrap_or_default();
+    let inv_type = game_data::get_item_info(mh_item_id, Some(&mh_bonus_ids))
+        .and_then(|info| info.get("inventory_type").and_then(|v| v.as_u64()))
+        .unwrap_or(0);
+    if inv_type != 17 {
+        return true;
+    }
+    // Main hand is a two-hander — off_hand must be empty
+    let oh = gear_set.get("off_hand");
+    match oh {
+        None => true,
+        Some(oh_item) => {
+            let oh_id = oh_item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+            oh_id == 0
+        }
+    }
+}
+
 /// Count valid Top Gear combinations without generating the full simc output.
 pub fn count_top_gear_combos(
     base_profile: &str,
@@ -637,8 +720,9 @@ pub fn count_top_gear_combos(
     selected_items: &HashMap<String, Vec<String>>,
     max_combos_override: Option<usize>,
 ) -> Result<usize, String> {
+    let (_, _, _, spec) = parse_base_profile(base_profile);
     let slot_item_lists = build_slot_candidates(base_profile, items_by_slot, selected_items);
-    count_valid_combos(&slot_item_lists, max_combos_override)
+    count_valid_combos(&slot_item_lists, max_combos_override, &spec)
 }
 
 /// Build per-slot candidate lists from items_by_slot and selected UIDs.
@@ -666,14 +750,18 @@ fn build_slot_candidates(
             }
         }
 
-        let equipped = slot_items
-            .iter()
-            .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false));
+        let equipped = slot_items.iter().find(|it| {
+            it.get("is_equipped")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        });
 
         if let Some(eq) = equipped {
             let already_included = candidates.iter().any(|c| {
                 c.get("item_id") == eq.get("item_id")
-                    && c.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false)
+                    && c.get("is_equipped")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
             });
             if !already_included {
                 candidates.insert(0, eq.clone());
@@ -692,11 +780,17 @@ fn build_slot_candidates(
                 let slot = slot.to_string();
                 if let Some(items) = slot_item_lists.get_mut(&slot) {
                     items.retain(|item| {
-                        if item.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        if item
+                            .get("is_equipped")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false)
+                        {
                             return true;
                         }
                         let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-                        if item_id == 0 { return true; }
+                        if item_id == 0 {
+                            return true;
+                        }
                         match game_data::get_item_armor_subclass(item_id) {
                             Some(subclass) => subclass <= max_subclass || subclass == 0,
                             None => true,
@@ -714,6 +808,7 @@ fn build_slot_candidates(
 fn count_valid_combos(
     slot_item_lists: &HashMap<String, Vec<Value>>,
     max_combos_override: Option<usize>,
+    spec: &str,
 ) -> Result<usize, String> {
     let mut varying_slots: Vec<String> = slot_item_lists
         .iter()
@@ -765,7 +860,11 @@ fn count_valid_combos(
             if let Some(items) = slot_item_lists.get(&slot) {
                 let default = items
                     .iter()
-                    .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false))
+                    .find(|it| {
+                        it.get("is_equipped")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(&items[0]);
                 gear_set.insert(slot, default.clone());
             }
@@ -776,16 +875,26 @@ fn count_valid_combos(
             gear_set.insert(slot.clone(), item.clone());
         }
 
-        if !validate_unique_equipped(&gear_set) { continue; }
-        if !validate_vault_constraint(&gear_set) { continue; }
+        if !validate_unique_equipped(&gear_set) {
+            continue;
+        }
+        if !validate_vault_constraint(&gear_set) {
+            continue;
+        }
+        if !validate_weapon_constraint(&gear_set, spec) {
+            continue;
+        }
 
         let is_baseline = GEAR_SLOTS.iter().all(|slot| {
-            gear_set.get(*slot)
+            gear_set
+                .get(*slot)
                 .and_then(|item| item.get("is_equipped"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true)
         });
-        if is_baseline { continue; }
+        if is_baseline {
+            continue;
+        }
 
         count += 1;
     }

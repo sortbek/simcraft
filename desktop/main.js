@@ -202,7 +202,25 @@ function setupAutoUpdater() {
   }
 }
 
+async function clearCacheIfVersionChanged() {
+  const fs = require("fs");
+  const versionFile = path.join(app.getPath("userData"), ".last-version");
+  const current = app.getVersion();
+  let previous = null;
+  try {
+    previous = fs.readFileSync(versionFile, "utf-8").trim();
+  } catch {}
+  if (previous && previous !== current) {
+    console.log(`Version changed (${previous} → ${current}), clearing web cache`);
+    const session = require("electron").session.defaultSession;
+    await session.clearCache();
+    await session.clearStorageData({ storages: ["cachestorage", "serviceworkers"] });
+  }
+  fs.writeFileSync(versionFile, current);
+}
+
 app.whenReady().then(async () => {
+  await clearCacheIfVersionChanged();
   startBackend();
 
   try {

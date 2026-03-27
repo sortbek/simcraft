@@ -2,7 +2,7 @@ use regex::Regex;
 use std::collections::HashMap;
 
 use crate::types::class_data::{self, GEAR_SLOTS};
-use crate::types::{RawParsedItem, CharacterInfo, ItemOrigin, TalentLoadout, ParseResult};
+use crate::types::{CharacterInfo, ItemOrigin, ParseResult, RawParsedItem, TalentLoadout};
 
 struct ItemProps {
     item_id: u64,
@@ -15,18 +15,31 @@ struct ItemProps {
 
 fn parse_item_props(item_str: &str) -> ItemProps {
     let mut props = ItemProps {
-        item_id: 0, ilevel: 0, name: String::new(),
-        bonus_ids: Vec::new(), enchant_id: 0, gem_id: 0,
+        item_id: 0,
+        ilevel: 0,
+        name: String::new(),
+        bonus_ids: Vec::new(),
+        enchant_id: 0,
+        gem_id: 0,
     };
 
     if let Some(caps) = Regex::new(r"id=(\d+)").unwrap().captures(item_str) {
         props.item_id = caps[1].parse().unwrap_or(0);
     }
-    if let Some(caps) = Regex::new(r"(?:ilevel|ilvl)=(\d+)").unwrap().captures(item_str) {
+    if let Some(caps) = Regex::new(r"(?:ilevel|ilvl)=(\d+)")
+        .unwrap()
+        .captures(item_str)
+    {
         props.ilevel = caps[1].parse().unwrap_or(0);
     }
-    if let Some(caps) = Regex::new(r"bonus_id=([0-9/:]+)").unwrap().captures(item_str) {
-        props.bonus_ids = caps[1].split(&['/', ':'][..]).filter_map(|s| s.parse().ok()).collect();
+    if let Some(caps) = Regex::new(r"bonus_id=([0-9/:]+)")
+        .unwrap()
+        .captures(item_str)
+    {
+        props.bonus_ids = caps[1]
+            .split(&['/', ':'][..])
+            .filter_map(|s| s.parse().ok())
+            .collect();
     }
     if let Some(caps) = Regex::new(r"enchant_id=(\d+)").unwrap().captures(item_str) {
         props.enchant_id = caps[1].parse().unwrap_or(0);
@@ -119,7 +132,11 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                 pending_name.clear();
                 pending_ilevel = 0;
 
-                let origin = if in_vault_section { ItemOrigin::Vault } else { ItemOrigin::Bags };
+                let origin = if in_vault_section {
+                    ItemOrigin::Vault
+                } else {
+                    ItemOrigin::Bags
+                };
 
                 items.push(RawParsedItem {
                     raw_slot: slot,
@@ -156,12 +173,19 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
 
             // Active talent line
             if let Some(caps) = talents_re.captures(stripped) {
-                let name = if pending_label.is_empty() { "Active".to_string() } else { pending_label.clone() };
-                talent_loadouts.insert(0, TalentLoadout {
-                    name,
-                    talent_string: caps[1].to_string(),
-                    is_active: true,
-                });
+                let name = if pending_label.is_empty() {
+                    "Active".to_string()
+                } else {
+                    pending_label.clone()
+                };
+                talent_loadouts.insert(
+                    0,
+                    TalentLoadout {
+                        name,
+                        talent_string: caps[1].to_string(),
+                        is_active: true,
+                    },
+                );
                 pending_label.clear();
                 continue;
             }
@@ -203,34 +227,4 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
         base_profile: base_profile_lines.join("\n"),
         talent_loadouts,
     }
-}
-
-pub fn parse_upgrade_currencies(simc_input: &str) -> HashMap<u64, u64> {
-    let mut currencies = HashMap::new();
-    let line_re = Regex::new(r"(?i)^#?\s*upgrade_currencies\s*=\s*(.+)$").unwrap();
-    let pair_re = Regex::new(r"(\d+)\s*[:=]\s*(\d+)").unwrap();
-
-    for raw_line in simc_input.lines() {
-        let line = raw_line.trim();
-        let Some(caps) = line_re.captures(line) else {
-            continue;
-        };
-        let rhs = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-        for pair in pair_re.captures_iter(rhs) {
-            let currency_id = pair
-                .get(1)
-                .and_then(|m| m.as_str().parse::<u64>().ok())
-                .unwrap_or(0);
-            let amount = pair
-                .get(2)
-                .and_then(|m| m.as_str().parse::<u64>().ok())
-                .unwrap_or(0);
-            if currency_id > 0 {
-                currencies.insert(currency_id, amount);
-            }
-        }
-        break;
-    }
-
-    currencies
 }

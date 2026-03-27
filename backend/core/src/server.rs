@@ -1,6 +1,6 @@
 use actix_cors::Cors;
 use actix_files::NamedFile;
-use actix_web::{web, App, HttpServer, HttpResponse, HttpRequest};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -9,15 +9,15 @@ use std::sync::Arc;
 #[cfg(feature = "desktop")]
 use std::sync::Mutex;
 
+use crate::addon_parser;
 use crate::game_data;
+use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
-use crate::storage::JobStorage;
 use crate::profileset_generator;
 use crate::result_parser;
 use crate::simc_runner;
-use crate::addon_parser;
-use crate::gear_resolver;
+use crate::storage::{self, JobStorage};
 use crate::types::ResolveGearResponse;
 
 /// Newtype wrapper to avoid colliding with the simc `web::Data<PathBuf>`.
@@ -73,6 +73,9 @@ pub struct SimOptions {
     /// Custom APL and SimC expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list).
     #[serde(default)]
     pub custom_apl: String,
+    // Batch grouping
+    #[serde(default)]
+    pub batch_id: Option<String>,
     // Expert Mode injection points
     #[serde(default)]
     pub simc_header: String,
@@ -88,7 +91,9 @@ pub struct SimOptions {
 
 impl SimOptions {
     fn has_raid_actors(&self) -> bool {
-        !sanitize_custom_simc(&self.simc_raid_actors).trim().is_empty()
+        !sanitize_custom_simc(&self.simc_raid_actors)
+            .trim()
+            .is_empty()
     }
 
     fn to_json(&self) -> Value {
@@ -214,12 +219,24 @@ pub struct ResolveGearRequest {
     pub max_upgrade: bool,
 }
 
-fn default_iterations() -> u32 { 1000 }
-fn default_fight_style() -> String { "Patchwerk".to_string() }
-fn default_target_error() -> f64 { 0.05 }
-fn default_sim_type() -> String { "quick".to_string() }
-fn default_desired_targets() -> u32 { 1 }
-fn default_max_time() -> u32 { 300 }
+fn default_iterations() -> u32 {
+    1000
+}
+fn default_fight_style() -> String {
+    "Patchwerk".to_string()
+}
+fn default_target_error() -> f64 {
+    0.05
+}
+fn default_sim_type() -> String {
+    "quick".to_string()
+}
+fn default_desired_targets() -> u32 {
+    1
+}
+fn default_max_time() -> u32 {
+    300
+}
 
 /// Sanitize user-provided custom SimC input by stripping dangerous directives.
 fn sanitize_custom_simc(input: &str) -> String {
@@ -425,7 +442,8 @@ fn apply_talent_override(simc_input: &str, talents: &str) -> String {
     }
     let re = regex::Regex::new(r"(?m)^talents=.+$").unwrap();
     if re.is_match(simc_input) {
-        re.replace(simc_input, format!("talents={}", talents)).to_string()
+        re.replace(simc_input, format!("talents={}", talents))
+            .to_string()
     } else {
         format!("{}\ntalents={}", simc_input, talents)
     }
@@ -495,7 +513,8 @@ fn spawn_staged_sim(
             }
             Err(e) => {
                 // Don't overwrite cancelled status with a generic error
-                let is_cancelled = store.get(&job_id)
+                let is_cancelled = store
+                    .get(&job_id)
                     .map(|j| j.status == JobStatus::Cancelled)
                     .unwrap_or(false);
                 if !is_cancelled {
@@ -505,6 +524,26 @@ fn spawn_staged_sim(
         }
         log_buffer.remove(&job_id);
     });
+}
+
+/// Validate batch_id against MAX_SCENARIOS. Returns an error response if rejected.
+fn validate_batch(batch_id: &Option<String>, store: &dyn JobStorage) -> Option<HttpResponse> {
+    let bid = match batch_id {
+        Some(b) if !b.is_empty() => b,
+        _ => return None,
+    };
+    let max = *storage::MAX_SCENARIOS;
+    if max == 0 {
+        return Some(HttpResponse::BadRequest().json(json!({
+            "detail": "Batch scenarios are disabled on this server."
+        })));
+    }
+    if store.count_batch(bid) >= max {
+        return Some(HttpResponse::BadRequest().json(json!({
+            "detail": format!("Batch limit reached ({max} scenarios max).")
+        })));
+    }
+    None
 }
 
 // ---------- Handlers ----------
@@ -523,13 +562,18 @@ async fn create_sim(
     simc_input = apply_talent_override(&simc_input, &req.options.talents);
     simc_input = inject_expert_fields(&simc_input, &req.options);
 
-    let job = Job::new(
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
+    let mut job = Job::new(
         simc_input.clone(),
         req.sim_type.clone(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
     );
+    job.batch_id = req.options.batch_id.clone();
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();
     store.insert(job);
@@ -549,7 +593,9 @@ async fn create_sim(
         let jid_cb = jid_logs.clone();
         match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options, move |line| {
             logs_cb.push_line(&jid_cb, line.to_string());
-        }).await {
+        })
+        .await
+        {
             Ok(output) => {
                 let mut parsed = result_parser::parse_simc_result(&output.json);
                 inject_realm(&mut parsed, &simc_input);
@@ -559,7 +605,8 @@ async fn create_sim(
                 store_clone.set_report_files(&job_id_clone, output.html_report, output.text_output);
             }
             Err(e) => {
-                let is_cancelled = store_clone.get(&job_id_clone)
+                let is_cancelled = store_clone
+                    .get(&job_id_clone)
                     .map(|j| j.status == JobStatus::Cancelled)
                     .unwrap_or(false);
                 if !is_cancelled {
@@ -629,6 +676,10 @@ async fn create_top_gear_sim(
 
     let generated_input = inject_expert_fields(&generated_input, &req.options);
 
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
     let job = Job::new(
         generated_input.clone(),
         "top_gear".to_string(),
@@ -648,6 +699,7 @@ async fn create_top_gear_sim(
 
     let mut job = job;
     job.combo_metadata_json = Some(meta_json);
+    job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
     spawn_staged_sim(
@@ -667,9 +719,7 @@ async fn create_top_gear_sim(
     })
 }
 
-async fn get_top_gear_combo_count(
-    req: web::Json<TopGearRequest>,
-) -> HttpResponse {
+async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
     } else {
@@ -681,7 +731,11 @@ async fn get_top_gear_combo_count(
     let resolved = gear_resolver::resolve_gear(&parse_result);
     let base_profile = resolved.base_profile.clone();
 
-    let mut items_by_slot = resolve_to_items_by_slot(&resolved);
+    let mut items_by_slot: HashMap<String, Vec<Value>> = if let Some(ref ibs) = req.items_by_slot {
+        ibs.clone()
+    } else {
+        resolve_to_items_by_slot(&resolved)
+    };
 
     if req.max_upgrade {
         items_by_slot = game_data::upgrade_items_by_slot(&items_by_slot);
@@ -699,7 +753,8 @@ async fn get_top_gear_combo_count(
         Ok(count) => HttpResponse::Ok().json(json!({ "combo_count": count })),
         Err(e) => {
             // Extract the count from the error message so the frontend can still display it
-            let count: usize = e.split('(')
+            let count: usize = e
+                .split('(')
                 .nth(1)
                 .and_then(|s| s.split(')').next())
                 .and_then(|s| s.parse().ok())
@@ -730,6 +785,10 @@ async fn create_droptimizer_sim(
 
     let generated_input = inject_expert_fields(&generated_input, &req.options);
 
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
     let job = Job::new(
         generated_input.clone(),
         "droptimizer".to_string(),
@@ -748,6 +807,7 @@ async fn create_droptimizer_sim(
 
     let mut job = job;
     job.combo_metadata_json = Some(meta_json);
+    job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
     spawn_staged_sim(
@@ -1172,9 +1232,7 @@ struct ListSimsQuery {
 }
 
 #[cfg(feature = "desktop")]
-async fn list_sims(
-    store: web::Data<Arc<dyn JobStorage>>,
-) -> HttpResponse {
+async fn list_sims(store: web::Data<Arc<dyn JobStorage>>) -> HttpResponse {
     let summaries = store.list_recent(20, None, None);
     HttpResponse::Ok().json(summaries)
 }
@@ -1273,9 +1331,7 @@ async fn cancel_sim(
             simc_runner::kill_job(&job_id);
             HttpResponse::Ok().json(json!({"status": "cancelled"}))
         }
-        _ => {
-            HttpResponse::BadRequest().json(json!({"detail": "Job is not running"}))
-        }
+        _ => HttpResponse::BadRequest().json(json!({"detail": "Job is not running"})),
     }
 }
 
@@ -1322,7 +1378,9 @@ async fn get_sim_raw(
                     Err(_) => HttpResponse::InternalServerError()
                         .json(json!({"detail": "Failed to parse stored result"})),
                 },
-                None => HttpResponse::NotFound().json(json!({"detail": "No results available yet"})),
+                None => {
+                    HttpResponse::NotFound().json(json!({"detail": "No results available yet"}))
+                }
             }
         }
     }
@@ -1385,11 +1443,14 @@ async fn get_sim_csv(
     let result = match &job.result_json {
         Some(r) => match serde_json::from_str::<Value>(r) {
             Ok(v) => v,
-            Err(_) => return HttpResponse::InternalServerError()
-                .json(json!({"detail": "Failed to parse result"})),
+            Err(_) => {
+                return HttpResponse::InternalServerError()
+                    .json(json!({"detail": "Failed to parse result"}))
+            }
         },
-        None => return HttpResponse::NotFound()
-            .json(json!({"detail": "No results available yet"})),
+        None => {
+            return HttpResponse::NotFound().json(json!({"detail": "No results available yet"}))
+        }
     };
 
     let mut csv = String::from("actor,dps,dps_error\n");
@@ -1397,7 +1458,10 @@ async fn get_sim_csv(
     if result.get("type").and_then(|t| t.as_str()) == Some("top_gear") {
         // Top Gear / Droptimizer: base + profileset results
         if let Some(base_dps) = result.get("base_dps").and_then(|v| v.as_f64()) {
-            let name = result.get("player_name").and_then(|n| n.as_str()).unwrap_or("Base");
+            let name = result
+                .get("player_name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("Base");
             csv.push_str(&format!("{},{:.1},\n", name, base_dps));
         }
         if let Some(results) = result.get("results").and_then(|r| r.as_array()) {
@@ -1409,22 +1473,28 @@ async fn get_sim_csv(
         }
     } else {
         // Quick Sim
-        let name = result.get("player_name").and_then(|n| n.as_str()).unwrap_or("Player");
+        let name = result
+            .get("player_name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("Player");
         let dps = result.get("dps").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let error = result.get("dps_error").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let error = result
+            .get("dps_error")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         csv.push_str(&format!("{},{:.1},{:.1}\n", name, dps, error));
     }
 
     HttpResponse::Ok()
         .content_type("text/csv; charset=utf-8")
-        .insert_header(("Content-Disposition", format!("attachment; filename=\"sim-{}.csv\"", job_id)))
+        .insert_header((
+            "Content-Disposition",
+            format!("attachment; filename=\"sim-{}.csv\"", job_id),
+        ))
         .body(csv)
 }
 
-async fn get_item_info(
-    path: web::Path<u64>,
-    query: web::Query<BonusIdsQuery>,
-) -> HttpResponse {
+async fn get_item_info(path: web::Path<u64>, query: web::Query<BonusIdsQuery>) -> HttpResponse {
     let item_id = path.into_inner();
     let bonus_list: Vec<u64> = if query.bonus_ids.is_empty() {
         Vec::new()
@@ -1456,9 +1526,7 @@ async fn get_item_info(
     HttpResponse::Ok().json(result)
 }
 
-async fn get_item_info_batch(
-    req: web::Json<ItemInfoBatchRequest>,
-) -> HttpResponse {
+async fn get_item_info_batch(req: web::Json<ItemInfoBatchRequest>) -> HttpResponse {
     let mut items_list = req.items.clone();
     if items_list.is_empty() && !req.item_ids.is_empty() {
         items_list = req
@@ -1476,10 +1544,7 @@ async fn get_item_info_batch(
     let mut unique_items: Vec<(u64, Vec<u64>)> = Vec::new();
 
     for item in &items_list {
-        let iid = item
-            .get("item_id")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let iid = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
         let bonus: Vec<u64> = item
             .get("bonus_ids")
             .and_then(|v| v.as_array())
@@ -1555,7 +1620,11 @@ async fn get_max_upgrade_ilevels(body: web::Json<Vec<Value>>) -> HttpResponse {
             let key = format!(
                 "{}:{}",
                 item_id,
-                sorted_ids.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(",")
+                sorted_ids
+                    .iter()
+                    .map(|b| b.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
             );
             results.insert(key, ilevel);
         }
@@ -1592,6 +1661,12 @@ async fn get_upgrade_options(query: web::Query<BonusIdsQuery>) -> HttpResponse {
     }
 }
 
+async fn get_config() -> HttpResponse {
+    HttpResponse::Ok().json(json!({
+        "max_scenarios": *storage::MAX_SCENARIOS,
+    }))
+}
+
 async fn health_check() -> HttpResponse {
     let threads = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -1613,9 +1688,7 @@ async fn system_stats(stats: web::Data<Arc<Mutex<SystemStats>>>) -> HttpResponse
     }))
 }
 
-async fn resolve_gear(
-    req: web::Json<ResolveGearRequest>,
-) -> HttpResponse {
+async fn resolve_gear(req: web::Json<ResolveGearRequest>) -> HttpResponse {
     let simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
     } else {
@@ -1631,13 +1704,19 @@ async fn get_season_config() -> HttpResponse {
     let cfg = crate::item_db::season_cfg();
 
     // Parse the new typed fields from the season config JSON
-    let season = cfg.get("season").and_then(|s| s.as_str()).unwrap_or("").to_string();
+    let season = cfg
+        .get("season")
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
+        .to_string();
 
-    let raid_difficulties: Vec<DifficultyDef> = cfg.get("raidDifficulties")
+    let raid_difficulties: Vec<DifficultyDef> = cfg
+        .get("raidDifficulties")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let dungeon_categories: Vec<DungeonCategory> = cfg.get("dungeonCategories")
+    let dungeon_categories: Vec<DungeonCategory> = cfg
+        .get("dungeonCategories")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
@@ -1662,26 +1741,48 @@ struct DropsQuery {
 
 async fn get_drops_by_type(path: web::Path<String>, query: web::Query<DropsQuery>) -> HttpResponse {
     let instance_type = path.into_inner();
-    let class_name = if query.class_name.is_empty() { None } else { Some(query.class_name.as_str()) };
-    let spec = if query.spec.is_empty() { None } else { Some(query.spec.as_str()) };
+    let class_name = if query.class_name.is_empty() {
+        None
+    } else {
+        Some(query.class_name.as_str())
+    };
+    let spec = if query.spec.is_empty() {
+        None
+    } else {
+        Some(query.spec.as_str())
+    };
     match game_data::get_drops_by_type(&instance_type, class_name, spec) {
         Some(drops) => HttpResponse::Ok().json(drops),
-        None => HttpResponse::NotFound().json(json!({"detail": "No drops found for this instance type"})),
+        None => HttpResponse::NotFound()
+            .json(json!({"detail": "No drops found for this instance type"})),
     }
 }
 
 async fn get_instance_drops(path: web::Path<i64>, query: web::Query<DropsQuery>) -> HttpResponse {
     let instance_id = path.into_inner();
-    let class_name = if query.class_name.is_empty() { None } else { Some(query.class_name.as_str()) };
-    let spec = if query.spec.is_empty() { None } else { Some(query.spec.as_str()) };
+    let class_name = if query.class_name.is_empty() {
+        None
+    } else {
+        Some(query.class_name.as_str())
+    };
+    let spec = if query.spec.is_empty() {
+        None
+    } else {
+        Some(query.spec.as_str())
+    };
     match game_data::get_instance_drops(instance_id, class_name, spec) {
         Some(drops) => HttpResponse::Ok().json(drops),
-        None => HttpResponse::NotFound().json(json!({"detail": "Instance not found or has no drops"})),
+        None => {
+            HttpResponse::NotFound().json(json!({"detail": "Instance not found or has no drops"}))
+        }
     }
 }
 
 /// SPA fallback: serve the appropriate HTML file for client-side routes
-async fn spa_fallback(req: HttpRequest, frontend_dir: web::Data<FrontendDir>) -> actix_web::Result<NamedFile> {
+async fn spa_fallback(
+    req: HttpRequest,
+    frontend_dir: web::Data<FrontendDir>,
+) -> actix_web::Result<NamedFile> {
     let path = req.path();
 
     // Try exact file match first (e.g., /quick-sim -> quick-sim.html)
@@ -1710,9 +1811,7 @@ pub async fn start(resource_dir: &Path, frontend_dir: Option<PathBuf>) -> u16 {
     } else {
         resource_dir.join("simc").join("simc")
     };
-    let storage: Arc<dyn JobStorage> = Arc::new(
-        crate::storage::memory::MemoryStorage::new()
-    );
+    let storage: Arc<dyn JobStorage> = Arc::new(crate::storage::memory::MemoryStorage::new());
     start_with_storage(storage, simc_path, 17384, frontend_dir).await
 }
 
@@ -1758,36 +1857,54 @@ pub async fn start_with_storage_bind(
             .app_data(simc_data.clone())
             .app_data(log_data.clone());
         #[cfg(feature = "desktop")]
-        { app = app.app_data(stats_data.clone()); }
+        {
+            app = app.app_data(stats_data.clone());
+        }
         let mut app = app
             .route("/api/sim", web::post().to(create_sim))
             .route("/api/top-gear/sim", web::post().to(create_top_gear_sim))
-            .route("/api/top-gear/combo-count", web::post().to(get_top_gear_combo_count))
-            .route("/api/upgrade-compare/sim", web::post().to(create_upgrade_compare_sim))
-            .route("/api/upgrade-compare/combo-count", web::post().to(get_upgrade_compare_combo_count))
-            .route("/api/upgrade-compare/debug", web::post().to(get_upgrade_compare_debug))
+            .route(
+                "/api/top-gear/combo-count",
+                web::post().to(get_top_gear_combo_count),
+            )
             .route("/api/sim/{id}", web::get().to(get_sim_status))
             .route("/api/sim/{id}/logs", web::get().to(get_sim_logs))
             .route("/api/sim/{id}/cancel", web::post().to(cancel_sim))
             .route("/api/sim/{id}/raw", web::get().to(get_sim_raw))
             .route("/api/sim/{id}/input", web::get().to(get_sim_input))
             .route("/api/sim/{id}/html", web::get().to(get_sim_html))
-            .route("/api/sim/{id}/output.txt", web::get().to(get_sim_text_output))
+            .route(
+                "/api/sim/{id}/output.txt",
+                web::get().to(get_sim_text_output),
+            )
             .route("/api/sim/{id}/data.csv", web::get().to(get_sim_csv))
             .route("/api/item-info/{id}", web::get().to(get_item_info))
             .route("/api/item-info/batch", web::post().to(get_item_info_batch))
             .route("/api/enchant-info/{id}", web::get().to(get_enchant_info))
             .route("/api/gem-info/{id}", web::get().to(get_gem_info))
-            .route("/api/max-upgrade-ilevels", web::post().to(get_max_upgrade_ilevels))
+            .route(
+                "/api/max-upgrade-ilevels",
+                web::post().to(get_max_upgrade_ilevels),
+            )
             .route("/api/upgrade-options", web::get().to(get_upgrade_options))
             .route("/api/currency-info/{id}", web::get().to(get_currency_info))
             .route("/api/upgrade-tracks", web::get().to(list_upgrade_tracks))
             .route("/api/gear/resolve", web::post().to(resolve_gear))
             .route("/api/season-config", web::get().to(get_season_config))
-            .route("/api/droptimizer/sim", web::post().to(create_droptimizer_sim))
+            .route(
+                "/api/droptimizer/sim",
+                web::post().to(create_droptimizer_sim),
+            )
             .route("/api/instances", web::get().to(list_instances))
-            .route("/api/instances/type/{type}/drops", web::get().to(get_drops_by_type))
-            .route("/api/instances/{id}/drops", web::get().to(get_instance_drops))
+            .route(
+                "/api/instances/type/{type}/drops",
+                web::get().to(get_drops_by_type),
+            )
+            .route(
+                "/api/instances/{id}/drops",
+                web::get().to(get_instance_drops),
+            )
+            .route("/api/config", web::get().to(get_config))
             .route("/health", web::get().to(health_check));
         #[cfg(feature = "desktop")]
         {
@@ -1804,17 +1921,14 @@ pub async fn start_with_storage_bind(
         if let Some(ref dir) = frontend {
             app = app
                 .app_data(web::Data::new(FrontendDir(dir.clone())))
-                .service(
-                    actix_files::Files::new("/_next", dir.join("_next"))
-                        .prefer_utf8(true)
-                )
+                .service(actix_files::Files::new("/_next", dir.join("_next")).prefer_utf8(true))
                 .default_service(web::get().to(spa_fallback));
         }
 
         app
     })
     .bind(&bind_addr)
-    .expect(&format!("Failed to bind to {}", bind_addr))
+    .unwrap_or_else(|_| panic!("Failed to bind to {}", bind_addr))
     .run();
 
     tokio::spawn(server);

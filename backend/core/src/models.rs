@@ -32,6 +32,7 @@ pub struct Job {
     pub created_at: String,
     pub html_report: Option<String>,
     pub text_output: Option<String>,
+    pub batch_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +48,7 @@ pub struct JobSummary {
     pub player_class: Option<String>,
     pub realm: Option<String>,
     pub dps: Option<f64>,
+    pub batch_id: Option<String>,
 }
 
 pub struct ResultSummary {
@@ -67,8 +69,14 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
     // Extract DPS, player name, class from parsed result
     if let Some(json_str) = result_json {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
-            summary.player_name = v.get("player_name").and_then(|n| n.as_str()).map(String::from);
-            summary.player_class = v.get("player_class").and_then(|c| c.as_str()).map(String::from);
+            summary.player_name = v
+                .get("player_name")
+                .and_then(|n| n.as_str())
+                .map(String::from);
+            summary.player_class = v
+                .get("player_class")
+                .and_then(|c| c.as_str())
+                .map(String::from);
             summary.dps = v.get("dps").and_then(|d| d.as_f64());
         }
     }
@@ -125,7 +133,7 @@ impl Job {
             created_at: chrono::Utc::now().to_rfc3339(),
             html_report: None,
             text_output: None,
+            batch_id: None,
         }
     }
 }
-

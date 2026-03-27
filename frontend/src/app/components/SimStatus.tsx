@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { API_URL } from "../lib/api";
+import { useEffect, useRef, useState } from 'react';
+import { API_URL } from '../lib/api';
 
 interface SimStatusProps {
   status: string;
@@ -69,22 +69,21 @@ function useCpuUsage(isRunning: boolean): number | null {
 }
 
 function classifyLine(line: string): string {
-  if (line.startsWith("SimulationCraft ")) return "text-gold/70";
-  if (line.startsWith("Simulating...")) return "text-gray-500";
-  if (line.startsWith("Generating Baseline:") || line.startsWith("Generating Profileset:"))
-    return "text-gray-500";
-  if (line.startsWith("Implementation Not Yet Verified"))
-    return "text-amber-500/60 italic";
+  if (line.startsWith('SimulationCraft ')) return 'text-gold/70';
+  if (line.startsWith('Simulating...')) return 'text-gray-500';
+  if (line.startsWith('Generating Baseline:') || line.startsWith('Generating Profileset:'))
+    return 'text-gray-500';
+  if (line.startsWith('Implementation Not Yet Verified')) return 'text-amber-500/60 italic';
   if (
-    line.startsWith("Generating reports") ||
-    line.startsWith("DPS Ranking:") ||
-    line.startsWith("Profilesets (") ||
-    line.startsWith("HPS Ranking:") ||
-    line.startsWith("Baseline Performance:")
+    line.startsWith('Generating reports') ||
+    line.startsWith('DPS Ranking:') ||
+    line.startsWith('Profilesets (') ||
+    line.startsWith('HPS Ranking:') ||
+    line.startsWith('Baseline Performance:')
   )
-    return "text-gray-300";
-  if (/^\s+\d+\.\d+\s*:\s*Combo\s/.test(line)) return "text-gray-500";
-  return "text-gray-500";
+    return 'text-gray-300';
+  if (/^\s+\d+\.\d+\s*:\s*Combo\s/.test(line)) return 'text-gray-500';
+  return 'text-gray-500';
 }
 
 function LogConsole({ lines }: { lines: string[] }) {
@@ -105,25 +104,25 @@ function LogConsole({ lines }: { lines: string[] }) {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-surface border border-border border-b-0 rounded-t-lg">
+      <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-border bg-surface px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-gold/60 animate-pulse" />
-          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">
+          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold/60" />
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">
             SimC Output
           </span>
         </div>
-        <span className="text-[10px] text-gray-600 font-mono tabular-nums">
+        <span className="font-mono text-[10px] tabular-nums text-gray-600">
           {lines.length} lines
         </span>
       </div>
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="max-h-[320px] overflow-y-auto bg-[#0c0c0e] border border-border rounded-b-lg p-3 font-mono text-[11px] leading-[1.7]"
+        className="max-h-[320px] overflow-y-auto rounded-b-lg border border-border bg-[#0c0c0e] p-3 font-mono text-[11px] leading-[1.7]"
       >
         {lines.map((line, i) => (
           <div key={i} className={`whitespace-pre-wrap break-all ${classifyLine(line)}`}>
-            {line || "\u00A0"}
+            {line || '\u00A0'}
           </div>
         ))}
       </div>
@@ -143,19 +142,19 @@ export default function SimStatus({
   showLogs,
   onToggleLogs,
 }: SimStatusProps) {
-  const isRunning = status === "running";
-  const isPending = status === "pending";
+  const isRunning = status === 'running';
+  const isPending = status === 'pending';
   const [cancelling, setCancelling] = useState(false);
   const displayProgress = useSmoothedProgress(progress);
   const cpuUsage = useCpuUsage(isRunning);
-  const title = progressStage || (isPending ? "Queued" : "Simulating");
+  const title = progressStage || (isPending ? 'Queued' : 'Simulating');
   const hasStages = stagesCompleted && stagesCompleted.length > 0;
 
   async function handleCancel() {
     if (!jobId || cancelling) return;
     setCancelling(true);
     try {
-      await fetch(`${API_URL}/api/sim/${jobId}/cancel`, { method: "POST" });
+      await fetch(`${API_URL}/api/sim/${jobId}/cancel`, { method: 'POST' });
       onCancelled?.();
     } catch {
       // ignore
@@ -165,29 +164,30 @@ export default function SimStatus({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-16 space-y-6">
-      <div className="w-10 h-10 border-2 border-border border-t-gold rounded-full animate-spin" />
+    <div className="flex flex-col items-center justify-center space-y-6 py-16">
+      <div className="relative">
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-zinc-800 border-t-gold" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="h-2 w-2 animate-pulse rounded-full bg-gold/60" />
+        </div>
+      </div>
 
       <div className="text-center">
-        <p className="text-sm text-white font-medium">{title}</p>
-        {progressDetail && (
-          <p className="text-[11px] text-gray-400 mt-1">{progressDetail}</p>
-        )}
+        <p className="text-sm font-semibold text-zinc-100">{title}</p>
+        {progressDetail && <p className="mt-1 text-[11px] text-zinc-500">{progressDetail}</p>}
       </div>
 
       <div className="w-72">
-        <div className="w-full bg-surface rounded-full h-1.5 overflow-hidden">
+        <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
           <div
-            className="bg-gold h-full rounded-full transition-all duration-700"
-            style={{ width: `${Math.max(displayProgress, status === "pending" ? 2 : 5)}%` }}
+            className="h-full rounded-full bg-gradient-to-r from-gold-dark to-gold transition-all duration-700"
+            style={{ width: `${Math.max(displayProgress, status === 'pending' ? 2 : 5)}%` }}
           />
         </div>
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-[11px] text-gray-400 font-mono tabular-nums">
-            {displayProgress}%
-          </p>
+        <div className="mt-2 flex items-center justify-between">
+          <p className="font-mono text-[10px] tabular-nums text-zinc-500">{displayProgress}%</p>
           {cpuUsage !== null && (
-            <p className="text-[11px] text-gray-400 font-mono tabular-nums">
+            <p className="font-mono text-[10px] tabular-nums text-zinc-500">
               CPU {Math.round(cpuUsage)}%
             </p>
           )}
@@ -199,34 +199,46 @@ export default function SimStatus({
           <button
             onClick={handleCancel}
             disabled={cancelling}
-            className="text-[12px] text-gray-500 hover:text-red-400 transition-colors px-3 py-1 rounded-lg hover:bg-red-500/10"
+            className="rounded-lg px-3 py-1 text-[12px] text-gray-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
           >
-            {cancelling ? "Cancelling..." : "Cancel Sim"}
+            {cancelling ? 'Cancelling...' : 'Cancel Sim'}
           </button>
           {onToggleLogs && (
             <button
               onClick={onToggleLogs}
-              className="flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-gray-300 transition-colors px-3 py-1 rounded-lg hover:bg-white/5"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[12px] text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <rect x="2" y="3" width="12" height="10" rx="1.5" />
                 <path d="M5 7l2 2 2-2" />
               </svg>
-              {showLogs ? "Hide Logs" : "Show Logs"}
+              {showLogs ? 'Hide Logs' : 'Show Logs'}
             </button>
           )}
         </div>
-      )}
-
-      {showLogs && logLines && logLines.length > 0 && (
-        <LogConsole lines={logLines} />
       )}
 
       {hasStages && (
         <div className="w-72 space-y-1 pt-2">
           {stagesCompleted!.map((stage, i) => (
             <div key={i} className="flex items-center gap-2">
-              <svg className="w-3 h-3 text-emerald-500 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="h-3 w-3 shrink-0 text-emerald-500"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M12 5L6.5 10.5L4 8" />
               </svg>
               <span className="text-[11px] text-gray-400">{stage}</span>
@@ -234,8 +246,8 @@ export default function SimStatus({
           ))}
           {progressStage && (
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 flex items-center justify-center shrink-0">
-                <div className="w-1.5 h-1.5 bg-gold rounded-full animate-pulse" />
+              <div className="flex h-3 w-3 shrink-0 items-center justify-center">
+                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" />
               </div>
               <span className="text-[11px] text-gray-400">
                 {progressStage}
@@ -245,6 +257,8 @@ export default function SimStatus({
           )}
         </div>
       )}
+
+      {showLogs && logLines && logLines.length > 0 && <LogConsole lines={logLines} />}
     </div>
   );
 }

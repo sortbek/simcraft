@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { API_URL } from "./api";
+import { useEffect, useState } from 'react';
+import { API_URL } from './api';
 
 export interface ItemQuery {
   item_id: number;
@@ -25,18 +25,18 @@ const cache: Record<string, ItemInfo> = {};
 
 function cacheKey(item_id: number, bonus_ids?: number[]): string {
   if (!bonus_ids || bonus_ids.length === 0) return String(item_id);
-  return `${item_id}:${[...bonus_ids].sort((a, b) => a - b).join(":")}`;
+  return `${item_id}:${[...bonus_ids].sort((a, b) => a - b).join(':')}`;
 }
 
 export const QUALITY_COLORS: Record<number, string> = {
-  0: "#9d9d9d", // Poor
-  1: "#ffffff", // Common
-  2: "#1eff00", // Uncommon
-  3: "#0070dd", // Rare
-  4: "#a335ee", // Epic
-  5: "#ff8000", // Legendary
-  6: "#e6cc80", // Artifact
-  7: "#00ccff", // Heirloom
+  0: '#9d9d9d', // Poor
+  1: '#ffffff', // Common
+  2: '#1eff00', // Uncommon
+  3: '#0070dd', // Rare
+  4: '#a335ee', // Epic
+  5: '#ff8000', // Legendary
+  6: '#e6cc80', // Artifact
+  7: '#00ccff', // Heirloom
 };
 
 export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
@@ -46,7 +46,7 @@ export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
   const depKey = queries
     .filter((q) => q.item_id > 0)
     .map((q) => cacheKey(q.item_id, q.bonus_ids))
-    .join(",");
+    .join(',');
 
   useEffect(() => {
     const unique = new Map<string, ItemQuery>();
@@ -82,7 +82,7 @@ export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
         try {
           const params = new URLSearchParams();
           if (q.bonus_ids && q.bonus_ids.length > 0) {
-            params.set("bonus_ids", q.bonus_ids.join(","));
+            params.set('bonus_ids', q.bonus_ids.join(','));
           }
           const url = `${API_URL}/api/item-info/${q.item_id}?${params}`;
           const res = await fetch(url);
@@ -122,7 +122,7 @@ export function useEnchantInfo(
   const depKey = enchantIds
     .filter((id) => id > 0)
     .sort()
-    .join(",");
+    .join(',');
 
   useEffect(() => {
     const unique = new Set(enchantIds.filter((id) => id > 0));
@@ -184,7 +184,7 @@ export function useGemInfo(gemIds: number[]): Record<number, GemInfo> {
   const depKey = gemIds
     .filter((id) => id > 0)
     .sort()
-    .join(",");
+    .join(',');
 
   useEffect(() => {
     const unique = new Set(gemIds.filter((id) => id > 0));
@@ -304,11 +304,11 @@ export function getWowheadData(
   bonusIds?: number[],
   ilevel?: number,
   enchantId?: number,
-  gemId?: number,
+  gemId?: number
 ): string {
   const parts: string[] = [];
   if (bonusIds && bonusIds.length > 0) {
-    parts.push(`bonus=${bonusIds.join(":")}`);
+    parts.push(`bonus=${bonusIds.join(':')}`);
   }
   if (ilevel && ilevel > 0) {
     parts.push(`ilvl=${ilevel}`);
@@ -319,5 +319,5 @@ export function getWowheadData(
   if (gemId && gemId > 0) {
     parts.push(`gems=${gemId}`);
   }
-  return parts.join("&");
+  return parts.join('&');
 }

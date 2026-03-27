@@ -23,6 +23,12 @@ pub struct LogBuffer {
     inner: Mutex<HashMap<String, JobLog>>,
 }
 
+impl Default for LogBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LogBuffer {
     pub fn new() -> Self {
         Self {
@@ -58,11 +64,7 @@ impl LogBuffer {
         // Calculate how many lines to skip from the front of the deque.
         // `after` is the cursor (last index the client has seen).
         // Lines in the deque cover indices [first_index, next_index).
-        let start = if after >= log.first_index {
-            after - log.first_index
-        } else {
-            0
-        };
+        let start = after.saturating_sub(log.first_index);
 
         let lines: Vec<String> = log.lines.iter().skip(start).cloned().collect();
         (lines, log.next_index)

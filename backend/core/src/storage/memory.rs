@@ -1,11 +1,17 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::models::{Job, JobStatus, JobSummary, extract_result_summary};
 use super::JobStorage;
+use crate::models::{extract_result_summary, Job, JobStatus, JobSummary};
 
 pub struct MemoryStorage {
     jobs: Mutex<HashMap<String, Job>>,
+}
+
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryStorage {
@@ -21,7 +27,8 @@ impl JobStorage for MemoryStorage {
         let mut jobs = self.jobs.lock().unwrap();
         jobs.insert(job.id.clone(), job);
         if jobs.len() > *super::MAX_JOBS {
-            let mut entries: Vec<(String, String)> = jobs.iter()
+            let mut entries: Vec<(String, String)> = jobs
+                .iter()
                 .map(|(id, j)| (id.clone(), j.created_at.clone()))
                 .collect();
             entries.sort_by(|a, b| a.1.cmp(&b.1));
@@ -36,19 +43,30 @@ impl JobStorage for MemoryStorage {
         self.jobs.lock().unwrap().get(id).cloned()
     }
 
-    fn list_recent(&self, limit: usize, player: Option<&str>, realm: Option<&str>) -> Vec<JobSummary> {
+    fn list_recent(
+        &self,
+        limit: usize,
+        player: Option<&str>,
+        realm: Option<&str>,
+    ) -> Vec<JobSummary> {
         let jobs = self.jobs.lock().unwrap();
         let mut entries: Vec<&Job> = jobs.values().collect();
         entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         let mut results: Vec<JobSummary> = Vec::new();
         for j in entries {
-            if results.len() >= limit { break; }
+            if results.len() >= limit {
+                break;
+            }
             let s = extract_result_summary(&j.result_json, &j.simc_input);
             if let Some(p) = player {
-                if s.player_name.as_deref() != Some(p) { continue; }
+                if s.player_name.as_deref() != Some(p) {
+                    continue;
+                }
             }
             if let Some(r) = realm {
-                if s.realm.as_deref() != Some(r) { continue; }
+                if s.realm.as_deref() != Some(r) {
+                    continue;
+                }
             }
             results.push(JobSummary {
                 id: j.id.clone(),
@@ -62,6 +80,7 @@ impl JobStorage for MemoryStorage {
                 player_class: s.player_class,
                 realm: s.realm,
                 dps: s.dps,
+                batch_id: j.batch_id.clone(),
             });
         }
         results
@@ -107,5 +126,14 @@ impl JobStorage for MemoryStorage {
             job.html_report = html;
             job.text_output = text;
         }
+    }
+
+    fn count_batch(&self, batch_id: &str) -> usize {
+        self.jobs
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|j| j.batch_id.as_deref() == Some(batch_id))
+            .count()
     }
 }

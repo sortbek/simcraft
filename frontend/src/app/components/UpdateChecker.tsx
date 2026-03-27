@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 export default function UpdateChecker() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [version, setVersion] = useState("");
+  const [version, setVersion] = useState('');
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -20,29 +20,35 @@ export default function UpdateChecker() {
     });
 
     // Also actively check
-    api.checkForUpdate().then((result) => {
-      if (result) {
-        setUpdateAvailable(true);
-        setVersion(result.version);
-      }
-    }).catch(() => {});
+    api
+      .checkForUpdate()
+      .then((result) => {
+        if (result) {
+          setUpdateAvailable(true);
+          setVersion(result.version);
+        }
+      })
+      .catch(() => {});
 
     const unlistenProgress = api.onDownloadProgress((percent) => {
       setProgress(Math.round(percent));
     });
 
-    return () => { unlisten(); unlistenProgress(); };
+    return () => {
+      unlisten();
+      unlistenProgress();
+    };
   }, []);
 
   async function handleInstall() {
     const api = window.electronAPI;
     if (!api) return;
     setInstalling(true);
-    setError("");
+    setError('');
     try {
       await api.downloadAndInstall();
     } catch (e: any) {
-      setError(e?.message || "Update failed");
+      setError(e?.message || 'Update failed');
       setInstalling(false);
     }
   }
@@ -50,35 +56,39 @@ export default function UpdateChecker() {
   if (!updateAvailable) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] max-w-sm bg-[#1a1a2e] border border-gold/40 rounded-lg shadow-lg shadow-black/40 p-4">
+    <div className="fixed bottom-4 right-4 z-[100] max-w-sm rounded-lg border border-gold/40 bg-[#1a1a2e] p-4 shadow-lg shadow-black/40">
       <div className="flex items-start gap-3">
-        <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4" />
+        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gold/20">
+          <svg
+            className="h-4 w-4 text-gold"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"
+            />
           </svg>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-200">
-            Update available
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            SimHammer v{version} is ready to install.
-          </p>
-          {error && (
-            <p className="text-xs text-red-400 mt-1">{error}</p>
-          )}
-          <div className="flex gap-2 mt-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-200">Update available</p>
+          <p className="mt-0.5 text-xs text-gray-400">SimHammer v{version} is ready to install.</p>
+          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+          <div className="mt-3 flex gap-2">
             <button
               onClick={handleInstall}
               disabled={installing}
-              className="px-3 py-1.5 text-xs font-medium rounded bg-gold text-black hover:bg-gold/90 disabled:opacity-50 transition-colors"
+              className="rounded bg-gold px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-gold/90 disabled:opacity-50"
             >
-              {installing ? `Downloading ${progress}%` : "Install & restart"}
+              {installing ? `Downloading ${progress}%` : 'Install & restart'}
             </button>
             <button
               onClick={() => setUpdateAvailable(false)}
               disabled={installing}
-              className="px-3 py-1.5 text-xs font-medium rounded text-gray-400 hover:text-gray-200 transition-colors"
+              className="rounded px-3 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-200"
             >
               Later
             </button>

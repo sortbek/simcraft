@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
 const FIGHT_STYLES = [
-  { value: "Patchwerk", label: "Patchwerk" },
-  { value: "HecticAddCleave", label: "Hectic Add Cleave" },
-  { value: "LightMovement", label: "Light Movement" },
+  { value: 'Patchwerk', label: 'Patchwerk' },
+  { value: 'HecticAddCleave', label: 'Hectic Add Cleave' },
+  { value: 'LightMovement', label: 'Light Movement' },
 ];
 
 interface FightStyleSelectorProps {
@@ -11,10 +11,7 @@ interface FightStyleSelectorProps {
   onChange: (value: string) => void;
 }
 
-export default function FightStyleSelector({
-  value,
-  onChange,
-}: FightStyleSelectorProps) {
+export default function FightStyleSelector({ value, onChange }: FightStyleSelectorProps) {
   return (
     <div className="flex gap-1.5">
       {FIGHT_STYLES.map((fs) => {
@@ -24,10 +21,10 @@ export default function FightStyleSelector({
             key={fs.value}
             type="button"
             onClick={() => onChange(fs.value)}
-            className={`flex-1 py-2 px-2 rounded-lg text-[12px] font-medium transition-all border ${
+            className={`flex-1 rounded-lg border px-2 py-2 text-xs font-medium transition-all duration-150 ${
               active
-                ? "bg-white text-black border-white"
-                : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
+                ? 'border-zinc-500 bg-zinc-800 text-white'
+                : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
             }`}
           >
             {fs.label}

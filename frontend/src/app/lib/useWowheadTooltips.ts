@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect } from 'react';
 
 declare global {
   interface Window {
@@ -8,9 +8,22 @@ declare global {
 
 export function useWowheadTooltips(deps: unknown[] = []) {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      window.$WowheadPower?.refreshLinks();
-    }, 100);
-    return () => clearTimeout(timer);
+    function refresh() {
+      if (window.$WowheadPower) {
+        window.$WowheadPower.refreshLinks();
+        return true;
+      }
+      return false;
+    }
+
+    // Try immediately, then retry until the script loads (up to 5s)
+    if (refresh()) return;
+    let attempts = 0;
+    const interval = setInterval(() => {
+      if (refresh() || ++attempts >= 25) {
+        clearInterval(interval);
+      }
+    }, 200);
+    return () => clearInterval(interval);
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
 }

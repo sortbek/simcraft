@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+dist
+backend/target
+backend/resources
+desktop/dist
+desktop/build
+*.lock

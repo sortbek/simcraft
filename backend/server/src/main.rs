@@ -28,14 +28,19 @@ async fn main() {
         env_or("PORT", "17384")
     } else {
         env_or("PORT", "8000")
-    }.parse().expect("PORT must be a number");
+    }
+    .parse()
+    .expect("PORT must be a number");
 
     println!("Loading game data from {:?}", data_dir);
     game_data::load(&data_dir);
     println!("MAX_COMBINATIONS = {}", *MAX_COMBINATIONS);
 
     let storage: Arc<dyn JobStorage> = if desktop_mode {
-        println!("Starting SimHammer in desktop mode on {}:{}", bind_host, port);
+        println!(
+            "Starting SimHammer in desktop mode on {}:{}",
+            bind_host, port
+        );
         Arc::new(simhammer_core::storage::memory::MemoryStorage::new())
     } else {
         let db_url = env_or("DATABASE_URL", "simhammer.db");

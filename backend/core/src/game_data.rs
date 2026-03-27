@@ -3,18 +3,17 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::types::class_data;
 use crate::item_db;
+use crate::types::class_data;
 
 // ---- Re-exports from item_db ----
 
 pub use crate::item_db::{
-    load, get_item_info, get_enchant_info, get_gem_info, get_item_armor_subclass,
-    get_upgrade_options, upgrade_bonus_ids_to_max, upgrade_simc_input,
-    upgrade_items_by_slot, apply_copy_enchants, get_upgrade_tracks,
-    get_currency_info, get_upgrade_cost_between,
+    apply_copy_enchants, get_enchant_info, get_gem_info, get_item_armor_subclass, get_item_info,
+    get_upgrade_options, get_upgrade_tracks, load, upgrade_bonus_ids_to_max, upgrade_items_by_slot,
+    upgrade_simc_input,
 };
-pub use crate::types::class_data::{QUALITY_NAMES, quality_name};
+pub use crate::types::class_data::{quality_name, QUALITY_NAMES};
 
 pub fn get_instances() -> &'static Vec<Value> {
     item_db::instances()
@@ -28,9 +27,9 @@ pub fn get_instance_drops(
     spec_name: Option<&str>,
 ) -> Option<serde_json::Map<String, Value>> {
     let instances = item_db::instances();
-    let instance = instances.iter().find(|i| {
-        i.get("id").and_then(|id| id.as_i64()) == Some(instance_id)
-    })?;
+    let instance = instances
+        .iter()
+        .find(|i| i.get("id").and_then(|id| id.as_i64()) == Some(instance_id))?;
 
     let max_armor = class_name.and_then(class_data::class_max_armor);
     let allowed_weapons = class_name.and_then(class_data::class_allowed_weapons);
@@ -39,7 +38,8 @@ pub fn get_instance_drops(
         .unwrap_or_default();
 
     let encounters = instance.get("encounters")?.as_array()?;
-    let encounter_ids: HashMap<i64, String> = encounters.iter()
+    let encounter_ids: HashMap<i64, String> = encounters
+        .iter()
         .filter_map(|e| {
             let id = e.get("id")?.as_i64()?;
             let name = e.get("name")?.as_str()?.to_string();
@@ -56,47 +56,72 @@ pub fn get_instance_drops(
         if let Some(items_list) = drops_map.get(eid) {
             for item in items_list {
                 let item_id = item.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                if !seen.insert(item_id) { continue; }
+                if !seen.insert(item_id) {
+                    continue;
+                }
 
-                let inv_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
+                let inv_type = item
+                    .get("inventoryType")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
 
                 // Filter by armor type
                 if let Some(max) = max_armor {
                     if armor_slot_types.contains(&inv_type)
                         && item.get("itemClass").and_then(|c| c.as_u64()) == Some(4)
                     {
-                        let sub = item.get("itemSubClass").and_then(|s| s.as_u64()).unwrap_or(0);
-                        if sub != 0 && sub != max { continue; }
+                        let sub = item
+                            .get("itemSubClass")
+                            .and_then(|s| s.as_u64())
+                            .unwrap_or(0);
+                        if sub != 0 && sub != max {
+                            continue;
+                        }
                     }
                 }
 
                 // Filter by weapon type
                 if let Some(weapons) = allowed_weapons {
                     if item.get("itemClass").and_then(|c| c.as_u64()) == Some(2) {
-                        let weapon_sub = item.get("itemSubClass").and_then(|s| s.as_u64()).unwrap_or(999);
-                        if !weapons.contains(&weapon_sub) { continue; }
+                        let weapon_sub = item
+                            .get("itemSubClass")
+                            .and_then(|s| s.as_u64())
+                            .unwrap_or(999);
+                        if !weapons.contains(&weapon_sub) {
+                            continue;
+                        }
                     }
                 }
 
                 // Filter shields
                 if inv_type == 14 {
                     if let Some(cn) = class_name {
-                        if !matches!(cn, "warrior" | "paladin" | "shaman") { continue; }
+                        if !matches!(cn, "warrior" | "paladin" | "shaman") {
+                            continue;
+                        }
                     }
                 }
 
                 // Filter off-hand items
                 if inv_type == 23 {
                     if let Some(cn) = class_name {
-                        if !matches!(cn, "priest" | "mage" | "warlock" | "druid" | "shaman" | "evoker") { continue; }
+                        if !matches!(
+                            cn,
+                            "priest" | "mage" | "warlock" | "druid" | "shaman" | "evoker"
+                        ) {
+                            continue;
+                        }
                     }
                 }
 
                 // Filter spec restrictions
                 if let Some(specs) = item.get("specs").and_then(|s| s.as_array()) {
                     if !allowed_specs.is_empty() {
-                        let item_specs: Vec<u64> = specs.iter().filter_map(|v| v.as_u64()).collect();
-                        if !allowed_specs.iter().any(|s| item_specs.contains(s)) { continue; }
+                        let item_specs: Vec<u64> =
+                            specs.iter().filter_map(|v| v.as_u64()).collect();
+                        if !allowed_specs.iter().any(|s| item_specs.contains(s)) {
+                            continue;
+                        }
                     }
                 }
 
@@ -110,11 +135,16 @@ pub fn get_instance_drops(
                 if let (Some(lvl), Some(tracks)) = (upgrade_lvl, track_map) {
                     for diff in &["lfr", "normal", "heroic", "mythic"] {
                         if let Some(track) = item_db::difficulty_track_name(diff) {
-                            if let Some(&(ilvl, bonus_id, quality)) = tracks.get(&(track.clone(), lvl, tm)) {
-                                diff_info.insert(diff.to_string(), serde_json::json!({
-                                    "ilvl": ilvl, "bonus_id": bonus_id, "quality": quality,
-                                    "track": track, "level": lvl, "max_level": tm,
-                                }));
+                            if let Some(&(ilvl, bonus_id, quality)) =
+                                tracks.get(&(track.clone(), lvl, tm))
+                            {
+                                diff_info.insert(
+                                    diff.to_string(),
+                                    serde_json::json!({
+                                        "ilvl": ilvl, "bonus_id": bonus_id, "quality": quality,
+                                        "track": track, "level": lvl, "max_level": tm,
+                                    }),
+                                );
                             }
                         }
                     }
@@ -127,15 +157,25 @@ pub fn get_instance_drops(
                         "ilvl": item_db::dungeon_normal_ilvl(), "bonus_id": 0, "quality": item_db::dungeon_normal_quality(),
                     }));
                     if let Some(tracks) = track_map {
-                        if let Some(ddt) = item_db::season_cfg().get("dungeonDifficultyTracks").and_then(|v| v.as_object()) {
+                        if let Some(ddt) = item_db::season_cfg()
+                            .get("dungeonDifficultyTracks")
+                            .and_then(|v| v.as_object())
+                        {
                             for (diff_key, entry) in ddt {
-                                let track = entry.get("track").and_then(|v| v.as_str()).unwrap_or("");
-                                let level = entry.get("level").and_then(|v| v.as_u64()).unwrap_or(0);
-                                if let Some(&(ilvl, bonus_id, quality)) = tracks.get(&(track.to_string(), level, tm)) {
-                                    dungeon_info.insert(diff_key.clone(), serde_json::json!({
-                                        "ilvl": ilvl, "bonus_id": bonus_id, "quality": quality,
-                                        "track": track, "level": level, "max_level": tm,
-                                    }));
+                                let track =
+                                    entry.get("track").and_then(|v| v.as_str()).unwrap_or("");
+                                let level =
+                                    entry.get("level").and_then(|v| v.as_u64()).unwrap_or(0);
+                                if let Some(&(ilvl, bonus_id, quality)) =
+                                    tracks.get(&(track.to_string(), level, tm))
+                                {
+                                    dungeon_info.insert(
+                                        diff_key.clone(),
+                                        serde_json::json!({
+                                            "ilvl": ilvl, "bonus_id": bonus_id, "quality": quality,
+                                            "track": track, "level": level, "max_level": tm,
+                                        }),
+                                    );
                                 }
                             }
                         }
@@ -151,8 +191,12 @@ pub fn get_instance_drops(
                     "inventory_type": inv_type,
                     "encounter": encounter_ids.get(eid).cloned().unwrap_or_default(),
                 });
-                if !diff_info.is_empty() { item_json["difficulty_info"] = Value::Object(diff_info); }
-                if !dungeon_info.is_empty() { item_json["dungeon_info"] = Value::Object(dungeon_info); }
+                if !diff_info.is_empty() {
+                    item_json["difficulty_info"] = Value::Object(diff_info);
+                }
+                if !dungeon_info.is_empty() {
+                    item_json["dungeon_info"] = Value::Object(dungeon_info);
+                }
                 by_slot.entry(slot).or_default().push(item_json);
             }
         }
@@ -162,7 +206,9 @@ pub fn get_instance_drops(
     for &slot in class_data::SLOT_DISPLAY_ORDER {
         if let Some(mut slot_items) = by_slot.remove(slot) {
             slot_items.sort_by(|a, b| {
-                b.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0)
+                b.get("ilevel")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
                     .cmp(&a.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0))
             });
             ordered.insert(slot.to_string(), Value::Array(slot_items));
@@ -170,13 +216,19 @@ pub fn get_instance_drops(
     }
     for (slot, mut slot_items) in by_slot {
         slot_items.sort_by(|a, b| {
-            b.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0)
+            b.get("ilevel")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
                 .cmp(&a.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0))
         });
         ordered.insert(slot.to_string(), Value::Array(slot_items));
     }
 
-    if ordered.is_empty() { None } else { Some(ordered) }
+    if ordered.is_empty() {
+        None
+    } else {
+        Some(ordered)
+    }
 }
 
 pub fn get_drops_by_type(
@@ -190,7 +242,9 @@ pub fn get_drops_by_type(
 
     for inst in instances {
         let itype = inst.get("type").and_then(|t| t.as_str()).unwrap_or("");
-        if itype != instance_type { continue; }
+        if itype != instance_type {
+            continue;
+        }
         let inst_id = inst.get("id").and_then(|id| id.as_i64()).unwrap_or(0);
         if let Some(drops) = get_instance_drops(inst_id, class_name, spec_name) {
             for (slot, items) in &drops {
@@ -199,14 +253,26 @@ pub fn get_drops_by_type(
                         let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
                         if seen.insert(item_id) {
                             let slot_str = match slot.as_str() {
-                                "Head" => "Head", "Neck" => "Neck", "Shoulder" => "Shoulder",
-                                "Back" => "Back", "Chest" => "Chest", "Wrist" => "Wrist",
-                                "Hands" => "Hands", "Waist" => "Waist", "Legs" => "Legs",
-                                "Feet" => "Feet", "Finger" => "Finger", "Trinket" => "Trinket",
-                                "One-Hand" => "One-Hand", "Main Hand" => "Main Hand",
-                                "Off Hand" => "Off Hand", "Two-Hand" => "Two-Hand",
-                                "Held In Off-Hand" => "Held In Off-Hand", "Shield" => "Shield",
-                                "Ranged" => "Ranged", _ => "Other",
+                                "Head" => "Head",
+                                "Neck" => "Neck",
+                                "Shoulder" => "Shoulder",
+                                "Back" => "Back",
+                                "Chest" => "Chest",
+                                "Wrist" => "Wrist",
+                                "Hands" => "Hands",
+                                "Waist" => "Waist",
+                                "Legs" => "Legs",
+                                "Feet" => "Feet",
+                                "Finger" => "Finger",
+                                "Trinket" => "Trinket",
+                                "One-Hand" => "One-Hand",
+                                "Main Hand" => "Main Hand",
+                                "Off Hand" => "Off Hand",
+                                "Two-Hand" => "Two-Hand",
+                                "Held In Off-Hand" => "Held In Off-Hand",
+                                "Shield" => "Shield",
+                                "Ranged" => "Ranged",
+                                _ => "Other",
                             };
                             merged.entry(slot_str).or_default().push(item.clone());
                         }
@@ -220,12 +286,18 @@ pub fn get_drops_by_type(
     for &slot in class_data::SLOT_DISPLAY_ORDER {
         if let Some(mut slot_items) = merged.remove(slot) {
             slot_items.sort_by(|a, b| {
-                b.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0)
+                b.get("ilevel")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
                     .cmp(&a.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0))
             });
             ordered.insert(slot.to_string(), Value::Array(slot_items));
         }
     }
 
-    if ordered.is_empty() { None } else { Some(ordered) }
+    if ordered.is_empty() {
+        None
+    } else {
+        Some(ordered)
+    }
 }

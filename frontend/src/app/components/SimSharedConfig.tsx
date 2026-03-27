@@ -1,10 +1,11 @@
-"use client";
+'use client';
 
-import { usePathname } from "next/navigation";
-import { useState } from "react";
-import FightStyleSelector from "./FightStyleSelector";
-import { useSimContext } from "./SimContext";
-import TalentPicker from "./TalentPicker";
+import { useMemo, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { useSimContext } from './SimContext';
+import FightStyleSelector from './FightStyleSelector';
+import ScenarioBuilder from './ScenarioBuilder';
+import TalentPicker from './TalentPicker';
 
 function parseCharacterInfo(input: string) {
   if (!input) return null;
@@ -16,51 +17,51 @@ function parseCharacterInfo(input: string) {
   if (nameMatch[2] && realmMatch?.[1]) {
     try {
       localStorage.setItem(
-        "simhammer_last_character",
-        JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] }),
+        'simhammer_last_character',
+        JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] })
       );
     } catch {}
   }
   return {
     className: nameMatch[1],
     name: nameMatch[2],
-    spec: specMatch?.[1] || "unknown",
+    spec: specMatch?.[1] || 'unknown',
   };
 }
 
 const EXPERT_TABS = [
   {
-    key: "header",
-    label: "Header",
-    desc: "Injected before the base actor. Use for global options and initial overrides.",
+    key: 'header',
+    label: 'Header',
+    desc: 'Injected before the base actor. Use for global options and initial overrides.',
   },
   {
-    key: "base_player",
-    label: "Base Player",
-    desc: "Injected after the base actor definition. Use for custom APL (actions=...) or player-specific overrides.",
+    key: 'base_player',
+    label: 'Base Player',
+    desc: 'Injected after the base actor definition. Use for custom APL (actions=...) or player-specific overrides.',
   },
   {
-    key: "raid_actors",
-    label: "Raid Actors",
-    desc: "Extremely experimental! Adds additional raid actors. Disables single_actor_batch when used.",
+    key: 'raid_actors',
+    label: 'Raid Actors',
+    desc: 'Extremely experimental! Adds additional raid actors. Disables single_actor_batch when used.',
   },
   {
-    key: "post_combos",
-    label: "Post Combos",
-    desc: "Injected after all profileset combinations. Use for additional actors after gear combos.",
+    key: 'post_combos',
+    label: 'Post Combos',
+    desc: 'Injected after all profileset combinations. Use for additional actors after gear combos.',
   },
   {
-    key: "footer",
-    label: "Footer",
-    desc: "Injected at the very end. Use for dungeon routes, fight overrides, or custom enemy configs.",
+    key: 'footer',
+    label: 'Footer',
+    desc: 'Injected at the very end. Use for dungeon routes, fight overrides, or custom enemy configs.',
   },
 ] as const;
 
-type ExpertTabKey = (typeof EXPERT_TABS)[number]["key"];
+type ExpertTabKey = (typeof EXPERT_TABS)[number]['key'];
 
 function AdvancedOptions() {
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<ExpertTabKey>("footer");
+  const [activeTab, setActiveTab] = useState<ExpertTabKey>('footer');
   const {
     fightStyle,
     setFightStyle,
@@ -82,25 +83,31 @@ function AdvancedOptions() {
     setSimcFooter,
   } = useSimContext();
 
-  const expertValues: Record<ExpertTabKey, string> = {
-    header: simcHeader,
-    base_player: simcBasePlayer,
-    raid_actors: simcRaidActors,
-    post_combos: simcPostCombos,
-    footer: simcFooter,
-  };
+  const expertValues: Record<ExpertTabKey, string> = useMemo(
+    () => ({
+      header: simcHeader,
+      base_player: simcBasePlayer,
+      raid_actors: simcRaidActors,
+      post_combos: simcPostCombos,
+      footer: simcFooter,
+    }),
+    [simcHeader, simcBasePlayer, simcRaidActors, simcPostCombos, simcFooter]
+  );
 
-  const expertSetters: Record<ExpertTabKey, (v: string) => void> = {
-    header: setSimcHeader,
-    base_player: setSimcBasePlayer,
-    raid_actors: setSimcRaidActors,
-    post_combos: setSimcPostCombos,
-    footer: setSimcFooter,
-  };
+  const expertSetters: Record<ExpertTabKey, (v: string) => void> = useMemo(
+    () => ({
+      header: setSimcHeader,
+      base_player: setSimcBasePlayer,
+      raid_actors: setSimcRaidActors,
+      post_combos: setSimcPostCombos,
+      footer: setSimcFooter,
+    }),
+    [setSimcHeader, setSimcBasePlayer, setSimcRaidActors, setSimcPostCombos, setSimcFooter]
+  );
 
   const hasExpertContent = Object.values(expertValues).some((v) => v.trim());
   const isDefault =
-    fightStyle === "Patchwerk" &&
+    fightStyle === 'Patchwerk' &&
     targetCount === 1 &&
     fightLength === 300 &&
     !customApl &&
@@ -112,24 +119,34 @@ function AdvancedOptions() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3 hover:bg-white/[0.02] transition-colors"
+        className="flex w-full items-center justify-between px-5 py-3.5 transition-colors hover:bg-white/[0.02]"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-300">
-            Advanced Options
-          </span>
+        <div className="flex items-center gap-2.5">
+          <svg
+            className="h-4 w-4 text-zinc-500"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="8" cy="8" r="2" />
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
+          </svg>
+          <span className="text-sm font-medium text-zinc-300">Advanced Options</span>
           {!open && !isDefault && (
-            <span className="text-[11px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+            <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[10px] font-medium text-gold">
               Modified
             </span>
           )}
         </div>
         <svg
-          className={`w-4 h-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 text-zinc-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.5"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
@@ -137,9 +154,9 @@ function AdvancedOptions() {
         </svg>
       </button>
       {open && (
-        <div className="px-5 pb-5 space-y-4 border-t border-border">
+        <div className="animate-fade-in space-y-5 border-t border-border px-5 pb-5">
           <div className="pt-4">
-            <label className="label-text mb-2 block">Fight Style</label>
+            <label className="label-text">Fight Style</label>
             <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -154,7 +171,7 @@ function AdvancedOptions() {
                   onChange={(e) => setTargetCount(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="text-sm font-mono text-white tabular-nums w-6 text-right">
+                <span className="w-6 text-right font-mono text-sm tabular-nums text-white">
                   {targetCount}
                 </span>
               </div>
@@ -171,13 +188,14 @@ function AdvancedOptions() {
                   onChange={(e) => setFightLength(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="text-sm font-mono text-white tabular-nums w-16 text-right">
-                  {Math.floor(fightLength / 60)}:
-                  {String(fightLength % 60).padStart(2, "0")}
+                <span className="w-16 text-right font-mono text-sm tabular-nums text-white">
+                  {Math.floor(fightLength / 60)}:{String(fightLength % 60).padStart(2, '0')}
                 </span>
               </div>
             </div>
           </div>
+
+          <ScenarioBuilder />
 
           {/* Custom APL */}
           <div className="space-y-2">
@@ -186,11 +204,11 @@ function AdvancedOptions() {
               value={customApl}
               onChange={(e) => setCustomApl(e.target.value)}
               placeholder="Custom APL or expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list=1)..."
-              className="input-field h-28 font-mono text-xs resize-y"
+              className="input-field h-28 resize-y font-mono text-xs"
             />
-            <p className="text-[11px] text-gray-600">
-              Override action priority lists or set expansion-specific options.
-              Injected after the base actor.
+            <p className="text-[11px] text-zinc-600">
+              Override action priority lists or set expansion-specific options. Injected after the
+              base actor.
             </p>
           </div>
 
@@ -227,26 +245,22 @@ function ExpertToggle({
   const [open, setOpen] = useState(hasContent);
 
   return (
-    <div className="pt-2 border-t border-border space-y-3">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2"
-      >
+    <div className="space-y-3 border-t border-border/60 pt-3">
+      <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-2.5">
         <div
-          className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
-            open ? "bg-gold" : "bg-surface-2 border border-border"
+          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+            open ? 'bg-gold' : 'border border-border bg-surface-2'
           }`}
         >
           <div
-            className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${
-              open ? "left-[18px] bg-black" : "left-0.5 bg-gray-500"
+            className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
+              open ? 'left-[18px] bg-black' : 'left-0.5 bg-gray-500'
             }`}
           />
         </div>
-        <span className="text-sm font-medium text-gray-300">Expert Mode</span>
+        <span className="text-sm font-medium text-zinc-300">Expert Mode</span>
         {!open && hasContent && (
-          <span className="text-[11px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+          <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[10px] font-medium text-gold">
             Modified
           </span>
         )}
@@ -258,17 +272,17 @@ function ExpertToggle({
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border whitespace-nowrap ${
+                className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                   activeTab === tab.key
-                    ? "bg-white text-black border-white"
+                    ? 'border-zinc-500 bg-zinc-800 text-white'
                     : expertValues[tab.key].trim()
-                      ? "bg-gold/10 text-gold border-gold/30 hover:border-gold/50"
-                      : "bg-surface-2 text-gray-400 border-border hover:border-gray-500 hover:text-white"
+                      ? 'border-gold/30 bg-gold/[0.06] text-gold hover:border-gold/50'
+                      : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                 }`}
               >
                 {tab.label}
                 {expertValues[tab.key].trim() && activeTab !== tab.key && (
-                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-gold inline-block" />
+                  <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-gold" />
                 )}
               </button>
             ))}
@@ -277,9 +291,9 @@ function ExpertToggle({
             value={expertValues[activeTab]}
             onChange={(e) => expertSetters[activeTab](e.target.value)}
             placeholder={`Paste ${activeTabInfo.label.toLowerCase()} SimC input here...`}
-            className="input-field h-32 font-mono text-xs resize-y"
+            className="input-field h-32 resize-y font-mono text-xs"
           />
-          <p className="text-[11px] text-gray-600">{activeTabInfo.desc}</p>
+          <p className="text-[11px] text-zinc-600">{activeTabInfo.desc}</p>
         </div>
       )}
     </div>
@@ -291,30 +305,32 @@ export default function SimSharedConfig() {
   const { simcInput, setSimcInput } = useSimContext();
 
   const showConfig =
-    pathname === "/quick-sim" ||
-    pathname === "/top-gear" ||
-    pathname === "/drop-finder" ||
-    pathname === "/upgrade-compare";
+    pathname === '/quick-sim' || pathname === '/top-gear' || pathname === '/drop-finder';
   if (!showConfig) return null;
 
   const detectedInfo = parseCharacterInfo(simcInput);
 
   return (
-    <div className="space-y-6 mb-6">
-      <div className="card p-5 space-y-3">
+    <div className="mb-6 space-y-4">
+      <div className="card space-y-3 p-5">
         <label className="label-text">SimC Addon Export</label>
         <textarea
           value={simcInput}
           onChange={(e) => setSimcInput(e.target.value)}
           placeholder="Paste your SimC addon export here..."
-          className="input-field h-44 font-mono text-xs resize-y"
+          className="input-field h-40 resize-y font-mono text-[11px] leading-relaxed"
         />
         {detectedInfo && (
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-gold">
-              {detectedInfo.name} &middot; {detectedInfo.spec}{" "}
-              {detectedInfo.className}
-            </p>
+          <div className="flex items-center justify-between rounded-lg bg-surface-2 px-3.5 py-2">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-gold/70" />
+              <p className="text-xs font-medium text-zinc-300">
+                {detectedInfo.name}
+                <span className="ml-1.5 font-normal text-zinc-500">
+                  {detectedInfo.spec} {detectedInfo.className}
+                </span>
+              </p>
+            </div>
             <TalentPicker />
           </div>
         )}

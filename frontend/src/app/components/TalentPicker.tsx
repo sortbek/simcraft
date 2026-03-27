@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo } from "react";
-import { useSimContext } from "./SimContext";
-import { parseTalentLoadouts } from "../lib/types";
+import { useEffect, useMemo } from 'react';
+import { useSimContext } from './SimContext';
+import { parseTalentLoadouts } from '../lib/types';
 
 export default function TalentPicker() {
   const { simcInput, selectedTalent, setSelectedTalent } = useSimContext();
@@ -12,7 +12,7 @@ export default function TalentPicker() {
   // Reset selection when input changes and current selection is no longer valid
   useEffect(() => {
     if (loadouts.length === 0) {
-      if (selectedTalent) setSelectedTalent("");
+      if (selectedTalent) setSelectedTalent('');
       return;
     }
     const stillValid = loadouts.some((l) => l.talentString === selectedTalent);
@@ -30,11 +30,12 @@ export default function TalentPicker() {
       <select
         value={selectedTalent}
         onChange={(e) => setSelectedTalent(e.target.value)}
-        className="input-field !py-1.5 !px-2.5 !text-xs !w-auto"
+        className="input-field !w-auto !px-2.5 !py-1.5 !text-xs"
       >
         {loadouts.map((l, i) => (
-          <option key={i} value={l.talentString}>
-            {l.name}{l.isActive ? " (equipped)" : ""}
+          <option key={`${l.name}-${i}`} value={l.talentString}>
+            {l.name}
+            {l.isActive ? ' (equipped)' : ''}
           </option>
         ))}
       </select>

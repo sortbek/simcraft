@@ -6,7 +6,10 @@ use crate::types::class_data::title_case;
 
 fn extract_version(raw: &Value) -> String {
     let version = raw.get("version").and_then(|v| v.as_str()).unwrap_or("");
-    let git_rev = raw.get("git_revision").and_then(|v| v.as_str()).unwrap_or("");
+    let git_rev = raw
+        .get("git_revision")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let git_branch = raw.get("git_branch").and_then(|v| v.as_str()).unwrap_or("");
     let build_date = raw.get("build_date").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -123,12 +126,20 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         .get("elapsed_time_seconds")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    let target_error = sim
-        .get("options")
-        .and_then(|o| o.get("target_error"))
+    let options = sim.get("options").unwrap_or(&empty);
+    let target_error = options
+        .get("target_error")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    let error_pct = if dps_mean > 0.0 { (dps_error / dps_mean) * 100.0 } else { 0.0 };
+    let desired_targets = options
+        .get("desired_targets")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1);
+    let error_pct = if dps_mean > 0.0 {
+        (dps_error / dps_mean) * 100.0
+    } else {
+        0.0
+    };
 
     let mut result = json!({
         "player_name": player.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown"),
@@ -140,6 +151,7 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         "dps_error": round1(dps_error),
         "dps_error_pct": round2(error_pct),
         "fight_length": round1(fight_length),
+        "desired_targets": desired_targets,
         "iterations": total_iterations,
         "elapsed_time_seconds": round2(elapsed_time),
         "target_error": target_error,
@@ -162,7 +174,9 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         abilities.sort_by(|a, b| {
             let a_dps = a["portion_dps"].as_f64().unwrap_or(0.0);
             let b_dps = b["portion_dps"].as_f64().unwrap_or(0.0);
-            b_dps.partial_cmp(&a_dps).unwrap_or(std::cmp::Ordering::Equal)
+            b_dps
+                .partial_cmp(&a_dps)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         result["abilities"] = json!(abilities);
     }
@@ -177,9 +191,7 @@ pub fn parse_simc_result(raw: &Value) -> Value {
             }
         }
         if !stat_weights.is_empty() {
-            stat_weights.sort_by(|a, b| {
-                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            stat_weights.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             let mut map = serde_json::Map::new();
             for (k, v) in stat_weights {
                 map.insert(k, json!(v));
@@ -231,10 +243,7 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
             .unwrap_or(0);
 
         if ilevel == 0 {
-            ilevel = data
-                .get("ilevel")
-                .and_then(|i| i.as_u64())
-                .unwrap_or(0);
+            ilevel = data.get("ilevel").and_then(|i| i.as_u64()).unwrap_or(0);
         }
 
         let bonus_ids: Vec<u64> = bonus_re
@@ -318,15 +327,9 @@ pub fn parse_top_gear_result(
 
     for ps in &profilesets {
         let mean_dps = ps.get("mean").and_then(|m| m.as_f64()).unwrap_or(0.0);
-        let combo_name = ps
-            .get("name")
-            .and_then(|n| n.as_str())
-            .unwrap_or("Unknown");
+        let combo_name = ps.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
 
-        let items = combo_metadata
-            .get(combo_name)
-            .cloned()
-            .unwrap_or_default();
+        let items = combo_metadata.get(combo_name).cloned().unwrap_or_default();
 
         results.push(json!({
             "name": combo_name,
@@ -362,7 +365,9 @@ pub fn parse_top_gear_result(
     results.sort_by(|a, b| {
         let a_dps = a["dps"].as_f64().unwrap_or(0.0);
         let b_dps = b["dps"].as_f64().unwrap_or(0.0);
-        b_dps.partial_cmp(&a_dps).unwrap_or(std::cmp::Ordering::Equal)
+        b_dps
+            .partial_cmp(&a_dps)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     // Extract full equipped gear for gear overview
@@ -370,6 +375,7 @@ pub fn parse_top_gear_result(
     let equipped_gear: serde_json::Map<String, Value> = all_gear.into_iter().collect();
 
     let statistics = sim.get("statistics").unwrap_or(&empty);
+    let options = sim.get("options").unwrap_or(&empty);
     let total_iterations = collected
         .get("dps")
         .and_then(|d| d.get("count"))
@@ -379,23 +385,42 @@ pub fn parse_top_gear_result(
         .get("elapsed_time_seconds")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    let target_error = sim
-        .get("options")
-        .and_then(|o| o.get("target_error"))
+    let fight_length = statistics
+        .get("simulation_length")
+        .and_then(|sl| sl.get("mean"))
+        .and_then(|m| m.as_f64())
+        .unwrap_or(0.0);
+    let target_error = options
+        .get("target_error")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
+    let desired_targets = options
+        .get("desired_targets")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1);
+    let max_time = options
+        .get("max_time")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(300.0);
     let dps_error = collected
         .get("dps")
         .and_then(|d| d.get("mean_std_dev"))
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    let error_pct = if base_dps > 0.0 { (dps_error / base_dps) * 100.0 } else { 0.0 };
+    let error_pct = if base_dps > 0.0 {
+        (dps_error / base_dps) * 100.0
+    } else {
+        0.0
+    };
 
     json!({
         "type": "top_gear",
         "base_dps": round1(base_dps),
         "dps_error": round1(dps_error),
         "dps_error_pct": round2(error_pct),
+        "fight_length": round1(fight_length),
+        "desired_targets": desired_targets,
+        "max_time": round1(max_time),
         "iterations": total_iterations,
         "elapsed_time_seconds": round2(elapsed_time),
         "target_error": target_error,
@@ -405,6 +430,7 @@ pub fn parse_top_gear_result(
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown"),
         "simc_version": extract_version(raw),
+        "simc_git_revision": raw.get("git_revision").and_then(|v| v.as_str()).unwrap_or(""),
         "results": results,
         "equipped_gear": Value::Object(equipped_gear),
     })

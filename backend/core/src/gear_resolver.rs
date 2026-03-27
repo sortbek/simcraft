@@ -7,22 +7,36 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::item_db;
-use crate::types::class_data::{self, GEAR_SLOTS, ARMOR_SLOTS};
+use crate::types::class_data::{self, ARMOR_SLOTS, GEAR_SLOTS};
 use crate::types::*;
 
 /// Build a stable UID for deduplication: "item_id:sorted_bonus_ids:origin:raw_slot"
 fn make_uid(item: &RawParsedItem) -> String {
     let mut sorted = item.bonus_ids.clone();
     sorted.sort();
-    let bonus_key = sorted.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(":");
-    format!("{}:{}:{}:{}", item.item_id, bonus_key, item.origin.as_str(), item.raw_slot)
+    let bonus_key = sorted
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    format!(
+        "{}:{}:{}:{}",
+        item.item_id,
+        bonus_key,
+        item.origin.as_str(),
+        item.raw_slot
+    )
 }
 
 /// Dedup key: item_id + sorted bonus_ids (ignores origin/slot).
 fn dedup_key(item: &RawParsedItem) -> String {
     let mut sorted = item.bonus_ids.clone();
     sorted.sort();
-    let bonus_key = sorted.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(":");
+    let bonus_key = sorted
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
     format!("{}:{}", item.item_id, bonus_key)
 }
 
@@ -32,27 +46,55 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
 
     let (name, icon, quality, tag, upgrade, sockets) = if let Some(ref info) = info {
         (
-            info.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown").to_string(),
-            info.get("icon").and_then(|i| i.as_str()).unwrap_or("inv_misc_questionmark").to_string(),
+            info.get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("Unknown")
+                .to_string(),
+            info.get("icon")
+                .and_then(|i| i.as_str())
+                .unwrap_or("inv_misc_questionmark")
+                .to_string(),
             info.get("quality").and_then(|q| q.as_u64()).unwrap_or(1),
-            info.get("tag").and_then(|t| t.as_str()).unwrap_or("").to_string(),
-            info.get("upgrade").and_then(|u| u.as_str()).unwrap_or("").to_string(),
+            info.get("tag")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string(),
+            info.get("upgrade")
+                .and_then(|u| u.as_str())
+                .unwrap_or("")
+                .to_string(),
             info.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0),
         )
     } else {
-        let name = if item.name.is_empty() { format!("Item {}", item.item_id) } else { item.name.clone() };
-        (name, "inv_misc_questionmark".to_string(), 1, String::new(), String::new(), 0)
+        let name = if item.name.is_empty() {
+            format!("Item {}", item.item_id)
+        } else {
+            item.name.clone()
+        };
+        (
+            name,
+            "inv_misc_questionmark".to_string(),
+            1,
+            String::new(),
+            String::new(),
+            0,
+        )
     };
 
     // Resolve ilevel: prefer DB-resolved (accounts for bonuses), fall back to parsed
-    let ilevel = info.as_ref()
+    let ilevel = info
+        .as_ref()
         .and_then(|i| i.get("ilevel").and_then(|v| v.as_u64()))
         .filter(|&v| v > 0)
         .unwrap_or(item.ilevel);
 
     let enchant_name = if item.enchant_id > 0 {
         item_db::get_enchant_info(item.enchant_id)
-            .and_then(|e| e.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+            .and_then(|e| {
+                e.get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string())
+            })
             .unwrap_or_default()
     } else {
         String::new()
@@ -60,10 +102,18 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
 
     let (gem_name, gem_icon) = if item.gem_id > 0 {
         item_db::get_gem_info(item.gem_id)
-            .map(|g| (
-                g.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string(),
-                g.get("icon").and_then(|i| i.as_str()).unwrap_or("").to_string(),
-            ))
+            .map(|g| {
+                (
+                    g.get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    g.get("icon")
+                        .and_then(|i| i.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                )
+            })
             .unwrap_or_default()
     } else {
         (String::new(), String::new())
@@ -97,10 +147,15 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
 fn eligible_slots(item: &RawParsedItem, spec: &str) -> Vec<String> {
     let info = item_db::get_item_info(item.item_id, Some(&item.bonus_ids));
     if let Some(ref info) = info {
-        let inv_type = info.get("inventory_type").and_then(|v| v.as_u64()).unwrap_or(0);
+        let inv_type = info
+            .get("inventory_type")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         if inv_type > 0 {
             return class_data::inv_type_to_slots(inv_type, spec)
-                .into_iter().map(|s| s.to_string()).collect();
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect();
         }
     }
     // Fallback: use raw_slot + paired slot
@@ -125,30 +180,46 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
     let mut seen_per_slot: HashMap<String, HashSet<String>> = HashMap::new();
 
     // Separate equipped and non-equipped items
-    let equipped_items: Vec<&RawParsedItem> = parse_result.items.iter()
+    let equipped_items: Vec<&RawParsedItem> = parse_result
+        .items
+        .iter()
         .filter(|i| i.origin == ItemOrigin::Equipped)
         .collect();
-    let other_items: Vec<&RawParsedItem> = parse_result.items.iter()
+    let other_items: Vec<&RawParsedItem> = parse_result
+        .items
+        .iter()
         .filter(|i| i.origin != ItemOrigin::Equipped)
         .collect();
 
     // Helper to get or create slot resolution
-    fn get_slot<'a>(slots: &'a mut HashMap<String, SlotResolution>, s: &str) -> &'a mut SlotResolution {
-        slots.entry(s.to_string()).or_insert_with(|| SlotResolution {
-            equipped: None,
-            alternatives: Vec::new(),
-        })
+    fn get_slot<'a>(
+        slots: &'a mut HashMap<String, SlotResolution>,
+        s: &str,
+    ) -> &'a mut SlotResolution {
+        slots
+            .entry(s.to_string())
+            .or_insert_with(|| SlotResolution {
+                equipped: None,
+                alternatives: Vec::new(),
+            })
     }
 
-    fn get_seen<'a>(seen: &'a mut HashMap<String, HashSet<String>>, s: &str) -> &'a mut HashSet<String> {
+    fn get_seen<'a>(
+        seen: &'a mut HashMap<String, HashSet<String>>,
+        s: &str,
+    ) -> &'a mut HashSet<String> {
         seen.entry(s.to_string()).or_default()
     }
 
     // Step 1: Place equipped items in their raw_slot
     for item in &equipped_items {
-        if item.item_id == 0 { continue; }
+        if item.item_id == 0 {
+            continue;
+        }
         let slot = &item.raw_slot;
-        if !GEAR_SLOTS.contains(&slot.as_str()) { continue; }
+        if !GEAR_SLOTS.contains(&slot.as_str()) {
+            continue;
+        }
 
         let dk = dedup_key(item);
         get_seen(&mut seen_per_slot, slot).insert(dk);
@@ -166,7 +237,10 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         if let Some(mh) = mh_equipped {
             if mh.item_id > 0 {
                 let info = item_db::get_item_info(mh.item_id, Some(&mh.bonus_ids));
-                let inv_type = info.as_ref().and_then(|i| i.get("inventory_type").and_then(|v| v.as_u64())).unwrap_or(0);
+                let inv_type = info
+                    .as_ref()
+                    .and_then(|i| i.get("inventory_type").and_then(|v| v.as_u64()))
+                    .unwrap_or(0);
                 // Only one-hand weapons cross over (inv_type 13)
                 if inv_type == 13 {
                     let dk = dedup_key(mh);
@@ -184,14 +258,19 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         if let Some(oh) = oh_equipped {
             if oh.item_id > 0 {
                 let info = item_db::get_item_info(oh.item_id, Some(&oh.bonus_ids));
-                let inv_type = info.as_ref().and_then(|i| i.get("inventory_type").and_then(|v| v.as_u64())).unwrap_or(0);
+                let inv_type = info
+                    .as_ref()
+                    .and_then(|i| i.get("inventory_type").and_then(|v| v.as_u64()))
+                    .unwrap_or(0);
                 if inv_type == 13 {
                     let dk = dedup_key(oh);
                     if !get_seen(&mut seen_per_slot, "main_hand").contains(&dk) {
                         get_seen(&mut seen_per_slot, "main_hand").insert(dk);
                         let mut resolved = enrich(oh, "main_hand");
                         resolved.origin = ItemOrigin::Equipped;
-                        get_slot(&mut slots, "main_hand").alternatives.push(resolved);
+                        get_slot(&mut slots, "main_hand")
+                            .alternatives
+                            .push(resolved);
                     }
                 }
             }
@@ -200,10 +279,14 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
 
     // Step 3: Place non-equipped items (bags + vault) in all eligible slots
     for item in &other_items {
-        if item.item_id == 0 { continue; }
+        if item.item_id == 0 {
+            continue;
+        }
 
         let item_eligible = eligible_slots(item, spec);
-        if item_eligible.is_empty() { continue; }
+        if item_eligible.is_empty() {
+            continue;
+        }
 
         // Armor type check
         let mut armor_excluded = false;
@@ -216,7 +299,9 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         }
 
         for slot in &item_eligible {
-            if !GEAR_SLOTS.contains(&slot.as_str()) { continue; }
+            if !GEAR_SLOTS.contains(&slot.as_str()) {
+                continue;
+            }
 
             // Only apply armor exclusion to armor slots
             if armor_excluded && ARMOR_SLOTS.contains(&slot.as_str()) {
@@ -230,7 +315,9 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
             }
 
             let dk = dedup_key(item);
-            if get_seen(&mut seen_per_slot, slot).contains(&dk) { continue; }
+            if get_seen(&mut seen_per_slot, slot).contains(&dk) {
+                continue;
+            }
             get_seen(&mut seen_per_slot, slot).insert(dk);
 
             let resolved = enrich(item, slot);
@@ -240,7 +327,9 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
 
     // Sort alternatives by ilevel descending
     for slot_res in slots.values_mut() {
-        slot_res.alternatives.sort_by(|a, b| b.ilevel.cmp(&a.ilevel));
+        slot_res
+            .alternatives
+            .sort_by(|a, b| b.ilevel.cmp(&a.ilevel));
     }
 
     ResolveGearResponse {

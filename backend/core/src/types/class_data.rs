@@ -7,9 +7,22 @@ use regex::Regex;
 // ---- Gear Slots ----
 
 pub const GEAR_SLOTS: &[&str] = &[
-    "head", "neck", "shoulder", "back", "chest", "wrist",
-    "hands", "waist", "legs", "feet", "finger1", "finger2",
-    "trinket1", "trinket2", "main_hand", "off_hand",
+    "head",
+    "neck",
+    "shoulder",
+    "back",
+    "chest",
+    "wrist",
+    "hands",
+    "waist",
+    "legs",
+    "feet",
+    "finger1",
+    "finger2",
+    "trinket1",
+    "trinket2",
+    "main_hand",
+    "off_hand",
 ];
 
 /// Armor-type-restricted slots (head, shoulder, chest, wrist, hands, waist, legs, feet).
@@ -31,21 +44,28 @@ pub fn paired_slot(slot: &str) -> Option<&'static str> {
     }
 }
 
-pub const UNIQUE_SLOT_PAIRS: &[(&str, &str)] = &[
-    ("finger1", "finger2"),
-    ("trinket1", "trinket2"),
-];
+pub const UNIQUE_SLOT_PAIRS: &[(&str, &str)] = &[("finger1", "finger2"), ("trinket1", "trinket2")];
 
 // ---- Slot Labels ----
 
 pub fn slot_label(slot: &str) -> &'static str {
     match slot {
-        "head" => "Head", "neck" => "Neck", "shoulder" => "Shoulder",
-        "back" => "Back", "chest" => "Chest", "wrist" => "Wrist",
-        "hands" => "Hands", "waist" => "Waist", "legs" => "Legs",
-        "feet" => "Feet", "finger1" => "Ring 1", "finger2" => "Ring 2",
-        "trinket1" => "Trinket 1", "trinket2" => "Trinket 2",
-        "main_hand" => "Main Hand", "off_hand" => "Off Hand",
+        "head" => "Head",
+        "neck" => "Neck",
+        "shoulder" => "Shoulder",
+        "back" => "Back",
+        "chest" => "Chest",
+        "wrist" => "Wrist",
+        "hands" => "Hands",
+        "waist" => "Waist",
+        "legs" => "Legs",
+        "feet" => "Feet",
+        "finger1" => "Ring 1",
+        "finger2" => "Ring 2",
+        "trinket1" => "Trinket 1",
+        "trinket2" => "Trinket 2",
+        "main_hand" => "Main Hand",
+        "off_hand" => "Off Hand",
         _ => "Unknown",
     }
 }
@@ -53,21 +73,51 @@ pub fn slot_label(slot: &str) -> &'static str {
 /// Human-readable slot name from inventory_type (for drop display).
 pub fn inventory_type_display_slot(inv_type: u64) -> &'static str {
     match inv_type {
-        1 => "Head", 2 => "Neck", 3 => "Shoulder", 4 => "Shirt",
-        5 | 20 => "Chest", 6 => "Waist", 7 => "Legs", 8 => "Feet",
-        9 => "Wrist", 10 => "Hands", 11 => "Finger", 12 => "Trinket",
-        13 => "One-Hand", 14 => "Shield", 15 | 26 => "Ranged",
-        16 => "Back", 17 => "Two-Hand", 19 => "Tabard",
-        21 => "Main Hand", 22 => "Off Hand", 23 => "Held In Off-Hand",
+        1 => "Head",
+        2 => "Neck",
+        3 => "Shoulder",
+        4 => "Shirt",
+        5 | 20 => "Chest",
+        6 => "Waist",
+        7 => "Legs",
+        8 => "Feet",
+        9 => "Wrist",
+        10 => "Hands",
+        11 => "Finger",
+        12 => "Trinket",
+        13 => "One-Hand",
+        14 => "Shield",
+        15 | 26 => "Ranged",
+        16 => "Back",
+        17 => "Two-Hand",
+        19 => "Tabard",
+        21 => "Main Hand",
+        22 => "Off Hand",
+        23 => "Held In Off-Hand",
         _ => "Other",
     }
 }
 
 pub const SLOT_DISPLAY_ORDER: &[&str] = &[
-    "Head", "Neck", "Shoulder", "Back", "Chest", "Wrist", "Hands",
-    "Waist", "Legs", "Feet", "Finger", "Trinket",
-    "One-Hand", "Main Hand", "Off Hand", "Two-Hand",
-    "Held In Off-Hand", "Shield", "Ranged",
+    "Head",
+    "Neck",
+    "Shoulder",
+    "Back",
+    "Chest",
+    "Wrist",
+    "Hands",
+    "Waist",
+    "Legs",
+    "Feet",
+    "Finger",
+    "Trinket",
+    "One-Hand",
+    "Main Hand",
+    "Off Hand",
+    "Two-Hand",
+    "Held In Off-Hand",
+    "Shield",
+    "Ranged",
 ];
 
 // ---- Class & Spec ----
@@ -75,9 +125,16 @@ pub const SLOT_DISPLAY_ORDER: &[&str] = &[
 pub fn can_dual_wield(spec: &str) -> bool {
     matches!(
         spec,
-        "frost" | "fury" | "enhancement" | "windwalker" | "brewmaster"
-            | "havoc" | "vengeance"
-            | "outlaw" | "assassination" | "subtlety"
+        "frost"
+            | "fury"
+            | "enhancement"
+            | "windwalker"
+            | "brewmaster"
+            | "havoc"
+            | "vengeance"
+            | "outlaw"
+            | "assassination"
+            | "subtlety"
     )
 }
 
@@ -117,21 +174,49 @@ pub fn class_spec_ids(class_name: &str, spec_name: Option<&str>) -> Vec<u64> {
     let all: &[(&str, u64)] = match class_name {
         "warrior" => &[("arms", 71), ("fury", 72), ("protection", 73)],
         "paladin" => &[("holy", 65), ("protection", 66), ("retribution", 70)],
-        "hunter" => &[("beast_mastery", 253), ("marksmanship", 254), ("survival", 255)],
+        "hunter" => &[
+            ("beast_mastery", 253),
+            ("marksmanship", 254),
+            ("survival", 255),
+        ],
         "rogue" => &[("assassination", 259), ("outlaw", 260), ("subtlety", 261)],
         "priest" => &[("discipline", 256), ("holy", 257), ("shadow", 258)],
         "death_knight" | "deathknight" => &[("blood", 250), ("frost", 251), ("unholy", 252)],
-        "shaman" => &[("elemental", 262), ("enhancement", 263), ("restoration", 264)],
+        "shaman" => &[
+            ("elemental", 262),
+            ("enhancement", 263),
+            ("restoration", 264),
+        ],
         "mage" => &[("arcane", 62), ("fire", 63), ("frost", 64)],
-        "warlock" => &[("affliction", 265), ("demonology", 266), ("destruction", 267)],
-        "monk" => &[("brewmaster", 268), ("mistweaver", 270), ("windwalker", 269)],
-        "druid" => &[("balance", 102), ("feral", 103), ("guardian", 104), ("restoration", 105)],
+        "warlock" => &[
+            ("affliction", 265),
+            ("demonology", 266),
+            ("destruction", 267),
+        ],
+        "monk" => &[
+            ("brewmaster", 268),
+            ("mistweaver", 270),
+            ("windwalker", 269),
+        ],
+        "druid" => &[
+            ("balance", 102),
+            ("feral", 103),
+            ("guardian", 104),
+            ("restoration", 105),
+        ],
         "demon_hunter" | "demonhunter" => &[("havoc", 577), ("vengeance", 581)],
-        "evoker" => &[("devastation", 1467), ("preservation", 1468), ("augmentation", 1473)],
+        "evoker" => &[
+            ("devastation", 1467),
+            ("preservation", 1468),
+            ("augmentation", 1473),
+        ],
         _ => &[],
     };
     if let Some(spec) = spec_name {
-        all.iter().filter(|(n, _)| *n == spec).map(|(_, id)| *id).collect()
+        all.iter()
+            .filter(|(n, _)| *n == spec)
+            .map(|(_, id)| *id)
+            .collect()
     } else {
         all.iter().map(|(_, id)| *id).collect()
     }
@@ -142,9 +227,15 @@ pub fn class_spec_ids(class_name: &str, spec_name: Option<&str>) -> Vec<u64> {
 /// Map an item's inventory_type to eligible gear slot names.
 pub fn inv_type_to_slots(inv_type: u64, spec: &str) -> Vec<&'static str> {
     match inv_type {
-        1 => vec!["head"], 2 => vec!["neck"], 3 => vec!["shoulder"],
-        5 | 20 => vec!["chest"], 6 => vec!["waist"], 7 => vec!["legs"],
-        8 => vec!["feet"], 9 => vec!["wrist"], 10 => vec!["hands"],
+        1 => vec!["head"],
+        2 => vec!["neck"],
+        3 => vec!["shoulder"],
+        5 | 20 => vec!["chest"],
+        6 => vec!["waist"],
+        7 => vec!["legs"],
+        8 => vec!["feet"],
+        9 => vec!["wrist"],
+        10 => vec!["hands"],
         11 => vec!["finger1", "finger2"],
         12 => vec!["trinket1", "trinket2"],
         13 => {
@@ -154,7 +245,7 @@ pub fn inv_type_to_slots(inv_type: u64, spec: &str) -> Vec<&'static str> {
                 vec!["main_hand"]
             }
         }
-        14 => vec!["off_hand"],  // Shield
+        14 => vec!["off_hand"], // Shield
         16 => vec!["back"],
         17 => {
             // Two-hand: Fury warriors can equip in both slots (Titan's Grip)
@@ -165,7 +256,7 @@ pub fn inv_type_to_slots(inv_type: u64, spec: &str) -> Vec<&'static str> {
             }
         }
         15 | 21 | 26 => vec!["main_hand"], // Ranged, Main-hand only
-        22 | 23 => vec!["off_hand"],        // Off-hand, Held
+        22 | 23 => vec!["off_hand"],       // Off-hand, Held
         _ => vec![],
     }
 }
@@ -173,17 +264,26 @@ pub fn inv_type_to_slots(inv_type: u64, spec: &str) -> Vec<&'static str> {
 // ---- Detection ----
 
 const CLASS_NAMES: &[&str] = &[
-    "warrior", "paladin", "hunter", "rogue", "priest",
-    "death_knight", "deathknight", "shaman", "mage", "warlock",
-    "monk", "demon_hunter", "demonhunter", "druid", "evoker",
+    "warrior",
+    "paladin",
+    "hunter",
+    "rogue",
+    "priest",
+    "death_knight",
+    "deathknight",
+    "shaman",
+    "mage",
+    "warlock",
+    "monk",
+    "demon_hunter",
+    "demonhunter",
+    "druid",
+    "evoker",
 ];
 
 /// Detect the character class from a simc input string.
 pub fn detect_class(simc_input: &str) -> Option<String> {
-    let pattern = format!(
-        r#"^({})\s*="#,
-        CLASS_NAMES.join("|")
-    );
+    let pattern = format!(r#"^({})\s*="#, CLASS_NAMES.join("|"));
     let class_re = Regex::new(&pattern).unwrap();
     for line in simc_input.lines() {
         let trimmed = line.trim();
@@ -209,8 +309,14 @@ pub fn detect_spec(simc_input: &str) -> Option<String> {
 // ---- Quality ----
 
 pub const QUALITY_NAMES: &[(u64, &str)] = &[
-    (0, "poor"), (1, "common"), (2, "uncommon"), (3, "rare"),
-    (4, "epic"), (5, "legendary"), (6, "artifact"), (7, "heirloom"),
+    (0, "poor"),
+    (1, "common"),
+    (2, "uncommon"),
+    (3, "rare"),
+    (4, "epic"),
+    (5, "legendary"),
+    (6, "artifact"),
+    (7, "heirloom"),
 ];
 
 pub fn quality_name(quality: u64) -> &'static str {
