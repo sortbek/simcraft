@@ -1,9 +1,9 @@
-const STORAGE_KEY = "simhammer_scenario_siblings";
+const STORAGE_KEY = 'simhammer_scenario_siblings';
 
 const FIGHT_STYLE_LABELS: Record<string, string> = {
-  Patchwerk: "Patchwerk",
-  HecticAddCleave: "Hectic Add Cleave",
-  LightMovement: "Light Movement",
+  Patchwerk: 'Patchwerk',
+  HecticAddCleave: 'Hectic Add Cleave',
+  LightMovement: 'Light Movement',
 };
 
 export interface ScenarioSibling {
@@ -15,9 +15,9 @@ export interface ScenarioSibling {
 
 export function formatScenarioLabel(s: ScenarioSibling): string {
   const style = FIGHT_STYLE_LABELS[s.fightStyle] || s.fightStyle;
-  const bosses = s.targetCount === 1 ? "1 boss" : `${s.targetCount} bosses`;
+  const bosses = s.targetCount === 1 ? '1 boss' : `${s.targetCount} bosses`;
   const min = Math.floor(s.fightLength / 60);
-  const sec = String(s.fightLength % 60).padStart(2, "0");
+  const sec = String(s.fightLength % 60).padStart(2, '0');
   return `${style} / ${bosses} / ${min}:${sec}`;
 }
 

@@ -333,10 +333,14 @@ impl JobStorage for PostgresStorage {
         let bid = batch_id.to_string();
         self.blocking(|client| {
             self.rt.block_on(async {
-                client.query_one(
-                    "SELECT COUNT(*)::BIGINT FROM jobs WHERE batch_id = $1",
-                    &[&bid],
-                ).await.map(|row| row.get::<_, i64>(0) as usize).unwrap_or(0)
+                client
+                    .query_one(
+                        "SELECT COUNT(*)::BIGINT FROM jobs WHERE batch_id = $1",
+                        &[&bid],
+                    )
+                    .await
+                    .map(|row| row.get::<_, i64>(0) as usize)
+                    .unwrap_or(0)
             })
         })
     }

@@ -162,24 +162,26 @@ impl JobStorage for SqliteStorage {
             "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json, simc_input, batch_id
              FROM jobs ORDER BY created_at DESC LIMIT ?1"
         ).unwrap();
-        let all: Vec<JobSummary> = stmt.query_map(params![fetch_limit], |row| {
-            let status_str: String = row.get(1)?;
-            let result_json: Option<String> = row.get(7)?;
-            let simc_input: String = row.get::<_, String>(8).unwrap_or_default();
-            let s = extract_result_summary(&result_json, &simc_input);
-            Ok(JobSummary {
-                id: row.get(0)?,
-                status: Self::str_to_status(&status_str),
-                sim_type: row.get(2)?,
-                created_at: row.get(3)?,
-                fight_style: row.get(4)?,
-                iterations: row.get::<_, u32>(5)?,
-                error_message: row.get(6)?,
-                player_name: s.player_name,
-                player_class: s.player_class,
-                realm: s.realm,
-                dps: s.dps,
-                batch_id: row.get(9).ok().flatten(),
+        let all: Vec<JobSummary> = stmt
+            .query_map(params![fetch_limit], |row| {
+                let status_str: String = row.get(1)?;
+                let result_json: Option<String> = row.get(7)?;
+                let simc_input: String = row.get::<_, String>(8).unwrap_or_default();
+                let s = extract_result_summary(&result_json, &simc_input);
+                Ok(JobSummary {
+                    id: row.get(0)?,
+                    status: Self::str_to_status(&status_str),
+                    sim_type: row.get(2)?,
+                    created_at: row.get(3)?,
+                    fight_style: row.get(4)?,
+                    iterations: row.get::<_, u32>(5)?,
+                    error_message: row.get(6)?,
+                    player_name: s.player_name,
+                    player_class: s.player_class,
+                    realm: s.realm,
+                    dps: s.dps,
+                    batch_id: row.get(9).ok().flatten(),
+                })
             })
             .unwrap()
             .filter_map(|r| r.ok())
@@ -279,6 +281,7 @@ impl JobStorage for SqliteStorage {
             "SELECT COUNT(*) FROM jobs WHERE batch_id = ?1",
             params![batch_id],
             |row| row.get::<_, usize>(0),
-        ).unwrap_or(0)
+        )
+        .unwrap_or(0)
     }
 }

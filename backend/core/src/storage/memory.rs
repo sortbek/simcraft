@@ -123,7 +123,10 @@ impl JobStorage for MemoryStorage {
     }
 
     fn count_batch(&self, batch_id: &str) -> usize {
-        self.jobs.lock().unwrap().values()
+        self.jobs
+            .lock()
+            .unwrap()
+            .values()
             .filter(|j| j.batch_id.as_deref() == Some(batch_id))
             .count()
     }

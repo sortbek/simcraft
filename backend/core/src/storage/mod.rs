@@ -26,7 +26,9 @@ pub static MAX_JOBS: Lazy<usize> = Lazy::new(|| {
 /// Override with MAX_SCENARIOS env var. Default: 10.
 pub static MAX_SCENARIOS: Lazy<usize> = Lazy::new(|| {
     if let Ok(val) = std::env::var("MAX_SCENARIOS") {
-        if let Ok(n) = val.parse() { return n; }
+        if let Ok(n) = val.parse() {
+            return n;
+        }
     }
     10
 });

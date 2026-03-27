@@ -14,11 +14,10 @@ use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
-use crate::storage::{self, JobStorage};
 use crate::profileset_generator;
 use crate::result_parser;
 use crate::simc_runner;
-use crate::storage::JobStorage;
+use crate::storage::{self, JobStorage};
 use crate::types::ResolveGearResponse;
 
 /// Newtype wrapper to avoid colliding with the simc `web::Data<PathBuf>`.
