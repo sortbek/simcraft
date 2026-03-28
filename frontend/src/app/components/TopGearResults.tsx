@@ -1,19 +1,19 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import DpsHeroCard from './DpsHeroCard';
-import {
-  useItemInfo,
-  useEnchantInfo,
-  useGemInfo,
-  getIconUrl,
-  getWowheadUrl,
-  getWowheadData,
-  QUALITY_COLORS,
-} from '../lib/useItemInfo';
-import type { ItemInfo, EnchantInfo, GemInfo, ItemQuery } from '../lib/useItemInfo';
 import { SLOT_LABELS } from '../lib/types';
+import type { EnchantInfo, GemInfo, ItemInfo, ItemQuery } from '../lib/useItemInfo';
+import {
+    getIconUrl,
+    getWowheadData,
+    getWowheadUrl,
+    QUALITY_COLORS,
+    useEnchantInfo,
+    useGemInfo,
+    useItemInfo,
+} from '../lib/useItemInfo';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
+import DpsHeroCard from './DpsHeroCard';
 
 interface ResultItem {
   slot: string;
@@ -476,6 +476,7 @@ function GearSlotRow({
   const qc = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
   const name = info?.name || item.name || `Item ${item.item_id}`;
   const icon = info?.icon || 'inv_misc_questionmark';
+  const hasUpgradeLevels = (item.upgrade_levels ?? 0) > 0;
   const whData =
     item.item_id > 0
       ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id)
@@ -516,6 +517,11 @@ function GearSlotRow({
               New
             </span>
           )}
+          {hasUpgradeLevels && (
+            <span className="shrink-0 rounded bg-cyan-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-cyan-300">
+              +{item.upgrade_levels} Lv
+            </span>
+          )}
           {item.origin === 'vault' && (
             <span className="shrink-0 rounded bg-amber-400/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-amber-400">
               Vault
@@ -525,6 +531,7 @@ function GearSlotRow({
         <p className="truncate text-[9px] text-muted">
           {SLOT_LABELS[slot] || slot}
           {item.ilevel > 0 && ` · ${item.ilevel}`}
+          {hasUpgradeLevels && ` · +${item.upgrade_levels} upgrade levels`}
           {info?.tag && ` · ${info.tag}`}
           {gem?.name ? (
             <span className="text-sky-400/70"> · {gem.name}</span>
@@ -553,6 +560,7 @@ function ItemTag({
   const name = info?.name || item.name || `Item ${item.item_id}`;
   const icon = info?.icon || 'inv_misc_questionmark';
   const kept = item.is_kept;
+  const hasUpgradeLevels = (item.upgrade_levels ?? 0) > 0;
   const whData =
     item.item_id > 0
       ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id)
@@ -589,6 +597,11 @@ function ItemTag({
       {item.origin === 'vault' && (
         <span className="shrink-0 text-[8px] font-bold uppercase tracking-wider text-amber-400">
           V
+        </span>
+      )}
+      {hasUpgradeLevels && (
+        <span className="shrink-0 text-[8px] font-bold uppercase tracking-wider text-cyan-300">
+          +{item.upgrade_levels}Lv
         </span>
       )}
       {enchant?.name && (

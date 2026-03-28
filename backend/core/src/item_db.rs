@@ -19,6 +19,10 @@ static BONUSES: OnceCell<HashMap<u64, Value>> = OnceCell::new();
 static UPGRADE_MAX: OnceCell<HashMap<u64, u64>> = OnceCell::new();
 static INSTANCES: OnceCell<Vec<Value>> = OnceCell::new();
 static DROPS_BY_ENCOUNTER: OnceCell<HashMap<i64, Vec<Value>>> = OnceCell::new();
+// bonus_id -> { currency_id -> amount } for the upgrade step to that bonus_id
+static UPGRADE_STEP_COSTS: OnceCell<HashMap<u64, HashMap<u64, u64>>> = OnceCell::new();
+// currency_id -> { currency_id, name, icon }
+static CURRENCY_INFO: OnceCell<HashMap<u64, Value>> = OnceCell::new();
 type UpgradeTrackKey = (String, u64, u64);
 type UpgradeTrackValue = (u64, u64, u64);
 static UPGRADE_TRACKS: OnceCell<HashMap<UpgradeTrackKey, UpgradeTrackValue>> = OnceCell::new();
@@ -455,33 +459,68 @@ pub fn get_upgrade_options(bonus_ids: &[u64]) -> Option<Vec<Value>> {
         if um.contains_key(bid) {
             let bonus = bonuses().get(bid)?;
             let group_id = bonus.get("upgrade")?.get("group")?.as_u64()?;
-            let mut members: Vec<&Value> = bonuses()
-                .values()
-                .filter(|b| {
-                    b.get("upgrade")
+            let current_level = bonus
+                .get("upgrade")
+                .and_then(|u| u.get("level"))
+                .and_then(|l| l.as_u64())
+                .unwrap_or(0);
+
+            let mut members: Vec<(u64, &Value)> = bonuses()
+                .iter()
+                .filter_map(|(member_id, member)| {
+                    let g = member
+                        .get("upgrade")
                         .and_then(|u| u.get("group"))
-                        .and_then(|g| g.as_u64())
-                        == Some(group_id)
+                        .and_then(|g| g.as_u64());
+                    if g == Some(group_id) {
+                        Some((*member_id, member))
+                    } else {
+                        None
+                    }
                 })
                 .collect();
-            members.sort_by_key(|b| {
-                b.get("upgrade")
+            members.sort_by_key(|(_, m)| {
+                m.get("upgrade")
                     .and_then(|u| u.get("level"))
                     .and_then(|l| l.as_u64())
                     .unwrap_or(0)
             });
+
+            let level_to_bonus: HashMap<u64, u64> = members
+                .iter()
+                .filter_map(|(mid, m)| {
+                    let level = m
+                        .get("upgrade")
+                        .and_then(|u| u.get("level"))
+                        .and_then(|l| l.as_u64())?;
+                    Some((level, *mid))
+                })
+                .collect();
+
             return Some(
                 members
                     .into_iter()
-                    .filter_map(|b| {
-                        let u = b.get("upgrade")?;
+                    .filter_map(|(member_id, member)| {
+                        let u = member.get("upgrade")?;
+                        let level = u.get("level")?.as_u64()?;
+                        let mut cumulative: HashMap<u64, u64> = HashMap::new();
+                        if level > current_level {
+                            for step_level in (current_level + 1)..=level {
+                                if let Some(sbid) = level_to_bonus.get(&step_level) {
+                                    add_cost_map(&mut cumulative, &upgrade_step_costs(*sbid));
+                                }
+                            }
+                        }
+
                         Some(serde_json::json!({
-                            "bonus_id": b.get("id")?.as_u64()?,
-                            "level": u.get("level")?.as_u64()?,
+                            "bonus_id": member_id,
+                            "level": level,
                             "max": u.get("max")?.as_u64()?,
                             "name": u.get("name")?.as_str()?,
                             "fullName": u.get("fullName")?.as_str()?,
                             "itemLevel": u.get("itemLevel")?.as_u64()?,
+                            "step_costs": upgrade_step_costs(member_id),
+                            "cumulative_costs": cumulative,
                         }))
                     })
                     .collect(),

@@ -4,18 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useSimContext } from "../components/SimContext";
 import { API_URL } from "../lib/api";
 import {
-  GEAR_SLOTS,
-  SLOT_LABELS,
-  parseAddonString,
-  parseUpgradeCurrencies,
-  type ParsedItem,
+    GEAR_SLOTS,
+    SLOT_LABELS,
+    parseAddonString,
+    parseUpgradeCurrencies,
+    type ParsedItem,
 } from "../lib/parseAddonString";
 import {
-  QUALITY_COLORS,
-  getIconUrl,
-  useCurrencyInfo,
-  useItemInfo,
-  type CurrencyInfo,
+    QUALITY_COLORS,
+    getIconUrl,
+    useCurrencyInfo,
+    useItemInfo,
+    type CurrencyInfo,
 } from "../lib/useItemInfo";
 
 type CurrencyMap = Record<number, number>;
@@ -141,37 +141,35 @@ export default function UpgradeComparePage() {
     [currencies],
   );
   const currencyInfo = useCurrencyInfo(currencyIds);
-  const dawncrestCurrencyIdSet = useMemo(() => {
-    const ids = Object.values(currencyInfo)
-      .filter((info) => info.name.toLowerCase().includes("dawncrest"))
-      .map((info) => info.currency_id);
+  const upgradeCurrencyIdSet = useMemo(() => {
+    const ids = Object.keys(currencies)
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id > 0);
     return new Set(ids);
-  }, [currencyInfo]);
+  }, [currencies]);
 
-  const dawncrestCurrencyKey = useMemo(
-    () => [...dawncrestCurrencyIdSet].sort((a, b) => a - b).join(","),
-    [dawncrestCurrencyIdSet],
+  const upgradeCurrencyKey = useMemo(
+    () => [...upgradeCurrencyIdSet].sort((a, b) => a - b).join(","),
+    [upgradeCurrencyIdSet],
   );
 
-  const dawncrestCurrencyEntries = useMemo(
+  const upgradeCurrencyEntries = useMemo(
     () =>
       Object.entries(currencies)
-        .filter(([currencyId]) =>
-          dawncrestCurrencyIdSet.has(Number(currencyId)),
-        )
+        .filter(([currencyId]) => upgradeCurrencyIdSet.has(Number(currencyId)))
         .sort((a, b) => Number(a[0]) - Number(b[0])),
-    [currencies, dawncrestCurrencyIdSet],
+    [currencies, upgradeCurrencyIdSet],
   );
 
   const candidateGroups = useMemo(() => {
     const groups = new Map<number, UpgradeCandidate[]>();
     for (const candidate of candidates) {
-      const dawncrestCurrencyIds = Object.keys(candidate.costs)
+      const upgradeCurrencyIds = Object.keys(candidate.costs)
         .map(Number)
-        .filter((cid) => dawncrestCurrencyIdSet.has(cid))
+        .filter((cid) => upgradeCurrencyIdSet.has(cid))
         .sort((a, b) => a - b);
-      if (dawncrestCurrencyIds.length === 0) continue;
-      const currencyId = dawncrestCurrencyIds[0];
+      if (upgradeCurrencyIds.length === 0) continue;
+      const currencyId = upgradeCurrencyIds[0];
       const existing = groups.get(currencyId) || [];
       existing.push(candidate);
       groups.set(currencyId, existing);
@@ -185,7 +183,7 @@ export default function UpgradeComparePage() {
           currencyInfo[currencyId]?.name || `Currency ${currencyId}`,
         candidates: groupedCandidates,
       })) as CandidateGroup[];
-  }, [candidates, dawncrestCurrencyIdSet, currencyInfo]);
+  }, [candidates, upgradeCurrencyIdSet, currencyInfo]);
 
   useEffect(() => {
     const trimmed = simcInput.trim();
@@ -248,23 +246,23 @@ export default function UpgradeComparePage() {
         );
         if (!current) return null;
 
-        const dawncrestHigher = options
+        const upgradeHigher = options
           .filter((opt) => {
             if (opt.level <= current.level) return false;
             const costs = opt.cumulative_costs || {};
             return Object.keys(costs).some((cid) =>
-              dawncrestCurrencyIdSet.has(Number(cid)),
+              upgradeCurrencyIdSet.has(Number(cid)),
             );
           })
           .sort((a, b) => a.level - b.level);
 
-        if (dawncrestHigher.length === 0) return null;
+        if (upgradeHigher.length === 0) return null;
 
-        const upgradeChoices = dawncrestHigher.map((opt) => ({
+        const upgradeChoices = upgradeHigher.map((opt) => ({
           target: opt,
           costs: toCostMap(opt.cumulative_costs),
         }));
-        const target = dawncrestHigher[dawncrestHigher.length - 1];
+        const target = upgradeHigher[upgradeHigher.length - 1];
         return {
           slot,
           item,
@@ -297,7 +295,7 @@ export default function UpgradeComparePage() {
     return () => {
       cancelled = true;
     };
-  }, [simcInput, dawncrestCurrencyKey]);
+  }, [simcInput, upgradeCurrencyKey]);
 
   useEffect(() => {
     if (!simcInput.trim()) {
@@ -413,7 +411,7 @@ export default function UpgradeComparePage() {
     }
   }
 
-  const hasDawncrestCurrencies = dawncrestCurrencyEntries.length > 0;
+  const hasUpgradeCurrencies = upgradeCurrencyEntries.length > 0;
 
   const toggleCurrencyGroup = (group: CandidateGroup) => {
     const groupSlots = group.candidates.map((c) => c.slot);
@@ -441,13 +439,13 @@ export default function UpgradeComparePage() {
         <p className="text-xs font-medium uppercase tracking-widest text-muted mb-3">
           Upgrade Currencies
         </p>
-        {!hasDawncrestCurrencies ? (
+        {!hasUpgradeCurrencies ? (
           <p className="text-sm text-muted">
-            No Dawncrest currencies found in your SimC export.
+            No upgrade currencies found in your SimC export.
           </p>
         ) : (
           <div className="space-y-2">
-            {dawncrestCurrencyEntries.map(([currencyId, amount]) => {
+            {upgradeCurrencyEntries.map(([currencyId, amount]) => {
               const info = currencyInfo[Number(currencyId)];
               return (
                 <div
@@ -488,7 +486,7 @@ export default function UpgradeComparePage() {
           <p className="text-sm text-muted">Loading upgrade options...</p>
         ) : candidates.length === 0 ? (
           <p className="text-sm text-muted">
-            No Dawncrest-upgradeable equipped items found.
+            No upgradeable equipped items found.
           </p>
         ) : (
           <div className="space-y-4">
@@ -705,7 +703,7 @@ export default function UpgradeComparePage() {
       <button
         onClick={handleSubmit}
         disabled={
-          submitting || candidates.length === 0 || !hasDawncrestCurrencies
+          submitting || candidates.length === 0 || !hasUpgradeCurrencies
         }
         className="btn-primary w-full py-3 text-sm"
       >

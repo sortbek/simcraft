@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { useSimContext } from './SimContext';
+import { useMemo, useState } from 'react';
 import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
+import { useSimContext } from './SimContext';
 import TalentPicker from './TalentPicker';
 
 function parseCharacterInfo(input: string) {
@@ -305,7 +305,10 @@ export default function SimSharedConfig() {
   const { simcInput, setSimcInput } = useSimContext();
 
   const showConfig =
-    pathname === '/quick-sim' || pathname === '/top-gear' || pathname === '/drop-finder';
+    pathname === '/quick-sim' ||
+    pathname === '/top-gear' ||
+    pathname === '/upgrade-compare' ||
+    pathname === '/drop-finder';
   if (!showConfig) return null;
 
   const detectedInfo = parseCharacterInfo(simcInput);

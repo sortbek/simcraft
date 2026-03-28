@@ -866,13 +866,6 @@ fn combo_count_from_generation_error(error: &str) -> usize {
         .unwrap_or(0)
 }
 
-fn is_dawncrest_currency(currency_id: u64) -> bool {
-    game_data::get_currency_info(currency_id)
-        .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|s| s.to_ascii_lowercase()))
-        .map(|name| name.contains("dawncrest"))
-        .unwrap_or(false)
-}
-
 fn prepare_upgrade_compare_request(
     req: &UpgradeCompareRequest,
 ) -> Result<PreparedUpgradeCompare, String> {
@@ -888,19 +881,11 @@ fn prepare_upgrade_compare_request(
     let base_profile = resolved.base_profile.clone();
     let items_by_slot = resolve_to_items_by_slot(&resolved);
 
-    let dawncrest_currency_ids: HashSet<u64> = upgrade_budget
-        .keys()
-        .copied()
-        .filter(|currency_id| is_dawncrest_currency(*currency_id))
-        .collect();
-
-    if dawncrest_currency_ids.is_empty() {
-        return Err("No Dawncrest currencies found in upgrade_currencies.".to_string());
-    }
+    let upgrade_currency_ids: HashSet<u64> = upgrade_budget.keys().copied().collect();
 
     let dawncrest_budget: HashMap<u64, u64> = upgrade_budget
         .iter()
-        .filter(|(currency_id, _)| dawncrest_currency_ids.contains(currency_id))
+        .filter(|(currency_id, _)| upgrade_currency_ids.contains(currency_id))
         .map(|(currency_id, amount)| (*currency_id, *amount))
         .collect();
 
@@ -962,18 +947,18 @@ fn prepare_upgrade_compare_request(
                     return None;
                 }
 
-                let has_dawncrest_cost = opt
+                let has_upgrade_cost = opt
                     .get("cumulative_costs")
                     .and_then(|v| v.as_object())
                     .map(|costs| {
                         costs
                             .keys()
                             .filter_map(|k| k.parse::<u64>().ok())
-                            .any(|cid| dawncrest_currency_ids.contains(&cid))
+                            .any(|cid| upgrade_currency_ids.contains(&cid))
                     })
                     .unwrap_or(false);
 
-                if has_dawncrest_cost {
+                if has_upgrade_cost {
                     Some((level, target_bonus_id))
                 } else {
                     None
@@ -1867,6 +1852,12 @@ pub async fn start_with_storage_bind(
                 "/api/top-gear/combo-count",
                 web::post().to(get_top_gear_combo_count),
             )
+            .route("/api/upgrade-compare/sim", web::post().to(create_upgrade_compare_sim))
+            .route(
+                "/api/upgrade-compare/combo-count",
+                web::post().to(get_upgrade_compare_combo_count),
+            )
+            .route("/api/upgrade-compare/debug", web::post().to(get_upgrade_compare_debug))
             .route("/api/sim/{id}", web::get().to(get_sim_status))
             .route("/api/sim/{id}/logs", web::get().to(get_sim_logs))
             .route("/api/sim/{id}/cancel", web::post().to(cancel_sim))

@@ -19,6 +19,13 @@ const simTypes = [
     matchPaths: ['/top-gear'],
   },
   {
+    href: '/upgrade-compare',
+    label: 'Upgrade Sim',
+    description: 'Compare upgrade paths within budget.',
+    icon: 'M8 2v12M3.5 6.5L8 2l4.5 4.5M2 14h12',
+    matchPaths: ['/upgrade-compare'],
+  },
+  {
     href: '/drop-finder',
     label: 'Drop Finder',
     description: 'Browse raid and dungeon loot tables.',
