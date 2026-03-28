@@ -11,8 +11,7 @@ const PRESETS = [
 ] as const;
 
 export default function SettingsPopover() {
-  const { threads, setThreads, maxCombinations, setMaxCombinations } =
-    useSimContext();
+  const { threads, setThreads, maxCombinations, setMaxCombinations } = useSimContext();
   const [open, setOpen] = useState(false);
   const [maxThreads, setMaxThreads] = useState(0);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -52,8 +51,7 @@ export default function SettingsPopover() {
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -62,7 +60,7 @@ export default function SettingsPopover() {
   if (!isDesktop || !maxThreads) return null;
 
   const selectedIdx = PRESETS.findIndex(
-    (p) => Math.max(1, Math.round(maxThreads * p.pct)) === threads,
+    (p) => Math.max(1, Math.round(maxThreads * p.pct)) === threads
   );
 
   return (
@@ -118,9 +116,7 @@ export default function SettingsPopover() {
           {/* Max Combinations */}
           <div className="mt-4 border-t border-border pt-4">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-medium text-gray-300">
-                Max Gear Combos
-              </span>
+              <span className="text-[13px] font-medium text-gray-300">Max Gear Combos</span>
               <input
                 type="number"
                 min={10}

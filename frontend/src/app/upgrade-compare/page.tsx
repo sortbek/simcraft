@@ -1,23 +1,23 @@
-"use client";
+'use client';
 
-import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
-import { useSimContext } from "../components/SimContext";
-import { API_URL } from "../lib/api";
+import Image from 'next/image';
+import { useEffect, useMemo, useState } from 'react';
+import { useSimContext } from '../components/SimContext';
+import { API_URL } from '../lib/api';
 import {
-    GEAR_SLOTS,
-    SLOT_LABELS,
-    parseAddonString,
-    parseUpgradeCurrencies,
-    type ParsedItem,
-} from "../lib/parseAddonString";
+  GEAR_SLOTS,
+  SLOT_LABELS,
+  parseAddonString,
+  parseUpgradeCurrencies,
+  type ParsedItem,
+} from '../lib/parseAddonString';
 import {
-    QUALITY_COLORS,
-    getIconUrl,
-    useCurrencyInfo,
-    useItemInfo,
-    type CurrencyInfo,
-} from "../lib/useItemInfo";
+  QUALITY_COLORS,
+  getIconUrl,
+  useCurrencyInfo,
+  useItemInfo,
+  type CurrencyInfo,
+} from '../lib/useItemInfo';
 
 type CurrencyMap = Record<number, number>;
 
@@ -84,20 +84,15 @@ function toCostMap(costs?: Record<string, number>): CurrencyMap {
   return out;
 }
 
-function formatCosts(
-  costs: CurrencyMap,
-  currencyInfo?: Record<number, CurrencyInfo>,
-): string {
-  const entries = Object.entries(costs).sort(
-    (a, b) => Number(a[0]) - Number(b[0]),
-  );
-  if (entries.length === 0) return "no cost";
+function formatCosts(costs: CurrencyMap, currencyInfo?: Record<number, CurrencyInfo>): string {
+  const entries = Object.entries(costs).sort((a, b) => Number(a[0]) - Number(b[0]));
+  if (entries.length === 0) return 'no cost';
   return entries
     .map(([currencyId, amount]) => {
       const name = currencyInfo?.[Number(currencyId)]?.name;
       return name ? `${name} x${amount}` : `${currencyId}x${amount}`;
     })
-    .join(", ");
+    .join(', ');
 }
 
 export default function UpgradeComparePage() {
@@ -124,9 +119,8 @@ export default function UpgradeComparePage() {
   const [submitting, setSubmitting] = useState(false);
   const [serverComboCount, setServerComboCount] = useState(0);
   const [debugLoading, setDebugLoading] = useState(false);
-  const [debugData, setDebugData] =
-    useState<UpgradeCompareDebugResponse | null>(null);
-  const [error, setError] = useState("");
+  const [debugData, setDebugData] = useState<UpgradeCompareDebugResponse | null>(null);
+  const [error, setError] = useState('');
 
   const infoQueries = useMemo(
     () =>
@@ -134,13 +128,10 @@ export default function UpgradeComparePage() {
         item_id: c.item.item_id,
         bonus_ids: c.item.bonus_ids,
       })),
-    [candidates],
+    [candidates]
   );
   const itemInfo = useItemInfo(infoQueries);
-  const currencyIds = useMemo(
-    () => Object.keys(currencies).map(Number),
-    [currencies],
-  );
+  const currencyIds = useMemo(() => Object.keys(currencies).map(Number), [currencies]);
   const currencyInfo = useCurrencyInfo(currencyIds);
   const upgradeCurrencyIdSet = useMemo(() => {
     const ids = Object.keys(currencies)
@@ -150,8 +141,8 @@ export default function UpgradeComparePage() {
   }, [currencies]);
 
   const upgradeCurrencyKey = useMemo(
-    () => [...upgradeCurrencyIdSet].sort((a, b) => a - b).join(","),
-    [upgradeCurrencyIdSet],
+    () => [...upgradeCurrencyIdSet].sort((a, b) => a - b).join(','),
+    [upgradeCurrencyIdSet]
   );
 
   const upgradeCurrencyEntries = useMemo(
@@ -159,7 +150,7 @@ export default function UpgradeComparePage() {
       Object.entries(currencies)
         .filter(([currencyId]) => upgradeCurrencyIdSet.has(Number(currencyId)))
         .sort((a, b) => Number(a[0]) - Number(b[0])),
-    [currencies, upgradeCurrencyIdSet],
+    [currencies, upgradeCurrencyIdSet]
   );
 
   const candidateGroups = useMemo(() => {
@@ -180,8 +171,7 @@ export default function UpgradeComparePage() {
       .sort((a, b) => a[0] - b[0])
       .map(([currencyId, groupedCandidates]) => ({
         currencyId,
-        currencyName:
-          currencyInfo[currencyId]?.name || `Currency ${currencyId}`,
+        currencyName: currencyInfo[currencyId]?.name || `Currency ${currencyId}`,
         candidates: groupedCandidates,
       })) as CandidateGroup[];
   }, [candidates, upgradeCurrencyIdSet, currencyInfo]);
@@ -189,7 +179,7 @@ export default function UpgradeComparePage() {
   useEffect(() => {
     const trimmed = simcInput.trim();
 
-    setError("");
+    setError('');
     setCurrencies(parseUpgradeCurrencies(simcInput));
 
     if (trimmed.length < 10) {
@@ -234,7 +224,7 @@ export default function UpgradeComparePage() {
     Promise.all(
       equippedBySlot.map(async ({ slot, item }) => {
         const res = await fetchWithTimeout(
-          `${API_URL}/api/upgrade-options?bonus_ids=${item.bonus_ids.join(",")}`,
+          `${API_URL}/api/upgrade-options?bonus_ids=${item.bonus_ids.join(',')}`
         );
         if (!res.ok) return null;
 
@@ -242,18 +232,14 @@ export default function UpgradeComparePage() {
         const options: UpgradeOption[] = data.options || [];
         if (!Array.isArray(options) || options.length === 0) return null;
 
-        const current = options.find((opt) =>
-          item.bonus_ids.includes(opt.bonus_id),
-        );
+        const current = options.find((opt) => item.bonus_ids.includes(opt.bonus_id));
         if (!current) return null;
 
         const upgradeHigher = options
           .filter((opt) => {
             if (opt.level <= current.level) return false;
             const costs = opt.cumulative_costs || {};
-            return Object.keys(costs).some((cid) =>
-              upgradeCurrencyIdSet.has(Number(cid)),
-            );
+            return Object.keys(costs).some((cid) => upgradeCurrencyIdSet.has(Number(cid)));
           })
           .sort((a, b) => a.level - b.level);
 
@@ -271,13 +257,11 @@ export default function UpgradeComparePage() {
           costs: toCostMap(target.cumulative_costs),
           upgradeChoices,
         } as UpgradeCandidate;
-      }),
+      })
     )
       .then((results) => {
         if (cancelled) return;
-        const filtered = results.filter(
-          (r): r is UpgradeCandidate => r !== null,
-        );
+        const filtered = results.filter((r): r is UpgradeCandidate => r !== null);
         setCandidates(filtered);
         setSelectedSlots(new Set());
       })
@@ -318,8 +302,8 @@ export default function UpgradeComparePage() {
     (async () => {
       try {
         const res = await fetch(`${API_URL}/api/upgrade-compare/debug`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             simc_input: simcInput,
             selected_slots: selected,
@@ -337,9 +321,7 @@ export default function UpgradeComparePage() {
           return;
         }
 
-        setServerComboCount(
-          typeof data.combo_count === "number" ? data.combo_count : 0,
-        );
+        setServerComboCount(typeof data.combo_count === 'number' ? data.combo_count : 0);
         setDebugData(data as UpgradeCompareDebugResponse);
       } catch {
         if (!cancelled) {
@@ -356,26 +338,20 @@ export default function UpgradeComparePage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    simcInput,
-    selectedSlots,
-    candidates.length,
-    maxCombinations,
-    selectedTalent,
-  ]);
+  }, [simcInput, selectedSlots, candidates.length, maxCombinations, selectedTalent]);
 
   async function handleSubmit() {
-    setError("");
+    setError('');
     setSubmitting(true);
     try {
       const selected = [...selectedSlots];
       if (selected.length === 0) {
-        throw new Error("Select at least one upgradeable item.");
+        throw new Error('Select at least one upgradeable item.');
       }
 
       const res = await fetch(`${API_URL}/api/upgrade-compare/sim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           simc_input: simcInput,
           selected_slots: selected,
@@ -404,9 +380,7 @@ export default function UpgradeComparePage() {
       const data = await res.json();
       window.location.href = `/sim/${data.id}`;
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to start simulation",
-      );
+      setError(err instanceof Error ? err.message : 'Failed to start simulation');
     } finally {
       setSubmitting(false);
     }
@@ -428,7 +402,7 @@ export default function UpgradeComparePage() {
 
   if (!simcInput.trim()) {
     return (
-      <p className="text-sm text-muted text-center py-6">
+      <p className="py-6 text-center text-sm text-muted">
         Paste your SimC addon export above to begin.
       </p>
     );
@@ -437,13 +411,11 @@ export default function UpgradeComparePage() {
   return (
     <div className="space-y-6">
       <div className="card p-4">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted mb-3">
+        <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted">
           Upgrade Currencies
         </p>
         {!hasUpgradeCurrencies ? (
-          <p className="text-sm text-muted">
-            No upgrade currencies found in your SimC export.
-          </p>
+          <p className="text-sm text-muted">No upgrade currencies found in your SimC export.</p>
         ) : (
           <div className="space-y-2">
             {upgradeCurrencyEntries.map(([currencyId, amount]) => {
@@ -451,16 +423,16 @@ export default function UpgradeComparePage() {
               return (
                 <div
                   key={currencyId}
-                  className="rounded-md bg-surface-2 border border-border px-3 py-2 text-sm flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm"
                 >
                   <Image
-                    src={getIconUrl(info?.icon || "inv_misc_questionmark")}
+                    src={getIconUrl(info?.icon || 'inv_misc_questionmark')}
                     alt=""
                     width={24}
                     height={24}
-                    className="w-6 h-6 rounded flex-shrink-0"
+                    className="h-6 w-6 flex-shrink-0 rounded"
                   />
-                  <span className="text-gray-300 truncate flex-1">
+                  <span className="flex-1 truncate text-gray-300">
                     {info?.name || `Currency ${currencyId}`}
                   </span>
                   <span className="font-mono tabular-nums text-white">
@@ -474,28 +446,23 @@ export default function UpgradeComparePage() {
       </div>
 
       <div className="card p-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="mb-3 flex items-center justify-between">
           <p className="text-xs font-medium uppercase tracking-widest text-muted">
             Upgradeable Equipped Items
           </p>
-          <span className="text-xs text-muted">
-            {serverComboCount} valid combos
-          </span>
+          <span className="text-xs text-muted">{serverComboCount} valid combos</span>
         </div>
 
         {loading ? (
           <p className="text-sm text-muted">Loading upgrade options...</p>
         ) : candidates.length === 0 ? (
-          <p className="text-sm text-muted">
-            No upgradeable equipped items found.
-          </p>
+          <p className="text-sm text-muted">No upgradeable equipped items found.</p>
         ) : (
           <div className="space-y-4">
             {candidateGroups.map((group) => {
               const groupSlots = group.candidates.map((c) => c.slot);
               const allSelected =
-                groupSlots.length > 0 &&
-                groupSlots.every((slot) => selectedSlots.has(slot));
+                groupSlots.length > 0 && groupSlots.every((slot) => selectedSlots.has(slot));
 
               return (
                 <div key={group.currencyId} className="space-y-2">
@@ -506,30 +473,24 @@ export default function UpgradeComparePage() {
                     <button
                       type="button"
                       onClick={() => toggleCurrencyGroup(group)}
-                      className="text-xs px-2 py-1 rounded border border-border bg-surface-2 hover:border-gold/40"
+                      className="rounded border border-border bg-surface-2 px-2 py-1 text-xs hover:border-gold/40"
                     >
-                      {allSelected ? "Deselect all" : "Select all"}
+                      {allSelected ? 'Deselect all' : 'Select all'}
                     </button>
                   </div>
 
                   {group.candidates.map((candidate) => {
                     const checked = selectedSlots.has(candidate.slot);
                     const info = itemInfo[candidate.item.item_id];
-                    const quality = info
-                      ? QUALITY_COLORS[info.quality] || "#fff"
-                      : "#fff";
-                    const icon = info?.icon || "inv_misc_questionmark";
+                    const quality = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
+                    const icon = info?.icon || 'inv_misc_questionmark';
                     const name =
-                      info?.name ||
-                      candidate.item.name ||
-                      `Item ${candidate.item.item_id}`;
+                      info?.name || candidate.item.name || `Item ${candidate.item.item_id}`;
                     return (
                       <label
                         key={candidate.slot}
-                        className={`flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer ${
-                          checked
-                            ? "border-gold/50 bg-gold/[0.05]"
-                            : "border-border bg-surface-2"
+                        className={`flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 ${
+                          checked ? 'border-gold/50 bg-gold/[0.05]' : 'border-border bg-surface-2'
                         }`}
                       >
                         <input
@@ -547,20 +508,16 @@ export default function UpgradeComparePage() {
                           alt=""
                           width={28}
                           height={28}
-                          className="w-7 h-7 rounded"
+                          className="h-7 w-7 rounded"
                         />
                         <div className="min-w-0 flex-1">
-                          <p
-                            className="text-sm truncate"
-                            style={{ color: quality }}
-                          >
-                            {SLOT_LABELS[candidate.slot] || candidate.slot}:{" "}
-                            {name}
+                          <p className="truncate text-sm" style={{ color: quality }}>
+                            {SLOT_LABELS[candidate.slot] || candidate.slot}: {name}
                           </p>
                           <p className="text-[11px] text-muted">
                             {candidate.item.ilevel}
-                            {" -> "}
-                            {candidate.target.itemLevel} |{" "}
+                            {' -> '}
+                            {candidate.target.itemLevel} |{' '}
                             {formatCosts(candidate.costs, currencyInfo)}
                           </p>
                         </div>
@@ -576,9 +533,9 @@ export default function UpgradeComparePage() {
 
       {/* Debug Info */}
       {selectedSlots.size > 0 && (
-        <div className="card p-4 border border-cyan-500/30 bg-cyan-500/[0.03]">
+        <div className="card border border-cyan-500/30 bg-cyan-500/[0.03] p-4">
           <details className="cursor-pointer">
-            <summary className="text-xs font-medium uppercase tracking-widest text-cyan-400 pb-3">
+            <summary className="pb-3 text-xs font-medium uppercase tracking-widest text-cyan-400">
               🐛 Debug Info - Simulation Combinations ({serverComboCount})
             </summary>
             <div className="space-y-3">
@@ -587,36 +544,28 @@ export default function UpgradeComparePage() {
               ) : debugData ? (
                 <>
                   <div>
-                    <p className="text-xs font-medium text-gray-300 mb-2">
+                    <p className="mb-2 text-xs font-medium text-gray-300">
                       Selected Items ({debugData.selected_items.length}):
                     </p>
                     <div className="space-y-1">
                       {debugData.selected_items.map((item) => (
-                        <div
-                          key={item.slot}
-                          className="text-xs text-gray-400 ml-4"
-                        >
+                        <div key={item.slot} className="ml-4 text-xs text-gray-400">
                           <span className="text-gray-500">
-                            {SLOT_LABELS[item.slot]?.toLowerCase() ||
-                              item.slot.toLowerCase()}
-                            :
-                          </span>{" "}
-                          {item.item_name} ({item.current_level}/
-                          {item.total_levels})
+                            {SLOT_LABELS[item.slot]?.toLowerCase() || item.slot.toLowerCase()}:
+                          </span>{' '}
+                          {item.item_name} ({item.current_level}/{item.total_levels})
                         </div>
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-xs font-medium text-gray-300 mb-2">
+                    <p className="mb-2 text-xs font-medium text-gray-300">
                       All Combinations ({debugData.combo_count}):
                     </p>
-                    <div className="bg-black/50 rounded border border-border max-h-96 overflow-y-auto">
+                    <div className="max-h-96 overflow-y-auto rounded border border-border bg-black/50">
                       {debugData.combinations.length === 0 ? (
-                        <div className="p-2 text-xs text-gray-500">
-                          No combinations to display
-                        </div>
+                        <div className="p-2 text-xs text-gray-500">No combinations to display</div>
                       ) : (
                         <div className="divide-y divide-border/50">
                           {debugData.combinations.map((combo, idx) => (
@@ -634,12 +583,11 @@ export default function UpgradeComparePage() {
                                     ).substring(0, 4);
                                     return `${abbreviation}:${item.choice_index}/${item.total_levels}`;
                                   })
-                                  .join(", ")}
+                                  .join(', ')}
                                 ]
                               </div>
-                              <div className="text-[9px] text-cyan-400/60 mt-1">
-                                Cost:{" "}
-                                {formatCosts(combo.total_costs, currencyInfo)}
+                              <div className="mt-1 text-[9px] text-cyan-400/60">
+                                Cost: {formatCosts(combo.total_costs, currencyInfo)}
                               </div>
                             </div>
                           ))}
@@ -647,9 +595,7 @@ export default function UpgradeComparePage() {
                       )}
                     </div>
                     {debugData.error && (
-                      <p className="text-[10px] text-red-400 mt-2">
-                        {debugData.error}
-                      </p>
+                      <p className="mt-2 text-[10px] text-red-400">{debugData.error}</p>
                     )}
                   </div>
                 </>
@@ -658,14 +604,12 @@ export default function UpgradeComparePage() {
               )}
 
               <div>
-                <p className="text-xs font-medium text-gray-300 mb-2">
-                  Payload Preview:
-                </p>
+                <p className="mb-2 text-xs font-medium text-gray-300">Payload Preview:</p>
                 <details>
-                  <summary className="text-xs text-cyan-400/70 cursor-pointer hover:text-cyan-400">
+                  <summary className="cursor-pointer text-xs text-cyan-400/70 hover:text-cyan-400">
                     View JSON
                   </summary>
-                  <pre className="text-[10px] text-gray-500 bg-black/40 rounded p-2 mt-2 overflow-x-auto max-h-64 overflow-y-auto">
+                  <pre className="mt-2 max-h-64 overflow-x-auto overflow-y-auto rounded bg-black/40 p-2 text-[10px] text-gray-500">
                     {JSON.stringify(
                       {
                         selected_slots: [...selectedSlots],
@@ -680,14 +624,14 @@ export default function UpgradeComparePage() {
                         ...(selectedTalent ? { talents: selectedTalent } : {}),
                       },
                       null,
-                      2,
+                      2
                     )}
                   </pre>
                 </details>
               </div>
 
               <div className="text-[11px] text-gray-400">
-                <span className="text-cyan-400/70">Valid Combinations:</span>{" "}
+                <span className="text-cyan-400/70">Valid Combinations:</span>{' '}
                 {serverComboCount.toLocaleString()}
               </div>
             </div>
@@ -703,12 +647,10 @@ export default function UpgradeComparePage() {
 
       <button
         onClick={handleSubmit}
-        disabled={
-          submitting || candidates.length === 0 || !hasUpgradeCurrencies
-        }
+        disabled={submitting || candidates.length === 0 || !hasUpgradeCurrencies}
         className="btn-primary w-full py-3 text-sm"
       >
-        {submitting ? "Starting sim..." : "Sim Upgrade Combinations"}
+        {submitting ? 'Starting sim...' : 'Sim Upgrade Combinations'}
       </button>
     </div>
   );

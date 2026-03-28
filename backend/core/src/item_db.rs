@@ -191,16 +191,24 @@ pub fn load(data_dir: &Path) {
         for entries in bus_raw.values() {
             for entry in entries {
                 let bonus_id = entry.get("bonusId").and_then(|b| b.as_u64()).unwrap_or(0);
-                if bonus_id == 0 { continue; }
+                if bonus_id == 0 {
+                    continue;
+                }
                 let mut by_currency: HashMap<u64, u64> = HashMap::new();
                 if let Some(cost_sets) = entry.get("costs").and_then(|c| c.as_array()) {
                     for set in cost_sets {
                         if let Some(amounts) = set.get("amounts").and_then(|a| a.as_array()) {
                             for amount in amounts {
-                                let cid = amount.get("currencyId").and_then(|v| v.as_u64()).unwrap_or(0);
-                                let val = amount.get("amount").and_then(|v| v.as_u64()).unwrap_or(0);
+                                let cid = amount
+                                    .get("currencyId")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                let val =
+                                    amount.get("amount").and_then(|v| v.as_u64()).unwrap_or(0);
                                 if cid > 0 {
-                                    if val > 0 { *by_currency.entry(cid).or_insert(0) += val; }
+                                    if val > 0 {
+                                        *by_currency.entry(cid).or_insert(0) += val;
+                                    }
                                     currency_info.entry(cid).or_insert_with(|| {
                                         let name = amount.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
                                         let icon = amount.get("icon").and_then(|v| v.as_str()).unwrap_or("inv_misc_questionmark").to_string();
@@ -211,7 +219,9 @@ pub fn load(data_dir: &Path) {
                         }
                     }
                 }
-                if !by_currency.is_empty() { step_costs.insert(bonus_id, by_currency); }
+                if !by_currency.is_empty() {
+                    step_costs.insert(bonus_id, by_currency);
+                }
             }
         }
         let _ = UPGRADE_STEP_COSTS.set(step_costs);
@@ -442,11 +452,16 @@ pub fn get_item_armor_subclass(item_id: u64) -> Option<u64> {
 // ---- Upgrade Functions ----
 
 fn upgrade_step_costs(bonus_id: u64) -> HashMap<u64, u64> {
-    UPGRADE_STEP_COSTS.get().and_then(|m| m.get(&bonus_id).cloned()).unwrap_or_default()
+    UPGRADE_STEP_COSTS
+        .get()
+        .and_then(|m| m.get(&bonus_id).cloned())
+        .unwrap_or_default()
 }
 
 fn add_cost_map(target: &mut HashMap<u64, u64>, add: &HashMap<u64, u64>) {
-    for (cid, amount) in add { *target.entry(*cid).or_insert(0) += *amount; }
+    for (cid, amount) in add {
+        *target.entry(*cid).or_insert(0) += *amount;
+    }
 }
 
 pub fn get_currency_info(currency_id: u64) -> Option<Value> {
@@ -533,27 +548,53 @@ pub fn get_upgrade_options(bonus_ids: &[u64]) -> Option<Vec<Value>> {
 fn upgrade_group_and_level(bonus_ids: &[u64]) -> Option<(u64, u64)> {
     let um = upgrade_max();
     for bid in bonus_ids {
-        if !um.contains_key(bid) { continue; }
+        if !um.contains_key(bid) {
+            continue;
+        }
         let bonus = bonuses().get(bid)?;
-        let group = bonus.get("upgrade").and_then(|u| u.get("group")).and_then(|g| g.as_u64());
-        let level = bonus.get("upgrade").and_then(|u| u.get("level")).and_then(|l| l.as_u64());
-        if let (Some(g), Some(l)) = (group, level) { return Some((g, l)); }
+        let group = bonus
+            .get("upgrade")
+            .and_then(|u| u.get("group"))
+            .and_then(|g| g.as_u64());
+        let level = bonus
+            .get("upgrade")
+            .and_then(|u| u.get("level"))
+            .and_then(|l| l.as_u64());
+        if let (Some(g), Some(l)) = (group, level) {
+            return Some((g, l));
+        }
     }
     None
 }
 
 fn bonus_id_for_group_level(group_id: u64, level: u64) -> Option<u64> {
     bonuses().iter().find_map(|(bid, bonus)| {
-        let g = bonus.get("upgrade").and_then(|u| u.get("group")).and_then(|v| v.as_u64());
-        let l = bonus.get("upgrade").and_then(|u| u.get("level")).and_then(|v| v.as_u64());
-        if g == Some(group_id) && l == Some(level) { Some(*bid) } else { None }
+        let g = bonus
+            .get("upgrade")
+            .and_then(|u| u.get("group"))
+            .and_then(|v| v.as_u64());
+        let l = bonus
+            .get("upgrade")
+            .and_then(|u| u.get("level"))
+            .and_then(|v| v.as_u64());
+        if g == Some(group_id) && l == Some(level) {
+            Some(*bid)
+        } else {
+            None
+        }
     })
 }
 
 pub fn get_upgrade_cost_between(old_bonus_ids: &[u64], new_bonus_ids: &[u64]) -> HashMap<u64, u64> {
-    let Some((group_old, level_old)) = upgrade_group_and_level(old_bonus_ids) else { return HashMap::new(); };
-    let Some((group_new, level_new)) = upgrade_group_and_level(new_bonus_ids) else { return HashMap::new(); };
-    if group_old != group_new || level_new <= level_old { return HashMap::new(); }
+    let Some((group_old, level_old)) = upgrade_group_and_level(old_bonus_ids) else {
+        return HashMap::new();
+    };
+    let Some((group_new, level_new)) = upgrade_group_and_level(new_bonus_ids) else {
+        return HashMap::new();
+    };
+    if group_old != group_new || level_new <= level_old {
+        return HashMap::new();
+    }
     let mut total = HashMap::new();
     for level in (level_old + 1)..=level_new {
         if let Some(sbid) = bonus_id_for_group_level(group_old, level) {

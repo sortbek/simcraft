@@ -827,9 +827,7 @@ async fn create_droptimizer_sim(
     })
 }
 
-async fn get_upgrade_compare_combo_count(
-    req: web::Json<UpgradeCompareRequest>,
-) -> HttpResponse {
+async fn get_upgrade_compare_combo_count(req: web::Json<UpgradeCompareRequest>) -> HttpResponse {
     let prepared = match prepare_upgrade_compare_request(&req) {
         Ok(prepared) => prepared,
         Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
@@ -905,10 +903,11 @@ fn prepare_upgrade_compare_request(
             continue;
         };
 
-        let Some(equipped) = items
-            .iter()
-            .find(|it| it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false))
-        else {
+        let Some(equipped) = items.iter().find(|it| {
+            it.get("is_equipped")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        }) else {
             continue;
         };
 
@@ -973,7 +972,10 @@ fn prepare_upgrade_compare_request(
             continue;
         }
 
-        let item_id = equipped.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+        let item_id = equipped
+            .get("item_id")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         let item_name = equipped
             .get("name")
             .and_then(|v| v.as_str())
@@ -984,7 +986,13 @@ fn prepare_upgrade_compare_request(
         for (target_level, target_bonus_id) in slot_upgrades {
             let new_bonus_ids: Vec<u64> = old_bonus_ids
                 .iter()
-                .map(|bid| if *bid == current_bonus_id { target_bonus_id } else { *bid })
+                .map(|bid| {
+                    if *bid == current_bonus_id {
+                        target_bonus_id
+                    } else {
+                        *bid
+                    }
+                })
                 .collect();
 
             if new_bonus_ids == old_bonus_ids || new_bonus_ids.is_empty() {
@@ -1047,31 +1055,30 @@ fn prepare_upgrade_compare_request(
     })
 }
 
-async fn get_upgrade_compare_debug(
-    req: web::Json<UpgradeCompareRequest>,
-) -> HttpResponse {
+async fn get_upgrade_compare_debug(req: web::Json<UpgradeCompareRequest>) -> HttpResponse {
     let prepared = match prepare_upgrade_compare_request(&req) {
         Ok(prepared) => prepared,
         Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
     };
 
-    let (_, combo_count, combo_metadata) = match profileset_generator::generate_upgrade_compare_input(
-        &prepared.base_profile,
-        &prepared.upgraded_options_by_slot,
-        &prepared.dawncrest_budget,
-        req.max_combinations,
-    ) {
-        Ok(result) => result,
-        Err(e) => {
-            return HttpResponse::Ok().json(UpgradeCompareDebugResponse {
-                selected_items: prepared.selected_items,
-                combo_count: combo_count_from_generation_error(&e),
-                combinations: Vec::new(),
-                truncated_count: 0,
-                error: Some(e),
-            });
-        }
-    };
+    let (_, combo_count, combo_metadata) =
+        match profileset_generator::generate_upgrade_compare_input(
+            &prepared.base_profile,
+            &prepared.upgraded_options_by_slot,
+            &prepared.dawncrest_budget,
+            req.max_combinations,
+        ) {
+            Ok(result) => result,
+            Err(e) => {
+                return HttpResponse::Ok().json(UpgradeCompareDebugResponse {
+                    selected_items: prepared.selected_items,
+                    combo_count: combo_count_from_generation_error(&e),
+                    combinations: Vec::new(),
+                    truncated_count: 0,
+                    error: Some(e),
+                });
+            }
+        };
 
     let slot_positions: HashMap<String, usize> = prepared
         .slot_order
@@ -1208,6 +1215,7 @@ async fn create_upgrade_compare_sim(
     })
 }
 
+#[cfg(not(feature = "desktop"))]
 #[derive(Debug, Deserialize)]
 struct ListSimsQuery {
     #[serde(default)]
@@ -1852,12 +1860,18 @@ pub async fn start_with_storage_bind(
                 "/api/top-gear/combo-count",
                 web::post().to(get_top_gear_combo_count),
             )
-            .route("/api/upgrade-compare/sim", web::post().to(create_upgrade_compare_sim))
+            .route(
+                "/api/upgrade-compare/sim",
+                web::post().to(create_upgrade_compare_sim),
+            )
             .route(
                 "/api/upgrade-compare/combo-count",
                 web::post().to(get_upgrade_compare_combo_count),
             )
-            .route("/api/upgrade-compare/debug", web::post().to(get_upgrade_compare_debug))
+            .route(
+                "/api/upgrade-compare/debug",
+                web::post().to(get_upgrade_compare_debug),
+            )
             .route("/api/sim/{id}", web::get().to(get_sim_status))
             .route("/api/sim/{id}/logs", web::get().to(get_sim_logs))
             .route("/api/sim/{id}/cancel", web::post().to(cancel_sim))
