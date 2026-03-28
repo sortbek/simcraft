@@ -45,6 +45,13 @@ pub fn get_instance_drops(
         _ => Vec::new(),
     };
 
+    let instance_name = instance
+        .get("name")
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
+    let is_meta = instance_id < 0;
+
     let encounters = instance.get("encounters")?.as_array()?;
     let encounter_ids: HashMap<i64, String> = encounters
         .iter()
@@ -54,6 +61,29 @@ pub fn get_instance_drops(
             Some((id, name))
         })
         .collect();
+
+    // For meta-instances (pools), the encounter IDs are actually instance IDs.
+    // Map each encounter ID to the instance name by direct ID lookup.
+    let encounter_to_instance: HashMap<i64, String> = if is_meta {
+        let mut map = HashMap::new();
+        for inst in instances {
+            let iid = inst.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+            if iid <= 0 {
+                continue;
+            }
+            if encounter_ids.contains_key(&iid) {
+                let iname = inst
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                map.insert(iid, iname);
+            }
+        }
+        map
+    } else {
+        HashMap::new()
+    };
 
     let drops_map = item_db::drops_by_encounter();
     let armor_slot_types = class_data::ARMOR_INVENTORY_TYPES;
@@ -204,6 +234,15 @@ pub fn get_instance_drops(
                     .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
                     .unwrap_or_default();
 
+                let item_instance = if is_meta {
+                    encounter_to_instance
+                        .get(eid)
+                        .cloned()
+                        .unwrap_or_default()
+                } else {
+                    instance_name.clone()
+                };
+
                 let mut item_json = serde_json::json!({
                     "item_id": item_id,
                     "name": item.get("name").and_then(|n| n.as_str()).unwrap_or(""),
@@ -212,6 +251,7 @@ pub fn get_instance_drops(
                     "ilevel": item.get("itemLevel").and_then(|i| i.as_u64()).unwrap_or(0),
                     "inventory_type": inv_type,
                     "encounter": encounter_ids.get(eid).cloned().unwrap_or_default(),
+                    "instance_name": item_instance,
                 });
                 if !item_specs.is_empty() {
                     item_json["specs"] = serde_json::json!(item_specs);

@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import type { DropItem, UpgradeTracks } from './types';
 import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 
@@ -17,6 +18,8 @@ const SLOT_ORDER = [
   'Finger',
   'Trinket',
 ];
+
+type GroupMode = 'slot' | 'instance';
 
 interface DropSlotListProps {
   drops: Record<string, DropItem[]>;
@@ -43,7 +46,34 @@ export default function DropSlotList({
   upgradeTracks,
   headerLabel,
 }: DropSlotListProps) {
+  const [groupMode, setGroupMode] = useState<GroupMode>('slot');
   const totalItems = Object.values(drops).reduce((n, items) => n + items.length, 0);
+
+  const allItems = useMemo(
+    () => Object.values(drops).flat(),
+    [drops],
+  );
+
+  const instanceSorted = useMemo(() => {
+    const groups = new Map<string, DropItem[]>();
+    for (const item of allItems) {
+      const inst = item.instance_name || 'Unknown';
+      const list = groups.get(inst) || [];
+      list.push(item);
+      groups.set(inst, list);
+    }
+    return [...groups.entries()];
+  }, [allItems]);
+
+  const slotSorted = useMemo(
+    () =>
+      [...Object.entries(drops)].sort(([a], [b]) => {
+        const ai = SLOT_ORDER.indexOf(a);
+        const bi = SLOT_ORDER.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      }),
+    [drops],
+  );
 
   return (
     <div className="space-y-4">
@@ -54,7 +84,22 @@ export default function DropSlotList({
             <span className="ml-1.5 text-gold">({selected.size} selected)</span>
           )}
         </p>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1">
+            {([['instance', 'By Instance'], ['slot', 'By Slot']] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setGroupMode(mode)}
+                className={`rounded border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                  groupMode === mode
+                    ? 'border-white bg-white text-black'
+                    : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={onSelectAll}
             className="text-[11px] text-gray-500 transition-colors hover:text-white"
@@ -70,16 +115,11 @@ export default function DropSlotList({
         </div>
       </div>
 
-      {[...Object.entries(drops)]
-        .sort(([a], [b]) => {
-          const ai = SLOT_ORDER.indexOf(a);
-          const bi = SLOT_ORDER.indexOf(b);
-          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-        })
-        .map(([slot, items]) => (
-          <div key={slot} className="card p-4">
+      {(groupMode === 'instance' ? instanceSorted : slotSorted).map(
+        ([groupLabel, items]) => (
+          <div key={groupLabel} className="card p-4">
             <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted">
-              {slot}
+              {groupLabel}
               <span className="ml-1.5 font-normal normal-case tracking-normal text-gray-600">
                 ({items.length})
               </span>
@@ -99,7 +139,8 @@ export default function DropSlotList({
               ))}
             </div>
           </div>
-        ))}
+        ),
+      )}
     </div>
   );
 }
@@ -149,17 +190,22 @@ function DropItemCard({
           </div>
         )}
       </div>
-      <a
-        href={`https://www.wowhead.com/item=${item.item_id}`}
-        data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
-        target="_blank"
-        rel="noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className={`text-[12px] font-medium ${isOffSpec ? 'opacity-60' : ''} ${QUALITY_COLORS[resolved.quality] || 'text-gray-400'}`}
-      >
-        {item.name}
-      </a>
-      <span className={`text-[11px] tabular-nums text-gray-600 ${isOffSpec ? 'opacity-60' : ''}`}>
+      <div className={`min-w-0 ${isOffSpec ? 'opacity-60' : ''}`}>
+        <a
+          href={`https://www.wowhead.com/item=${item.item_id}`}
+          data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className={`block text-[12px] font-medium leading-tight ${QUALITY_COLORS[resolved.quality] || 'text-gray-400'}`}
+        >
+          {item.name}
+        </a>
+        {item.encounter && (
+          <span className="text-[10px] text-zinc-500">{item.encounter}</span>
+        )}
+      </div>
+      <span className={`shrink-0 text-[11px] tabular-nums text-gray-600 ${isOffSpec ? 'opacity-60' : ''}`}>
         {resolved.ilvl}
       </span>
     </button>
