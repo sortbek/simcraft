@@ -33,19 +33,16 @@ export default function DungeonGrid({
       >
         <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 brightness-[0.5] saturate-[0.7]">
           {instances
+            .filter((inst) => inst.image_url)
             .slice(0, 4)
-            .map((inst) =>
-              inst.image_url ? (
-                <img
-                  key={inst.id}
-                  src={imgSrc(inst.image_url)}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div key={inst.id} className="bg-surface-2" />
-              )
-            )}
+            .map((inst) => (
+              <img
+                key={inst.id}
+                src={imgSrc(inst.image_url!)}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ))}
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         <div className="relative w-full px-3 pb-3 pt-1">

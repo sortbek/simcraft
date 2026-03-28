@@ -135,8 +135,8 @@ function downloadFile(url, dest) {
 async function compactInstances(inputPath, outputPath, inputDir, outputDir) {
   const data = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 
-  // Load instance image URLs from Blizzard API data (fetched at build time)
-  let imageMap = new Map(); // instance_id -> remote_url
+  // Load instance and encounter image URLs from Blizzard API data (fetched at build time)
+  let imageMap = new Map(); // id -> remote_url (instances + encounters)
 
   // Primary: blizzard-instances.json (all expansion dungeons + raids)
   const instancesPath = path.join(inputDir, "blizzard-instances.json");
@@ -146,6 +146,12 @@ async function compactInstances(inputPath, outputPath, inputDir, outputDir) {
       for (const inst of [...(instances.dungeons || []), ...(instances.raids || [])]) {
         if (inst.id && inst.image_url) {
           imageMap.set(inst.id, inst.image_url);
+        }
+        // Encounter creature images
+        for (const enc of inst.encounters || []) {
+          if (enc.id && enc.image_url) {
+            imageMap.set(enc.id, enc.image_url);
+          }
         }
       }
     } catch { /* malformed file */ }
@@ -162,6 +168,14 @@ async function compactInstances(inputPath, outputPath, inputDir, outputDir) {
         }
       }
     } catch { /* malformed file */ }
+  }
+
+  // Fallback: use any image_url already present in source instances.json
+  // (covers synthetic entries like World Bosses that aren't in Blizzard journal data)
+  for (const inst of data) {
+    if (!imageMap.has(inst.id) && inst.image_url && inst.image_url.startsWith("http")) {
+      imageMap.set(inst.id, inst.image_url);
+    }
   }
 
   // Download images to output dir
@@ -186,15 +200,19 @@ async function compactInstances(inputPath, outputPath, inputDir, outputDir) {
     console.log(`    (downloaded ${downloaded}/${imageMap.size} instance images)`);
   }
 
-  // Write local paths into instance data
+  // Write local paths into instance data (and remove broken external URLs)
   for (const instance of data) {
     if (localMap.has(instance.id)) {
       instance.image_url = localMap.get(instance.id);
+    } else if (instance.image_url && instance.image_url.startsWith("http")) {
+      delete instance.image_url;
     }
     if (instance.encounters) {
       for (const enc of instance.encounters) {
         if (localMap.has(enc.id)) {
           enc.image_url = localMap.get(enc.id);
+        } else if (enc.image_url && enc.image_url.startsWith("http")) {
+          delete enc.image_url;
         }
       }
     }

@@ -19,6 +19,7 @@ backend/target/
 backend/resources/data/
 backend/resources/data-full/
 backend/resources/data-compact/
+backend/resources/data-compacted/
 backend/resources/simc/
 backend/resources/frontend/
 desktop/resources/
