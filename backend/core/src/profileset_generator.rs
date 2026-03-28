@@ -472,6 +472,222 @@ pub fn generate_droptimizer_input(
     (lines.join("\n"), combo_count, combo_metadata)
 }
 
+// ---- Upgrade Compare ----
+
+/// Generate profileset input for upgrade comparison.
+///
+/// Uses DFS to enumerate all valid combinations of item upgrades
+/// within the given currency budget. Each combination is a profileset
+/// where selected items are upgraded to different levels.
+pub fn generate_upgrade_compare_input(
+    base_profile: &str,
+    upgraded_options_by_slot: &HashMap<String, Vec<Value>>,
+    upgrade_budget: &HashMap<u64, u64>,
+    max_combos_override: Option<usize>,
+) -> ProfilesetResult {
+    let (base_lines, equipped_gear, talents_string, _spec) = parse_base_profile(base_profile);
+
+    let mut slots: Vec<String> = upgraded_options_by_slot
+        .keys()
+        .filter(|s| !upgraded_options_by_slot[*s].is_empty())
+        .cloned()
+        .collect();
+    slots.sort();
+    if slots.is_empty() {
+        return Err("No upgradeable equipped items were selected.".to_string());
+    }
+
+    let limit = max_combos_override.unwrap_or(*MAX_COMBINATIONS);
+
+    // DFS: explore upgrade choices per slot within budget
+    struct Combo {
+        choices: Vec<(String, usize)>, // (slot, option_index)
+    }
+
+    fn within_budget(
+        spent: &HashMap<u64, u64>,
+        cost: &HashMap<u64, u64>,
+        budget: &HashMap<u64, u64>,
+    ) -> bool {
+        cost.iter().all(|(cid, amount)| {
+            let next = spent.get(cid).copied().unwrap_or(0) + amount;
+            next <= budget.get(cid).copied().unwrap_or(0)
+        })
+    }
+
+    let mut retained: Vec<Combo> = Vec::new();
+    let mut best_spend: u64 = 0;
+
+    fn dfs(
+        idx: usize,
+        slots: &[String],
+        options: &HashMap<String, Vec<Value>>,
+        budget: &HashMap<u64, u64>,
+        spent: &mut HashMap<u64, u64>,
+        current: &mut Vec<(String, usize)>,
+        best_spend: &mut u64,
+        retained: &mut Vec<Combo>,
+        limit: usize,
+    ) {
+        if idx == slots.len() {
+            let total: u64 = spent.values().sum();
+            if total > *best_spend {
+                *best_spend = total;
+                retained.clear();
+            }
+            if total >= *best_spend {
+                retained.push(Combo {
+                    choices: current.clone(),
+                });
+            }
+            return;
+        }
+
+        let slot = &slots[idx];
+        let slot_opts = match options.get(slot) {
+            Some(o) => o,
+            None => {
+                // No upgrade for this slot — keep equipped (option 0 = no change)
+                current.push((slot.clone(), 0));
+                dfs(
+                    idx + 1, slots, options, budget, spent, current, best_spend, retained, limit,
+                );
+                current.pop();
+                return;
+            }
+        };
+
+        // Option 0: keep current (no upgrade)
+        current.push((slot.clone(), 0));
+        dfs(
+            idx + 1, slots, options, budget, spent, current, best_spend, retained, limit,
+        );
+        current.pop();
+
+        // Options 1..N: upgrade to each level
+        for (i, opt) in slot_opts.iter().enumerate() {
+            let costs: HashMap<u64, u64> = opt
+                .get("upgrade_costs")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+
+            if !within_budget(spent, &costs, budget) {
+                continue;
+            }
+
+            // Add costs
+            for (cid, amount) in &costs {
+                *spent.entry(*cid).or_insert(0) += amount;
+            }
+            current.push((slot.clone(), i + 1)); // 1-indexed (0 = keep)
+
+            dfs(
+                idx + 1, slots, options, budget, spent, current, best_spend, retained, limit,
+            );
+
+            current.pop();
+            // Remove costs
+            for (cid, amount) in &costs {
+                let entry = spent.entry(*cid).or_insert(0);
+                *entry = entry.saturating_sub(*amount);
+            }
+
+            if retained.len() > limit * 2 {
+                return; // Safety valve
+            }
+        }
+    }
+
+    let mut spent: HashMap<u64, u64> = HashMap::new();
+    let mut current: Vec<(String, usize)> = Vec::new();
+    dfs(
+        0,
+        &slots,
+        upgraded_options_by_slot,
+        upgrade_budget,
+        &mut spent,
+        &mut current,
+        &mut best_spend,
+        &mut retained,
+        limit,
+    );
+
+    if retained.len() > limit {
+        return Err(format!(
+            "Too many upgrade combinations ({}). Maximum is {}. Please deselect some items.",
+            retained.len(),
+            limit
+        ));
+    }
+
+    // Build profileset output
+    let mut lines: Vec<String> = Vec::new();
+    let mut combo_metadata: HashMap<String, Vec<Value>> = HashMap::new();
+
+    // Base actor
+    lines.push("# Base Actor".to_string());
+    lines.extend(base_lines);
+    lines.push("### Combo 1".to_string());
+    for slot in GEAR_SLOTS {
+        if let Some(gear) = equipped_gear.get(*slot) {
+            lines.push(format!("{}={}", slot, gear));
+        } else if *slot == "off_hand" {
+            lines.push("off_hand=,".to_string());
+        }
+    }
+    if !talents_string.is_empty() {
+        lines.push(format!("talents={}", talents_string));
+    }
+    lines.push(String::new());
+
+    let mut combo_idx = 2usize;
+
+    for combo in &retained {
+        // Check if all choices are "keep" (no upgrades)
+        if combo.choices.iter().all(|(_, idx)| *idx == 0) {
+            continue;
+        }
+
+        let combo_name = format!("Combo {}", combo_idx);
+        let mut items_meta: Vec<Value> = Vec::new();
+
+        lines.push(format!("### {}", combo_name));
+
+        for (slot, choice_idx) in &combo.choices {
+            if *choice_idx == 0 {
+                continue; // Keep equipped
+            }
+            let opt = &upgraded_options_by_slot[slot][*choice_idx - 1];
+            let simc = opt.get("simc_string").and_then(|v| v.as_str()).unwrap_or("");
+            if !simc.is_empty() {
+                lines.push(format!("profileset.\"{}\"+={}={}", combo_name, slot, simc));
+            }
+
+            let mut meta = item_meta(opt, slot);
+            meta["is_kept"] = json!(false);
+            meta["upgrade_levels"] = opt
+                .get("upgrade_levels")
+                .cloned()
+                .unwrap_or(json!(0));
+            items_meta.push(meta);
+        }
+
+        if !talents_string.is_empty() {
+            lines.push(format!(
+                "profileset.\"{}\"+=talents={}",
+                combo_name, talents_string
+            ));
+        }
+        lines.push(String::new());
+
+        combo_metadata.insert(combo_name, items_meta);
+        combo_idx += 1;
+    }
+
+    let combo_count = combo_idx - 2;
+    Ok((lines.join("\n"), combo_count, combo_metadata))
+}
+
 /// Vault constraint: at most one vault item across all slots.
 /// An item and its upgraded copy (same item_id) count as a single vault pick.
 fn validate_vault_constraint(gear_set: &HashMap<String, Value>) -> bool {

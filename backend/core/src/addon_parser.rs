@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::collections::HashMap;
 
 use crate::types::class_data::{self, GEAR_SLOTS};
 use crate::types::{CharacterInfo, ItemOrigin, ParseResult, RawParsedItem, TalentLoadout};
@@ -226,4 +227,30 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
         base_profile: base_profile_lines.join("\n"),
         talent_loadouts,
     }
+}
+
+/// Extract upgrade currency budget from a SimC addon string.
+///
+/// Parses lines like: `# upgrade_currencies = 3068:80/3069:100`
+/// Returns a map of currency_id → amount.
+pub fn parse_upgrade_currencies(simc_input: &str) -> HashMap<u64, u64> {
+    let line_re = Regex::new(r"(?i)^#?\s*upgrade_currencies\s*=\s*(.+)$").unwrap();
+    // Only match c:ID:AMOUNT entries (currencies), skip i:ID:AMOUNT (items)
+    let pair_re = Regex::new(r"c:(\d+):(\d+)").unwrap();
+
+    let mut currencies = HashMap::new();
+    for line in simc_input.lines() {
+        if let Some(caps) = line_re.captures(line.trim()) {
+            let rhs = &caps[1];
+            for pair in pair_re.captures_iter(rhs) {
+                let id: u64 = pair[1].parse().unwrap_or(0);
+                let amount: u64 = pair[2].parse().unwrap_or(0);
+                if id > 0 {
+                    currencies.insert(id, amount);
+                }
+            }
+            break;
+        }
+    }
+    currencies
 }
