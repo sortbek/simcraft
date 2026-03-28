@@ -12,6 +12,11 @@ const nextConfig = {
         hostname: "wow.zamimg.com",
         pathname: "/images/wow/icons/**",
       },
+      {
+        protocol: "https",
+        hostname: "render.worldofwarcraft.com",
+        pathname: "/icons/**",
+      },
     ],
   },
 };

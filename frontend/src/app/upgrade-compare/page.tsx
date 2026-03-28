@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useSimContext } from "../components/SimContext";
 import { API_URL } from "../lib/api";
@@ -295,7 +296,7 @@ export default function UpgradeComparePage() {
     return () => {
       cancelled = true;
     };
-  }, [simcInput, upgradeCurrencyKey]);
+  }, [simcInput, upgradeCurrencyKey, upgradeCurrencyIdSet]);
 
   useEffect(() => {
     if (!simcInput.trim()) {
@@ -452,7 +453,7 @@ export default function UpgradeComparePage() {
                   key={currencyId}
                   className="rounded-md bg-surface-2 border border-border px-3 py-2 text-sm flex items-center gap-2"
                 >
-                  <img
+                  <Image
                     src={getIconUrl(info?.icon || "inv_misc_questionmark")}
                     alt=""
                     width={24}
@@ -541,7 +542,7 @@ export default function UpgradeComparePage() {
                             setSelectedSlots(next);
                           }}
                         />
-                        <img
+                        <Image
                           src={getIconUrl(icon)}
                           alt=""
                           width={28}
