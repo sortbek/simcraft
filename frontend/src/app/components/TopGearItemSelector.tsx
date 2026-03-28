@@ -5,6 +5,7 @@ import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
 import { API_URL } from '../lib/api';
 import { useSimContext } from './SimContext';
+import GearItemRow from './GearItemRow';
 
 interface UpgradeOption {
   bonus_id: number;
@@ -244,6 +245,23 @@ export default function TopGearItemSelector({
     return result;
   }, [resolved]);
 
+  function itemDetails(item: ResolvedItem): { text: string; color?: string }[] {
+    const parts: { text: string; color?: string }[] = [];
+    if (item.origin === 'vault') parts.push({ text: 'Great Vault', color: 'text-amber-400/80' });
+    if (item.tag) parts.push({ text: item.tag });
+    if (item.upgrade) parts.push({ text: item.upgrade });
+    if (item.gem_name) {
+      parts.push({ text: item.gem_name, color: 'text-sky-400/70' });
+    } else if (item.sockets > 0) {
+      parts.push({
+        text: `${item.sockets > 1 ? item.sockets + ' ' : ''}Socket${item.sockets > 1 ? 's' : ''}`,
+        color: 'text-sky-400/70',
+      });
+    }
+    if (item.enchant_name) parts.push({ text: item.enchant_name, color: 'text-emerald-400/70' });
+    return parts;
+  }
+
   if (visibleGroups.length === 0) {
     return (
       <div className="card p-8 text-center">
@@ -287,113 +305,57 @@ export default function TopGearItemSelector({
             </p>
 
             {equipped.map((item, eqIdx) => (
-              <div
+              <GearItemRow
                 key={`eq-${eqIdx}`}
-                className="flex items-center gap-2.5 rounded-md bg-white/[0.03] px-2.5 py-2"
+                icon={item.icon}
+                name={item.name}
+                nameColor={item.quality_color}
+                details={itemDetails(item)}
+                ilevel={item.ilevel}
+                equipped
+                href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
+                wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
               >
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-white/10">
-                  <svg className="h-3 w-3 text-white/40" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M12 5L6.5 10.5L4 8"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-                <div className="h-8 w-8 shrink-0 overflow-hidden rounded ring-1 ring-white/5">
-                  <img
-                    src={getIconUrl(item.icon)}
-                    alt=""
-                    width={32}
-                    height={32}
-                    className="h-full w-full"
-                    loading="lazy"
-                  />
-                </div>
-                <ItemDetails
+                <UpgradeButton
                   item={item}
-                  upgradeMenuKey={item.uid}
                   upgradeMenuFor={upgradeMenuFor}
                   upgradeOptions={upgradeOptions}
                   loadingUpgrades={loadingUpgrades}
                   onUpgradeClick={() => openUpgradeMenu(item, item.uid)}
                   onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)}
                 />
-              </div>
+              </GearItemRow>
             ))}
 
             {equipped.length > 0 && alternatives.length > 0 && (
               <div className="!my-1.5 border-t border-border/50" />
             )}
 
-            {alternatives.map((item, altIdx) => {
-              const checked = isItemSelected(item, group);
-              const isVault = item.origin === 'vault';
-
-              return (
-                <label
-                  key={`alt-${altIdx}`}
-                  className={`group flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors ${
-                    checked
-                      ? isVault
-                        ? 'bg-amber-400/[0.12] ring-2 ring-amber-400/50'
-                        : 'bg-gold/[0.07]'
-                      : isVault
-                        ? 'bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:bg-amber-400/[0.08] hover:ring-amber-400/50'
-                        : 'hover:bg-white/[0.02]'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleItem(item, group)}
-                    className="peer sr-only"
-                  />
-                  <div
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border transition-all ${
-                      checked
-                        ? 'border-gold bg-gold'
-                        : 'border-gray-600 group-hover:border-gray-500'
-                    }`}
-                  >
-                    {checked && (
-                      <svg className="h-3 w-3 text-black" viewBox="0 0 16 16" fill="none">
-                        <path
-                          d="M12 5L6.5 10.5L4 8"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    )}
-                  </div>
-                  <div
-                    className={`h-8 w-8 shrink-0 overflow-hidden rounded ring-2 ${isVault ? 'ring-amber-400/70' : 'ring-white/5'}`}
-                  >
-                    <img
-                      src={getIconUrl(item.icon)}
-                      alt=""
-                      width={32}
-                      height={32}
-                      className="h-full w-full"
-                      loading="lazy"
-                    />
-                  </div>
-                  <ItemDetails
-                    item={item}
-                    upgradeMenuKey={item.uid}
-                    upgradeMenuFor={upgradeMenuFor}
-                    upgradeOptions={upgradeOptions}
-                    loadingUpgrades={loadingUpgrades}
-                    onUpgradeClick={() => openUpgradeMenu(item, item.uid)}
-                    onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)}
-                  />
-                </label>
-              );
-            })}
+            {alternatives.map((item, altIdx) => (
+              <GearItemRow
+                key={`alt-${altIdx}`}
+                icon={item.icon}
+                name={item.name}
+                nameColor={item.quality_color}
+                details={itemDetails(item)}
+                ilevel={item.ilevel}
+                selectable
+                checked={isItemSelected(item, group)}
+                onToggle={() => toggleItem(item, group)}
+                vault={item.origin === 'vault'}
+                href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
+                wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
+              >
+                <UpgradeButton
+                  item={item}
+                  upgradeMenuFor={upgradeMenuFor}
+                  upgradeOptions={upgradeOptions}
+                  loadingUpgrades={loadingUpgrades}
+                  onUpgradeClick={() => openUpgradeMenu(item, item.uid)}
+                  onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)}
+                />
+              </GearItemRow>
+            ))}
           </div>
         ))}
       </div>
@@ -401,9 +363,8 @@ export default function TopGearItemSelector({
   );
 }
 
-function ItemDetails({
+function UpgradeButton({
   item,
-  upgradeMenuKey,
   upgradeMenuFor,
   upgradeOptions,
   loadingUpgrades,
@@ -411,119 +372,77 @@ function ItemDetails({
   onUpgradeSelect,
 }: {
   item: ResolvedItem;
-  upgradeMenuKey: string;
   upgradeMenuFor: string | null;
   upgradeOptions: UpgradeOption[];
   loadingUpgrades: boolean;
   onUpgradeClick: () => void;
   onUpgradeSelect: (opt: UpgradeOption) => void;
 }) {
-  const hasUpgrade = !!item.upgrade;
-  const isMenuOpen = upgradeMenuFor === upgradeMenuKey;
-
-  const parts: { text: string; color?: string }[] = [];
-  if (item.origin === 'vault') parts.push({ text: 'Great Vault', color: 'text-amber-400/80' });
-  if (item.tag) parts.push({ text: item.tag });
-  if (item.upgrade) parts.push({ text: item.upgrade });
-  if (item.gem_name) {
-    parts.push({ text: item.gem_name, color: 'text-sky-400/70' });
-  } else if (item.sockets > 0) {
-    parts.push({
-      text: `${item.sockets > 1 ? item.sockets + ' ' : ''}Socket${item.sockets > 1 ? 's' : ''}`,
-      color: 'text-sky-400/70',
-    });
-  }
-  if (item.enchant_name) parts.push({ text: item.enchant_name, color: 'text-emerald-400/70' });
+  if (!item.upgrade) return null;
+  const isMenuOpen = upgradeMenuFor === item.uid;
 
   return (
-    <>
-      <div className="relative min-w-0 flex-1">
-        <a
-          href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
-          data-wowhead={item.item_id > 0 ? getWowheadData(item) : undefined}
-          className="pointer-events-auto block truncate text-[13px] leading-tight no-underline"
-          style={{ color: item.quality_color }}
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onUpgradeClick();
+        }}
+        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+          isMenuOpen
+            ? 'bg-gold/20 text-gold'
+            : 'text-gray-600 hover:bg-white/[0.05] hover:text-gray-400'
+        }`}
+        title="Add copy at different upgrade level"
+      >
+        <svg
+          className="h-3 w-3"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
         >
-          {item.name}
-        </a>
-        {parts.length > 0 && (
-          <span className="mt-0.5 block truncate text-[11px] text-muted">
-            {parts.map((p, i) => (
-              <span key={i}>
-                {i > 0 && <span className="opacity-40"> · </span>}
-                <span className={p.color || ''}>{p.text}</span>
-              </span>
-            ))}
-          </span>
-        )}
-        {isMenuOpen && (
-          <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-border bg-surface py-1 shadow-xl">
-            {loadingUpgrades ? (
-              <div className="px-3 py-2 text-[11px] text-muted">Loading...</div>
-            ) : upgradeOptions.length === 0 ? (
-              <div className="px-3 py-2 text-[11px] text-muted">No options</div>
-            ) : (
-              upgradeOptions.map((opt) => {
-                const isCurrent = item.bonus_ids.includes(opt.bonus_id);
-                return (
-                  <button
-                    key={opt.bonus_id}
-                    type="button"
-                    disabled={isCurrent}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      onUpgradeSelect(opt);
-                    }}
-                    className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[11px] ${
-                      isCurrent
-                        ? 'cursor-default text-muted'
-                        : 'text-gray-300 hover:bg-white/[0.05] hover:text-white'
-                    }`}
-                  >
-                    <span>{opt.fullName}</span>
-                    <span className="font-mono text-[10px] tabular-nums text-muted">
-                      {opt.itemLevel}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
-        {hasUpgrade && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              onUpgradeClick();
-            }}
-            className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
-              isMenuOpen
-                ? 'bg-gold/20 text-gold'
-                : 'text-gray-600 hover:bg-white/[0.05] hover:text-gray-400'
-            }`}
-            title="Add copy at different upgrade level"
-          >
-            <svg
-              className="h-3 w-3"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <path d="M8 12V4M5 7l3-3 3 3" />
-            </svg>
-          </button>
-        )}
-        <span className="font-mono text-xs tabular-nums text-muted">
-          {item.ilevel > 0 && item.ilevel}
-        </span>
-      </div>
-    </>
+          <path d="M8 12V4M5 7l3-3 3 3" />
+        </svg>
+      </button>
+      {isMenuOpen && (
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-border bg-surface py-1 shadow-xl">
+          {loadingUpgrades ? (
+            <div className="px-3 py-2 text-[11px] text-muted">Loading...</div>
+          ) : upgradeOptions.length === 0 ? (
+            <div className="px-3 py-2 text-[11px] text-muted">No options</div>
+          ) : (
+            upgradeOptions.map((opt) => {
+              const isCurrent = item.bonus_ids.includes(opt.bonus_id);
+              return (
+                <button
+                  key={opt.bonus_id}
+                  type="button"
+                  disabled={isCurrent}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onUpgradeSelect(opt);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[11px] ${
+                    isCurrent
+                      ? 'cursor-default text-muted'
+                      : 'text-gray-300 hover:bg-white/[0.05] hover:text-white'
+                  }`}
+                >
+                  <span>{opt.fullName}</span>
+                  <span className="font-mono text-[10px] tabular-nums text-muted">
+                    {opt.itemLevel}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
   );
 }

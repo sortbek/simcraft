@@ -305,7 +305,10 @@ export default function SimSharedConfig() {
   const { simcInput, setSimcInput } = useSimContext();
 
   const showConfig =
-    pathname === '/quick-sim' || pathname === '/top-gear' || pathname === '/drop-finder';
+    pathname === '/quick-sim' ||
+    pathname === '/top-gear' ||
+    pathname === '/drop-finder' ||
+    pathname === '/upgrade-compare';
   if (!showConfig) return null;
 
   const detectedInfo = parseCharacterInfo(simcInput);
