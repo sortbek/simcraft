@@ -13,6 +13,8 @@
 
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
+const http = require("http");
 
 // ---------------------------------------------------------------------------
 // Manifest: which files to include and which fields to keep per file.
@@ -48,8 +50,8 @@ const MANIFEST = {
   // Seasons — small file, keep as-is
   "seasons.json": null,
 
-  // Instances — small file, keep as-is
-  "instances.json": null,
+  // Instances — enriched with Blizzard CDN image URLs at compaction time
+  "instances.json": { custom: true, handler: "instances" },
 
   // Season config — our own file, keep as-is
   "season-config.json": null,
@@ -101,6 +103,106 @@ function compactItems(inputPath, outputPath) {
   fs.writeFileSync(outputPath, JSON.stringify(result));
 }
 
+/**
+ * Download a URL to a local file. Returns true on success.
+ */
+function downloadFile(url, dest) {
+  return new Promise((resolve) => {
+    const mod = url.startsWith("https") ? https : http;
+    const req = mod.get(url, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        downloadFile(res.headers.location, dest).then(resolve);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        resolve(false);
+        return;
+      }
+      const ws = fs.createWriteStream(dest);
+      res.pipe(ws);
+      ws.on("finish", () => { ws.close(); resolve(true); });
+      ws.on("error", () => resolve(false));
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(10000, () => { req.destroy(); resolve(false); });
+  });
+}
+
+/**
+ * Compact instances.json, download instance tile images, and rewrite URLs to local paths.
+ */
+async function compactInstances(inputPath, outputPath, inputDir, outputDir) {
+  const data = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+
+  // Load instance image URLs from Blizzard API data (fetched at build time)
+  let imageMap = new Map(); // instance_id -> remote_url
+
+  // Primary: blizzard-instances.json (all expansion dungeons + raids)
+  const instancesPath = path.join(inputDir, "blizzard-instances.json");
+  if (fs.existsSync(instancesPath)) {
+    try {
+      const instances = JSON.parse(fs.readFileSync(instancesPath, "utf8"));
+      for (const inst of [...(instances.dungeons || []), ...(instances.raids || [])]) {
+        if (inst.id && inst.image_url) {
+          imageMap.set(inst.id, inst.image_url);
+        }
+      }
+    } catch { /* malformed file */ }
+  }
+
+  // Supplement: blizzard-season.json M+ rotation (covers old-expansion dungeons in rotation)
+  const seasonPath = path.join(inputDir, "blizzard-season.json");
+  if (fs.existsSync(seasonPath)) {
+    try {
+      const season = JSON.parse(fs.readFileSync(seasonPath, "utf8"));
+      for (const d of season.mplus_rotation || []) {
+        if (d.instance_id != null && d.image_url && !imageMap.has(d.instance_id)) {
+          imageMap.set(d.instance_id, d.image_url);
+        }
+      }
+    } catch { /* malformed file */ }
+  }
+
+  // Download images to output dir
+  const imagesDir = path.join(outputDir, "instance-images");
+  const localMap = new Map(); // instance_id -> local api path
+  if (imageMap.size > 0) {
+    fs.mkdirSync(imagesDir, { recursive: true });
+    const results = await Promise.all(
+      [...imageMap.entries()].map(async ([id, url]) => {
+        const ext = path.extname(new URL(url).pathname) || ".jpg";
+        const filename = `${id}${ext}`;
+        const dest = path.join(imagesDir, filename);
+        const ok = await downloadFile(url, dest);
+        if (ok) {
+          localMap.set(id, `/api/data/instance-images/${filename}`);
+          return true;
+        }
+        return false;
+      })
+    );
+    const downloaded = results.filter(Boolean).length;
+    console.log(`    (downloaded ${downloaded}/${imageMap.size} instance images)`);
+  }
+
+  // Write local paths into instance data
+  for (const instance of data) {
+    if (localMap.has(instance.id)) {
+      instance.image_url = localMap.get(instance.id);
+    }
+    if (instance.encounters) {
+      for (const enc of instance.encounters) {
+        if (localMap.has(enc.id)) {
+          enc.image_url = localMap.get(enc.id);
+        }
+      }
+    }
+  }
+
+  fs.writeFileSync(outputPath, JSON.stringify(data));
+}
+
 function pickFields(obj, fields) {
   const result = {};
   for (const f of fields) {
@@ -109,9 +211,13 @@ function pickFields(obj, fields) {
   return result;
 }
 
-function compactFile(inputPath, outputPath, config) {
+async function compactFile(inputPath, outputPath, config, inputDir, outputDir) {
   if (config && config.custom) {
-    compactItems(inputPath, outputPath);
+    if (config.handler === "instances") {
+      await compactInstances(inputPath, outputPath, inputDir, outputDir);
+    } else {
+      compactItems(inputPath, outputPath);
+    }
     return;
   }
 
@@ -147,7 +253,7 @@ function compactFile(inputPath, outputPath, config) {
   }
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   if (args.length < 2) {
     console.error("Usage: node compact-data.js <input-dir> <output-dir>");
@@ -176,7 +282,7 @@ function main() {
     }
 
     const inSize = fs.statSync(inputPath).size;
-    compactFile(inputPath, outputPath, config);
+    await compactFile(inputPath, outputPath, config, inputDir, outputDir);
     const outSize = fs.statSync(outputPath).size;
 
     totalIn += inSize;
@@ -200,4 +306,4 @@ function fmt(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + "MB";
 }
 
-main();
+main().catch((err) => { console.error(err); process.exit(1); });

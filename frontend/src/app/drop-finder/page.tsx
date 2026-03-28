@@ -10,6 +10,7 @@ import { useSimSubmit } from '../lib/useSimSubmit';
 import type { SeasonConfigResponse, DifficultyDef, DungeonCategory } from '../lib/types';
 import CategorySelector from './CategorySelector';
 import DropSlotList from './DropSlotList';
+import DungeonGrid from './DungeonGrid';
 import {
   detectClass,
   detectSpec,
@@ -248,18 +249,21 @@ export default function DropFinderPage() {
     return [];
   }, [seasonConfig, isRaid, activeDungeonCat]);
 
+  const dungeonInstances = activeDungeonCat?.instances ?? [];
+  const activeInstances = isRaid ? raids : dungeonInstances;
+  const hasImages = activeInstances.some((i) => i.image_url);
+
+  const allKey = isRaid
+    ? 'type:raid'
+    : String(activeDungeonCat?.cat.poolInstanceId ?? 'type:dungeon');
+
   const instanceOptions = useMemo(() => {
-    const list = isRaid ? raids : (activeDungeonCat?.instances ?? []);
-    // For raids use type:raid (all raids), for dungeons use the pool instance ID
-    // so only dungeons in the current rotation are shown
-    const allKey = isRaid
-      ? 'type:raid'
-      : String(activeDungeonCat?.cat.poolInstanceId ?? 'type:dungeon');
+    const list = isRaid ? raids : dungeonInstances;
     return [
       { key: allKey, label: `All ${isRaid ? 'Raids' : 'Dungeons'}` },
       ...list.map((inst) => ({ key: String(inst.id), label: inst.name })),
     ];
-  }, [isRaid, raids, activeDungeonCat]);
+  }, [isRaid, raids, dungeonInstances, allKey]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];
@@ -339,7 +343,15 @@ export default function DropFinderPage() {
         dungeonCats={dungeonCats}
       />
 
-      {category && (
+      {category && hasImages ? (
+        <DungeonGrid
+          value={selectedId}
+          onChange={setSelectedId}
+          instances={activeInstances}
+          allKey={allKey}
+          allLabel={isRaid ? 'All Raids' : `All ${activeDungeonCat?.cat.label ?? 'Dungeons'}`}
+        />
+      ) : category ? (
         <div className="card p-5">
           <label className="label-text">{isRaid ? 'Select Raid' : 'Select Dungeon'}</label>
           <ToggleButtonGroup
@@ -348,7 +360,7 @@ export default function DropFinderPage() {
             options={instanceOptions}
           />
         </div>
-      )}
+      ) : null}
 
       {(isRaid || isDungeon) && selectedId && activeDifficulties.length > 0 && (
         <div className="card space-y-4 p-5">

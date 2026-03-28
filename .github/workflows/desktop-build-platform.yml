@@ -117,6 +117,8 @@ jobs:
             curl -sL -o "$f" "https://www.raidbots.com/static/data/live/$f"
           done
           cp ../../core/season-config.json ./season-config.json 2>/dev/null || true
+          curl -sL -o blizzard-season.json https://simhammer.com/api/blizzard/season || true
+          curl -sL -o blizzard-instances.json https://simhammer.com/api/blizzard/instances || true
 
       - name: Compact game data
         shell: bash

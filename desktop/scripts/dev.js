@@ -98,6 +98,21 @@ async function fetchGameData(dataDir) {
     fs.copyFileSync(seasonConfig, path.join(dataDir, "season-config.json"));
     console.log("[dev] Copied season-config.json");
   }
+
+  // Fetch Blizzard data (season + instance images)
+  for (const [file, url] of [
+    ["blizzard-season.json", "https://simhammer.com/api/blizzard/season"],
+    ["blizzard-instances.json", "https://simhammer.com/api/blizzard/instances"],
+  ]) {
+    try {
+      process.stdout.write(`[dev] Fetching ${file}... `);
+      const buf = await download(url);
+      fs.writeFileSync(path.join(dataDir, file), buf);
+      console.log("ok");
+    } catch {
+      console.log("skipped (unreachable)");
+    }
+  }
 }
 
 async function ensureResources() {

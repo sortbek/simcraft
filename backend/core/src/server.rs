@@ -24,6 +24,9 @@ use crate::types::ResolveGearResponse;
 #[derive(Clone)]
 struct FrontendDir(PathBuf);
 
+#[derive(Clone)]
+struct DataDir(PathBuf);
+
 #[cfg(feature = "desktop")]
 /// Shared system info state, refreshed in background for live CPU readings.
 struct SystemStats {
@@ -1362,8 +1365,9 @@ pub async fn start(resource_dir: &Path, frontend_dir: Option<PathBuf>) -> u16 {
     } else {
         resource_dir.join("simc").join("simc")
     };
+    let data_dir = Some(resource_dir.join("data"));
     let storage: Arc<dyn JobStorage> = Arc::new(crate::storage::memory::MemoryStorage::new());
-    start_with_storage(storage, simc_path, 17384, frontend_dir).await
+    start_with_storage(storage, simc_path, 17384, frontend_dir, data_dir).await
 }
 
 /// Start the actix-web HTTP server with a given storage backend.
@@ -1373,8 +1377,9 @@ pub async fn start_with_storage(
     simc_path: PathBuf,
     port: u16,
     frontend_dir: Option<PathBuf>,
+    data_dir: Option<PathBuf>,
 ) -> u16 {
-    start_with_storage_bind(storage, simc_path, "127.0.0.1", port, frontend_dir).await
+    start_with_storage_bind(storage, simc_path, "127.0.0.1", port, frontend_dir, data_dir).await
 }
 
 /// Start the actix-web HTTP server with a given storage backend and bind address.
@@ -1385,6 +1390,7 @@ pub async fn start_with_storage_bind(
     bind_host: &str,
     port: u16,
     frontend_dir: Option<PathBuf>,
+    data_dir: Option<PathBuf>,
 ) -> u16 {
     let store_data = web::Data::new(storage);
     let simc_data = web::Data::new(simc_path);
@@ -1392,6 +1398,7 @@ pub async fn start_with_storage_bind(
     #[cfg(feature = "desktop")]
     let stats_data = web::Data::new(Arc::new(Mutex::new(SystemStats::new())));
     let frontend = frontend_dir.clone();
+    let data = data_dir.clone();
 
     let bind_addr = format!("{}:{}", bind_host, port);
 
@@ -1465,6 +1472,17 @@ pub async fn start_with_storage_bind(
         #[cfg(not(feature = "desktop"))]
         {
             app = app.route("/api/sims", web::get().to(list_sims_filtered));
+        }
+
+        // Serve cached instance images from data directory
+        if let Some(ref dir) = data {
+            let images_dir = dir.join("instance-images");
+            if images_dir.exists() {
+                app = app.service(
+                    actix_files::Files::new("/api/data/instance-images", images_dir)
+                        .prefer_utf8(true),
+                );
+            }
         }
 
         // Serve static frontend files in production (not in dev mode)

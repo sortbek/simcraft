@@ -1,6 +1,7 @@
 interface DpsHeroCardProps {
   playerName: string;
   playerClass: string;
+  playerRealm?: string;
   dps: number;
   dpsError?: number;
   dpsErrorPct?: number;
@@ -16,6 +17,7 @@ interface DpsHeroCardProps {
 export default function DpsHeroCard({
   playerName,
   playerClass,
+  playerRealm,
   dps,
   dpsError,
   dpsErrorPct,
@@ -32,19 +34,35 @@ export default function DpsHeroCard({
     (iterations != null && iterations > 0) ||
     elapsedTime != null;
 
+  const insetUrl =
+    playerRealm && playerName
+      ? `https://simhammer.com/api/blizzard/character/${encodeURIComponent(playerRealm.toLowerCase())}/${encodeURIComponent(playerName.toLowerCase())}/media/inset`
+      : null;
+
   return (
     <div className="card overflow-hidden">
-      <div className="px-8 pb-6 pt-8 text-center">
-        <p className="mb-3 text-xs font-medium text-zinc-500">
-          {playerName} &middot; {playerClass}
-        </p>
-        <p className="text-5xl font-bold tabular-nums tracking-tight text-white">
-          {Math.round(dps).toLocaleString()}
-        </p>
-        <p className="mt-2 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-          Damage Per Second
-        </p>
-        {children}
+      <div className="relative overflow-hidden px-8 pb-6 pt-8 text-center">
+        {insetUrl && (
+          <img
+            src={insetUrl}
+            alt=""
+            className="pointer-events-none absolute bottom-0 left-0 h-[130%] w-auto -translate-x-1/4 object-contain opacity-15"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        )}
+        <div className="relative">
+          <p className="text-2xl font-bold tracking-tight text-white">{playerName}</p>
+          <p className="mt-0.5 text-sm font-medium text-gold/70">{playerClass}</p>
+          <p className="mt-4 text-5xl font-bold tabular-nums tracking-tight text-white">
+            {Math.round(dps).toLocaleString()}
+          </p>
+          <p className="mt-1.5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+            Damage Per Second
+          </p>
+          {children}
+        </div>
       </div>
       {hasMetadata && (
         <div className="flex items-center justify-center gap-px border-t border-border bg-surface-2">

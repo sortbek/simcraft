@@ -17,6 +17,7 @@ interface ResultsChartProps {
   fightLength: number;
   playerName: string;
   playerClass: string;
+  playerRealm?: string;
   abilities: Ability[];
   desiredTargets?: number;
   iterations?: number;
@@ -90,6 +91,7 @@ export default function ResultsChart({
   fightLength,
   playerName,
   playerClass,
+  playerRealm,
   abilities,
   desiredTargets,
   iterations,
@@ -107,6 +109,7 @@ export default function ResultsChart({
       <DpsHeroCard
         playerName={playerName}
         playerClass={playerClass}
+        playerRealm={playerRealm}
         dps={dps}
         dpsError={dpsError}
         dpsErrorPct={dpsErrorPct}

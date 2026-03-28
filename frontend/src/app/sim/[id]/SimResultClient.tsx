@@ -199,6 +199,7 @@ export default function SimResultClient() {
           <TopGearResults
             playerName={r.player_name as string}
             playerClass={r.player_class as string}
+            playerRealm={r.realm as string | undefined}
             baseDps={r.base_dps as number}
             results={
               r.results as Array<{
@@ -250,6 +251,7 @@ export default function SimResultClient() {
             fightLength={r.fight_length as number}
             playerName={r.player_name as string}
             playerClass={r.player_class as string}
+            playerRealm={r.realm as string | undefined}
             abilities={
               (r.abilities as Array<{
                 name: string;

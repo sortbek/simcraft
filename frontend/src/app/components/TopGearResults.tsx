@@ -38,6 +38,7 @@ interface TopGearResult {
 interface TopGearResultsProps {
   playerName: string;
   playerClass: string;
+  playerRealm?: string;
   baseDps: number;
   results: TopGearResult[];
   equippedGear?: Record<string, ResultItem>;
@@ -68,6 +69,7 @@ const ALL_SLOTS = [...GEAR_ORDER_LEFT, ...GEAR_ORDER_RIGHT, ...GEAR_ORDER_BOTTOM
 export default function TopGearResults({
   playerName,
   playerClass,
+  playerRealm,
   baseDps,
   results,
   equippedGear,
@@ -182,11 +184,17 @@ export default function TopGearResults({
 
   const hasGearOverview = equippedGear && Object.keys(equippedGear).length > 0;
 
+  const characterRenderUrl =
+    playerRealm && playerName
+      ? `https://simhammer.com/api/blizzard/character/${encodeURIComponent(playerRealm.toLowerCase())}/${encodeURIComponent(playerName.toLowerCase())}/media/render`
+      : null;
+
   return (
     <div className="space-y-6">
       <DpsHeroCard
         playerName={playerName}
         playerClass={playerClass}
+        playerRealm={playerRealm}
         dps={bestResult && bestResult.delta > 0 ? bestResult.dps : baseDps}
         dpsError={dpsError}
         dpsErrorPct={dpsErrorPct}
@@ -210,12 +218,55 @@ export default function TopGearResults({
 
       {/* Gear Overview */}
       {hasGearOverview && (
-        <div className="card p-5">
-          <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">Best Gear</p>
-          <div className="grid grid-cols-2 gap-x-4">
-            {/* Left column */}
-            <div className="space-y-1">
-              {GEAR_ORDER_LEFT.map((slot) => (
+        <div className="card relative overflow-hidden p-5">
+          {characterRenderUrl && (
+            <img
+              src={characterRenderUrl}
+              alt=""
+              className="pointer-events-none absolute inset-0 mx-auto h-[130%] w-auto -translate-y-[12%] object-contain opacity-30"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
+          <div className="relative">
+            <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">Best Gear</p>
+            <div className={`grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}>
+              {/* Left column */}
+              <div className="space-y-1">
+                {GEAR_ORDER_LEFT.map((slot) => (
+                  <GearSlotRow
+                    key={slot}
+                    slot={slot}
+                    item={bestGearSet[slot]}
+                    isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                    itemInfoMap={itemInfoMap}
+                    enchantInfoMap={enchantInfoMap}
+                    gemInfoMap={gemInfoMap}
+                  />
+                ))}
+              </div>
+              {/* Spacer for character render background */}
+              {characterRenderUrl && <div />}
+              {/* Right column */}
+              <div className="space-y-1">
+                {GEAR_ORDER_RIGHT.map((slot) => (
+                  <GearSlotRow
+                    key={slot}
+                    slot={slot}
+                    item={bestGearSet[slot]}
+                    isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                    itemInfoMap={itemInfoMap}
+                    enchantInfoMap={enchantInfoMap}
+                    gemInfoMap={gemInfoMap}
+                    align="right"
+                  />
+                ))}
+              </div>
+            </div>
+            {/* Weapons row */}
+            <div className={`mt-1 grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}>
+              {GEAR_ORDER_BOTTOM.map((slot, i) => (
                 <GearSlotRow
                   key={slot}
                   slot={slot}
@@ -224,37 +275,11 @@ export default function TopGearResults({
                   itemInfoMap={itemInfoMap}
                   enchantInfoMap={enchantInfoMap}
                   gemInfoMap={gemInfoMap}
+                  align={i === 1 ? 'right' : 'left'}
                 />
               ))}
+              {characterRenderUrl && <div />}
             </div>
-            {/* Right column */}
-            <div className="space-y-1">
-              {GEAR_ORDER_RIGHT.map((slot) => (
-                <GearSlotRow
-                  key={slot}
-                  slot={slot}
-                  item={bestGearSet[slot]}
-                  isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
-                  itemInfoMap={itemInfoMap}
-                  enchantInfoMap={enchantInfoMap}
-                  gemInfoMap={gemInfoMap}
-                />
-              ))}
-            </div>
-          </div>
-          {/* Weapons row */}
-          <div className="mt-1 grid grid-cols-2 gap-x-4">
-            {GEAR_ORDER_BOTTOM.map((slot) => (
-              <GearSlotRow
-                key={slot}
-                slot={slot}
-                item={bestGearSet[slot]}
-                isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
-                itemInfoMap={itemInfoMap}
-                enchantInfoMap={enchantInfoMap}
-                gemInfoMap={gemInfoMap}
-              />
-            ))}
           </div>
         </div>
       )}
@@ -441,6 +466,7 @@ function GearSlotRow({
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
+  align = 'left',
 }: {
   slot: string;
   item?: ResultItem;
@@ -448,12 +474,15 @@ function GearSlotRow({
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
+  align?: 'left' | 'right';
 }) {
+  const rtl = align === 'right';
+
   if (!item || item.item_id <= 0) {
     return (
-      <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+      <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
         <div className="h-7 w-7 shrink-0 rounded border border-border bg-white/[0.03]" />
-        <div>
+        <div className={rtl ? 'text-right' : ''}>
           <p className="text-[11px] text-gray-600">{SLOT_LABELS[slot] || slot}</p>
           <p className="text-[9px] text-gray-700">Empty</p>
         </div>
@@ -474,7 +503,7 @@ function GearSlotRow({
 
   return (
     <div
-      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${
+      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''} ${
         isUpgrade ? 'bg-emerald-500/[0.07] ring-1 ring-emerald-500/20' : ''
       }`}
     >
@@ -489,8 +518,8 @@ function GearSlotRow({
           loading="lazy"
         />
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
+      <div className={`min-w-0 flex-1 ${rtl ? 'text-right' : ''}`}>
+        <div className={`flex items-center gap-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
           <a
             href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
             data-wowhead={whData}
