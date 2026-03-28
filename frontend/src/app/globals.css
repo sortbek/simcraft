@@ -27,10 +27,10 @@
     @apply rounded-lg border border-border bg-transparent px-5 py-2.5 text-gray-300 transition-all duration-150 hover:border-zinc-500 hover:bg-white/[0.03] hover:text-white active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
   }
   .input-field {
-    @apply w-full rounded-lg border border-border bg-surface-2 px-3.5 py-2.5 text-sm text-gray-100 placeholder-zinc-600 shadow-sm transition-all duration-150 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500/20;
+    @apply w-full rounded-lg border border-border bg-surface-2 px-3.5 py-2.5 text-sm text-gray-100 placeholder-zinc-600 shadow-sm transition-all duration-150 focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/10;
   }
   .label-text {
-    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-500;
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400;
   }
 }
 

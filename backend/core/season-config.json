@@ -25,7 +25,9 @@
         { "key": "mythic+7",  "label": "+7",        "track": "Hero",       "level": 1, "sortOrder": 8 },
         { "key": "mythic+8",  "label": "+8",        "track": "Hero",       "level": 2, "sortOrder": 9 },
         { "key": "mythic+9",  "label": "+9",        "track": "Hero",       "level": 2, "sortOrder": 10 },
-        { "key": "mythic+10", "label": "+10",        "track": "Hero",       "level": 3, "sortOrder": 11 }
+        { "key": "mythic+10", "label": "+10",        "track": "Hero",       "level": 3, "sortOrder": 11 },
+        { "key": "vault+7-9", "label": "Vault +7-9",  "track": "Hero",       "level": 4, "sortOrder": 12 },
+        { "key": "vault+10",  "label": "Vault +10",   "track": "Myth",       "level": 1, "sortOrder": 13 }
       ]
     },
     {
@@ -77,6 +79,8 @@
     "mythic+7":  { "track": "Hero",       "level": 1 },
     "mythic+8":  { "track": "Hero",       "level": 2 },
     "mythic+9":  { "track": "Hero",       "level": 2 },
-    "mythic+10": { "track": "Hero",       "level": 3 }
+    "mythic+10": { "track": "Hero",       "level": 3 },
+    "vault+7-9": { "track": "Hero",       "level": 4 },
+    "vault+10":  { "track": "Myth",       "level": 1 }
   }
 }

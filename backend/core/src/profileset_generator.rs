@@ -202,17 +202,37 @@ pub fn generate_top_gear_input(
         let combo_name = format!("Combo {}", combo_idx + 2);
         lines.push(format!("### {}", combo_name));
 
+        let mut combo_mh_is_two_hand = false;
         for slot in GEAR_SLOTS {
             let slot_str = slot.to_string();
             if let Some(item) = gear_set.get(&slot_str) {
-                let simc_str = item
-                    .get("simc_string")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("");
-                lines.push(format!(
-                    "profileset.\"{}\"+={}={}",
-                    combo_name, slot, simc_str
-                ));
+                // If main_hand is a two-hander, clear off_hand instead of outputting it
+                if *slot == "main_hand" {
+                    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let bonus_ids: Vec<u64> = item
+                        .get("bonus_ids")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
+                        .unwrap_or_default();
+                    let inv_type = game_data::get_item_info(item_id, Some(&bonus_ids))
+                        .and_then(|info| info.get("inventory_type").and_then(|v| v.as_u64()))
+                        .unwrap_or(0);
+                    if inv_type == 17 && spec != "fury" {
+                        combo_mh_is_two_hand = true;
+                    }
+                }
+                if *slot == "off_hand" && combo_mh_is_two_hand {
+                    lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
+                } else {
+                    let simc_str = item
+                        .get("simc_string")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("");
+                    lines.push(format!(
+                        "profileset.\"{}\"+={}={}",
+                        combo_name, slot, simc_str
+                    ));
+                }
             } else if *slot == "off_hand" {
                 lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
             }

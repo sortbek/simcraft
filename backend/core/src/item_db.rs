@@ -255,8 +255,14 @@ pub fn load(data_dir: &Path) {
     println!("Indexed drops for {} encounters", drops.len());
     let _ = DROPS_BY_ENCOUNTER.set(drops);
 
-    // season-config.json
+    // season-config.json — check data_dir first, fall back to crate root
     let season_path = data_dir.join("season-config.json");
+    let season_path = if season_path.exists() {
+        season_path
+    } else {
+        // Fall back to bundled config next to core/Cargo.toml
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("season-config.json")
+    };
     if season_path.exists() {
         let cfg: Value = serde_json::from_reader(std::io::BufReader::new(
             fs::File::open(&season_path).unwrap(),
@@ -397,6 +403,12 @@ pub fn get_item_info(item_id: u64, bonus_ids: Option<&[u64]>) -> Option<Value> {
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
 
+    let item_class = item.get("itemClass").and_then(|c| c.as_u64()).unwrap_or(0);
+    let item_subclass = item
+        .get("itemSubClass")
+        .and_then(|s| s.as_u64())
+        .unwrap_or(0);
+
     Some(serde_json::json!({
         "item_id": item_id,
         "name": item.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown"),
@@ -409,6 +421,8 @@ pub fn get_item_info(item_id: u64, bonus_ids: Option<&[u64]>) -> Option<Value> {
         "upgrade": upgrade,
         "armor_subclass": armor_subclass,
         "inventory_type": inventory_type,
+        "item_class": item_class,
+        "item_subclass": item_subclass,
     }))
 }
 

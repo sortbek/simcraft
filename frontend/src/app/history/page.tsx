@@ -21,10 +21,17 @@ interface JobSummary {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  done: 'bg-green-500',
-  running: 'bg-yellow-500',
+  done: 'bg-emerald-500',
+  running: 'bg-amber-500',
   failed: 'bg-red-500',
-  pending: 'bg-gray-500',
+  pending: 'bg-zinc-500',
+  cancelled: 'bg-zinc-600',
+};
+
+const FIGHT_STYLE_SHORT: Record<string, string> = {
+  Patchwerk: 'Patch',
+  HecticAddCleave: 'Cleave',
+  LightMovement: 'Move',
 };
 
 const SIM_TYPE_LABELS: Record<string, string> = {
@@ -68,41 +75,49 @@ function extractCharacter(simcInput: string): { name: string; realm: string } | 
   return null;
 }
 
-function SimRow({ sim }: { sim: JobSummary }) {
+function SimRow({ sim, compact }: { sim: JobSummary; compact?: boolean }) {
   return (
     <Link
       href={`/sim/${sim.id}`}
-      className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-white/[0.02]"
+      className={`flex items-center gap-3 transition-colors hover:bg-white/[0.03] ${compact ? 'px-4 py-2' : 'px-5 py-3'}`}
     >
       <span
-        className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLORS[sim.status] || STATUS_COLORS.pending}`}
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_COLORS[sim.status] || STATUS_COLORS.pending}`}
       />
-      <span className="shrink-0 rounded bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-gold">
-        {SIM_TYPE_LABELS[sim.sim_type] || sim.sim_type}
-      </span>
+      {!compact && (
+        <span className="shrink-0 rounded-md bg-gold/[0.08] px-2 py-0.5 text-[10px] font-medium text-gold">
+          {SIM_TYPE_LABELS[sim.sim_type] || sim.sim_type}
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         {sim.player_name ? (
-          <span className="block truncate text-sm text-white">
+          <span className={`block truncate text-zinc-200 ${compact ? 'text-xs' : 'text-sm'}`}>
             {sim.player_name}
-            {sim.player_class && <span className="ml-1.5 text-muted">{sim.player_class}</span>}
+            {sim.player_class && <span className="ml-1.5 text-zinc-500">{sim.player_class}</span>}
           </span>
         ) : sim.status === 'failed' ? (
-          <span className="block truncate text-sm text-red-400">
+          <span className={`block truncate text-red-400/80 ${compact ? 'text-xs' : 'text-sm'}`}>
             {sim.error_message || 'Failed'}
           </span>
         ) : (
-          <span className="block truncate text-sm text-muted">
+          <span className={`block truncate text-zinc-500 ${compact ? 'text-xs' : 'text-sm'}`}>
             {sim.status === 'running' ? 'Simulating...' : 'Pending...'}
           </span>
         )}
       </div>
-      <span className="w-20 shrink-0 text-right font-mono text-sm tabular-nums text-white">
+      <span
+        className={`shrink-0 text-right font-mono tabular-nums text-zinc-200 ${compact ? 'w-16 text-xs' : 'w-20 text-sm'}`}
+      >
         {sim.dps ? Math.round(sim.dps).toLocaleString() : '—'}
       </span>
-      <span className="hidden w-20 shrink-0 text-right text-[11px] text-muted sm:block">
-        {sim.fight_style}
+      <span
+        className={`hidden shrink-0 text-right text-zinc-500 sm:block ${compact ? 'w-12 text-[10px]' : 'w-20 text-[11px]'}`}
+      >
+        {FIGHT_STYLE_SHORT[sim.fight_style] || sim.fight_style}
       </span>
-      <span className="w-14 shrink-0 text-right text-[11px] text-gray-600">
+      <span
+        className={`shrink-0 text-right text-zinc-600 ${compact ? 'w-12 text-[10px]' : 'w-14 text-[11px]'}`}
+      >
         {timeAgo(sim.created_at)}
       </span>
     </Link>
@@ -148,45 +163,74 @@ function groupByBatch(sims: JobSummary[]): HistoryEntry[] {
   return entries;
 }
 
+function BatchGroup({ entry }: { entry: Extract<HistoryEntry, { type: 'batch' }> }) {
+  const first = entry.sims[0];
+  const simType = SIM_TYPE_LABELS[first?.sim_type] || first?.sim_type || 'Sim';
+  const bestDps = Math.max(...entry.sims.map((s) => s.dps ?? 0));
+
+  return (
+    <div className="border-b border-border last:border-b-0">
+      {/* Batch header */}
+      <div className="flex items-center gap-3 px-5 py-3">
+        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-gold/10">
+          <svg
+            className="h-3 w-3 text-gold"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          >
+            <path d="M2 4h12M2 8h12M2 12h12" />
+          </svg>
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="text-sm font-medium text-zinc-200">
+            {simType} &middot; {entry.sims.length} Scenarios
+          </span>
+          {first?.player_name && (
+            <span className="ml-2 text-xs text-zinc-500">{first.player_name}</span>
+          )}
+        </div>
+        <span className="shrink-0 rounded-md bg-gold/[0.08] px-2 py-0.5 text-[10px] font-medium text-gold">
+          {simType}
+        </span>
+        {bestDps > 0 && (
+          <span className="w-20 shrink-0 text-right font-mono text-sm tabular-nums text-zinc-200">
+            {Math.round(bestDps).toLocaleString()}
+          </span>
+        )}
+        <span className="w-14 shrink-0 text-right text-[11px] text-zinc-600">
+          {timeAgo(first?.created_at)}
+        </span>
+      </div>
+      {/* Batch items — indented */}
+      <div className="border-t border-border/50 bg-surface-2/50 pl-4">
+        <div className="divide-y divide-border/30">
+          {entry.sims.map((sim) => (
+            <SimRow key={sim.id} sim={sim} compact />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SimList({ sims }: { sims: JobSummary[] }) {
   const entries = groupByBatch(sims);
 
   return (
     <div className="card overflow-hidden">
-      <div className="divide-y divide-border">
-        {entries.map((entry) => {
-          if (entry.type === 'single') {
-            return <SimRow key={entry.sim.id} sim={entry.sim} />;
-          }
+      {entries.map((entry) => {
+        if (entry.type === 'single') {
           return (
-            <div key={entry.batchId}>
-              <div className="flex items-center gap-2 px-5 pb-1 pt-3">
-                <svg
-                  className="h-3.5 w-3.5 text-gold/60"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                >
-                  <path d="M2 4h12M2 8h12M2 12h12" />
-                </svg>
-                <span className="text-[11px] font-medium text-gold/60">
-                  Scenario batch ({entry.sims.length} sims)
-                </span>
-                <span className="text-[11px] text-gray-600">
-                  {timeAgo(entry.sims[0].created_at)}
-                </span>
-              </div>
-              <div className="divide-y divide-border/50">
-                {entry.sims.map((sim) => (
-                  <SimRow key={sim.id} sim={sim} />
-                ))}
-              </div>
+            <div key={entry.sim.id} className="border-b border-border last:border-b-0">
+              <SimRow sim={entry.sim} />
             </div>
           );
-        })}
-      </div>
+        }
+        return <BatchGroup key={entry.batchId} entry={entry} />;
+      })}
     </div>
   );
 }

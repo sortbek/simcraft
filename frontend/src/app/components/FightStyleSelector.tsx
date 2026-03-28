@@ -23,7 +23,7 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
             onClick={() => onChange(fs.value)}
             className={`flex-1 rounded-lg border px-2 py-2 text-xs font-medium transition-all duration-150 ${
               active
-                ? 'border-zinc-500 bg-zinc-800 text-white'
+                ? 'border-gold/40 bg-gold/[0.08] text-gold'
                 : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
             }`}
           >
