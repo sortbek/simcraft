@@ -264,6 +264,13 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         }
     }
 
+    // Equipped gear
+    let all_gear = extract_all_gear(player);
+    if !all_gear.is_empty() {
+        let equipped_gear: serde_json::Map<String, Value> = all_gear.into_iter().collect();
+        result["equipped_gear"] = Value::Object(equipped_gear);
+    }
+
     result
 }
 

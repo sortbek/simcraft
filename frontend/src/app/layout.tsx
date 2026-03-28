@@ -34,27 +34,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <UpdateChecker />
         <SimProvider>
           <header className="desktop-drag sticky top-0 z-50 border-b border-border/80 bg-bg/90 backdrop-blur-xl">
-            <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-              <a
-                href="https://simhammer.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="desktop-no-drag group flex items-center gap-2.5"
-              >
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-b from-gold to-gold-dark shadow-sm">
-                  <svg className="h-3.5 w-3.5 text-black" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M3 2l10 6-10 6V2z" />
-                  </svg>
+            <div className="flex h-11 items-center justify-between desktop-header:h-11">
+              <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6">
+                <a
+                  href="https://simhammer.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="desktop-no-drag group flex items-center gap-2.5"
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-b from-gold to-gold-dark shadow-sm">
+                    <svg className="h-3.5 w-3.5 text-black" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M3 2l10 6-10 6V2z" />
+                    </svg>
+                  </div>
+                  <span className="text-[15px] font-bold tracking-tight text-gray-100 transition-colors group-hover:text-white">
+                    SimHammer
+                  </span>
+                </a>
+                <div className="desktop-no-drag flex items-center gap-1.5">
+                  <SettingsPopover />
+                  <DesktopAppLink />
                 </div>
-                <span className="text-[15px] font-bold tracking-tight text-gray-100 transition-colors group-hover:text-white">
-                  SimHammer
-                </span>
-              </a>
-              <div className="desktop-no-drag flex items-center gap-1.5">
-                <SettingsPopover />
-                <DesktopAppLink />
-                <WindowControls />
               </div>
+              <WindowControls />
             </div>
           </header>
           <main className="mx-auto max-w-5xl px-6 py-8">

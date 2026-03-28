@@ -163,6 +163,14 @@ pub(super) async fn resolve_gear(req: web::Json<ResolveGearRequest>) -> HttpResp
     HttpResponse::Ok().json(resolved)
 }
 
+pub(super) async fn get_talent_tree(path: web::Path<u64>) -> HttpResponse {
+    let spec_id = path.into_inner();
+    match game_data::talent_tree(spec_id) {
+        Some(tree) => HttpResponse::Ok().json(tree),
+        None => HttpResponse::NotFound().json(json!({"detail": "Talent tree not found"})),
+    }
+}
+
 pub(super) async fn get_season_config() -> HttpResponse {
     use crate::types::season::*;
     let cfg = crate::item_db::season_cfg();

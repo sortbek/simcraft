@@ -227,9 +227,12 @@ pub(super) fn apply_talent_override(simc_input: &str, talents: &str) -> String {
 /// Extract server= (realm) from a simc input string and inject it into a parsed result.
 pub(super) fn inject_realm(parsed: &mut Value, simc_input: &str) {
     for line in simc_input.lines() {
-        if let Some(val) = line.trim().strip_prefix("server=") {
+        let trimmed = line.trim();
+        if let Some(val) = trimmed.strip_prefix("server=") {
             parsed["realm"] = json!(val);
-            break;
+        }
+        if let Some(val) = trimmed.strip_prefix("talents=") {
+            parsed["talent_string"] = json!(val);
         }
     }
 }

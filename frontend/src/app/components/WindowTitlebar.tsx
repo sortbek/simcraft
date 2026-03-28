@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from 'react';
 
 export default function WindowControls() {
   const [isMaximized, setIsMaximized] = useState(false);
-  const [hovered, setHovered] = useState<string | null>(null);
 
   const windowAction = useCallback(async (action: 'minimize' | 'toggleMaximize' | 'close') => {
     try {
@@ -33,74 +32,41 @@ export default function WindowControls() {
   }, []);
 
   return (
-    <div className="desktop-only" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-      <div className="flex items-center gap-1">
+    <div className="desktop-only-flex" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div className="flex items-center">
+        <div className="mx-2 h-3.5 w-px bg-zinc-700/60" />
+
         <button
           onClick={() => windowAction('minimize')}
-          onMouseEnter={() => setHovered('min')}
-          onMouseLeave={() => setHovered(null)}
-          className="flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 hover:bg-white/[0.08]"
+          className="group flex h-9 w-11 items-center justify-center transition-colors duration-100 hover:bg-white/[0.07]"
         >
-          <div
-            className={`h-[1.5px] w-2.5 rounded-full transition-colors duration-150 ${
-              hovered === 'min' ? 'bg-gray-300' : 'bg-gray-600'
-            }`}
-          />
+          <svg className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-zinc-300" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.25">
+            <path d="M1.5 5h7" />
+          </svg>
         </button>
 
         <button
           onClick={() => windowAction('toggleMaximize')}
-          onMouseEnter={() => setHovered('max')}
-          onMouseLeave={() => setHovered(null)}
-          className="flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 hover:bg-white/[0.08]"
+          className="group flex h-9 w-11 items-center justify-center transition-colors duration-100 hover:bg-white/[0.07]"
         >
           {isMaximized ? (
-            <svg
-              className={`h-[10px] w-[10px] transition-colors duration-150 ${
-                hovered === 'max' ? 'text-gray-300' : 'text-gray-600'
-              }`}
-              viewBox="0 0 10 10"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-            >
-              <path d="M2.5 3.5h4v4h-4z" />
-              <path d="M3.5 3.5V2.5h4v4h-1" />
+            <svg className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-zinc-300" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.25">
+              <rect x="0.5" y="2.5" width="6" height="6" rx="0.5" />
+              <path d="M3.5 2.5V1.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-.5.5H8.5" />
             </svg>
           ) : (
-            <svg
-              className={`h-[10px] w-[10px] transition-colors duration-150 ${
-                hovered === 'max' ? 'text-gray-300' : 'text-gray-600'
-              }`}
-              viewBox="0 0 10 10"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-            >
-              <rect x="1.5" y="1.5" width="7" height="7" rx="0.5" />
+            <svg className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-zinc-300" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.25">
+              <rect x="1" y="1" width="8" height="8" rx="1" />
             </svg>
           )}
         </button>
 
         <button
           onClick={() => windowAction('close')}
-          onMouseEnter={() => setHovered('close')}
-          onMouseLeave={() => setHovered(null)}
-          className={`flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 ${
-            hovered === 'close' ? 'bg-red-500/90' : 'hover:bg-white/[0.08]'
-          }`}
+          className="group flex h-9 w-11 items-center justify-center transition-colors duration-100 hover:bg-[#c42b1c]"
         >
-          <svg
-            className={`h-[10px] w-[10px] transition-colors duration-150 ${
-              hovered === 'close' ? 'text-white' : 'text-gray-600'
-            }`}
-            viewBox="0 0 10 10"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          >
-            <path d="M2 2l6 6M8 2l-6 6" />
+          <svg className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-white" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round">
+            <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
           </svg>
         </button>
       </div>

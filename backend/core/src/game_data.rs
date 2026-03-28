@@ -11,7 +11,8 @@ use crate::types::class_data;
 pub use crate::item_db::{
     apply_copy_enchants, get_currency_info, get_enchant_info, get_gem_info,
     get_item_armor_subclass, get_item_info, get_upgrade_cost_between, get_upgrade_options,
-    get_upgrade_tracks, load, upgrade_bonus_ids_to_max, upgrade_items_by_slot, upgrade_simc_input,
+    get_upgrade_tracks, load, talent_tree, upgrade_bonus_ids_to_max, upgrade_items_by_slot,
+    upgrade_simc_input,
 };
 pub use crate::types::class_data::{quality_name, QUALITY_NAMES};
 

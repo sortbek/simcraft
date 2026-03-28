@@ -276,6 +276,10 @@ pub async fn start_with_storage_bind(
                 "/api/instances/{id}/drops",
                 web::get().to(game_data_handlers::get_instance_drops),
             )
+            .route(
+                "/api/talent-tree/{specId}",
+                web::get().to(game_data_handlers::get_talent_tree),
+            )
             // System routes
             .route("/api/config", web::get().to(get_config))
             .route("/health", web::get().to(health_check));
