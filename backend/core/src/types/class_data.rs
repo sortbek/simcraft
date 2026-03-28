@@ -34,63 +34,21 @@ pub const ARMOR_SLOTS: &[&str] = &[
 /// Armor inventory types where subclass filtering applies.
 pub const ARMOR_INVENTORY_TYPES: &[u64] = &[1, 3, 5, 6, 7, 8, 9, 10, 20];
 
+/// Paired slots — single source for both `paired_slot()` and `UNIQUE_SLOT_PAIRS`.
+const PAIRED_SLOTS: &[(&str, &str)] = &[("finger1", "finger2"), ("trinket1", "trinket2")];
+
+pub const UNIQUE_SLOT_PAIRS: &[(&str, &str)] = PAIRED_SLOTS;
+
 pub fn paired_slot(slot: &str) -> Option<&'static str> {
-    match slot {
-        "finger1" => Some("finger2"),
-        "finger2" => Some("finger1"),
-        "trinket1" => Some("trinket2"),
-        "trinket2" => Some("trinket1"),
-        _ => None,
-    }
-}
-
-pub const UNIQUE_SLOT_PAIRS: &[(&str, &str)] = &[("finger1", "finger2"), ("trinket1", "trinket2")];
-
-// ---- Slot Labels ----
-
-pub fn slot_label(slot: &str) -> &'static str {
-    match slot {
-        "head" => "Head",
-        "neck" => "Neck",
-        "shoulder" => "Shoulder",
-        "back" => "Back",
-        "chest" => "Chest",
-        "wrist" => "Wrist",
-        "hands" => "Hands",
-        "waist" => "Waist",
-        "legs" => "Legs",
-        "feet" => "Feet",
-        "finger1" => "Ring 1",
-        "finger2" => "Ring 2",
-        "trinket1" => "Trinket 1",
-        "trinket2" => "Trinket 2",
-        "main_hand" => "Main Hand",
-        "off_hand" => "Off Hand",
-        _ => "Unknown",
-    }
-}
-
-/// Human-readable slot name from inventory_type (for drop display).
-pub fn inventory_type_display_slot(inv_type: u64) -> &'static str {
-    match inv_type {
-        1 => "Head",
-        2 => "Neck",
-        3 => "Shoulder",
-        4 => "Shirt",
-        5 | 20 => "Chest",
-        6 => "Waist",
-        7 => "Legs",
-        8 => "Feet",
-        9 => "Wrist",
-        10 => "Hands",
-        11 => "Finger",
-        12 => "Trinket",
-        13 | 15 | 17 | 21 | 26 => "Main Hand", // One-Hand, Ranged, Two-Hand, Main Hand
-        14 | 22 | 23 => "Off Hand",            // Shield, Off Hand, Held In Off-Hand
-        16 => "Back",
-        19 => "Tabard",
-        _ => "Other",
-    }
+    PAIRED_SLOTS.iter().find_map(|(a, b)| {
+        if *a == slot {
+            Some(*b)
+        } else if *b == slot {
+            Some(*a)
+        } else {
+            None
+        }
+    })
 }
 
 pub const SLOT_DISPLAY_ORDER: &[&str] = &[
@@ -110,285 +68,252 @@ pub const SLOT_DISPLAY_ORDER: &[&str] = &[
     "Trinket",
 ];
 
-// ---- Class & Spec ----
+/// Human-readable slot name from inventory_type (for drop display).
+pub fn inventory_type_display_slot(inv_type: u64) -> &'static str {
+    match inv_type {
+        1 => "Head",
+        2 => "Neck",
+        3 => "Shoulder",
+        4 => "Shirt",
+        5 | 20 => "Chest",
+        6 => "Waist",
+        7 => "Legs",
+        8 => "Feet",
+        9 => "Wrist",
+        10 => "Hands",
+        11 => "Finger",
+        12 => "Trinket",
+        13 | 15 | 17 | 21 | 26 => "Main Hand",
+        14 | 22 | 23 => "Off Hand",
+        16 => "Back",
+        19 => "Tabard",
+        _ => "Other",
+    }
+}
+
+// ---- Class & Spec Data Table ----
+//
+// All class/spec metadata lives here. The lookup functions below derive from
+// this single table instead of maintaining parallel match blocks.
+
+/// Per-spec metadata.
+pub struct SpecDef {
+    pub name: &'static str,
+    pub id: u64,
+    /// Weapon subclass IDs:
+    ///   0=1H Axe, 1=2H Axe, 2=Bow, 3=Gun, 4=1H Mace, 5=2H Mace,
+    ///   6=Polearm, 7=1H Sword, 8=2H Sword, 9=Warglaive, 10=Staff,
+    ///   13=Fist, 15=Dagger, 18=Crossbow, 19=Wand
+    pub weapon_subclasses: &'static [u64],
+    pub can_dual_wield: bool,
+    pub can_use_shield: bool,
+    pub can_use_offhand: bool,
+}
+
+/// Per-class metadata, containing its specs.
+pub struct ClassDef {
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+    /// Max armor subclass: 1=Cloth, 2=Leather, 3=Mail, 4=Plate.
+    pub max_armor: u64,
+    /// Class-level allowed weapon subclasses (broad filter for drop tables).
+    pub weapons: &'static [u64],
+    pub specs: &'static [SpecDef],
+}
+
+static CLASSES: &[ClassDef] = &[
+    ClassDef {
+        name: "warrior",
+        aliases: &[],
+        max_armor: 4,
+        weapons: &[0, 1, 4, 5, 6, 7, 8, 13, 15],
+        specs: &[
+            SpecDef { name: "arms",       id: 71, weapon_subclasses: &[1, 5, 6, 8],                   can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "fury",        id: 72, weapon_subclasses: &[0, 1, 4, 5, 6, 7, 8, 13, 15], can_dual_wield: true,  can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "protection",  id: 73, weapon_subclasses: &[0, 4, 7, 13, 15],             can_dual_wield: false, can_use_shield: true,  can_use_offhand: false },
+        ],
+    },
+    ClassDef {
+        name: "paladin",
+        aliases: &[],
+        max_armor: 4,
+        weapons: &[0, 1, 4, 5, 6, 7, 8],
+        specs: &[
+            SpecDef { name: "holy",        id: 65, weapon_subclasses: &[4, 5, 6, 7, 8],   can_dual_wield: false, can_use_shield: true,  can_use_offhand: true  },
+            SpecDef { name: "protection",  id: 66, weapon_subclasses: &[0, 4, 7, 13],     can_dual_wield: false, can_use_shield: true,  can_use_offhand: false },
+            SpecDef { name: "retribution", id: 70, weapon_subclasses: &[1, 5, 6, 8],      can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+        ],
+    },
+    ClassDef {
+        name: "hunter",
+        aliases: &[],
+        max_armor: 3,
+        weapons: &[2, 3, 6, 18],
+        specs: &[
+            SpecDef { name: "beast_mastery", id: 253, weapon_subclasses: &[2, 3, 18],       can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "marksmanship",  id: 254, weapon_subclasses: &[2, 3, 18],       can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "survival",      id: 255, weapon_subclasses: &[1, 5, 6, 8, 10], can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+        ],
+    },
+    ClassDef {
+        name: "rogue",
+        aliases: &[],
+        max_armor: 2,
+        weapons: &[0, 4, 7, 13, 15],
+        specs: &[
+            SpecDef { name: "assassination", id: 259, weapon_subclasses: &[0, 4, 7, 13, 15], can_dual_wield: true, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "outlaw",        id: 260, weapon_subclasses: &[0, 4, 7, 13, 15], can_dual_wield: true, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "subtlety",      id: 261, weapon_subclasses: &[0, 4, 7, 13, 15], can_dual_wield: true, can_use_shield: false, can_use_offhand: false },
+        ],
+    },
+    ClassDef {
+        name: "priest",
+        aliases: &[],
+        max_armor: 1,
+        weapons: &[4, 10, 15, 19],
+        specs: &[
+            SpecDef { name: "discipline", id: 256, weapon_subclasses: &[4, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "holy",       id: 257, weapon_subclasses: &[4, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "shadow",     id: 258, weapon_subclasses: &[4, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+        ],
+    },
+    ClassDef {
+        name: "death_knight",
+        aliases: &["deathknight"],
+        max_armor: 4,
+        weapons: &[0, 1, 4, 5, 7, 8],
+        specs: &[
+            SpecDef { name: "blood",  id: 250, weapon_subclasses: &[1, 5, 6, 8],          can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "frost",  id: 251, weapon_subclasses: &[0, 1, 4, 5, 6, 7, 8], can_dual_wield: true,  can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "unholy", id: 252, weapon_subclasses: &[1, 5, 6, 8],          can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+        ],
+    },
+    ClassDef {
+        name: "shaman",
+        aliases: &[],
+        max_armor: 3,
+        weapons: &[0, 1, 4, 5, 10, 13],
+        specs: &[
+            SpecDef { name: "elemental",   id: 262, weapon_subclasses: &[0, 4, 10, 13, 15], can_dual_wield: false, can_use_shield: true,  can_use_offhand: true  },
+            SpecDef { name: "enhancement", id: 263, weapon_subclasses: &[0, 4, 13, 15],     can_dual_wield: true,  can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "restoration", id: 264, weapon_subclasses: &[0, 4, 10, 13, 15], can_dual_wield: false, can_use_shield: true,  can_use_offhand: true  },
+        ],
+    },
+    ClassDef {
+        name: "mage",
+        aliases: &[],
+        max_armor: 1,
+        weapons: &[7, 10, 15, 19],
+        specs: &[
+            SpecDef { name: "arcane", id: 62, weapon_subclasses: &[7, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "fire",   id: 63, weapon_subclasses: &[7, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "frost",  id: 64, weapon_subclasses: &[7, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+        ],
+    },
+    ClassDef {
+        name: "warlock",
+        aliases: &[],
+        max_armor: 1,
+        weapons: &[7, 10, 15, 19],
+        specs: &[
+            SpecDef { name: "affliction",  id: 265, weapon_subclasses: &[7, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "demonology",  id: 266, weapon_subclasses: &[7, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "destruction", id: 267, weapon_subclasses: &[7, 10, 15, 19], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+        ],
+    },
+    ClassDef {
+        name: "monk",
+        aliases: &[],
+        max_armor: 2,
+        weapons: &[0, 4, 6, 7, 10, 13],
+        specs: &[
+            SpecDef { name: "brewmaster",  id: 268, weapon_subclasses: &[0, 4, 6, 7, 10, 13], can_dual_wield: true,  can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "mistweaver",  id: 270, weapon_subclasses: &[4, 7, 10, 13],       can_dual_wield: false, can_use_shield: false, can_use_offhand: true  },
+            SpecDef { name: "windwalker",  id: 269, weapon_subclasses: &[0, 4, 7, 13],        can_dual_wield: true,  can_use_shield: false, can_use_offhand: false },
+        ],
+    },
+    ClassDef {
+        name: "druid",
+        aliases: &[],
+        max_armor: 2,
+        weapons: &[4, 5, 6, 10, 13, 15],
+        specs: &[
+            SpecDef { name: "balance",     id: 102, weapon_subclasses: &[4, 5, 6, 10, 13, 15], can_dual_wield: false, can_use_shield: false, can_use_offhand: true  },
+            SpecDef { name: "feral",       id: 103, weapon_subclasses: &[4, 5, 6, 10, 13, 15], can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "guardian",    id: 104, weapon_subclasses: &[4, 5, 6, 10, 13, 15], can_dual_wield: false, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "restoration", id: 105, weapon_subclasses: &[4, 5, 10, 13, 15],   can_dual_wield: false, can_use_shield: false, can_use_offhand: true  },
+        ],
+    },
+    ClassDef {
+        name: "demon_hunter",
+        aliases: &["demonhunter"],
+        max_armor: 2,
+        weapons: &[0, 7, 9, 13],
+        specs: &[
+            SpecDef { name: "havoc",    id: 577, weapon_subclasses: &[0, 7, 9, 13], can_dual_wield: true, can_use_shield: false, can_use_offhand: false },
+            SpecDef { name: "vengeance", id: 581, weapon_subclasses: &[0, 7, 9, 13], can_dual_wield: true, can_use_shield: false, can_use_offhand: false },
+        ],
+    },
+    ClassDef {
+        name: "evoker",
+        aliases: &[],
+        max_armor: 3,
+        weapons: &[0, 4, 7, 10, 13, 15],
+        specs: &[
+            SpecDef { name: "devastation",  id: 1467, weapon_subclasses: &[0, 4, 7, 10, 13, 15], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "preservation", id: 1468, weapon_subclasses: &[0, 4, 7, 10, 13, 15], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+            SpecDef { name: "augmentation", id: 1473, weapon_subclasses: &[0, 4, 7, 10, 13, 15], can_dual_wield: false, can_use_shield: false, can_use_offhand: true },
+        ],
+    },
+];
+
+// ---- Lookup Helpers ----
+
+fn find_class(name: &str) -> Option<&'static ClassDef> {
+    let n = name.to_lowercase();
+    CLASSES
+        .iter()
+        .find(|c| c.name == n || c.aliases.iter().any(|&a| a == n))
+}
 
 pub fn can_dual_wield(spec: &str) -> bool {
-    matches!(
-        spec,
-        "frost"
-            | "fury"
-            | "enhancement"
-            | "windwalker"
-            | "brewmaster"
-            | "havoc"
-            | "vengeance"
-            | "outlaw"
-            | "assassination"
-            | "subtlety"
-    )
+    CLASSES
+        .iter()
+        .flat_map(|c| c.specs.iter())
+        .any(|s| s.name == spec && s.can_dual_wield)
 }
 
 /// Max armor subclass: 1=Cloth, 2=Leather, 3=Mail, 4=Plate.
 pub fn class_max_armor(class_name: &str) -> Option<u64> {
-    match class_name.to_lowercase().as_str() {
-        "priest" | "mage" | "warlock" => Some(1),
-        "rogue" | "monk" | "druid" | "demon_hunter" | "demonhunter" => Some(2),
-        "hunter" | "shaman" | "evoker" => Some(3),
-        "warrior" | "paladin" | "death_knight" | "deathknight" => Some(4),
-        _ => None,
-    }
+    find_class(class_name).map(|c| c.max_armor)
 }
 
-/// Weapon subclass IDs each class can equip.
+/// Weapon subclass IDs each class can equip (broad filter for drop tables).
 pub fn class_allowed_weapons(class_name: &str) -> Option<&'static [u64]> {
-    match class_name {
-        "warrior" => Some(&[0, 1, 4, 5, 6, 7, 8, 13, 15]),
-        "paladin" => Some(&[0, 1, 4, 5, 6, 7, 8]),
-        "hunter" => Some(&[2, 3, 6, 18]),
-        "rogue" => Some(&[0, 4, 7, 13, 15]),
-        "priest" => Some(&[4, 10, 15, 19]),
-        "death_knight" | "deathknight" => Some(&[0, 1, 4, 5, 7, 8]),
-        "shaman" => Some(&[0, 1, 4, 5, 10, 13]),
-        "mage" => Some(&[7, 10, 15, 19]),
-        "warlock" => Some(&[7, 10, 15, 19]),
-        "monk" => Some(&[0, 4, 6, 7, 10, 13]),
-        "druid" => Some(&[4, 5, 6, 10, 13, 15]),
-        "demon_hunter" | "demonhunter" => Some(&[0, 7, 9, 13]),
-        "evoker" => Some(&[0, 4, 7, 10, 13, 15]),
-        _ => None,
-    }
+    find_class(class_name).map(|c| c.weapons)
 }
 
-/// Per-spec weapon eligibility profile.
-/// Weapon subclass IDs:
-///   0=1H Axe, 1=2H Axe, 2=Bow, 3=Gun, 4=1H Mace, 5=2H Mace,
-///   6=Polearm, 7=1H Sword, 8=2H Sword, 9=Warglaive, 10=Staff,
-///   13=Fist, 15=Dagger, 18=Crossbow, 19=Wand
-pub struct SpecWeaponProfile {
-    pub weapon_subclasses: &'static [u64],
-    pub can_use_shield: bool,
-    pub can_use_offhand: bool, // held-in-off-hand (caster off-hands, inv_type 23)
-}
-
-pub fn spec_weapon_profile(class_name: &str, spec: &str) -> Option<SpecWeaponProfile> {
-    match (class_name, spec) {
-        // Warrior
-        (_, "arms") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[1, 5, 6, 8], // 2H axes/maces/swords, polearms
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-        (_, "fury") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 1, 4, 5, 6, 7, 8, 13, 15], // all warrior weapons
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-        ("warrior", "protection") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 7, 13, 15], // 1H axes/maces/swords, fist, dagger
-            can_use_shield: true,
-            can_use_offhand: false,
-        }),
-
-        // Paladin
-        ("paladin", "holy") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[4, 5, 7, 8, 6], // maces, swords, polearm
-            can_use_shield: true,
-            can_use_offhand: true,
-        }),
-        ("paladin", "protection") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 7, 13], // 1H axes/maces/swords, fist
-            can_use_shield: true,
-            can_use_offhand: false,
-        }),
-        (_, "retribution") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[1, 5, 6, 8], // 2H axes/maces/swords, polearms
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-
-        // Hunter
-        (_, "beast_mastery") | (_, "marksmanship") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[2, 3, 18], // bow, gun, crossbow
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-        (_, "survival") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[1, 5, 6, 8, 10], // 2H melee + staff
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-
-        // Rogue
-        (_, "assassination") | (_, "outlaw") | (_, "subtlety") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 7, 13, 15], // 1H axes/maces/swords, fist, dagger
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-
-        // Priest
-        (_, "discipline") | (_, "shadow") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[4, 10, 15, 19], // mace, staff, dagger, wand
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-        ("priest", "holy") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[4, 10, 15, 19], // mace, staff, dagger, wand
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-
-        // Death Knight
-        (_, "blood") | (_, "unholy") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[1, 5, 6, 8], // 2H axes/maces/swords, polearms
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-        ("death_knight" | "deathknight", "frost") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 1, 4, 5, 6, 7, 8], // 1H+2H axes/maces/swords, polearms
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-
-        // Shaman
-        (_, "elemental") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 10, 13, 15], // 1H axe/mace, staff, fist, dagger
-            can_use_shield: true,
-            can_use_offhand: true,
-        }),
-        (_, "enhancement") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 13, 15], // 1H axe/mace, fist, dagger
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-        ("shaman", "restoration") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 10, 13, 15], // 1H axe/mace, staff, fist, dagger
-            can_use_shield: true,
-            can_use_offhand: true,
-        }),
-
-        // Mage
-        (_, "arcane") | (_, "fire") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[7, 10, 15, 19], // sword, staff, dagger, wand
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-        ("mage", "frost") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[7, 10, 15, 19], // sword, staff, dagger, wand
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-
-        // Warlock
-        (_, "affliction") | (_, "demonology") | (_, "destruction") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[7, 10, 15, 19], // sword, staff, dagger, wand
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-
-        // Monk
-        (_, "brewmaster") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 6, 7, 10, 13], // 1H axe/mace/sword, polearm, staff, fist
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-        (_, "mistweaver") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[4, 7, 10, 13], // mace, sword, staff, fist
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-        (_, "windwalker") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 4, 7, 13], // 1H axe/mace/sword, fist
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-
-        // Druid
-        (_, "balance") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[4, 5, 6, 10, 13, 15], // mace, 2H mace, polearm, staff, fist, dagger
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-        (_, "feral") | (_, "guardian") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[4, 5, 6, 10, 13, 15], // mace, 2H mace, polearm, staff, fist, dagger
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-        ("druid", "restoration") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[4, 5, 10, 13, 15], // mace, 2H mace, staff, fist, dagger
-            can_use_shield: false,
-            can_use_offhand: true,
-        }),
-
-        // Demon Hunter
-        (_, "havoc") | (_, "vengeance") => Some(SpecWeaponProfile {
-            weapon_subclasses: &[0, 7, 9, 13], // 1H axe/sword, warglaive, fist
-            can_use_shield: false,
-            can_use_offhand: false,
-        }),
-
-        // Evoker
-        (_, "devastation") | (_, "preservation") | (_, "augmentation") => {
-            Some(SpecWeaponProfile {
-                weapon_subclasses: &[0, 4, 7, 10, 13, 15], // 1H axe/mace/sword, staff, fist, dagger
-                can_use_shield: false,
-                can_use_offhand: true,
-            })
-        }
-
-        _ => None,
-    }
+/// Per-spec weapon eligibility. Returns the full `SpecDef` which includes
+/// `weapon_subclasses`, `can_use_shield`, `can_use_offhand`, and more.
+pub fn spec_weapon_profile(class_name: &str, spec: &str) -> Option<&'static SpecDef> {
+    let class = find_class(class_name)?;
+    class.specs.iter().find(|s| s.name == spec)
 }
 
 /// Map spec name → numeric spec ID.
 pub fn class_spec_ids(class_name: &str, spec_name: Option<&str>) -> Vec<u64> {
-    let all: &[(&str, u64)] = match class_name {
-        "warrior" => &[("arms", 71), ("fury", 72), ("protection", 73)],
-        "paladin" => &[("holy", 65), ("protection", 66), ("retribution", 70)],
-        "hunter" => &[
-            ("beast_mastery", 253),
-            ("marksmanship", 254),
-            ("survival", 255),
-        ],
-        "rogue" => &[("assassination", 259), ("outlaw", 260), ("subtlety", 261)],
-        "priest" => &[("discipline", 256), ("holy", 257), ("shadow", 258)],
-        "death_knight" | "deathknight" => &[("blood", 250), ("frost", 251), ("unholy", 252)],
-        "shaman" => &[
-            ("elemental", 262),
-            ("enhancement", 263),
-            ("restoration", 264),
-        ],
-        "mage" => &[("arcane", 62), ("fire", 63), ("frost", 64)],
-        "warlock" => &[
-            ("affliction", 265),
-            ("demonology", 266),
-            ("destruction", 267),
-        ],
-        "monk" => &[
-            ("brewmaster", 268),
-            ("mistweaver", 270),
-            ("windwalker", 269),
-        ],
-        "druid" => &[
-            ("balance", 102),
-            ("feral", 103),
-            ("guardian", 104),
-            ("restoration", 105),
-        ],
-        "demon_hunter" | "demonhunter" => &[("havoc", 577), ("vengeance", 581)],
-        "evoker" => &[
-            ("devastation", 1467),
-            ("preservation", 1468),
-            ("augmentation", 1473),
-        ],
-        _ => &[],
+    let class = match find_class(class_name) {
+        Some(c) => c,
+        None => return vec![],
     };
-    if let Some(spec) = spec_name {
-        all.iter()
-            .filter(|(n, _)| *n == spec)
-            .map(|(_, id)| *id)
-            .collect()
-    } else {
-        all.iter().map(|(_, id)| *id).collect()
+    match spec_name {
+        Some(name) => class
+            .specs
+            .iter()
+            .filter(|s| s.name == name)
+            .map(|s| s.id)
+            .collect(),
+        None => class.specs.iter().map(|s| s.id).collect(),
     }
 }
 
@@ -433,31 +358,16 @@ pub fn inv_type_to_slots(inv_type: u64, spec: &str) -> Vec<&'static str> {
 
 // ---- Detection ----
 
-const CLASS_NAMES: &[&str] = &[
-    "warrior",
-    "paladin",
-    "hunter",
-    "rogue",
-    "priest",
-    "death_knight",
-    "deathknight",
-    "shaman",
-    "mage",
-    "warlock",
-    "monk",
-    "demon_hunter",
-    "demonhunter",
-    "druid",
-    "evoker",
-];
-
 /// Detect the character class from a simc input string.
 pub fn detect_class(simc_input: &str) -> Option<String> {
-    let pattern = format!(r#"^({})\s*="#, CLASS_NAMES.join("|"));
+    let names: Vec<&str> = CLASSES
+        .iter()
+        .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied()))
+        .collect();
+    let pattern = format!(r#"^({})\s*="#, names.join("|"));
     let class_re = Regex::new(&pattern).unwrap();
     for line in simc_input.lines() {
-        let trimmed = line.trim();
-        if let Some(caps) = class_re.captures(trimmed) {
+        if let Some(caps) = class_re.captures(line.trim()) {
             return Some(caps[1].to_string());
         }
     }
@@ -468,8 +378,7 @@ pub fn detect_class(simc_input: &str) -> Option<String> {
 pub fn detect_spec(simc_input: &str) -> Option<String> {
     let spec_re = Regex::new(r"^spec=(\w+)").unwrap();
     for line in simc_input.lines() {
-        let trimmed = line.trim();
-        if let Some(caps) = spec_re.captures(trimmed) {
+        if let Some(caps) = spec_re.captures(line.trim()) {
             return Some(caps[1].to_lowercase());
         }
     }

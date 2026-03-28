@@ -1,0 +1,298 @@
+use actix_web::{web, HttpResponse};
+use serde_json::json;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use super::helpers::*;
+use super::types::*;
+use crate::addon_parser;
+use crate::game_data;
+use crate::gear_resolver;
+use crate::log_buffer::LogBuffer;
+use crate::models::{Job, JobStatus};
+use crate::profileset_generator;
+use crate::result_parser;
+use crate::simc_runner;
+use crate::storage::JobStorage;
+
+pub(super) async fn create_sim(
+    req: web::Json<SimRequest>,
+    store: web::Data<Arc<dyn JobStorage>>,
+    simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
+) -> HttpResponse {
+    let mut simc_input = if req.max_upgrade {
+        game_data::upgrade_simc_input(&req.simc_input)
+    } else {
+        req.simc_input.clone()
+    };
+    simc_input = apply_talent_override(&simc_input, &req.options.talents);
+    simc_input = inject_expert_fields(&simc_input, &req.options);
+
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
+    let mut job = Job::new(
+        simc_input.clone(),
+        req.sim_type.clone(),
+        req.options.iterations,
+        req.options.fight_style.clone(),
+        req.options.target_error,
+    );
+    job.batch_id = req.options.batch_id.clone();
+    let job_id = job.id.clone();
+    let created_at = job.created_at.clone();
+    store.insert(job);
+
+    // Spawn background task
+    let store_clone = store.get_ref().clone();
+    let simc = simc_path.get_ref().clone();
+    let options = req.options.to_json_with_sim_type(&req.sim_type);
+    let job_id_clone = job_id.clone();
+    let logs = log_buffer.get_ref().clone();
+    let jid_logs = job_id.clone();
+
+    tokio::spawn(async move {
+        store_clone.update_status(&job_id_clone, JobStatus::Running);
+        store_clone.update_progress(&job_id_clone, 20, "Simulating", "");
+        let logs_cb = logs.clone();
+        let jid_cb = jid_logs.clone();
+        match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options, move |line| {
+            logs_cb.push_line(&jid_cb, line.to_string());
+        })
+        .await
+        {
+            Ok(output) => {
+                let mut parsed = result_parser::parse_simc_result(&output.json);
+                inject_realm(&mut parsed, &simc_input);
+                let result_str = serde_json::to_string(&parsed).unwrap_or_default();
+                let raw_str = serde_json::to_string(&output.json).ok();
+                store_clone.set_result(&job_id_clone, result_str, raw_str);
+                store_clone.set_report_files(&job_id_clone, output.html_report, output.text_output);
+            }
+            Err(e) => {
+                let is_cancelled = store_clone
+                    .get(&job_id_clone)
+                    .map(|j| j.status == JobStatus::Cancelled)
+                    .unwrap_or(false);
+                if !is_cancelled {
+                    store_clone.set_error(&job_id_clone, e);
+                }
+            }
+        }
+        logs.remove(&jid_logs);
+    });
+
+    HttpResponse::Ok().json(SimResponse {
+        id: job_id,
+        status: "pending".to_string(),
+        created_at,
+    })
+}
+
+pub(super) async fn create_top_gear_sim(
+    req: web::Json<TopGearRequest>,
+    store: web::Data<Arc<dyn JobStorage>>,
+    simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
+) -> HttpResponse {
+    let mut simc_input = if req.max_upgrade {
+        game_data::upgrade_simc_input(&req.simc_input)
+    } else {
+        req.simc_input.clone()
+    };
+    simc_input = apply_talent_override(&simc_input, &req.options.talents);
+
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let resolved = gear_resolver::resolve_gear(&parse_result);
+    let base_profile = resolved.base_profile.clone();
+
+    let mut items_by_slot: HashMap<String, Vec<serde_json::Value>> =
+        if let Some(ref ibs) = req.items_by_slot {
+            ibs.clone()
+        } else {
+            resolve_to_items_by_slot(&resolved)
+        };
+
+    if req.max_upgrade {
+        items_by_slot = game_data::upgrade_items_by_slot(&items_by_slot);
+    }
+
+    if req.copy_enchants {
+        items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
+    }
+
+    let (generated_input, combo_count, combo_metadata) =
+        match profileset_generator::generate_top_gear_input(
+            &base_profile,
+            &items_by_slot,
+            &req.selected_items,
+            req.max_combinations,
+        ) {
+            Ok(r) => r,
+            Err(e) => {
+                return HttpResponse::BadRequest().json(json!({"detail": e}));
+            }
+        };
+
+    if combo_count == 0 {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "No alternative items selected. Select at least one non-equipped item."
+        }));
+    }
+
+    let generated_input = inject_expert_fields(&generated_input, &req.options);
+
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
+    let job = Job::new(
+        generated_input.clone(),
+        "top_gear".to_string(),
+        req.options.iterations,
+        req.options.fight_style.clone(),
+        req.options.target_error,
+    );
+    let job_id = job.id.clone();
+    let created_at = job.created_at.clone();
+
+    // Store combo metadata on the job
+    let meta_json = serde_json::to_string(&json!({
+        "_combo_metadata": combo_metadata,
+        "_combo_count": combo_count,
+    }))
+    .unwrap_or_default();
+
+    let mut job = job;
+    job.combo_metadata_json = Some(meta_json);
+    job.batch_id = req.options.batch_id.clone();
+    store.insert(job);
+
+    spawn_staged_sim(
+        store.get_ref().clone(),
+        simc_path.get_ref().clone(),
+        req.options.to_json(),
+        job_id.clone(),
+        generated_input,
+        combo_count,
+        log_buffer.get_ref().clone(),
+    );
+
+    HttpResponse::Ok().json(SimResponse {
+        id: job_id,
+        status: "pending".to_string(),
+        created_at,
+    })
+}
+
+pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> HttpResponse {
+    let mut simc_input = if req.max_upgrade {
+        game_data::upgrade_simc_input(&req.simc_input)
+    } else {
+        req.simc_input.clone()
+    };
+    simc_input = apply_talent_override(&simc_input, &req.options.talents);
+
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let resolved = gear_resolver::resolve_gear(&parse_result);
+    let base_profile = resolved.base_profile.clone();
+
+    let mut items_by_slot: HashMap<String, Vec<serde_json::Value>> =
+        if let Some(ref ibs) = req.items_by_slot {
+            ibs.clone()
+        } else {
+            resolve_to_items_by_slot(&resolved)
+        };
+
+    if req.max_upgrade {
+        items_by_slot = game_data::upgrade_items_by_slot(&items_by_slot);
+    }
+    if req.copy_enchants {
+        items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
+    }
+
+    match profileset_generator::count_top_gear_combos(
+        &base_profile,
+        &items_by_slot,
+        &req.selected_items,
+        req.max_combinations,
+    ) {
+        Ok(count) => HttpResponse::Ok().json(json!({ "combo_count": count })),
+        Err(e) => {
+            // Extract the count from the error message so the frontend can still display it
+            let count: usize = e
+                .split('(')
+                .nth(1)
+                .and_then(|s| s.split(')').next())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            HttpResponse::Ok().json(json!({ "combo_count": count, "error": e }))
+        }
+    }
+}
+
+pub(super) async fn create_droptimizer_sim(
+    req: web::Json<DroptimizerRequest>,
+    store: web::Data<Arc<dyn JobStorage>>,
+    simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
+) -> HttpResponse {
+    let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let base_profile = parse_result.base_profile.clone();
+
+    let (generated_input, combo_count, combo_metadata) =
+        profileset_generator::generate_droptimizer_input(&base_profile, &req.drop_items);
+
+    if combo_count == 0 {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "No items selected. Select at least one drop item."
+        }));
+    }
+
+    let generated_input = inject_expert_fields(&generated_input, &req.options);
+
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
+    let job = Job::new(
+        generated_input.clone(),
+        "droptimizer".to_string(),
+        req.options.iterations,
+        req.options.fight_style.clone(),
+        req.options.target_error,
+    );
+    let job_id = job.id.clone();
+    let created_at = job.created_at.clone();
+
+    let meta_json = serde_json::to_string(&json!({
+        "_combo_metadata": combo_metadata,
+        "_combo_count": combo_count,
+    }))
+    .unwrap_or_default();
+
+    let mut job = job;
+    job.combo_metadata_json = Some(meta_json);
+    job.batch_id = req.options.batch_id.clone();
+    store.insert(job);
+
+    spawn_staged_sim(
+        store.get_ref().clone(),
+        simc_path.get_ref().clone(),
+        req.options.to_json(),
+        job_id.clone(),
+        generated_input,
+        combo_count,
+        log_buffer.get_ref().clone(),
+    );
+
+    HttpResponse::Ok().json(SimResponse {
+        id: job_id,
+        status: "pending".to_string(),
+        created_at,
+    })
+}
