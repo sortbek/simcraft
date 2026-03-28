@@ -170,7 +170,9 @@ fn eligible_slots(item: &RawParsedItem, spec: &str) -> Vec<String> {
 pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
     let character = &parse_result.character;
     let spec = character.spec.as_deref().unwrap_or("");
+    let class_name = character.class_name.as_deref().unwrap_or("");
     let max_armor = character.max_armor();
+    let allowed_weapons = class_data::class_allowed_weapons(class_name);
     let can_dw = character.can_dual_wield();
 
     let mut slots: HashMap<String, SlotResolution> = HashMap::new();
@@ -298,6 +300,24 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
             }
         }
 
+        // Weapon type check
+        let mut weapon_excluded = false;
+        if let Some(weapons) = allowed_weapons {
+            let info = item_db::get_item_info(item.item_id, Some(&item.bonus_ids));
+            if let Some(ref info) = info {
+                let item_class = info.get("item_class").and_then(|v| v.as_u64()).unwrap_or(0);
+                if item_class == 2 {
+                    let weapon_sub = info
+                        .get("item_subclass")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(999);
+                    if !weapons.contains(&weapon_sub) {
+                        weapon_excluded = true;
+                    }
+                }
+            }
+        }
+
         for slot in &item_eligible {
             if !GEAR_SLOTS.contains(&slot.as_str()) {
                 continue;
@@ -310,6 +330,17 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
                     item_id: item.item_id,
                     name: item.name.clone(),
                     reason: "Wrong armor type".to_string(),
+                });
+                continue;
+            }
+
+            // Weapon type exclusion for weapon slots
+            if weapon_excluded && matches!(slot.as_str(), "main_hand" | "off_hand") {
+                excluded.push(ExcludedItem {
+                    uid: make_uid(item),
+                    item_id: item.item_id,
+                    name: item.name.clone(),
+                    reason: "Wrong weapon type".to_string(),
                 });
                 continue;
             }

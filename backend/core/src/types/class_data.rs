@@ -85,20 +85,17 @@ pub fn inventory_type_display_slot(inv_type: u64) -> &'static str {
         10 => "Hands",
         11 => "Finger",
         12 => "Trinket",
-        13 => "One-Hand",
-        14 => "Shield",
-        15 | 26 => "Ranged",
+        13 | 15 | 17 | 21 | 26 => "Main Hand", // One-Hand, Ranged, Two-Hand, Main Hand
+        14 | 22 | 23 => "Off Hand",            // Shield, Off Hand, Held In Off-Hand
         16 => "Back",
-        17 => "Two-Hand",
         19 => "Tabard",
-        21 => "Main Hand",
-        22 => "Off Hand",
-        23 => "Held In Off-Hand",
         _ => "Other",
     }
 }
 
 pub const SLOT_DISPLAY_ORDER: &[&str] = &[
+    "Main Hand",
+    "Off Hand",
     "Head",
     "Neck",
     "Shoulder",
@@ -111,13 +108,6 @@ pub const SLOT_DISPLAY_ORDER: &[&str] = &[
     "Feet",
     "Finger",
     "Trinket",
-    "One-Hand",
-    "Main Hand",
-    "Off Hand",
-    "Two-Hand",
-    "Held In Off-Hand",
-    "Shield",
-    "Ranged",
 ];
 
 // ---- Class & Spec ----
@@ -165,6 +155,186 @@ pub fn class_allowed_weapons(class_name: &str) -> Option<&'static [u64]> {
         "druid" => Some(&[4, 5, 6, 10, 13, 15]),
         "demon_hunter" | "demonhunter" => Some(&[0, 7, 9, 13]),
         "evoker" => Some(&[0, 4, 7, 10, 13, 15]),
+        _ => None,
+    }
+}
+
+/// Per-spec weapon eligibility profile.
+/// Weapon subclass IDs:
+///   0=1H Axe, 1=2H Axe, 2=Bow, 3=Gun, 4=1H Mace, 5=2H Mace,
+///   6=Polearm, 7=1H Sword, 8=2H Sword, 9=Warglaive, 10=Staff,
+///   13=Fist, 15=Dagger, 18=Crossbow, 19=Wand
+pub struct SpecWeaponProfile {
+    pub weapon_subclasses: &'static [u64],
+    pub can_use_shield: bool,
+    pub can_use_offhand: bool, // held-in-off-hand (caster off-hands, inv_type 23)
+}
+
+pub fn spec_weapon_profile(class_name: &str, spec: &str) -> Option<SpecWeaponProfile> {
+    match (class_name, spec) {
+        // Warrior
+        (_, "arms") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[1, 5, 6, 8], // 2H axes/maces/swords, polearms
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+        (_, "fury") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 1, 4, 5, 6, 7, 8, 13, 15], // all warrior weapons
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+        ("warrior", "protection") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 7, 13, 15], // 1H axes/maces/swords, fist, dagger
+            can_use_shield: true,
+            can_use_offhand: false,
+        }),
+
+        // Paladin
+        ("paladin", "holy") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[4, 5, 7, 8, 6], // maces, swords, polearm
+            can_use_shield: true,
+            can_use_offhand: true,
+        }),
+        ("paladin", "protection") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 7, 13], // 1H axes/maces/swords, fist
+            can_use_shield: true,
+            can_use_offhand: false,
+        }),
+        (_, "retribution") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[1, 5, 6, 8], // 2H axes/maces/swords, polearms
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+
+        // Hunter
+        (_, "beast_mastery") | (_, "marksmanship") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[2, 3, 18], // bow, gun, crossbow
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+        (_, "survival") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[1, 5, 6, 8, 10], // 2H melee + staff
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+
+        // Rogue
+        (_, "assassination") | (_, "outlaw") | (_, "subtlety") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 7, 13, 15], // 1H axes/maces/swords, fist, dagger
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+
+        // Priest
+        (_, "discipline") | (_, "shadow") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[4, 10, 15, 19], // mace, staff, dagger, wand
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+        ("priest", "holy") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[4, 10, 15, 19], // mace, staff, dagger, wand
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+
+        // Death Knight
+        (_, "blood") | (_, "unholy") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[1, 5, 6, 8], // 2H axes/maces/swords, polearms
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+        ("death_knight" | "deathknight", "frost") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 1, 4, 5, 6, 7, 8], // 1H+2H axes/maces/swords, polearms
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+
+        // Shaman
+        (_, "elemental") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 10, 13, 15], // 1H axe/mace, staff, fist, dagger
+            can_use_shield: true,
+            can_use_offhand: true,
+        }),
+        (_, "enhancement") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 13, 15], // 1H axe/mace, fist, dagger
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+        ("shaman", "restoration") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 10, 13, 15], // 1H axe/mace, staff, fist, dagger
+            can_use_shield: true,
+            can_use_offhand: true,
+        }),
+
+        // Mage
+        (_, "arcane") | (_, "fire") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[7, 10, 15, 19], // sword, staff, dagger, wand
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+        ("mage", "frost") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[7, 10, 15, 19], // sword, staff, dagger, wand
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+
+        // Warlock
+        (_, "affliction") | (_, "demonology") | (_, "destruction") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[7, 10, 15, 19], // sword, staff, dagger, wand
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+
+        // Monk
+        (_, "brewmaster") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 6, 7, 10, 13], // 1H axe/mace/sword, polearm, staff, fist
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+        (_, "mistweaver") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[4, 7, 10, 13], // mace, sword, staff, fist
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+        (_, "windwalker") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 4, 7, 13], // 1H axe/mace/sword, fist
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+
+        // Druid
+        (_, "balance") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[4, 5, 6, 10, 13, 15], // mace, 2H mace, polearm, staff, fist, dagger
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+        (_, "feral") | (_, "guardian") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[4, 5, 6, 10, 13, 15], // mace, 2H mace, polearm, staff, fist, dagger
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+        ("druid", "restoration") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[4, 5, 10, 13, 15], // mace, 2H mace, staff, fist, dagger
+            can_use_shield: false,
+            can_use_offhand: true,
+        }),
+
+        // Demon Hunter
+        (_, "havoc") | (_, "vengeance") => Some(SpecWeaponProfile {
+            weapon_subclasses: &[0, 7, 9, 13], // 1H axe/sword, warglaive, fist
+            can_use_shield: false,
+            can_use_offhand: false,
+        }),
+
+        // Evoker
+        (_, "devastation") | (_, "preservation") | (_, "augmentation") => {
+            Some(SpecWeaponProfile {
+                weapon_subclasses: &[0, 4, 7, 10, 13, 15], // 1H axe/mace/sword, staff, fist, dagger
+                can_use_shield: false,
+                can_use_offhand: true,
+            })
+        }
+
         _ => None,
     }
 }

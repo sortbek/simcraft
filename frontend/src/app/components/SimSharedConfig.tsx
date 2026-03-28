@@ -274,7 +274,7 @@ function ExpertToggle({
                 onClick={() => setActiveTab(tab.key)}
                 className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                   activeTab === tab.key
-                    ? 'border-zinc-500 bg-zinc-800 text-white'
+                    ? 'border-gold/40 bg-gold/[0.08] text-gold'
                     : expertValues[tab.key].trim()
                       ? 'border-gold/30 bg-gold/[0.06] text-gold hover:border-gold/50'
                       : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'

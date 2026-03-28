@@ -182,8 +182,8 @@ export default function SimResultClient() {
                   href={`/sim/${s.id}`}
                   className={`rounded-lg border px-2.5 py-1 text-[12px] font-medium transition-all ${
                     isCurrent
-                      ? 'border-white bg-white text-black'
-                      : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
+                      ? 'border-gold/40 bg-gold/[0.08] text-gold'
+                      : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                   }`}
                 >
                   {formatScenarioLabel(s)}

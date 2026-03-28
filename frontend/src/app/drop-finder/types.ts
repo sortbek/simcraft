@@ -36,6 +36,8 @@ export interface DropItem {
   bonus_ids?: number[];
   difficulty_info?: Record<string, TrackInfo>;
   dungeon_info?: Record<string, TrackInfo>;
+  specs?: number[];
+  off_spec?: boolean;
 }
 
 export const QUALITY_COLORS: Record<number, string> = {
@@ -87,4 +89,91 @@ export function detectClass(simcInput: string): string | null {
 export function detectSpec(simcInput: string): string | null {
   const m = simcInput.match(/^spec=(\w+)/m);
   return m ? m[1] : null;
+}
+
+const CLASS_SPECS: Record<string, string[]> = {
+  warrior: ['arms', 'fury', 'protection'],
+  paladin: ['holy', 'protection', 'retribution'],
+  hunter: ['beast_mastery', 'marksmanship', 'survival'],
+  rogue: ['assassination', 'outlaw', 'subtlety'],
+  priest: ['discipline', 'holy', 'shadow'],
+  death_knight: ['blood', 'frost', 'unholy'],
+  deathknight: ['blood', 'frost', 'unholy'],
+  shaman: ['elemental', 'enhancement', 'restoration'],
+  mage: ['arcane', 'fire', 'frost'],
+  warlock: ['affliction', 'demonology', 'destruction'],
+  monk: ['brewmaster', 'mistweaver', 'windwalker'],
+  druid: ['balance', 'feral', 'guardian', 'restoration'],
+  demon_hunter: ['havoc', 'vengeance'],
+  demonhunter: ['havoc', 'vengeance'],
+  evoker: ['devastation', 'preservation', 'augmentation'],
+};
+
+export function getClassSpecs(className: string): string[] {
+  return CLASS_SPECS[className] ?? [];
+}
+
+const SPEC_IDS: Record<string, number> = {
+  arms: 71,
+  fury: 72,
+  protection_warrior: 73,
+  holy_paladin: 65,
+  protection_paladin: 66,
+  retribution: 70,
+  beast_mastery: 253,
+  marksmanship: 254,
+  survival: 255,
+  assassination: 259,
+  outlaw: 260,
+  subtlety: 261,
+  discipline: 256,
+  holy_priest: 257,
+  shadow: 258,
+  blood: 250,
+  frost_dk: 251,
+  unholy: 252,
+  elemental: 262,
+  enhancement: 263,
+  restoration_shaman: 264,
+  arcane: 62,
+  fire: 63,
+  frost_mage: 64,
+  affliction: 265,
+  demonology: 266,
+  destruction: 267,
+  brewmaster: 268,
+  windwalker: 269,
+  mistweaver: 270,
+  balance: 102,
+  feral: 103,
+  guardian: 104,
+  restoration_druid: 105,
+  havoc: 577,
+  vengeance: 581,
+  devastation: 1467,
+  preservation: 1468,
+  augmentation: 1473,
+};
+
+export function getSpecId(className: string, specName: string): number | null {
+  // Handle ambiguous spec names using class context
+  const key = (() => {
+    switch (specName) {
+      case 'protection':
+        return className === 'warrior' ? 'protection_warrior' : 'protection_paladin';
+      case 'holy':
+        return className === 'paladin' ? 'holy_paladin' : 'holy_priest';
+      case 'frost':
+        return className === 'mage' ? 'frost_mage' : 'frost_dk';
+      case 'restoration':
+        return className === 'shaman' ? 'restoration_shaman' : 'restoration_druid';
+      default:
+        return specName;
+    }
+  })();
+  return SPEC_IDS[key] ?? null;
+}
+
+export function formatSpecName(spec: string): string {
+  return spec.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -33,9 +33,17 @@ pub fn get_instance_drops(
 
     let max_armor = class_name.and_then(class_data::class_max_armor);
     let allowed_weapons = class_name.and_then(class_data::class_allowed_weapons);
-    let allowed_specs: Vec<u64> = class_name
-        .map(|c| class_data::class_spec_ids(c, spec_name))
+    let active_spec_names: Vec<&str> = spec_name
+        .map(|s| s.split(',').map(|s| s.trim()).collect())
         .unwrap_or_default();
+    let allowed_specs: Vec<u64> = match (class_name, spec_name) {
+        (Some(c), Some(specs)) => specs
+            .split(',')
+            .flat_map(|s| class_data::class_spec_ids(c, Some(s.trim())))
+            .collect(),
+        (Some(c), None) => class_data::class_spec_ids(c, None),
+        _ => Vec::new(),
+    };
 
     let encounters = instance.get("encounters")?.as_array()?;
     let encounter_ids: HashMap<i64, String> = encounters
@@ -80,41 +88,48 @@ pub fn get_instance_drops(
                     }
                 }
 
-                // Filter by weapon type
-                if let Some(weapons) = allowed_weapons {
-                    if item.get("itemClass").and_then(|c| c.as_u64()) == Some(2) {
-                        let weapon_sub = item
-                            .get("itemSubClass")
-                            .and_then(|s| s.as_u64())
-                            .unwrap_or(999);
-                        if !weapons.contains(&weapon_sub) {
-                            continue;
-                        }
-                    }
-                }
+                // Filter by weapon/shield/off-hand eligibility per active spec
+                let item_class = item.get("itemClass").and_then(|c| c.as_u64()).unwrap_or(0);
+                let weapon_sub = item
+                    .get("itemSubClass")
+                    .and_then(|s| s.as_u64())
+                    .unwrap_or(0);
 
-                // Filter shields
-                if inv_type == 14 {
+                if item_class == 2 || inv_type == 14 || inv_type == 23 {
+                    // Weapon, shield, or held off-hand — check spec profiles
                     if let Some(cn) = class_name {
-                        if !matches!(cn, "warrior" | "paladin" | "shaman") {
-                            continue;
+                        if !active_spec_names.is_empty() {
+                            let any_spec_can_use = active_spec_names.iter().any(|spec| {
+                                if let Some(profile) = class_data::spec_weapon_profile(cn, spec) {
+                                    if item_class == 2 {
+                                        profile.weapon_subclasses.contains(&weapon_sub)
+                                    } else if inv_type == 14 {
+                                        profile.can_use_shield
+                                    } else {
+                                        profile.can_use_offhand
+                                    }
+                                } else {
+                                    // Unknown spec — fall back to class-level check
+                                    if let Some(weapons) = allowed_weapons {
+                                        item_class != 2 || weapons.contains(&weapon_sub)
+                                    } else {
+                                        true
+                                    }
+                                }
+                            });
+                            if !any_spec_can_use {
+                                continue;
+                            }
+                        } else if let Some(weapons) = allowed_weapons {
+                            // No spec info — fall back to class-level weapon check
+                            if item_class == 2 && !weapons.contains(&weapon_sub) {
+                                continue;
+                            }
                         }
                     }
                 }
 
-                // Filter off-hand items
-                if inv_type == 23 {
-                    if let Some(cn) = class_name {
-                        if !matches!(
-                            cn,
-                            "priest" | "mage" | "warlock" | "druid" | "shaman" | "evoker"
-                        ) {
-                            continue;
-                        }
-                    }
-                }
-
-                // Filter spec restrictions
+                // Filter spec restrictions (items with explicit spec lists)
                 if let Some(specs) = item.get("specs").and_then(|s| s.as_array()) {
                     if !allowed_specs.is_empty() {
                         let item_specs: Vec<u64> =
@@ -182,6 +197,13 @@ pub fn get_instance_drops(
                     }
                 }
 
+                // Include item's spec restriction list (if any) for frontend off-spec indicators
+                let item_specs: Vec<u64> = item
+                    .get("specs")
+                    .and_then(|s| s.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
+                    .unwrap_or_default();
+
                 let mut item_json = serde_json::json!({
                     "item_id": item_id,
                     "name": item.get("name").and_then(|n| n.as_str()).unwrap_or(""),
@@ -191,6 +213,41 @@ pub fn get_instance_drops(
                     "inventory_type": inv_type,
                     "encounter": encounter_ids.get(eid).cloned().unwrap_or_default(),
                 });
+                if !item_specs.is_empty() {
+                    item_json["specs"] = serde_json::json!(item_specs);
+                }
+
+                // Compute off-spec flag: can the main spec use this item?
+                if let (Some(cn), Some(main_spec)) =
+                    (class_name, active_spec_names.first().copied())
+                {
+                    let main_spec_ids = class_data::class_spec_ids(cn, Some(main_spec));
+                    let mut main_can_use = true;
+
+                    // Check spec restrictions (if item has a specs list)
+                    if !item_specs.is_empty()
+                        && !main_spec_ids.iter().any(|id| item_specs.contains(id))
+                    {
+                        main_can_use = false;
+                    }
+
+                    // Check weapon/shield/offhand eligibility
+                    if main_can_use && (item_class == 2 || inv_type == 14 || inv_type == 23) {
+                        if let Some(profile) = class_data::spec_weapon_profile(cn, main_spec) {
+                            main_can_use = if item_class == 2 {
+                                profile.weapon_subclasses.contains(&weapon_sub)
+                            } else if inv_type == 14 {
+                                profile.can_use_shield
+                            } else {
+                                profile.can_use_offhand
+                            };
+                        }
+                    }
+
+                    if !main_can_use {
+                        item_json["off_spec"] = serde_json::json!(true);
+                    }
+                }
                 if !diff_info.is_empty() {
                     item_json["difficulty_info"] = Value::Object(diff_info);
                 }

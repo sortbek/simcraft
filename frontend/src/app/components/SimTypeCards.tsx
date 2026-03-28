@@ -61,11 +61,11 @@ export default function SimTypeCards() {
             <div className="flex items-center gap-3">
               <div
                 className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                  isActive ? 'bg-gold/20' : 'bg-zinc-800 group-hover:bg-zinc-700'
+                  isActive ? 'bg-gold/20' : 'bg-gold/[0.06] group-hover:bg-gold/[0.12]'
                 }`}
               >
                 <svg
-                  className={`h-4 w-4 transition-colors ${isActive ? 'text-gold' : 'text-zinc-400 group-hover:text-gold'}`}
+                  className={`h-4 w-4 transition-colors ${isActive ? 'text-gold' : 'text-gold/50 group-hover:text-gold'}`}
                   viewBox="0 0 16 16"
                   fill="none"
                   stroke="currentColor"
