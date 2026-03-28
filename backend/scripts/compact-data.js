@@ -297,6 +297,25 @@ async function main() {
   console.log(
     `\n  Total: ${fmt(totalIn)} -> ${fmt(totalOut)}  (-${((1 - totalOut / totalIn) * 100).toFixed(0)}%)`
   );
+
+  // Download static assets (faction crests + backgrounds)
+  const staticAssets = {
+    "faction-alliance.png": "https://assets-bwa.worldofwarcraft.blizzard.com/dab2428aa2f51e140c9a.png",
+    "faction-horde.png": "https://assets-bwa.worldofwarcraft.blizzard.com/3edbc547ab318bd385b2.png",
+    "faction-bg-alliance.jpg": "https://assets-bwa.worldofwarcraft.blizzard.com/ae30cbf7f81a72bba2fc.jpg",
+    "faction-bg-horde.jpg": "https://assets-bwa.worldofwarcraft.blizzard.com/4ff3a76b171ba4f1842b.jpg",
+  };
+  const assetsDir = path.join(outputDir, "static");
+  fs.mkdirSync(assetsDir, { recursive: true });
+  let assetCount = 0;
+  for (const [filename, url] of Object.entries(staticAssets)) {
+    const dest = path.join(assetsDir, filename);
+    if (await downloadFile(url, dest)) assetCount++;
+  }
+  if (assetCount > 0) {
+    console.log(`  Downloaded ${assetCount} static assets`);
+  }
+
   console.log(`  Output: ${outputDir}`);
 }
 
