@@ -64,9 +64,7 @@ export default function GearItemRow({
           <input type="checkbox" checked={checked} onChange={onToggle} className="peer sr-only" />
           <div
             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border transition-all ${
-              checked
-                ? 'border-gold bg-gold'
-                : 'border-gray-600 group-hover:border-gray-500'
+              checked ? 'border-gold bg-gold' : 'border-gray-600 group-hover:border-gray-500'
             }`}
           >
             {checked && (
@@ -102,7 +100,14 @@ export default function GearItemRow({
           vault ? 'ring-2 ring-amber-400/70' : 'ring-1 ring-white/5'
         }`}
       >
-        <img src={getIconUrl(icon)} alt="" width={32} height={32} className="h-full w-full" loading="lazy" />
+        <img
+          src={getIconUrl(icon)}
+          alt=""
+          width={32}
+          height={32}
+          className="h-full w-full"
+          loading="lazy"
+        />
       </div>
 
       {/* Name + details */}
@@ -159,9 +164,5 @@ export default function GearItemRow({
     );
   }
 
-  return (
-    <div className={`${baseClass} ${equipped ? 'bg-white/[0.03]' : ''}`}>
-      {content}
-    </div>
-  );
+  return <div className={`${baseClass} ${equipped ? 'bg-white/[0.03]' : ''}`}>{content}</div>;
 }

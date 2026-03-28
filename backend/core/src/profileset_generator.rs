@@ -504,113 +504,99 @@ pub fn generate_upgrade_compare_input(
         choices: Vec<(String, usize)>, // (slot, option_index)
     }
 
-    fn within_budget(
-        spent: &HashMap<u64, u64>,
-        cost: &HashMap<u64, u64>,
-        budget: &HashMap<u64, u64>,
-    ) -> bool {
-        cost.iter().all(|(cid, amount)| {
-            let next = spent.get(cid).copied().unwrap_or(0) + amount;
-            next <= budget.get(cid).copied().unwrap_or(0)
-        })
+    struct DfsCtx<'a> {
+        slots: &'a [String],
+        options: &'a HashMap<String, Vec<Value>>,
+        budget: &'a HashMap<u64, u64>,
+        limit: usize,
+        best_spend: u64,
+        retained: Vec<Combo>,
+        spent: HashMap<u64, u64>,
+        current: Vec<(String, usize)>,
     }
 
-    let mut retained: Vec<Combo> = Vec::new();
-    let mut best_spend: u64 = 0;
-
-    fn dfs(
-        idx: usize,
-        slots: &[String],
-        options: &HashMap<String, Vec<Value>>,
-        budget: &HashMap<u64, u64>,
-        spent: &mut HashMap<u64, u64>,
-        current: &mut Vec<(String, usize)>,
-        best_spend: &mut u64,
-        retained: &mut Vec<Combo>,
-        limit: usize,
-    ) {
-        if idx == slots.len() {
-            let total: u64 = spent.values().sum();
-            if total > *best_spend {
-                *best_spend = total;
-                retained.clear();
-            }
-            if total >= *best_spend {
-                retained.push(Combo {
-                    choices: current.clone(),
-                });
-            }
-            return;
+    impl DfsCtx<'_> {
+        fn within_budget(&self, cost: &HashMap<u64, u64>) -> bool {
+            cost.iter().all(|(cid, amount)| {
+                let next = self.spent.get(cid).copied().unwrap_or(0) + amount;
+                next <= self.budget.get(cid).copied().unwrap_or(0)
+            })
         }
 
-        let slot = &slots[idx];
-        let slot_opts = match options.get(slot) {
-            Some(o) => o,
-            None => {
-                // No upgrade for this slot — keep equipped (option 0 = no change)
-                current.push((slot.clone(), 0));
-                dfs(
-                    idx + 1, slots, options, budget, spent, current, best_spend, retained, limit,
-                );
-                current.pop();
+        fn dfs(&mut self, idx: usize) {
+            if idx == self.slots.len() {
+                let total: u64 = self.spent.values().sum();
+                if total > self.best_spend {
+                    self.best_spend = total;
+                    self.retained.clear();
+                }
+                if total >= self.best_spend {
+                    self.retained.push(Combo {
+                        choices: self.current.clone(),
+                    });
+                }
                 return;
             }
-        };
 
-        // Option 0: keep current (no upgrade)
-        current.push((slot.clone(), 0));
-        dfs(
-            idx + 1, slots, options, budget, spent, current, best_spend, retained, limit,
-        );
-        current.pop();
+            let slot = self.slots[idx].clone();
+            let slot_opts: Option<Vec<Value>> = self.options.get(&slot).cloned();
 
-        // Options 1..N: upgrade to each level
-        for (i, opt) in slot_opts.iter().enumerate() {
-            let costs: HashMap<u64, u64> = opt
-                .get("upgrade_costs")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_default();
+            let Some(slot_opts) = slot_opts else {
+                self.current.push((slot, 0));
+                self.dfs(idx + 1);
+                self.current.pop();
+                return;
+            };
 
-            if !within_budget(spent, &costs, budget) {
-                continue;
-            }
+            // Option 0: keep current (no upgrade)
+            self.current.push((slot.clone(), 0));
+            self.dfs(idx + 1);
+            self.current.pop();
 
-            // Add costs
-            for (cid, amount) in &costs {
-                *spent.entry(*cid).or_insert(0) += amount;
-            }
-            current.push((slot.clone(), i + 1)); // 1-indexed (0 = keep)
+            // Options 1..N: upgrade to each level
+            for (i, opt) in slot_opts.iter().enumerate() {
+                let costs: HashMap<u64, u64> = opt
+                    .get("upgrade_costs")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or_default();
 
-            dfs(
-                idx + 1, slots, options, budget, spent, current, best_spend, retained, limit,
-            );
+                if !self.within_budget(&costs) {
+                    continue;
+                }
 
-            current.pop();
-            // Remove costs
-            for (cid, amount) in &costs {
-                let entry = spent.entry(*cid).or_insert(0);
-                *entry = entry.saturating_sub(*amount);
-            }
+                for (cid, amount) in &costs {
+                    *self.spent.entry(*cid).or_insert(0) += amount;
+                }
+                self.current.push((slot.clone(), i + 1));
 
-            if retained.len() > limit * 2 {
-                return; // Safety valve
+                self.dfs(idx + 1);
+
+                self.current.pop();
+                for (cid, amount) in &costs {
+                    let entry = self.spent.entry(*cid).or_insert(0);
+                    *entry = entry.saturating_sub(*amount);
+                }
+
+                if self.retained.len() > self.limit * 2 {
+                    return;
+                }
             }
         }
     }
 
-    let mut spent: HashMap<u64, u64> = HashMap::new();
-    let mut current: Vec<(String, usize)> = Vec::new();
-    dfs(
-        0,
-        &slots,
-        upgraded_options_by_slot,
-        upgrade_budget,
-        &mut spent,
-        &mut current,
-        &mut best_spend,
-        &mut retained,
+    let mut ctx = DfsCtx {
+        slots: &slots,
+        options: upgraded_options_by_slot,
+        budget: upgrade_budget,
         limit,
-    );
+        best_spend: 0,
+        retained: Vec::new(),
+        spent: HashMap::new(),
+        current: Vec::new(),
+    };
+    ctx.dfs(0);
+
+    let retained = ctx.retained;
 
     if retained.len() > limit {
         return Err(format!(
@@ -658,17 +644,17 @@ pub fn generate_upgrade_compare_input(
                 continue; // Keep equipped
             }
             let opt = &upgraded_options_by_slot[slot][*choice_idx - 1];
-            let simc = opt.get("simc_string").and_then(|v| v.as_str()).unwrap_or("");
+            let simc = opt
+                .get("simc_string")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if !simc.is_empty() {
                 lines.push(format!("profileset.\"{}\"+={}={}", combo_name, slot, simc));
             }
 
             let mut meta = item_meta(opt, slot);
             meta["is_kept"] = json!(false);
-            meta["upgrade_levels"] = opt
-                .get("upgrade_levels")
-                .cloned()
-                .unwrap_or(json!(0));
+            meta["upgrade_levels"] = opt.get("upgrade_levels").cloned().unwrap_or(json!(0));
             items_meta.push(meta);
         }
 

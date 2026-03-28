@@ -35,7 +35,10 @@ interface PrepareResponse {
 
 // ---- Helpers ----
 
-function formatCosts(costs: Record<string, number>, currencies: Record<string, CurrencyMeta>): string {
+function formatCosts(
+  costs: Record<string, number>,
+  currencies: Record<string, CurrencyMeta>
+): string {
   const entries = Object.entries(costs).sort((a, b) => Number(a[0]) - Number(b[0]));
   if (entries.length === 0) return 'no cost';
   return entries
@@ -78,7 +81,9 @@ function useUpgradeData(simcInput: string) {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [simcInput]);
 
   return { data, loading };
@@ -223,16 +228,19 @@ export default function UpgradeComparePage() {
       {/* Explainer */}
       <div className="rounded-lg border border-border/50 bg-surface-2/50 px-4 py-3">
         <p className="text-[13px] leading-relaxed text-zinc-400">
-          Find the best way to spend your <span className="font-medium text-gold/80">Dawncrest upgrade currencies</span>.
-          Select which equipped items to consider, and SimHammer will test every valid upgrade
-          combination within your budget to find which gives the most DPS.
+          Find the best way to spend your{' '}
+          <span className="font-medium text-gold/80">Dawncrest upgrade currencies</span>. Select
+          which equipped items to consider, and SimHammer will test every valid upgrade combination
+          within your budget to find which gives the most DPS.
         </p>
       </div>
 
       {/* Currency Budget */}
       {hasCurrencies && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-widest text-muted">Budget</span>
+          <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
+            Budget
+          </span>
           {Object.values(currencies)
             .filter((c) => c.name)
             .sort((a, b) => a.id - b.id)
@@ -270,7 +278,12 @@ export default function UpgradeComparePage() {
           <div className="card flex justify-center p-8">
             <svg className="h-6 w-6 animate-spin text-gold" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-              <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path
+                d="M14 8a6 6 0 00-6-6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
             </svg>
           </div>
         ) : candidates.length === 0 ? (

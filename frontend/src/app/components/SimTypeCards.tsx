@@ -111,7 +111,8 @@ export default function SimTypeCards() {
               <div className="absolute left-0 right-0 top-full z-50 pt-1">
                 <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xl">
                   {sim.children!.map((child) => {
-                    const childActive = pathname === child.href || pathname.startsWith(child.href + '/');
+                    const childActive =
+                      pathname === child.href || pathname.startsWith(child.href + '/');
                     return (
                       <Link
                         key={child.href}

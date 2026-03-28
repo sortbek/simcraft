@@ -45,7 +45,9 @@ function useFaction(realm?: string, name?: string): string | null {
         // ignore
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [realm, name]);
 
   return faction;
@@ -107,7 +109,10 @@ export default function DpsHeroCard({
             src={insetUrl}
             alt=""
             className="pointer-events-none absolute bottom-0 left-0 h-[130%] w-auto -translate-x-1/4 object-contain opacity-15"
-            style={{ maskImage: 'linear-gradient(to right, black 50%, transparent 95%)', WebkitMaskImage: 'linear-gradient(to right, black 50%, transparent 95%)' }}
+            style={{
+              maskImage: 'linear-gradient(to right, black 50%, transparent 95%)',
+              WebkitMaskImage: 'linear-gradient(to right, black 50%, transparent 95%)',
+            }}
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).style.display = 'none';
             }}

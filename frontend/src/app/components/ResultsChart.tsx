@@ -146,7 +146,7 @@ export default function ResultsChart({
             return (
               <div key={i}>
                 <div
-                  className={`group relative flex h-7 items-center${hasChildren ? ' cursor-pointer' : ''}`}
+                  className={`group relative flex h-7 items-center${hasChildren ? 'cursor-pointer' : ''}`}
                   onClick={
                     hasChildren
                       ? () =>
@@ -197,18 +197,11 @@ export default function ResultsChart({
                 </div>
                 {isOpen &&
                   a.children?.map((child, ci) => {
-                    const childColor =
-                      SCHOOL_COLORS[child.school] || SCHOOL_COLORS.physical;
-                    const childPct =
-                      totalDps > 0
-                        ? (child.portion_dps / totalDps) * 100
-                        : 0;
+                    const childColor = SCHOOL_COLORS[child.school] || SCHOOL_COLORS.physical;
+                    const childPct = totalDps > 0 ? (child.portion_dps / totalDps) * 100 : 0;
                     const childName = child.name.replace(/_/g, ' ');
                     return (
-                      <div
-                        key={ci}
-                        className="group relative flex h-6 items-center"
-                      >
+                      <div key={ci} className="group relative flex h-6 items-center">
                         <div
                           className="absolute bottom-0.5 top-0.5 w-[2px] rounded-full"
                           style={{

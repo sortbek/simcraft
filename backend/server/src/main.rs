@@ -60,7 +60,15 @@ async fn main() {
         }
     };
 
-    server::start_with_storage_bind(storage, simc_path, &bind_host, port, frontend_dir, Some(data_dir)).await;
+    server::start_with_storage_bind(
+        storage,
+        simc_path,
+        &bind_host,
+        port,
+        frontend_dir,
+        Some(data_dir),
+    )
+    .await;
 
     // Keep the server running
     tokio::signal::ctrl_c().await.ok();

@@ -24,8 +24,6 @@ use crate::types::ResolveGearResponse;
 #[derive(Clone)]
 struct FrontendDir(PathBuf);
 
-#[derive(Clone)]
-struct DataDir(PathBuf);
 
 #[cfg(feature = "desktop")]
 /// Shared system info state, refreshed in background for live CPU readings.
@@ -801,10 +799,16 @@ async fn create_droptimizer_sim(
 // ---- Upgrade Compare ----
 
 /// Shared prep: parse SimC input, extract upgrade budget, build upgrade options per slot.
+struct PreparedUpgradeCompare {
+    base_profile: String,
+    upgraded_options_by_slot: HashMap<String, Vec<Value>>,
+    upgrade_budget: HashMap<u64, u64>,
+}
+
 fn prepare_upgrade_compare(
     simc_input: &str,
     selected_slots: &[String],
-) -> Result<(String, HashMap<String, Vec<Value>>, HashMap<u64, u64>), HttpResponse> {
+) -> Result<PreparedUpgradeCompare, HttpResponse> {
     let upgrade_budget = addon_parser::parse_upgrade_currencies(simc_input);
     if upgrade_budget.is_empty() {
         return Err(HttpResponse::BadRequest().json(json!({
@@ -874,7 +878,10 @@ fn prepare_upgrade_compare(
             let has_relevant_cost = opt
                 .get("cumulative_costs")
                 .and_then(|c| c.as_object())
-                .map(|m| m.keys().any(|k| upgrade_currency_ids.contains(&k.parse().unwrap_or(0))))
+                .map(|m| {
+                    m.keys()
+                        .any(|k| upgrade_currency_ids.contains(&k.parse().unwrap_or(0)))
+                })
                 .unwrap_or(false);
             if !has_relevant_cost {
                 continue;
@@ -918,7 +925,10 @@ fn prepare_upgrade_compare(
                 upgraded["simc_string"] = json!(new_simc);
 
                 // Resolve new ilevel
-                let item_id = equipped.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                let item_id = equipped
+                    .get("item_id")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 if let Some(info) = game_data::get_item_info(item_id, Some(&new_bonus_ids)) {
                     if let Some(ilvl) = info.get("ilevel").and_then(|v| v.as_u64()) {
                         upgraded["ilevel"] = json!(ilvl);
@@ -938,7 +948,11 @@ fn prepare_upgrade_compare(
         }
     }
 
-    Ok((base_profile, upgraded_options_by_slot, upgrade_budget))
+    Ok(PreparedUpgradeCompare {
+        base_profile,
+        upgraded_options_by_slot,
+        upgrade_budget,
+    })
 }
 
 /// Check if two bonus IDs belong to the same upgrade group.
@@ -959,16 +973,10 @@ fn bonuses_in_same_group(a: u64, b: u64) -> bool {
 
 /// Returns everything the frontend needs to render the upgrade-compare UI in one call:
 /// equipped items, upgrade options per slot, currency budget with metadata.
-async fn get_upgrade_compare_prepare(
-    req: web::Json<serde_json::Value>,
-) -> HttpResponse {
-    let simc_input = req
-        .get("simc_input")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+async fn get_upgrade_compare_prepare(req: web::Json<serde_json::Value>) -> HttpResponse {
+    let simc_input = req.get("simc_input").and_then(|v| v.as_str()).unwrap_or("");
     if simc_input.len() < 10 {
-        return HttpResponse::BadRequest()
-            .json(json!({ "detail": "SimC input too short." }));
+        return HttpResponse::BadRequest().json(json!({ "detail": "SimC input too short." }));
     }
 
     let upgrade_budget = addon_parser::parse_upgrade_currencies(simc_input);
@@ -987,7 +995,9 @@ async fn get_upgrade_compare_prepare(
             None => continue,
         };
         let equipped = match slot_items.iter().find(|it| {
-            it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false)
+            it.get("is_equipped")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
         }) {
             Some(e) => e,
             None => continue,
@@ -1029,27 +1039,46 @@ async fn get_upgrade_compare_prepare(
             .iter()
             .filter(|o| {
                 let level = o.get("level").and_then(|l| l.as_u64()).unwrap_or(0);
-                if level <= current_level { return false; }
+                if level <= current_level {
+                    return false;
+                }
                 o.get("cumulative_costs")
                     .and_then(|c| c.as_object())
-                    .map(|m| m.keys().any(|k| upgrade_currency_ids.contains(&k.parse().unwrap_or(0))))
+                    .map(|m| {
+                        m.keys()
+                            .any(|k| upgrade_currency_ids.contains(&k.parse().unwrap_or(0)))
+                    })
                     .unwrap_or(false)
             })
             .collect();
 
-        if upgrades.is_empty() { continue; }
+        if upgrades.is_empty() {
+            continue;
+        }
 
         let max_upgrade = upgrades.last().unwrap();
-        let item_id = equipped.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+        let item_id = equipped
+            .get("item_id")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         let ilevel = equipped.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0);
-        let target_ilevel = max_upgrade.get("itemLevel").and_then(|v| v.as_u64()).unwrap_or(0);
+        let target_ilevel = max_upgrade
+            .get("itemLevel")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
 
         // Delta cost = target cumulative - current cumulative
         let mut delta_costs: HashMap<String, u64> = HashMap::new();
-        if let Some(target_cc) = max_upgrade.get("cumulative_costs").and_then(|v| v.as_object()) {
+        if let Some(target_cc) = max_upgrade
+            .get("cumulative_costs")
+            .and_then(|v| v.as_object())
+        {
             for (k, v) in target_cc {
                 let target_amt = v.as_u64().unwrap_or(0);
-                let current_amt = current_cumulative.get(&k.parse::<u64>().unwrap_or(0)).copied().unwrap_or(0);
+                let current_amt = current_cumulative
+                    .get(&k.parse::<u64>().unwrap_or(0))
+                    .copied()
+                    .unwrap_or(0);
                 let delta = target_amt.saturating_sub(current_amt);
                 if delta > 0 {
                     delta_costs.insert(k.clone(), delta);
@@ -1086,21 +1115,18 @@ async fn get_upgrade_compare_prepare(
     }))
 }
 
-async fn get_upgrade_compare_combo_count(
-    req: web::Json<UpgradeCompareRequest>,
-) -> HttpResponse {
+async fn get_upgrade_compare_combo_count(req: web::Json<UpgradeCompareRequest>) -> HttpResponse {
     let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
 
-    let (base_profile, upgraded_options_by_slot, upgrade_budget) =
-        match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
+    let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
 
     match profileset_generator::generate_upgrade_compare_input(
-        &base_profile,
-        &upgraded_options_by_slot,
-        &upgrade_budget,
+        &prepared.base_profile,
+        &prepared.upgraded_options_by_slot,
+        &prepared.upgrade_budget,
         req.max_combinations,
     ) {
         Ok((_, count, _)) => HttpResponse::Ok().json(json!({ "combo_count": count })),
@@ -1124,17 +1150,16 @@ async fn create_upgrade_compare_sim(
 ) -> HttpResponse {
     let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
 
-    let (base_profile, upgraded_options_by_slot, upgrade_budget) =
-        match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
+    let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
 
     let (generated_input, combo_count, combo_metadata) =
         match profileset_generator::generate_upgrade_compare_input(
-            &base_profile,
-            &upgraded_options_by_slot,
-            &upgrade_budget,
+            &prepared.base_profile,
+            &prepared.upgraded_options_by_slot,
+            &prepared.upgrade_budget,
             req.max_combinations,
         ) {
             Ok(result) => result,
@@ -1798,7 +1823,15 @@ pub async fn start_with_storage(
     frontend_dir: Option<PathBuf>,
     data_dir: Option<PathBuf>,
 ) -> u16 {
-    start_with_storage_bind(storage, simc_path, "127.0.0.1", port, frontend_dir, data_dir).await
+    start_with_storage_bind(
+        storage,
+        simc_path,
+        "127.0.0.1",
+        port,
+        frontend_dir,
+        data_dir,
+    )
+    .await
 }
 
 /// Start the actix-web HTTP server with a given storage backend and bind address.
@@ -1880,10 +1913,22 @@ pub async fn start_with_storage_bind(
                 "/api/instances/{id}/drops",
                 web::get().to(get_instance_drops),
             )
-            .route("/api/upgrade-compare/prepare", web::post().to(get_upgrade_compare_prepare))
-            .route("/api/upgrade-compare/sim", web::post().to(create_upgrade_compare_sim))
-            .route("/api/upgrade-compare/combo-count", web::post().to(get_upgrade_compare_combo_count))
-            .route("/api/upgrade-options", web::get().to(get_upgrade_options_handler))
+            .route(
+                "/api/upgrade-compare/prepare",
+                web::post().to(get_upgrade_compare_prepare),
+            )
+            .route(
+                "/api/upgrade-compare/sim",
+                web::post().to(create_upgrade_compare_sim),
+            )
+            .route(
+                "/api/upgrade-compare/combo-count",
+                web::post().to(get_upgrade_compare_combo_count),
+            )
+            .route(
+                "/api/upgrade-options",
+                web::get().to(get_upgrade_options_handler),
+            )
             .route("/api/config", web::get().to(get_config))
             .route("/health", web::get().to(health_check));
         #[cfg(feature = "desktop")]
@@ -1909,8 +1954,7 @@ pub async fn start_with_storage_bind(
             let static_dir = dir.join("static");
             if static_dir.exists() {
                 app = app.service(
-                    actix_files::Files::new("/api/data/static", static_dir)
-                        .prefer_utf8(true),
+                    actix_files::Files::new("/api/data/static", static_dir).prefer_utf8(true),
                 );
             }
         }

@@ -188,15 +188,9 @@ pub fn load(data_dir: &Path) {
                 if bonus_id > 0 {
                     if let Some(currency) = entry.get("currency") {
                         let cid = currency.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                        let amount = currency
-                            .get("amount")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0);
+                        let amount = currency.get("amount").and_then(|v| v.as_u64()).unwrap_or(0);
                         if cid > 0 && amount > 0 {
-                            step_costs
-                                .entry(bonus_id)
-                                .or_default()
-                                .insert(cid, amount);
+                            step_costs.entry(bonus_id).or_default().insert(cid, amount);
                             currencies.entry(cid).or_insert_with(|| {
                                 let n = currency
                                     .get("name")

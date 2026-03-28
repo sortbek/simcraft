@@ -231,8 +231,12 @@ export default function TopGearResults({
             />
           )}
           <div className="relative">
-            <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">Best Gear</p>
-            <div className={`grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}>
+            <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">
+              Best Gear
+            </p>
+            <div
+              className={`grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}
+            >
               {/* Left column */}
               <div className="space-y-1">
                 {GEAR_ORDER_LEFT.map((slot) => (
@@ -266,7 +270,9 @@ export default function TopGearResults({
               </div>
             </div>
             {/* Weapons row */}
-            <div className={`mt-1 grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}>
+            <div
+              className={`mt-1 grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}
+            >
               {GEAR_ORDER_BOTTOM.map((slot, i) => (
                 <GearSlotRow
                   key={slot}
@@ -524,7 +530,9 @@ function GearSlotRow({
 
   if (!item || item.item_id <= 0) {
     return (
-      <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
+      <div
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}
+      >
         <div className="h-7 w-7 shrink-0 rounded border border-border bg-white/[0.03]" />
         <div className={rtl ? 'text-right' : ''}>
           <p className="text-[11px] text-gray-600">{SLOT_LABELS[slot] || slot}</p>

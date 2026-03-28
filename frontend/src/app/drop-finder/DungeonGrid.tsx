@@ -32,18 +32,20 @@ export default function DungeonGrid({
         }`}
       >
         <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 brightness-[0.5] saturate-[0.7]">
-          {instances.slice(0, 4).map((inst) =>
-            inst.image_url ? (
-              <img
-                key={inst.id}
-                src={imgSrc(inst.image_url)}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div key={inst.id} className="bg-surface-2" />
-            )
-          )}
+          {instances
+            .slice(0, 4)
+            .map((inst) =>
+              inst.image_url ? (
+                <img
+                  key={inst.id}
+                  src={imgSrc(inst.image_url)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div key={inst.id} className="bg-surface-2" />
+              )
+            )}
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         <div className="relative w-full px-3 pb-3 pt-1">
@@ -71,7 +73,7 @@ export default function DungeonGrid({
             <img
               src={imgSrc(inst.image_url)}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover brightness-[0.6] saturate-[0.8] transition-all duration-300 group-hover:brightness-75 group-hover:scale-105"
+              className="absolute inset-0 h-full w-full object-cover brightness-[0.6] saturate-[0.8] transition-all duration-300 group-hover:scale-105 group-hover:brightness-75"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).style.display = 'none';
               }}
