@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { DropItem, UpgradeTracks } from './types';
 import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 
@@ -110,9 +111,11 @@ function DropItemCard({
           : 'border-border bg-surface-2 hover:border-gray-500'
       }`}
     >
-      <img
+      <Image
         src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`}
         alt=""
+        width={24}
+        height={24}
         className="h-6 w-6 rounded"
       />
       <a

@@ -1,4 +1,4 @@
-export type ItemOrigin = "equipped" | "bags" | "vault";
+export type ItemOrigin = 'equipped' | 'bags' | 'vault';
 
 export interface ParsedItem {
   slot: string;
@@ -16,68 +16,68 @@ export interface ParsedItem {
 export type ItemsBySlot = Record<string, ParsedItem[]>;
 
 export const GEAR_SLOTS = [
-  "head",
-  "neck",
-  "shoulder",
-  "back",
-  "chest",
-  "wrist",
-  "hands",
-  "waist",
-  "legs",
-  "feet",
-  "finger1",
-  "finger2",
-  "trinket1",
-  "trinket2",
-  "main_hand",
-  "off_hand",
+  'head',
+  'neck',
+  'shoulder',
+  'back',
+  'chest',
+  'wrist',
+  'hands',
+  'waist',
+  'legs',
+  'feet',
+  'finger1',
+  'finger2',
+  'trinket1',
+  'trinket2',
+  'main_hand',
+  'off_hand',
 ];
 
 export const SLOT_LABELS: Record<string, string> = {
-  head: "Head",
-  neck: "Neck",
-  shoulder: "Shoulder",
-  back: "Back",
-  chest: "Chest",
-  wrist: "Wrist",
-  hands: "Hands",
-  waist: "Waist",
-  legs: "Legs",
-  feet: "Feet",
-  finger1: "Ring 1",
-  finger2: "Ring 2",
-  trinket1: "Trinket 1",
-  trinket2: "Trinket 2",
-  main_hand: "Main Hand",
-  off_hand: "Off Hand",
+  head: 'Head',
+  neck: 'Neck',
+  shoulder: 'Shoulder',
+  back: 'Back',
+  chest: 'Chest',
+  wrist: 'Wrist',
+  hands: 'Hands',
+  waist: 'Waist',
+  legs: 'Legs',
+  feet: 'Feet',
+  finger1: 'Ring 1',
+  finger2: 'Ring 2',
+  trinket1: 'Trinket 1',
+  trinket2: 'Trinket 2',
+  main_hand: 'Main Hand',
+  off_hand: 'Off Hand',
 };
 
-const SLOT_REGEX = new RegExp(`^(${GEAR_SLOTS.join("|")})=(.*)`, "i");
+const SLOT_REGEX = new RegExp(`^(${GEAR_SLOTS.join('|')})=(.*)`, 'i');
 
 // Bag items for these slots should appear in both paired slots
 const BASE_PAIRED_SLOTS: Record<string, string> = {
-  finger1: "finger2",
-  finger2: "finger1",
-  trinket1: "trinket2",
-  trinket2: "trinket1",
+  finger1: 'finger2',
+  finger2: 'finger1',
+  trinket1: 'trinket2',
+  trinket2: 'trinket1',
 };
 
 const DUAL_WIELD_SPECS = new Set([
-  "frost",
-  "fury",
-  "enhancement",
-  "windwalker",
-  "brewmaster",
-  "havoc",
-  "vengeance",
-  "outlaw",
-  "assassination",
-  "subtlety",
+  'frost',
+  'fury',
+  'enhancement',
+  'windwalker',
+  'brewmaster',
+  'havoc',
+  'vengeance',
+  'outlaw',
+  'assassination',
+  'subtlety',
 ]);
 
 function detectSpec(simcInput: string): string | null {
-  for (const line of simcInput.split("\n")) {
+  for (const line of simcInput.split('\n')) {
     const m = line.trim().match(/^spec=(\w+)/);
     if (m) return m[1].toLowerCase();
   }
@@ -92,8 +92,8 @@ function getPairedSlots(): Record<string, string> {
 }
 
 function parseItemProps(
-  itemStr: string,
-): Omit<ParsedItem, "slot" | "is_equipped" | "simc_string" | "origin"> {
+  itemStr: string
+): Omit<ParsedItem, 'slot' | 'is_equipped' | 'simc_string' | 'origin'> {
   const idMatch = itemStr.match(/,id=(\d+)/);
   const ilvlMatch = itemStr.match(/(?:ilevel|ilvl)=(\d+)/);
   const nameMatch = itemStr.match(/name=([^,]+)/);
@@ -102,17 +102,15 @@ function parseItemProps(
   const enchantMatch = itemStr.match(/enchant_id=(\d+)/);
   const gemMatch = itemStr.match(/gem_id=(\d+)/);
 
-  let name = "";
+  let name = '';
   if (nameMatch) {
-    name = nameMatch[1].replace(/_/g, " ");
+    name = nameMatch[1].replace(/_/g, ' ');
   } else if (encMatch) {
-    name = encMatch[1].replace(/_/g, " ");
+    name = encMatch[1].replace(/_/g, ' ');
   }
   name = name.replace(/\b\w/g, (c) => c.toUpperCase());
 
-  const bonus_ids = bonusMatch
-    ? bonusMatch[1].split(/[/:]/).map(Number).filter(Boolean)
-    : [];
+  const bonus_ids = bonusMatch ? bonusMatch[1].split(/[/:]/).map(Number).filter(Boolean) : [];
 
   return {
     item_id: idMatch ? parseInt(idMatch[1]) : 0,
@@ -150,19 +148,19 @@ const CLASS_MAX_ARMOR: Record<string, number> = {
 };
 
 const ARMOR_SLOTS = new Set([
-  "head",
-  "shoulder",
-  "chest",
-  "wrist",
-  "hands",
-  "waist",
-  "legs",
-  "feet",
+  'head',
+  'shoulder',
+  'chest',
+  'wrist',
+  'hands',
+  'waist',
+  'legs',
+  'feet',
 ]);
 
 /** Detect character class from simc input. */
 export function detectClass(simcInput: string): string | null {
-  for (const line of simcInput.split("\n")) {
+  for (const line of simcInput.split('\n')) {
     const m = line.trim().match(CLASS_RE);
     if (m) return m[1];
   }
@@ -184,25 +182,25 @@ export interface TalentLoadout {
 /** Parse all talent loadouts from a simc input string. */
 export function parseTalentLoadouts(simcInput: string): TalentLoadout[] {
   const loadouts: TalentLoadout[] = [];
-  const lines = simcInput.split("\n");
-  let pendingLabel = "";
+  const lines = simcInput.split('\n');
+  let pendingLabel = '';
 
   for (const rawLine of lines) {
     const stripped = rawLine.trim();
 
-    if (stripped.startsWith("#")) {
-      const clean = stripped.replace(/^#+\s*/, "");
+    if (stripped.startsWith('#')) {
+      const clean = stripped.replace(/^#+\s*/, '');
       const talentMatch = clean.match(/^talents=(.+)/);
       if (talentMatch) {
         const name = pendingLabel || `Loadout ${loadouts.length + 1}`;
         loadouts.push({ name, talentString: talentMatch[1], isActive: false });
-        pendingLabel = "";
+        pendingLabel = '';
       } else if (
         !clean.match(SLOT_REGEX) &&
         !clean.match(ITEM_HEADER_REGEX) &&
         clean.length > 0 &&
         clean.length < 60 &&
-        !clean.startsWith("gear_")
+        !clean.startsWith('gear_')
       ) {
         // Potential loadout name header (short non-gear comment)
         pendingLabel = clean;
@@ -211,13 +209,13 @@ export function parseTalentLoadouts(simcInput: string): TalentLoadout[] {
       const talentMatch = stripped.match(/^talents=(.+)/);
       if (talentMatch) {
         loadouts.unshift({
-          name: pendingLabel || "Active",
+          name: pendingLabel || 'Active',
           talentString: talentMatch[1],
           isActive: true,
         });
-        pendingLabel = "";
+        pendingLabel = '';
       } else {
-        pendingLabel = "";
+        pendingLabel = '';
       }
     }
   }
@@ -233,26 +231,26 @@ export function parseAddonString(simcInput: string): ItemsBySlot {
   const bagItems: Record<string, ParsedItem[]> = {};
 
   // Track the last "# Name (ilvl)" header line
-  let pendingName = "";
+  let pendingName = '';
   let pendingIlevel = 0;
   let inVaultSection = false;
 
-  for (const rawLine of simcInput.split("\n")) {
+  for (const rawLine of simcInput.split('\n')) {
     const stripped = rawLine.trim();
 
-    if (stripped.startsWith("#")) {
-      const clean = stripped.replace(/^#+\s*/, "");
+    if (stripped.startsWith('#')) {
+      const clean = stripped.replace(/^#+\s*/, '');
 
       // Detect vault section boundaries
-      if (clean.toLowerCase() === "weekly reward choices") {
+      if (clean.toLowerCase() === 'weekly reward choices') {
         inVaultSection = true;
-        pendingName = "";
+        pendingName = '';
         pendingIlevel = 0;
         continue;
       }
-      if (clean.toLowerCase() === "end of weekly reward choices") {
+      if (clean.toLowerCase() === 'end of weekly reward choices') {
         inVaultSection = false;
-        pendingName = "";
+        pendingName = '';
         pendingIlevel = 0;
         continue;
       }
@@ -265,9 +263,9 @@ export function parseAddonString(simcInput: string): ItemsBySlot {
         // Use pending header data if the item line didn't have name/ilvl
         if (!props.name && pendingName) props.name = pendingName;
         if (!props.ilevel && pendingIlevel) props.ilevel = pendingIlevel;
-        pendingName = "";
+        pendingName = '';
         pendingIlevel = 0;
-        const origin: ItemOrigin = inVaultSection ? "vault" : "bags";
+        const origin: ItemOrigin = inVaultSection ? 'vault' : 'bags';
         const entry: ParsedItem = {
           slot,
           simc_string: itemStr,
@@ -291,7 +289,7 @@ export function parseAddonString(simcInput: string): ItemsBySlot {
           pendingName = headerMatch[1];
           pendingIlevel = parseInt(headerMatch[2]);
         } else {
-          pendingName = "";
+          pendingName = '';
           pendingIlevel = 0;
         }
       }
@@ -303,14 +301,14 @@ export function parseAddonString(simcInput: string): ItemsBySlot {
         const props = parseItemProps(itemStr);
         if (!props.name && pendingName) props.name = pendingName;
         if (!props.ilevel && pendingIlevel) props.ilevel = pendingIlevel;
-        pendingName = "";
+        pendingName = '';
         pendingIlevel = 0;
         equipped[slot] = {
           slot,
           simc_string: itemStr,
           is_equipped: true,
           ...props,
-          origin: "equipped",
+          origin: 'equipped',
         };
       }
     }
@@ -330,11 +328,7 @@ export function parseAddonString(simcInput: string): ItemsBySlot {
     // For dual-wield specs, add the equipped weapon from the other hand as an alternative
     if (spec && DUAL_WIELD_SPECS.has(spec)) {
       const otherSlot =
-        slot === "main_hand"
-          ? "off_hand"
-          : slot === "off_hand"
-            ? "main_hand"
-            : null;
+        slot === 'main_hand' ? 'off_hand' : slot === 'off_hand' ? 'main_hand' : null;
       if (otherSlot && equipped[otherSlot]) {
         const otherItem = equipped[otherSlot];
         if (otherItem.item_id > 0 && !seenIds.has(otherItem.item_id)) {
@@ -343,7 +337,7 @@ export function parseAddonString(simcInput: string): ItemsBySlot {
             ...otherItem,
             slot,
             is_equipped: false,
-            origin: "equipped",
+            origin: 'equipped',
           });
         }
       }
@@ -366,14 +360,12 @@ export function parseAddonString(simcInput: string): ItemsBySlot {
   return itemsBySlot;
 }
 
-export function parseUpgradeCurrencies(
-  simcInput: string,
-): Record<number, number> {
+export function parseUpgradeCurrencies(simcInput: string): Record<number, number> {
   const currencies: Record<number, number> = {};
   const lineRegex = /^#?\s*upgrade_currencies\s*=\s*(.+)$/i;
   const pairRegex = /(?:^|\/)\s*c:(\d+):(\d+)/gi;
 
-  for (const rawLine of simcInput.split("\n")) {
+  for (const rawLine of simcInput.split('\n')) {
     const line = rawLine.trim();
     const match = line.match(lineRegex);
     if (!match) continue;

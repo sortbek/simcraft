@@ -96,9 +96,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    _setSimcInput(readSessionString("simhammer_simc_input", ""));
-    _setThreads(readStored("simhammer_threads", 0));
-    _setMaxCombinations(readStored("simhammer_max_combinations", 500));
+    _setSimcInput(readSessionString('simhammer_simc_input', ''));
+    _setThreads(readStored('simhammer_threads', 0));
+    _setMaxCombinations(readStored('simhammer_max_combinations', 500));
   }, []);
 
   const setSimcInput = useCallback((v: string) => {

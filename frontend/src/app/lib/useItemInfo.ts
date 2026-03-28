@@ -114,9 +114,7 @@ export interface EnchantInfo {
 
 const enchantCache: Record<number, EnchantInfo> = {};
 
-export function useEnchantInfo(
-  enchantIds: number[],
-): Record<number, EnchantInfo> {
+export function useEnchantInfo(enchantIds: number[]): Record<number, EnchantInfo> {
   const [enchants, setEnchants] = useState<Record<number, EnchantInfo>>({});
 
   const depKey = enchantIds
@@ -239,15 +237,13 @@ export interface CurrencyInfo {
 
 const currencyInfoCache: Record<number, CurrencyInfo> = {};
 
-export function useCurrencyInfo(
-  currencyIds: number[],
-): Record<number, CurrencyInfo> {
+export function useCurrencyInfo(currencyIds: number[]): Record<number, CurrencyInfo> {
   const [infos, setInfos] = useState<Record<number, CurrencyInfo>>({});
 
   const depKey = currencyIds
     .filter((id) => id > 0)
     .sort((a, b) => a - b)
-    .join(",");
+    .join(',');
 
   useEffect(() => {
     const cached: Record<number, CurrencyInfo> = {};

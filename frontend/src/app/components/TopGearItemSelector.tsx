@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
@@ -303,7 +304,7 @@ export default function TopGearItemSelector({
                   </svg>
                 </div>
                 <div className="h-8 w-8 shrink-0 overflow-hidden rounded ring-1 ring-white/5">
-                  <img
+                  <Image
                     src={getIconUrl(item.icon)}
                     alt=""
                     width={32}
@@ -373,7 +374,7 @@ export default function TopGearItemSelector({
                   <div
                     className={`h-8 w-8 shrink-0 overflow-hidden rounded ring-2 ${isVault ? 'ring-amber-400/70' : 'ring-white/5'}`}
                   >
-                    <img
+                    <Image
                       src={getIconUrl(item.icon)}
                       alt=""
                       width={32}

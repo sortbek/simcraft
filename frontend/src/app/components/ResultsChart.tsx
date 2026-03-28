@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import DpsHeroCard from './DpsHeroCard';
 
@@ -65,9 +66,11 @@ function useSpellIcons(spellIds: number[]) {
 
 function SpellIcon({ icon }: { icon: string }) {
   return (
-    <img
+    <Image
       src={`https://wow.zamimg.com/images/wow/icons/small/${icon}.jpg`}
       alt=""
+      width={20}
+      height={20}
       className="h-5 w-5 shrink-0 rounded-[3px]"
     />
   );

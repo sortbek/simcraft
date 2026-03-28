@@ -329,12 +329,18 @@ pub fn generate_upgrade_compare_input(
     upgraded_options_by_slot: &HashMap<String, Vec<Value>>,
     upgrade_budget: &HashMap<u64, u64>,
     max_combos_override: Option<usize>,
-) -> Result<(String, usize, HashMap<String, Vec<Value>>), String> {
+) -> ProfilesetResult {
     let (base_lines, equipped_gear, talents_string, _spec) = parse_base_profile(base_profile);
 
     let mut slots: Vec<String> = upgraded_options_by_slot
         .iter()
-        .filter_map(|(slot, options)| if options.is_empty() { None } else { Some(slot.clone()) })
+        .filter_map(|(slot, options)| {
+            if options.is_empty() {
+                None
+            } else {
+                Some(slot.clone())
+            }
+        })
         .collect();
     slots.sort();
     if slots.is_empty() {

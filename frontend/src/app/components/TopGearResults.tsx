@@ -4,13 +4,13 @@ import { useMemo, useState } from 'react';
 import { SLOT_LABELS } from '../lib/types';
 import type { EnchantInfo, GemInfo, ItemInfo, ItemQuery } from '../lib/useItemInfo';
 import {
-    getIconUrl,
-    getWowheadData,
-    getWowheadUrl,
-    QUALITY_COLORS,
-    useEnchantInfo,
-    useGemInfo,
-    useItemInfo,
+  getIconUrl,
+  getWowheadData,
+  getWowheadUrl,
+  QUALITY_COLORS,
+  useEnchantInfo,
+  useGemInfo,
+  useItemInfo,
 } from '../lib/useItemInfo';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
 import DpsHeroCard from './DpsHeroCard';
@@ -221,9 +221,7 @@ export default function TopGearResults({
                   key={slot}
                   slot={slot}
                   item={bestGearSet[slot]}
-                  isUpgrade={
-                    (bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade
-                  }
+                  isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
                   itemInfoMap={itemInfoMap}
                   enchantInfoMap={enchantInfoMap}
                   gemInfoMap={gemInfoMap}
@@ -237,9 +235,7 @@ export default function TopGearResults({
                   key={slot}
                   slot={slot}
                   item={bestGearSet[slot]}
-                  isUpgrade={
-                    (bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade
-                  }
+                  isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
                   itemInfoMap={itemInfoMap}
                   enchantInfoMap={enchantInfoMap}
                   gemInfoMap={gemInfoMap}
@@ -254,9 +250,7 @@ export default function TopGearResults({
                 key={slot}
                 slot={slot}
                 item={bestGearSet[slot]}
-                isUpgrade={
-                  (bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade
-                }
+                isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
                 itemInfoMap={itemInfoMap}
                 enchantInfoMap={enchantInfoMap}
                 gemInfoMap={gemInfoMap}
@@ -461,9 +455,7 @@ function GearSlotRow({
       <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
         <div className="h-7 w-7 shrink-0 rounded border border-border bg-white/[0.03]" />
         <div>
-          <p className="text-[11px] text-gray-600">
-            {SLOT_LABELS[slot] || slot}
-          </p>
+          <p className="text-[11px] text-gray-600">{SLOT_LABELS[slot] || slot}</p>
           <p className="text-[9px] text-gray-700">Empty</p>
         </div>
       </div>
