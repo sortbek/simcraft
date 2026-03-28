@@ -34,6 +34,15 @@ fn extract_version(raw: &Value) -> String {
     }
 }
 
+/// Read portion_aps from a stat entry (can be an object with `mean` or a bare number).
+fn extract_portion_aps(stat: &Value) -> f64 {
+    match stat.get("portion_aps") {
+        Some(v) if v.is_object() => v.get("mean").and_then(|m| m.as_f64()).unwrap_or(0.0),
+        Some(v) => v.as_f64().unwrap_or(0.0),
+        None => 0.0,
+    }
+}
+
 /// Extract ability stats from a player or pet stats array into the abilities list.
 /// If `pet_name` is Some, abilities are prefixed with the pet name.
 fn extract_stats_into(abilities: &mut Vec<Value>, stats: Option<&Value>, pet_name: Option<&str>) {
@@ -43,46 +52,101 @@ fn extract_stats_into(abilities: &mut Vec<Value>, stats: Option<&Value>, pet_nam
     };
     for stat in stats {
         let raw_name = stat.get("name").and_then(|n| n.as_str()).unwrap_or("");
-        let dps_contribution = if let Some(portion_aps) = stat.get("portion_aps") {
-            if let Some(obj) = portion_aps.as_object() {
-                obj.get("mean").and_then(|m| m.as_f64()).unwrap_or(0.0)
-            } else {
-                portion_aps.as_f64().unwrap_or(0.0)
+        if raw_name.is_empty() {
+            continue;
+        }
+
+        // Get DPS from portion_aps (object with mean, or bare number).
+        // Sum parent + children to get total DPS for this ability group.
+        let parent_dps = extract_portion_aps(stat);
+        let children_arr = stat.get("children").and_then(|c| c.as_array());
+        let mut children_dps_total = 0.0;
+        if let Some(children) = children_arr {
+            for child in children {
+                children_dps_total += extract_portion_aps(child);
             }
-        } else {
-            0.0
-        };
+        }
+        let dps_contribution = parent_dps + children_dps_total;
+
+        if dps_contribution <= 0.0 {
+            continue;
+        }
+
         let school = stat
             .get("school")
             .and_then(|s| s.as_str())
             .unwrap_or("physical");
+        let display_name = match pet_name {
+            Some(pn) => format!("{}: {}", title_case(&pn.replace('_', " ")), raw_name),
+            None => raw_name.to_string(),
+        };
 
-        if !raw_name.is_empty() && dps_contribution > 0.0 {
-            let display_name = match pet_name {
-                Some(pn) => format!("{}: {}", title_case(&pn.replace('_', " ")), raw_name),
-                None => raw_name.to_string(),
-            };
-            let spell_id = stat.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-            let mut ability = json!({
-                "name": display_name,
-                "portion_dps": round1(dps_contribution),
-                "school": school,
-            });
-            if spell_id > 0 {
-                ability["spell_id"] = json!(spell_id);
-            }
-            if spell_id == 0 {
-                if let Some(children) = stat.get("children").and_then(|c| c.as_array()) {
-                    if let Some(child) = children.first() {
-                        let child_id = child.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                        if child_id > 0 {
-                            ability["spell_id"] = json!(child_id);
-                        }
-                    }
+        // Resolve spell_id: prefer parent, fall back to first child
+        let mut spell_id = stat.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+        if spell_id == 0 {
+            if let Some(children) = children_arr {
+                if let Some(child) = children.first() {
+                    spell_id = child.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
                 }
             }
-            abilities.push(ability);
         }
+
+        let mut ability = json!({
+            "name": display_name,
+            "portion_dps": round1(dps_contribution),
+            "school": school,
+        });
+        if spell_id > 0 {
+            ability["spell_id"] = json!(spell_id);
+        }
+
+        // Emit children when the parent has multiple sub-abilities.
+        // If the parent itself does damage alongside children, include
+        // the parent's own contribution as the first child entry.
+        if let Some(children) = children_arr {
+            let mut child_entries: Vec<Value> = Vec::new();
+
+            // Parent's own damage as first sub-entry
+            if parent_dps > 0.0 {
+                let mut parent_entry = json!({
+                    "name": raw_name,
+                    "portion_dps": round1(parent_dps),
+                    "school": school,
+                });
+                if spell_id > 0 {
+                    parent_entry["spell_id"] = json!(spell_id);
+                }
+                child_entries.push(parent_entry);
+            }
+
+            for child in children {
+                let child_dps = extract_portion_aps(child);
+                if child_dps <= 0.0 {
+                    continue;
+                }
+                let child_name = child.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                let child_school = child
+                    .get("school")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or(school);
+                let child_spell_id = child.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+                let mut entry = json!({
+                    "name": child_name,
+                    "portion_dps": round1(child_dps),
+                    "school": child_school,
+                });
+                if child_spell_id > 0 {
+                    entry["spell_id"] = json!(child_spell_id);
+                }
+                child_entries.push(entry);
+            }
+
+            if child_entries.len() > 1 {
+                ability["children"] = json!(child_entries);
+            }
+        }
+
+        abilities.push(ability);
     }
 }
 

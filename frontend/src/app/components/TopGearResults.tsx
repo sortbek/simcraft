@@ -26,6 +26,7 @@ interface ResultItem {
   is_kept?: boolean;
   encounter?: string;
   origin?: string;
+  upgrade_levels?: number;
 }
 
 interface TopGearResult {
@@ -341,23 +342,66 @@ export default function TopGearResults({
             ))}
           </div>
         ) : (
-          <div className="space-y-1">
-            {results.map((result, idx) => (
-              <ResultRow
-                key={result.name}
-                result={result}
-                rank={idx + 1}
-                maxDps={maxDps}
-                baseDps={baseDps}
-                isBest={idx === 0 && result.delta > 0}
-                itemInfoMap={itemInfoMap}
-                enchantInfoMap={enchantInfoMap}
-                gemInfoMap={gemInfoMap}
-              />
-            ))}
-          </div>
+          <RankedResults
+            results={results}
+            maxDps={maxDps}
+            baseDps={baseDps}
+            itemInfoMap={itemInfoMap}
+            enchantInfoMap={enchantInfoMap}
+            gemInfoMap={gemInfoMap}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+const INITIAL_VISIBLE = 8;
+
+function RankedResults({
+  results,
+  maxDps,
+  baseDps,
+  itemInfoMap,
+  enchantInfoMap,
+  gemInfoMap,
+}: {
+  results: TopGearResult[];
+  maxDps: number;
+  baseDps: number;
+  itemInfoMap: Record<number, ItemInfo>;
+  enchantInfoMap: Record<number, EnchantInfo>;
+  gemInfoMap: Record<number, GemInfo>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? results : results.slice(0, INITIAL_VISIBLE);
+  const hasMore = results.length > INITIAL_VISIBLE;
+
+  return (
+    <div className="space-y-1">
+      {visible.map((result, idx) => (
+        <ResultRow
+          key={result.name}
+          result={result}
+          rank={idx + 1}
+          maxDps={maxDps}
+          baseDps={baseDps}
+          isBest={idx === 0 && result.delta > 0}
+          itemInfoMap={itemInfoMap}
+          enchantInfoMap={enchantInfoMap}
+          gemInfoMap={gemInfoMap}
+        />
+      ))}
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-2 w-full rounded-lg border border-border bg-surface-2 py-2 text-xs text-zinc-400 transition-all hover:border-zinc-600 hover:text-zinc-200"
+        >
+          {expanded
+            ? 'Show less'
+            : `Show all ${results.length} results (+${results.length - INITIAL_VISIBLE} more)`}
+        </button>
+      )}
     </div>
   );
 }
@@ -501,12 +545,21 @@ function GearSlotRow({
       ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id)
       : undefined;
 
+  const fadeDir = rtl ? 'to left' : 'to right';
+
   return (
     <div
-      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''} ${
-        isUpgrade ? 'bg-emerald-500/[0.07] ring-1 ring-emerald-500/20' : ''
-      }`}
+      className={`relative flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}
     >
+      {isUpgrade && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-lg bg-emerald-500/[0.15] ring-1 ring-emerald-500/30"
+          style={{
+            maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+            WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+          }}
+        />
+      )}
       <div className="h-7 w-7 shrink-0 overflow-hidden rounded border border-border">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -531,11 +584,15 @@ function GearSlotRow({
           >
             {name}
           </a>
-          {isUpgrade && (
+          {isUpgrade && item.upgrade_levels ? (
+            <span className="shrink-0 rounded bg-emerald-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-emerald-400">
+              +{item.upgrade_levels} {item.upgrade_levels === 1 ? 'level' : 'levels'}
+            </span>
+          ) : isUpgrade ? (
             <span className="shrink-0 rounded bg-emerald-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-emerald-400">
               New
             </span>
-          )}
+          ) : null}
           {item.origin === 'vault' && (
             <span className="shrink-0 rounded bg-amber-400/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-amber-400">
               Vault
@@ -606,11 +663,15 @@ function ItemTag({
       >
         {name}
       </a>
-      {item.origin === 'vault' && (
+      {item.upgrade_levels ? (
+        <span className="shrink-0 text-[8px] font-bold uppercase tracking-wider text-emerald-400">
+          +{item.upgrade_levels}
+        </span>
+      ) : item.origin === 'vault' ? (
         <span className="shrink-0 text-[8px] font-bold uppercase tracking-wider text-amber-400">
           V
         </span>
-      )}
+      ) : null}
       {enchant?.name && (
         <span className="max-w-[70px] truncate text-[9px] text-emerald-400/70" title={enchant.name}>
           {enchant.name}
