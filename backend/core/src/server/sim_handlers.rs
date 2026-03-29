@@ -27,7 +27,8 @@ pub(super) async fn create_sim(
     } else {
         req.simc_input.clone()
     };
-    simc_input = apply_talent_override(&simc_input, &req.options.talents);
+    simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(&simc_input, &req.options.talents));
+    simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
     simc_input = inject_expert_fields(&simc_input, &req.options);
 
     if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
@@ -103,7 +104,7 @@ pub(super) async fn create_top_gear_sim(
     } else {
         req.simc_input.clone()
     };
-    simc_input = apply_talent_override(&simc_input, &req.options.talents);
+    simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(&simc_input, &req.options.talents));
 
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let resolved = gear_resolver::resolve_gear(&parse_result);
@@ -194,7 +195,7 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
     } else {
         req.simc_input.clone()
     };
-    simc_input = apply_talent_override(&simc_input, &req.options.talents);
+    simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(&simc_input, &req.options.talents));
 
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let resolved = gear_resolver::resolve_gear(&parse_result);
@@ -240,7 +241,7 @@ pub(super) async fn create_droptimizer_sim(
     simc_path: web::Data<PathBuf>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
-    let simc_input = apply_talent_override(&req.simc_input, &req.options.talents);
+    let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(&req.simc_input, &req.options.talents));
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let base_profile = parse_result.base_profile.clone();
 

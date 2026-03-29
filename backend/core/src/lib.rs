@@ -9,4 +9,5 @@ pub mod result_parser;
 pub mod server;
 pub mod simc_runner;
 pub mod storage;
+pub mod talent_normalize;
 pub mod types;

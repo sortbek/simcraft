@@ -37,7 +37,9 @@ export interface SubTreeNode {
   type: 'subtree';
   posX: number;
   posY: number;
+  maxRanks: number;
   entryNode?: boolean;
+  freeNode?: boolean;
   next: number[];
   prev: number[];
   entries: SubTreeEntry[];
@@ -64,6 +66,8 @@ export interface TalentTreeData {
   heroNodes: TalentNode[];
   subTreeNodes: SubTreeNode[];
   fullNodeOrder: number[];
+  /** maxRanks for every node in fullNodeOrder (across all specs of the class). */
+  fullNodeMaxRanks: Record<string, number>;
 }
 
 // Module-level cache (same pattern as useItemInfo)
@@ -76,7 +80,7 @@ export function useTalentTree(specId: number | null): TalentTreeData | null {
 
   useEffect(() => {
     if (specId == null) return;
-    if (cache[specId]) {
+    if (cache[specId] && cache[specId].fullNodeMaxRanks) {
       setTree(cache[specId]);
       return;
     }

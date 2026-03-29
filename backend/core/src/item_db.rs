@@ -322,6 +322,26 @@ pub fn talent_tree(spec_id: u64) -> Option<&'static Value> {
     TALENT_TREES.get()?.get(&spec_id)
 }
 
+/// Return all talent trees that share the same classId as the given specId.
+pub fn talent_trees_for_class(spec_id: u64) -> Vec<&'static Value> {
+    let trees = match TALENT_TREES.get() {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+    let class_id = match trees.get(&spec_id) {
+        Some(t) => t.get("classId").and_then(|v| v.as_u64()),
+        None => return Vec::new(),
+    };
+    let class_id = match class_id {
+        Some(id) => id,
+        None => return Vec::new(),
+    };
+    trees
+        .values()
+        .filter(|t| t.get("classId").and_then(|v| v.as_u64()) == Some(class_id))
+        .collect()
+}
+
 pub fn upgrade_tracks() -> Option<&'static HashMap<UpgradeTrackKey, UpgradeTrackValue>> {
     UPGRADE_TRACKS.get()
 }

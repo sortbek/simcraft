@@ -1,13 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { parseTalentLoadouts } from '../lib/types';
+import { decodeHeader } from '../lib/talentDecode';
+import { normalizeTalentString } from '../lib/talentEncode';
+import { useTalentTree } from '../lib/useTalentTree';
 import TalentTree from './TalentTree';
+
+type ViewMode = 'hidden' | 'view' | 'edit';
 
 export default function TalentPicker() {
   const { simcInput, selectedTalent, setSelectedTalent } = useSimContext();
-  const [showTree, setShowTree] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('hidden');
+  const [selectedLoadoutIdx, setSelectedLoadoutIdx] = useState(0);
 
   const loadouts = useMemo(() => parseTalentLoadouts(simcInput), [simcInput]);
 
@@ -21,18 +27,59 @@ export default function TalentPicker() {
     return '';
   }, [selectedTalent, loadouts]);
 
-  // Reset selection when input changes and current selection is no longer valid
+  // Extract specId from the active talent string for editor mode
+  const specId = useMemo(() => {
+    if (!activeTalent) return null;
+    try {
+      return decodeHeader(activeTalent).specId;
+    } catch {
+      return null;
+    }
+  }, [activeTalent]);
+
+  const tree = useTalentTree(specId);
+
+  // Normalize talent strings (auto-grant free nodes that SimC requires)
+  const normalize = useCallback(
+    (s: string) => {
+      if (!tree) return s;
+      try {
+        return normalizeTalentString(s, tree);
+      } catch {
+        return s;
+      }
+    },
+    [tree],
+  );
+
+  // Ensure selectedTalent is always set and normalized.
+  // Runs on mount, on input change, and when tree data loads.
   useEffect(() => {
     if (loadouts.length === 0) {
       if (selectedTalent) setSelectedTalent('');
       return;
     }
-    const stillValid = loadouts.some((l) => l.talentString === selectedTalent);
-    if (!stillValid) {
-      const active = loadouts.find((l) => l.isActive);
-      setSelectedTalent(active?.talentString || loadouts[0].talentString);
+
+    // Determine which talent string should be active
+    const currentLoadout = loadouts[selectedLoadoutIdx] ?? loadouts[0];
+    const rawTalent = currentLoadout?.talentString || '';
+    if (!rawTalent) return;
+
+    // Normalize it (requires tree data; returns raw if tree isn't loaded yet)
+    const normalized = normalize(rawTalent);
+
+    // Set if not already matching
+    if (selectedTalent !== normalized) {
+      setSelectedTalent(normalized);
     }
-  }, [loadouts, selectedTalent, setSelectedTalent]);
+  }, [loadouts, selectedLoadoutIdx, tree, normalize, selectedTalent, setSelectedTalent]);
+
+  const handleEditorChange = useCallback(
+    (s: string) => {
+      setSelectedTalent(s);
+    },
+    [setSelectedTalent],
+  );
 
   if (loadouts.length === 0) return null;
 
@@ -42,12 +89,17 @@ export default function TalentPicker() {
         <span className="text-xs text-gray-500">Talents</span>
         {loadouts.length >= 2 && (
           <select
-            value={selectedTalent}
-            onChange={(e) => setSelectedTalent(e.target.value)}
+            value={selectedLoadoutIdx}
+            onChange={(e) => {
+              const idx = Number(e.target.value);
+              setSelectedLoadoutIdx(idx);
+              setSelectedTalent(normalize(loadouts[idx].talentString));
+              if (viewMode === 'edit') setViewMode('view');
+            }}
             className="input-field !w-auto !px-2.5 !py-1.5 !text-xs"
           >
             {loadouts.map((l, i) => (
-              <option key={`${l.name}-${i}`} value={l.talentString}>
+              <option key={`${l.name}-${i}`} value={i}>
                 {l.name}
                 {l.isActive ? ' (equipped)' : ''}
               </option>
@@ -55,13 +107,33 @@ export default function TalentPicker() {
           </select>
         )}
         <button
-          onClick={() => setShowTree((v) => !v)}
+          onClick={() => setViewMode((v) => (v === 'hidden' ? 'view' : 'hidden'))}
           className="text-[11px] text-muted transition-colors hover:text-white"
         >
-          {showTree ? 'Hide tree' : 'Show tree'}
+          {viewMode !== 'hidden' ? 'Hide tree' : 'Show tree'}
         </button>
+        {viewMode !== 'hidden' && (
+          <button
+            onClick={() => setViewMode((v) => (v === 'edit' ? 'view' : 'edit'))}
+            className={`text-[11px] transition-colors ${
+              viewMode === 'edit'
+                ? 'font-medium text-gold'
+                : 'text-muted hover:text-white'
+            }`}
+          >
+            {viewMode === 'edit' ? 'Done editing' : 'Edit'}
+          </button>
+        )}
       </div>
-      {showTree && activeTalent && <TalentTree talentString={activeTalent} />}
+      {viewMode === 'view' && activeTalent && <TalentTree talentString={activeTalent} />}
+      {viewMode === 'edit' && specId && (
+        <TalentTree
+          talentString={activeTalent}
+          editable
+          specId={specId}
+          onTalentStringChange={handleEditorChange}
+        />
+      )}
     </div>
   );
 }

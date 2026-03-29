@@ -165,10 +165,53 @@ pub(super) async fn resolve_gear(req: web::Json<ResolveGearRequest>) -> HttpResp
 
 pub(super) async fn get_talent_tree(path: web::Path<u64>) -> HttpResponse {
     let spec_id = path.into_inner();
-    match game_data::talent_tree(spec_id) {
-        Some(tree) => HttpResponse::Ok().json(tree),
-        None => HttpResponse::NotFound().json(json!({"detail": "Talent tree not found"})),
+    let tree = match game_data::talent_tree(spec_id) {
+        Some(t) => t,
+        None => {
+            return HttpResponse::NotFound().json(json!({"detail": "Talent tree not found"}))
+        }
+    };
+
+    // Build fullNodeMaxRanks by combining all specs of the same class.
+    // The fullNodeOrder covers ALL nodes across all specs, but each spec's
+    // node arrays only include its own subset. The decoder needs maxRanks
+    // for every node in fullNodeOrder to correctly parse the bit stream.
+    let mut max_ranks: HashMap<u64, u64> = HashMap::new();
+    for (key, nodes_key) in [
+        ("classNodes", "classNodes"),
+        ("specNodes", "specNodes"),
+        ("heroNodes", "heroNodes"),
+    ] {
+        for sibling in crate::item_db::talent_trees_for_class(spec_id) {
+            if let Some(nodes) = sibling.get(nodes_key).and_then(|v| v.as_array()) {
+                for node in nodes {
+                    if let (Some(id), Some(mr)) = (
+                        node.get("id").and_then(|v| v.as_u64()),
+                        node.get("maxRanks").and_then(|v| v.as_u64()),
+                    ) {
+                        max_ranks.insert(id, mr);
+                    }
+                }
+            }
+        }
+        let _ = key; // suppress unused warning
     }
+    // SubTree nodes (maxRanks defaults to 1)
+    for sibling in crate::item_db::talent_trees_for_class(spec_id) {
+        if let Some(nodes) = sibling.get("subTreeNodes").and_then(|v| v.as_array()) {
+            for node in nodes {
+                if let Some(id) = node.get("id").and_then(|v| v.as_u64()) {
+                    max_ranks.entry(id).or_insert(1);
+                }
+            }
+        }
+    }
+
+    let mut response = tree.clone();
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert("fullNodeMaxRanks".to_string(), json!(max_ranks));
+    }
+    HttpResponse::Ok().json(response)
 }
 
 pub(super) async fn get_season_config() -> HttpResponse {
