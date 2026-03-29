@@ -356,6 +356,15 @@ pub fn inv_type_to_slots(inv_type: u64, spec: &str) -> Vec<&'static str> {
     }
 }
 
+/// Map a numeric spec ID to the SimC spec name (e.g., 254 → "marksmanship").
+pub fn spec_id_to_name(spec_id: u64) -> Option<&'static str> {
+    CLASSES
+        .iter()
+        .flat_map(|c| c.specs.iter())
+        .find(|s| s.id == spec_id)
+        .map(|s| s.name)
+}
+
 // ---- Detection ----
 
 /// Detect the character class from a simc input string.

@@ -402,10 +402,15 @@ pub fn parse_top_gear_result(
 
         let items = combo_metadata.get(combo_name).cloned().unwrap_or_default();
 
-        // Extract talent_build name from items metadata (if present)
+        // Extract talent_build name and spec from items metadata (if present)
         let talent_build = items
             .first()
             .and_then(|it| it.get("talent_build"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let talent_spec = items
+            .first()
+            .and_then(|it| it.get("talent_spec"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
@@ -417,6 +422,9 @@ pub fn parse_top_gear_result(
         });
         if !talent_build.is_empty() {
             entry["talent_build"] = json!(talent_build);
+        }
+        if !talent_spec.is_empty() {
+            entry["talent_spec"] = json!(talent_spec);
         }
         results.push(entry);
     }
@@ -435,6 +443,12 @@ pub fn parse_top_gear_result(
     let baseline_talent = baseline_items
         .first()
         .and_then(|it| it.get("talent_build"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let baseline_talent_spec = baseline_items
+        .first()
+        .and_then(|it| it.get("talent_spec"))
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
@@ -457,6 +471,9 @@ pub fn parse_top_gear_result(
     });
     if !baseline_talent.is_empty() {
         baseline_entry["talent_build"] = json!(baseline_talent);
+    }
+    if !baseline_talent_spec.is_empty() {
+        baseline_entry["talent_spec"] = json!(baseline_talent_spec);
     }
     results.push(baseline_entry);
 

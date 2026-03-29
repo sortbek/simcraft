@@ -28,6 +28,8 @@ pub struct SimOptions {
     pub threads: u32,
     #[serde(default)]
     pub talents: String,
+    #[serde(default)]
+    pub spec_override: String,
     /// Custom APL and SimC expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list).
     #[serde(default)]
     pub custom_apl: String,

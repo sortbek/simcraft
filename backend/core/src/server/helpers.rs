@@ -224,6 +224,20 @@ pub(super) fn apply_talent_override(simc_input: &str, talents: &str) -> String {
     }
 }
 
+/// Replace the spec= line in a simc input string.
+pub(super) fn apply_spec_override(simc_input: &str, spec: &str) -> String {
+    if spec.is_empty() {
+        return simc_input.to_string();
+    }
+    let re = regex::Regex::new(r"(?m)^spec=.+$").unwrap();
+    if re.is_match(simc_input) {
+        re.replace(simc_input, format!("spec={}", spec))
+            .to_string()
+    } else {
+        format!("{}\nspec={}", simc_input, spec)
+    }
+}
+
 /// Extract server= (realm) from a simc input string and inject it into a parsed result.
 pub(super) fn inject_realm(parsed: &mut Value, simc_input: &str) {
     for line in simc_input.lines() {

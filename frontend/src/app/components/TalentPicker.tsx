@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
-import { parseTalentLoadouts } from '../lib/types';
+import { parseTalentLoadouts, SPEC_ID_TO_NAME, SPEC_NAME_TO_ID, specDisplayName, classColorForSpec } from '../lib/types';
 import type { TalentLoadoutParsed } from '../lib/types';
 import { decodeHeader, decodeNodes } from '../lib/talentDecode';
 import { encodeTalentString } from '../lib/talentEncode';
@@ -63,6 +63,7 @@ export default function TalentPicker() {
 
   const addonLoadouts = useMemo(() => parseTalentLoadouts(simcInput), [simcInput]);
 
+
   // Merge addon loadouts + custom (imported/blank) loadouts
   const allLoadouts = useMemo(
     () => [...addonLoadouts, ...customLoadouts],
@@ -98,6 +99,17 @@ export default function TalentPicker() {
   }, [currentTalent]);
 
   const tree = useTalentTree(specId);
+
+  // The spec from the active (equipped) talent in the simc input — stable reference for compare badges
+  const baseSpecId = useMemo(() => {
+    const active = addonLoadouts.find((l) => l.isActive);
+    if (!active?.talentString) return null;
+    try {
+      return decodeHeader(active.talentString).specId;
+    } catch {
+      return null;
+    }
+  }, [addonLoadouts]);
 
   const handleEditorChange = useCallback(
     (s: string) => {
@@ -143,15 +155,23 @@ export default function TalentPicker() {
     const calcMatch = talentStr.match(/talent-calc\/[^/]+\/[^/]+\/([A-Za-z0-9+/]+)/);
     if (calcMatch) talentStr = calcMatch[1];
 
+    let importedSpecId: number;
     try {
       const header = decodeHeader(talentStr);
       if (!header.specId) throw new Error('Invalid');
+      importedSpecId = header.specId;
     } catch {
       setImportError('Invalid talent string. Paste a WoW talent export string.');
       return;
     }
 
-    const name = `Import ${customLoadouts.length + 1}`;
+    // If imported build is a different spec, prefix the name with the spec
+    const importedSpecName = SPEC_NAME_TO_ID
+      ? Object.entries(SPEC_NAME_TO_ID).find(([, id]) => id === importedSpecId)?.[0]
+      : null;
+    const isDifferentSpec = specId != null && importedSpecId !== specId;
+    const prefix = isDifferentSpec && importedSpecName ? `${specDisplayName(importedSpecName)} ` : '';
+    const name = `${prefix}Import ${customLoadouts.length + 1}`;
     addCustomLoadout(name, talentStr);
     setShowImport(false);
     setImportValue('');
@@ -166,6 +186,7 @@ export default function TalentPicker() {
     addCustomLoadout(name, blank);
     setViewMode('edit');
   }, [specId, tree, customLoadouts.length, addCustomLoadout]);
+
 
   // Track selected indices for compare mode (avoids duplicate talent string issues)
   const [compareIndices, setCompareIndices] = useState<Set<number>>(new Set());
@@ -349,7 +370,12 @@ export default function TalentPicker() {
             {allLoadouts.map((l, i) => {
               const checked = compareIndices.has(i);
               const status = getBuildStatus(l.talentString, tree);
-              const incomplete = status && !status.complete;
+              // const incomplete = status && !status.complete;
+              let loadoutSpecName: string | undefined;
+              try {
+                const sid = decodeHeader(l.talentString).specId;
+                loadoutSpecName = SPEC_ID_TO_NAME[sid];
+              } catch { /* ignore */ }
               return (
                 <button
                   key={`${l.name}-${i}`}
@@ -361,9 +387,21 @@ export default function TalentPicker() {
                   }`}
                 >
                   {/* Incomplete badge */}
-                  {incomplete && (
+                  {/* {incomplete && (
                     <div className="absolute right-1.5 top-1.5 z-10 rounded bg-amber-500/15 px-1 py-px text-[8px] font-bold text-amber-400">
                       {status.classSpent}/{CLASS_POINTS} · {status.specSpent}/{SPEC_POINTS}
+                    </div>
+                  )} */}
+                  {/* Spec label (only when different from base spec) */}
+                  {loadoutSpecName && baseSpecId != null && SPEC_NAME_TO_ID[loadoutSpecName] !== baseSpecId && (
+                    <div
+                      className="absolute left-1.5 top-1.5 z-10 rounded px-1.5 py-px text-[8px] font-bold"
+                      style={{
+                        color: classColorForSpec(loadoutSpecName) ?? '#c4b5fd',
+                        backgroundColor: `${classColorForSpec(loadoutSpecName) ?? '#8b5cf6'}20`,
+                      }}
+                    >
+                      {specDisplayName(loadoutSpecName)}
                     </div>
                   )}
                   {/* Mini tree preview */}

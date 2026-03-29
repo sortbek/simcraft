@@ -181,3 +181,81 @@ export const SLOT_LABELS: Record<string, string> = {
   main_hand: 'Main Hand',
   off_hand: 'Off Hand',
 };
+
+// ---- Class / Spec Data ----
+
+/** All specs for each class (SimC names). Matches backend CLASSES array. */
+export const CLASS_SPECS: Record<string, string[]> = {
+  warrior: ['arms', 'fury', 'protection'],
+  paladin: ['holy', 'protection', 'retribution'],
+  hunter: ['beast_mastery', 'marksmanship', 'survival'],
+  rogue: ['assassination', 'outlaw', 'subtlety'],
+  priest: ['discipline', 'holy', 'shadow'],
+  death_knight: ['blood', 'frost', 'unholy'],
+  deathknight: ['blood', 'frost', 'unholy'],
+  shaman: ['elemental', 'enhancement', 'restoration'],
+  mage: ['arcane', 'fire', 'frost'],
+  warlock: ['affliction', 'demonology', 'destruction'],
+  monk: ['brewmaster', 'mistweaver', 'windwalker'],
+  druid: ['balance', 'feral', 'guardian', 'restoration'],
+  demon_hunter: ['havoc', 'vengeance'],
+  demonhunter: ['havoc', 'vengeance'],
+  evoker: ['devastation', 'preservation', 'augmentation'],
+};
+
+/** Spec ID → SimC spec name mapping. */
+export const SPEC_ID_TO_NAME: Record<number, string> = {
+  71: 'arms', 72: 'fury', 73: 'protection',
+  65: 'holy', 66: 'protection', 70: 'retribution',
+  253: 'beast_mastery', 254: 'marksmanship', 255: 'survival',
+  259: 'assassination', 260: 'outlaw', 261: 'subtlety',
+  256: 'discipline', 257: 'holy', 258: 'shadow',
+  250: 'blood', 251: 'frost', 252: 'unholy',
+  262: 'elemental', 263: 'enhancement', 264: 'restoration',
+  62: 'arcane', 63: 'fire', 64: 'frost',
+  265: 'affliction', 266: 'demonology', 267: 'destruction',
+  268: 'brewmaster', 270: 'mistweaver', 269: 'windwalker',
+  102: 'balance', 103: 'feral', 104: 'guardian', 105: 'restoration',
+  577: 'havoc', 581: 'vengeance',
+  1467: 'devastation', 1468: 'preservation', 1473: 'augmentation',
+};
+
+/** Reverse mapping: spec name → spec ID */
+export const SPEC_NAME_TO_ID: Record<string, number> = Object.fromEntries(
+  Object.entries(SPEC_ID_TO_NAME).map(([id, name]) => [name, Number(id)]),
+);
+
+/** Pretty-print a spec name: beast_mastery → Beast Mastery */
+export function specDisplayName(spec: string): string {
+  return spec
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Official WoW class colors. */
+export const CLASS_COLORS: Record<string, string> = {
+  warrior: '#C79C6E',
+  paladin: '#F58CBA',
+  hunter: '#ABD473',
+  rogue: '#FFF569',
+  priest: '#FFFFFF',
+  death_knight: '#C41F3B',
+  deathknight: '#C41F3B',
+  shaman: '#0070DE',
+  mage: '#69CCF0',
+  warlock: '#9482C9',
+  monk: '#00FF96',
+  druid: '#FF7D0A',
+  demon_hunter: '#A330C9',
+  demonhunter: '#A330C9',
+  evoker: '#33937F',
+};
+
+/** Look up the WoW class color for a spec name (e.g. "beast_mastery" → "#ABD473"). */
+export function classColorForSpec(specName: string): string | undefined {
+  for (const [cls, specs] of Object.entries(CLASS_SPECS)) {
+    if (specs.includes(specName)) return CLASS_COLORS[cls];
+  }
+  return undefined;
+}

@@ -13,6 +13,7 @@ import {
   getWowheadData,
   QUALITY_COLORS,
 } from '../lib/useItemInfo';
+import { specDisplayName } from '../lib/types';
 import type { ItemInfo, EnchantInfo, GemInfo, ItemQuery } from '../lib/useItemInfo';
 import { SLOT_LABELS } from '../lib/types';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
@@ -36,6 +37,7 @@ interface TopGearResult {
   items: ResultItem[];
   dps: number;
   talent_build?: string;
+  talent_spec?: string;
   delta: number;
 }
 
@@ -378,10 +380,19 @@ function ResultRow({
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
 }) {
+  console.log(result);
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
   const isEquipped =
     result.items.length === 0 || result.name.startsWith('Currently Equipped');
   const hasTalentBuild = !!result.talent_build;
+  const talentBadge = hasTalentBuild ? (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded bg-purple-500/10 px-1.5 py-px text-[9px] font-medium">
+      {result.talent_spec && (
+        <span className="text-purple-300">{specDisplayName(result.talent_spec)}</span>
+      )}
+      <span className="text-purple-400/70">{result.talent_build}</span>
+    </span>
+  ) : null;
 
   return (
     <div
@@ -401,20 +412,27 @@ function ResultRow({
             </span>
           )}
 
-          {isEquipped ? (
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-muted">Currently Equipped</span>
-              {hasTalentBuild && (
-                <span className="shrink-0 rounded bg-purple-500/10 px-1.5 py-px text-[9px] font-medium text-purple-400">
-                  {result.talent_build}
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="flex min-w-0 flex-wrap items-center gap-1">
-              {result.items
-                .filter((it) => !it.is_kept)
-                .map((it, i) => (
+          {(() => {
+            const changedItems = result.items.filter((it) => !it.is_kept);
+            const hasChangedItems = changedItems.length > 0;
+
+            if (isEquipped) {
+              return (
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] text-muted">Currently Equipped</span>
+                  {talentBadge}
+                </div>
+              );
+            }
+
+            // Talent-only comparison (no gear changes): show talent build as primary label
+            if (!hasChangedItems && hasTalentBuild) {
+              return talentBadge;
+            }
+
+            return (
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                {changedItems.map((it, i) => (
                   <ItemTag
                     key={i}
                     item={it}
@@ -423,13 +441,10 @@ function ResultRow({
                     gem={it.gem_id ? gemInfoMap[it.gem_id] : undefined}
                   />
                 ))}
-              {hasTalentBuild && (
-                <span className="shrink-0 rounded bg-purple-500/10 px-1.5 py-px text-[9px] font-medium text-purple-400">
-                  {result.talent_build}
-                </span>
-              )}
-            </div>
-          )}
+                {talentBadge}
+              </div>
+            );
+          })()}
 
           {isBest && (
             <span className="shrink-0 rounded bg-gold/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold">

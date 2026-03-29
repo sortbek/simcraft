@@ -9,6 +9,33 @@ use once_cell::sync::Lazy;
 
 type ProfilesetResult = Result<(String, usize, HashMap<String, Vec<Value>>), String>;
 
+const BASE64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Extract the specId from a talent export string header (bits 8-23).
+fn extract_spec_id_from_talent_string(talent_str: &str) -> Option<u64> {
+    let mut bits = Vec::new();
+    for ch in talent_str.bytes() {
+        let val = BASE64.iter().position(|&b| b == ch)?;
+        for bit in 0..6 {
+            bits.push((val >> bit) & 1);
+        }
+        if bits.len() >= 24 {
+            break;
+        }
+    }
+    if bits.len() < 24 {
+        return None;
+    }
+    // Skip 8-bit version, read 16-bit specId (LSB-first)
+    let mut spec_id = 0u64;
+    for i in 0..16 {
+        if bits[8 + i] == 1 {
+            spec_id |= 1 << i;
+        }
+    }
+    Some(spec_id)
+}
+
 /// Maximum gear combinations for Top Gear. Override with MAX_COMBINATIONS env var.
 pub static MAX_COMBINATIONS: Lazy<usize> = Lazy::new(|| {
     if let Ok(val) = std::env::var("MAX_COMBINATIONS") {
@@ -219,8 +246,21 @@ pub fn generate_top_gear_input_with_talents(
             lines.push("off_hand=,".to_string());
         }
     }
+    // Determine the base actor's effective spec (might differ from original if first talent build is another spec)
+    let base_actor_spec: String = if !base_talent.is_empty() {
+        extract_spec_id_from_talent_string(base_talent)
+            .and_then(class_data::spec_id_to_name)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| spec.clone())
+    } else {
+        spec.clone()
+    };
+
     if !base_talent.is_empty() {
         lines.push(format!("talents={}", base_talent));
+        if base_actor_spec != spec {
+            lines.push(format!("spec={}", base_actor_spec));
+        }
     }
     lines.push(String::new());
 
@@ -235,7 +275,22 @@ pub fn generate_top_gear_input_with_talents(
         }
     }
     let baseline_name = if has_talent_variants {
-        format!("Currently Equipped ({})", effective_talents[0].0)
+        let talent_name = &effective_talents[0].0;
+        let talent_spec: Option<&str> = extract_spec_id_from_talent_string(&effective_talents[0].1)
+            .and_then(class_data::spec_id_to_name);
+        if baseline_items.is_empty() {
+            baseline_items.push(json!({
+                "talent_build": talent_name,
+                "talent_spec": talent_spec,
+                "is_kept": true,
+            }));
+        } else {
+            for item in &mut baseline_items {
+                item["talent_build"] = json!(talent_name);
+                item["talent_spec"] = json!(talent_spec);
+            }
+        }
+        format!("Currently Equipped ({})", talent_name)
     } else {
         "Currently Equipped".to_string()
     };
@@ -328,6 +383,17 @@ pub fn generate_top_gear_input_with_talents(
                     "profileset.\"{}\"+=talents={}",
                     combo_name, talent_str
                 ));
+                // Add spec override if talent build's spec differs from the base actor's spec
+                if let Some(talent_spec_id) = extract_spec_id_from_talent_string(talent_str) {
+                    if let Some(talent_spec_name) = class_data::spec_id_to_name(talent_spec_id) {
+                        if talent_spec_name != base_actor_spec {
+                            lines.push(format!(
+                                "profileset.\"{}\"+=spec={}",
+                                combo_name, talent_spec_name
+                            ));
+                        }
+                    }
+                }
             }
             lines.push(String::new());
 
@@ -374,10 +440,22 @@ pub fn generate_top_gear_input_with_talents(
                 }
             }
 
-            // Tag with talent build name if comparing talents
+            // Tag with talent build name and spec if comparing talents
             if has_talent_variants {
-                for item in &mut combo_items {
-                    item["talent_build"] = json!(talent_name);
+                let talent_spec: Option<&str> = extract_spec_id_from_talent_string(talent_str)
+                    .and_then(class_data::spec_id_to_name);
+                if combo_items.is_empty() {
+                    // No gear changes — add a synthetic entry with just the talent build name
+                    combo_items.push(json!({
+                        "talent_build": talent_name,
+                        "talent_spec": talent_spec,
+                        "is_kept": true,
+                    }));
+                } else {
+                    for item in &mut combo_items {
+                        item["talent_build"] = json!(talent_name);
+                        item["talent_spec"] = json!(talent_spec);
+                    }
                 }
             }
 
