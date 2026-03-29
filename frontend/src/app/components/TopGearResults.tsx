@@ -380,7 +380,6 @@ function ResultRow({
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
 }) {
-  console.log(result);
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
   const isEquipped =
     result.items.length === 0 || result.name.startsWith('Currently Equipped');

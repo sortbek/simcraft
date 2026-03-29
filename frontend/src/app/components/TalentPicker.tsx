@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
-import { parseTalentLoadouts, SPEC_ID_TO_NAME, SPEC_NAME_TO_ID, specDisplayName, classColorForSpec } from '../lib/types';
+import { parseTalentLoadouts, SPEC_ID_TO_NAME, specDisplayName, classColorForSpec } from '../lib/types';
 import type { TalentLoadoutParsed } from '../lib/types';
 import { decodeHeader, decodeNodes } from '../lib/talentDecode';
 import { encodeTalentString } from '../lib/talentEncode';
@@ -166,9 +166,7 @@ export default function TalentPicker() {
     }
 
     // If imported build is a different spec, prefix the name with the spec
-    const importedSpecName = SPEC_NAME_TO_ID
-      ? Object.entries(SPEC_NAME_TO_ID).find(([, id]) => id === importedSpecId)?.[0]
-      : null;
+    const importedSpecName = SPEC_ID_TO_NAME[importedSpecId];
     const isDifferentSpec = specId != null && importedSpecId !== specId;
     const prefix = isDifferentSpec && importedSpecName ? `${specDisplayName(importedSpecName)} ` : '';
     const name = `${prefix}Import ${customLoadouts.length + 1}`;
@@ -371,10 +369,11 @@ export default function TalentPicker() {
               const checked = compareIndices.has(i);
               const status = getBuildStatus(l.talentString, tree);
               // const incomplete = status && !status.complete;
+              let loadoutSpecId: number | undefined;
               let loadoutSpecName: string | undefined;
               try {
-                const sid = decodeHeader(l.talentString).specId;
-                loadoutSpecName = SPEC_ID_TO_NAME[sid];
+                loadoutSpecId = decodeHeader(l.talentString).specId;
+                loadoutSpecName = SPEC_ID_TO_NAME[loadoutSpecId];
               } catch { /* ignore */ }
               return (
                 <button
@@ -386,14 +385,8 @@ export default function TalentPicker() {
                       : 'border-border bg-surface hover:border-zinc-600'
                   }`}
                 >
-                  {/* Incomplete badge */}
-                  {/* {incomplete && (
-                    <div className="absolute right-1.5 top-1.5 z-10 rounded bg-amber-500/15 px-1 py-px text-[8px] font-bold text-amber-400">
-                      {status.classSpent}/{CLASS_POINTS} · {status.specSpent}/{SPEC_POINTS}
-                    </div>
-                  )} */}
                   {/* Spec label (only when different from base spec) */}
-                  {loadoutSpecName && baseSpecId != null && SPEC_NAME_TO_ID[loadoutSpecName] !== baseSpecId && (
+                  {loadoutSpecName && baseSpecId != null && loadoutSpecId !== baseSpecId && (
                     <div
                       className="absolute left-1.5 top-1.5 z-10 rounded px-1.5 py-px text-[8px] font-bold"
                       style={{
