@@ -1,11 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { parseTalentLoadouts } from '../lib/types';
 import { decodeHeader } from '../lib/talentDecode';
-import { normalizeTalentString } from '../lib/talentEncode';
-import { useTalentTree } from '../lib/useTalentTree';
 import TalentTree from './TalentTree';
 
 type ViewMode = 'hidden' | 'view' | 'edit';
@@ -13,66 +11,39 @@ type ViewMode = 'hidden' | 'view' | 'edit';
 export default function TalentPicker() {
   const { simcInput, selectedTalent, setSelectedTalent } = useSimContext();
   const [viewMode, setViewMode] = useState<ViewMode>('hidden');
-  const [selectedLoadoutIdx, setSelectedLoadoutIdx] = useState(0);
+  const [selectedLoadoutIdx, setSelectedLoadoutIdx] = useState(() => {
+    // Find the active loadout index on first render
+    const loadouts = parseTalentLoadouts(simcInput);
+    const idx = loadouts.findIndex((l) => l.isActive);
+    return idx >= 0 ? idx : 0;
+  });
 
   const loadouts = useMemo(() => parseTalentLoadouts(simcInput), [simcInput]);
 
-  // Get the active talent string (even if there's only one loadout)
-  const activeTalent = useMemo(() => {
-    if (selectedTalent) return selectedTalent;
-    if (loadouts.length > 0) {
-      const active = loadouts.find((l) => l.isActive);
-      return active?.talentString || loadouts[0].talentString;
-    }
-    return '';
-  }, [selectedTalent, loadouts]);
+  // Always keep selectedTalent in sync with the selected loadout.
+  // The backend handles normalization (free nodes, subtree selectors).
+  const currentTalent = loadouts[selectedLoadoutIdx]?.talentString || '';
 
-  // Extract specId from the active talent string for editor mode
-  const specId = useMemo(() => {
-    if (!activeTalent) return null;
-    try {
-      return decodeHeader(activeTalent).specId;
-    } catch {
-      return null;
-    }
-  }, [activeTalent]);
-
-  const tree = useTalentTree(specId);
-
-  // Normalize talent strings (auto-grant free nodes that SimC requires)
-  const normalize = useCallback(
-    (s: string) => {
-      if (!tree) return s;
-      try {
-        return normalizeTalentString(s, tree);
-      } catch {
-        return s;
-      }
-    },
-    [tree],
-  );
-
-  // Ensure selectedTalent is always set and normalized.
-  // Runs on mount, on input change, and when tree data loads.
   useEffect(() => {
     if (loadouts.length === 0) {
       if (selectedTalent) setSelectedTalent('');
       return;
     }
-
-    // Determine which talent string should be active
-    const currentLoadout = loadouts[selectedLoadoutIdx] ?? loadouts[0];
-    const rawTalent = currentLoadout?.talentString || '';
-    if (!rawTalent) return;
-
-    // Normalize it (requires tree data; returns raw if tree isn't loaded yet)
-    const normalized = normalize(rawTalent);
-
-    // Set if not already matching
-    if (selectedTalent !== normalized) {
-      setSelectedTalent(normalized);
+    // Keep selectedTalent in sync with current loadout
+    if (currentTalent && selectedTalent !== currentTalent) {
+      setSelectedTalent(currentTalent);
     }
-  }, [loadouts, selectedLoadoutIdx, tree, normalize, selectedTalent, setSelectedTalent]);
+  }, [currentTalent, loadouts.length, selectedTalent, setSelectedTalent]);
+
+  // Extract specId for editor mode
+  const specId = useMemo(() => {
+    if (!currentTalent) return null;
+    try {
+      return decodeHeader(currentTalent).specId;
+    } catch {
+      return null;
+    }
+  }, [currentTalent]);
 
   const handleEditorChange = useCallback(
     (s: string) => {
@@ -93,7 +64,7 @@ export default function TalentPicker() {
             onChange={(e) => {
               const idx = Number(e.target.value);
               setSelectedLoadoutIdx(idx);
-              setSelectedTalent(normalize(loadouts[idx].talentString));
+              setSelectedTalent(loadouts[idx].talentString);
               if (viewMode === 'edit') setViewMode('view');
             }}
             className="input-field !w-auto !px-2.5 !py-1.5 !text-xs"
@@ -125,10 +96,10 @@ export default function TalentPicker() {
           </button>
         )}
       </div>
-      {viewMode === 'view' && activeTalent && <TalentTree talentString={activeTalent} />}
+      {viewMode === 'view' && currentTalent && <TalentTree talentString={currentTalent} />}
       {viewMode === 'edit' && specId && (
         <TalentTree
-          talentString={activeTalent}
+          talentString={currentTalent}
           editable
           specId={specId}
           onTalentStringChange={handleEditorChange}

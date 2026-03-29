@@ -24,6 +24,8 @@ interface TalentTreeProps {
   editable?: boolean;
   specId?: number;
   onTalentStringChange?: (s: string) => void;
+  /** Render as a tiny inline preview — no card, no labels, no tooltips */
+  mini?: boolean;
 }
 
 // Node dimensions in SVG units (posX/posY use ~600 unit spacing)
@@ -41,6 +43,7 @@ export default function TalentTree({
   editable,
   specId: specIdProp,
   onTalentStringChange,
+  mini,
 }: TalentTreeProps) {
   // In edit mode, freeze the initial talent string so prop changes don't re-decode
   const initialTalentRef = useRef(talentString);
@@ -166,6 +169,7 @@ export default function TalentTree({
 
   if (!tree || !selections) {
     if (!talentString && !specIdProp) return null;
+    if (mini) return null;
     return (
       <div className="card flex items-center justify-center p-5">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-800 border-t-gold" />
@@ -186,6 +190,26 @@ export default function TalentTree({
   const classSpent = getPointsSpent(selections, tree.classNodes);
   const specSpent = getPointsSpent(selections, tree.specNodes);
   const heroSpent = getPointsSpent(selections, activeHeroNodes);
+
+  const allNodesArr = [...tree.classNodes, ...tree.specNodes, ...tree.heroNodes];
+
+  if (mini) {
+    return (
+      <div className="flex h-full w-full items-stretch gap-0.5">
+        <div className="flex-[2] min-w-0">
+          <MiniTreeSvg nodes={tree.classNodes} selections={selections} allNodes={allNodesArr} />
+        </div>
+        {activeHeroNodes.length > 0 && (
+          <div className="flex-1 min-w-0 self-center h-[45%]">
+            <MiniTreeSvg nodes={activeHeroNodes} selections={selections} allNodes={allNodesArr} />
+          </div>
+        )}
+        <div className="flex-[2] min-w-0">
+          <MiniTreeSvg nodes={tree.specNodes} selections={selections} allNodes={allNodesArr} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card space-y-3 p-4">
@@ -530,6 +554,103 @@ function TalentNodeSvg({
         </foreignObject>
       )}
     </g>
+  );
+}
+
+function MiniTreeSvg({
+  nodes,
+  selections,
+  allNodes,
+}: {
+  nodes: TalentNode[];
+  selections: Map<number, NodeSelection>;
+  allNodes: TalentNode[];
+}) {
+  const nodeById = useMemo(() => new Map(allNodes.map((n) => [n.id, n])), [allNodes]);
+  const sectionIds = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
+
+  if (nodes.length === 0) return null;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.posX);
+    maxX = Math.max(maxX, n.posX);
+    minY = Math.min(minY, n.posY);
+    maxY = Math.max(maxY, n.posY);
+  }
+  const pad = 300;
+  const vbX = minX - pad;
+  const vbY = minY - pad;
+  const vbW = maxX - minX + pad * 2;
+  const vbH = maxY - minY + pad * 2;
+
+  return (
+    <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+      {nodes.map((node) =>
+        node.next
+          .filter((tid) => sectionIds.has(tid))
+          .map((tid) => {
+            const target = nodeById.get(tid);
+            if (!target) return null;
+            const active = selections.has(node.id) && selections.has(tid);
+            return (
+              <line
+                key={`${node.id}-${tid}`}
+                x1={node.posX} y1={node.posY}
+                x2={target.posX} y2={target.posY}
+                stroke={active ? GOLD : 'rgba(255,255,255,0.08)'}
+                strokeWidth={active ? 40 : 24}
+                strokeLinecap="round"
+              />
+            );
+          }),
+      )}
+      {nodes.map((node) => {
+        const selected = selections.has(node.id);
+        const sel = selections.get(node.id);
+        const isChoice = node.type === 'choice' && node.entries.length > 1;
+        let entry = node.entries[0];
+        if (isChoice && sel && sel.choiceIndex >= 0 && sel.choiceIndex < node.entries.length) {
+          entry = node.entries[sel.choiceIndex];
+        }
+        const icon = entry?.icon;
+        const r = 140;
+        return (
+          <g key={node.id} opacity={selected ? 1 : 0.25}>
+            <clipPath id={`mini-clip-${node.id}`}>
+              <circle cx={node.posX} cy={node.posY} r={r} />
+            </clipPath>
+            {icon ? (
+              <image
+                href={`https://render.worldofwarcraft.com/icons/56/${icon}.jpg`}
+                x={node.posX - r}
+                y={node.posY - r}
+                width={r * 2}
+                height={r * 2}
+                clipPath={`url(#mini-clip-${node.id})`}
+              />
+            ) : (
+              <circle
+                cx={node.posX}
+                cy={node.posY}
+                r={r}
+                fill="rgba(255,255,255,0.08)"
+              />
+            )}
+            {selected && (
+              <circle
+                cx={node.posX}
+                cy={node.posY}
+                r={r}
+                fill="none"
+                stroke={GOLD}
+                strokeWidth={20}
+              />
+            )}
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 

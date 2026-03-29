@@ -245,9 +245,6 @@ export default function SimResultClient() {
             targetError={r.target_error as number | undefined}
             elapsedTime={r.elapsed_time_seconds as number | undefined}
           />
-          {typeof r.talent_string === 'string' && r.talent_string && (
-            <TalentTree talentString={r.talent_string as string} />
-          )}
         </>
       ) : (
         <>

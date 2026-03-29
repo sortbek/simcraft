@@ -108,55 +108,58 @@ export default function GearOverview({
       )}
       <div className="relative">
         <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">{title}</p>
-        <div
-          className={`grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}
-        >
-          <div className="space-y-1">
-            {GEAR_ORDER_LEFT.map((slot) => (
-              <GearSlotRow
-                key={slot}
-                slot={slot}
-                item={gear[slot]}
-                isUpgrade={upgradeSlots?.has(slot)}
-                itemInfoMap={itemInfoMap}
-                enchantInfoMap={enchantInfoMap}
-                gemInfoMap={gemInfoMap}
-              />
-            ))}
-          </div>
-          {characterRenderUrl && <div />}
-          <div className="space-y-1">
-            {GEAR_ORDER_RIGHT.map((slot) => (
-              <GearSlotRow
-                key={slot}
-                slot={slot}
-                item={gear[slot]}
-                isUpgrade={upgradeSlots?.has(slot)}
-                itemInfoMap={itemInfoMap}
-                enchantInfoMap={enchantInfoMap}
-                gemInfoMap={gemInfoMap}
-                align="right"
-              />
-            ))}
-          </div>
-        </div>
-        <div
-          className={`mt-1 grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}
-        >
-          {GEAR_ORDER_BOTTOM.map((slot, i) => (
-            <GearSlotRow
-              key={slot}
-              slot={slot}
-              item={gear[slot]}
-              isUpgrade={upgradeSlots?.has(slot)}
-              itemInfoMap={itemInfoMap}
-              enchantInfoMap={enchantInfoMap}
-              gemInfoMap={gemInfoMap}
-              align={i === 1 ? 'right' : 'left'}
-            />
-          ))}
-          {characterRenderUrl && <div />}
-        </div>
+        {(() => {
+          const gridCols = characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2';
+          return (
+            <>
+              <div className={`grid gap-x-4 ${gridCols}`}>
+                <div className="space-y-1">
+                  {GEAR_ORDER_LEFT.map((slot) => (
+                    <GearSlotRow
+                      key={slot}
+                      slot={slot}
+                      item={gear[slot]}
+                      isUpgrade={upgradeSlots?.has(slot)}
+                      itemInfoMap={itemInfoMap}
+                      enchantInfoMap={enchantInfoMap}
+                      gemInfoMap={gemInfoMap}
+                    />
+                  ))}
+                </div>
+                {characterRenderUrl && <div />}
+                <div className="space-y-1">
+                  {GEAR_ORDER_RIGHT.map((slot) => (
+                    <GearSlotRow
+                      key={slot}
+                      slot={slot}
+                      item={gear[slot]}
+                      isUpgrade={upgradeSlots?.has(slot)}
+                      itemInfoMap={itemInfoMap}
+                      enchantInfoMap={enchantInfoMap}
+                      gemInfoMap={gemInfoMap}
+                      align="right"
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className={`mt-1 grid gap-x-4 ${gridCols}`}>
+                {GEAR_ORDER_BOTTOM.map((slot, i) => (
+                  <GearSlotRow
+                    key={slot}
+                    slot={slot}
+                    item={gear[slot]}
+                    isUpgrade={upgradeSlots?.has(slot)}
+                    itemInfoMap={itemInfoMap}
+                    enchantInfoMap={enchantInfoMap}
+                    gemInfoMap={gemInfoMap}
+                    align={i === 1 ? 'right' : 'left'}
+                  />
+                ))}
+                {characterRenderUrl && <div />}
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );

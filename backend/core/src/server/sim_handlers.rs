@@ -27,7 +27,7 @@ pub(super) async fn create_sim(
     } else {
         req.simc_input.clone()
     };
-    simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(&simc_input, &req.options.talents));
+    simc_input = apply_talent_override(&simc_input, &req.options.talents);
     simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
     simc_input = inject_expert_fields(&simc_input, &req.options);
 
