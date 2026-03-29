@@ -10,7 +10,7 @@ import { useSimSubmit } from '../lib/useSimSubmit';
 import type { ResolveGearResponse } from '../lib/types';
 
 export default function TopGearPage() {
-  const { simcInput, maxCombinations, scenarios } = useSimContext();
+  const { simcInput, maxCombinations, scenarios, talentBuilds } = useSimContext();
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
   const [localItems, setLocalItems] = useState<
@@ -121,8 +121,9 @@ export default function TopGearPage() {
 
   // Fetch combo count whenever selection changes
   useEffect(() => {
-    const hasSelection = Object.values(selectedUids).some((s) => s.size > 0);
-    if (!resolved || !hasSelection) {
+    const hasGearSelection = Object.values(selectedUids).some((s) => s.size > 0);
+    const hasTalentCompare = talentBuilds.length > 1;
+    if (!resolved || (!hasGearSelection && !hasTalentCompare)) {
       setComboCount(0);
       setComboError('');
       return;
@@ -141,6 +142,7 @@ export default function TopGearPage() {
             max_upgrade: maxUpgrade,
             copy_enchants: copyEnchants,
             ...(maxCombinations != null ? { max_combinations: maxCombinations } : {}),
+            ...(talentBuilds.length > 1 ? { talent_builds: talentBuilds.map(tb => ({ name: tb.name, talent_string: tb.talentString })) } : {}),
           }),
           signal: controller.signal,
         });
@@ -163,7 +165,7 @@ export default function TopGearPage() {
     return () => {
       controller.abort();
     };
-  }, [selectedUids, resolved, localItems, maxUpgrade, copyEnchants, maxCombinations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedUids, resolved, localItems, maxUpgrade, copyEnchants, maxCombinations, talentBuilds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildPayload = useCallback(
     () => ({
@@ -173,9 +175,10 @@ export default function TopGearPage() {
       max_upgrade: maxUpgrade,
       copy_enchants: copyEnchants,
       ...(maxCombinations != null ? { max_combinations: maxCombinations } : {}),
+      ...(talentBuilds.length > 1 ? { talent_builds: talentBuilds.map(tb => ({ name: tb.name, talent_string: tb.talentString })) } : {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [simcInput, localItems, selectedUids, maxUpgrade, copyEnchants, maxCombinations]
+    [simcInput, localItems, selectedUids, maxUpgrade, copyEnchants, maxCombinations, talentBuilds]
   );
 
   const validate = useCallback(() => {

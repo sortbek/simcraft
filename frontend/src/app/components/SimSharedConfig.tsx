@@ -7,13 +7,15 @@ import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import TalentPicker from './TalentPicker';
 
-/** Adler-32 checksum matching the SimC addon's implementation. */
+/** Adler-32 checksum matching the SimC addon's implementation.
+ *  The Lua addon processes raw UTF-8 bytes, so we must do the same. */
 function adler32(s: string): number {
   const prime = 65521;
   let s1 = 1;
   let s2 = 0;
-  for (let i = 0; i < s.length; i++) {
-    s1 = (s1 + s.charCodeAt(i)) % prime;
+  const bytes = new TextEncoder().encode(s);
+  for (let i = 0; i < bytes.length; i++) {
+    s1 = (s1 + bytes[i]) % prime;
     s2 = (s2 + s1) % prime;
   }
   return ((s2 << 16) | s1) >>> 0;
@@ -24,11 +26,14 @@ function validateChecksum(input: string): 'valid' | 'invalid' | null {
   const match = input.match(/^#\s*Checksum:\s*([0-9a-fA-F]+)\s*$/m);
   if (!match) return null;
   const expected = parseInt(match[1], 16);
-  // The checksum covers everything before the checksum line
+  // The checksum covers everything before the checksum line.
+  // The SimC addon may compute with \r\n or \n line endings depending on OS.
+  // Browsers normalize textarea input to \n, so try both.
   const idx = input.indexOf(match[0]);
   const body = input.substring(0, idx);
-  const computed = adler32(body);
-  return computed === expected ? 'valid' : 'invalid';
+  if (adler32(body) === expected) return 'valid';
+  if (adler32(body.replace(/\n/g, '\r\n')) === expected) return 'valid';
+  return 'invalid';
 }
 
 function parseCharacterInfo(input: string) {
@@ -359,20 +364,18 @@ export default function SimSharedConfig() {
           </div>
         )}
         {detectedInfo && (
-          <div className="flex items-center justify-between rounded-lg bg-surface-2 px-3.5 py-2">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-gold/70" />
-              <p className="text-xs font-medium text-zinc-300">
-                {detectedInfo.name}
-                <span className="ml-1.5 font-normal text-zinc-500">
-                  {detectedInfo.spec} {detectedInfo.className}
-                </span>
-              </p>
-            </div>
-            <TalentPicker />
+          <div className="flex items-center gap-2 rounded-lg bg-surface-2 px-3.5 py-2">
+            <div className="h-2 w-2 rounded-full bg-gold/70" />
+            <p className="text-xs font-medium text-zinc-300">
+              {detectedInfo.name}
+              <span className="ml-1.5 font-normal text-zinc-500">
+                {detectedInfo.spec} {detectedInfo.className}
+              </span>
+            </p>
           </div>
         )}
       </div>
+      <TalentPicker />
       <AdvancedOptions />
     </div>
   );

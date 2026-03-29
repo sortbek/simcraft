@@ -26,6 +26,8 @@ interface TalentTreeProps {
   onTalentStringChange?: (s: string) => void;
   /** Render as a tiny inline preview — no card, no labels, no tooltips */
   mini?: boolean;
+  /** Skip card wrapper (when rendered inside another card) */
+  bare?: boolean;
 }
 
 // Node dimensions in SVG units (posX/posY use ~600 unit spacing)
@@ -44,6 +46,7 @@ export default function TalentTree({
   specId: specIdProp,
   onTalentStringChange,
   mini,
+  bare,
 }: TalentTreeProps) {
   // In edit mode, freeze the initial talent string so prop changes don't re-decode
   const initialTalentRef = useRef(talentString);
@@ -212,8 +215,8 @@ export default function TalentTree({
   }
 
   return (
-    <div className="card space-y-3 p-4">
-      <p className="text-xs font-medium uppercase tracking-widest text-muted">Talents</p>
+    <div className={bare ? 'space-y-3' : 'card space-y-3 p-4'}>
+      {!bare && <p className="text-xs font-medium uppercase tracking-widest text-muted">Talents</p>}
       <div className="flex flex-col gap-3 lg:flex-row lg:gap-4">
         <TreeSection
           label={tree.className}

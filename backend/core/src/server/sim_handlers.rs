@@ -125,12 +125,28 @@ pub(super) async fn create_top_gear_sim(
         items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
     }
 
+    // Build talent builds list: normalize each talent string
+    let talent_builds: Vec<(String, String)> = req
+        .talent_builds
+        .iter()
+        .map(|tb| {
+            let normalized =
+                crate::talent_normalize::normalize_simc_talents(&format!("talents={}", tb.talent_string));
+            let ts = normalized
+                .strip_prefix("talents=")
+                .unwrap_or(&tb.talent_string)
+                .to_string();
+            (tb.name.clone(), ts)
+        })
+        .collect();
+
     let (generated_input, combo_count, combo_metadata) =
-        match profileset_generator::generate_top_gear_input(
+        match profileset_generator::generate_top_gear_input_with_talents(
             &base_profile,
             &items_by_slot,
             &req.selected_items,
             req.max_combinations,
+            &talent_builds,
         ) {
             Ok(r) => r,
             Err(e) => {
@@ -138,9 +154,9 @@ pub(super) async fn create_top_gear_sim(
             }
         };
 
-    if combo_count == 0 {
+    if combo_count == 0 && req.talent_builds.len() <= 1 {
         return HttpResponse::BadRequest().json(json!({
-            "detail": "No alternative items selected. Select at least one non-equipped item."
+            "detail": "No alternative items selected. Select at least one non-equipped item or multiple talent builds."
         }));
     }
 
@@ -215,11 +231,12 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
         items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
     }
 
-    match profileset_generator::count_top_gear_combos(
+    match profileset_generator::count_top_gear_combos_with_talents(
         &base_profile,
         &items_by_slot,
         &req.selected_items,
         req.max_combinations,
+        req.talent_builds.len(),
     ) {
         Ok(count) => HttpResponse::Ok().json(json!({ "combo_count": count })),
         Err(e) => {

@@ -35,6 +35,7 @@ interface TopGearResult {
   name: string;
   items: ResultItem[];
   dps: number;
+  talent_build?: string;
   delta: number;
 }
 
@@ -378,7 +379,9 @@ function ResultRow({
   gemInfoMap: Record<number, GemInfo>;
 }) {
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
-  const isEquipped = result.items.length === 0 || result.name === 'Currently Equipped';
+  const isEquipped =
+    result.items.length === 0 || result.name.startsWith('Currently Equipped');
+  const hasTalentBuild = !!result.talent_build;
 
   return (
     <div
@@ -399,7 +402,14 @@ function ResultRow({
           )}
 
           {isEquipped ? (
-            <span className="text-[12px] text-muted">Currently Equipped</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-muted">Currently Equipped</span>
+              {hasTalentBuild && (
+                <span className="shrink-0 rounded bg-purple-500/10 px-1.5 py-px text-[9px] font-medium text-purple-400">
+                  {result.talent_build}
+                </span>
+              )}
+            </div>
           ) : (
             <div className="flex min-w-0 flex-wrap items-center gap-1">
               {result.items
@@ -413,6 +423,11 @@ function ResultRow({
                     gem={it.gem_id ? gemInfoMap[it.gem_id] : undefined}
                   />
                 ))}
+              {hasTalentBuild && (
+                <span className="shrink-0 rounded bg-purple-500/10 px-1.5 py-px text-[9px] font-medium text-purple-400">
+                  {result.talent_build}
+                </span>
+              )}
             </div>
           )}
 

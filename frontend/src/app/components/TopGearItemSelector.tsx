@@ -134,9 +134,13 @@ export default function TopGearItemSelector({
         `bonus_id=${newBonusIds.join('/')}`
       );
 
+      // Upgraded copies are added as bag items (not equipped), so origin must be 'bags'
+      // to match the UID the backend generates when parsing the appended simc line.
+      const copyOrigin = 'bags';
       const copy: ResolvedItem = {
         ...item,
-        uid: `${item.item_id}:${[...newBonusIds].sort((a, b) => a - b).join(':')}:${item.origin}:${item.slot}`,
+        origin: copyOrigin as ResolvedItem['origin'],
+        uid: `${item.item_id}:${[...newBonusIds].sort((a, b) => a - b).join(':')}:${copyOrigin}:${item.slot}`,
         bonus_ids: newBonusIds,
         simc_string: newSimcString,
         ilevel: option.itemLevel,
@@ -157,9 +161,18 @@ export default function TopGearItemSelector({
       // Notify parent so the simc string gets appended on submit
       onItemAdded(item.slot, newSimcString, item.origin);
 
+      // Auto-select the upgraded copy
+      const updated: Record<string, Set<string>> = {};
+      for (const [k, v] of Object.entries(selectedUids)) {
+        updated[k] = new Set(v);
+      }
+      if (!updated[item.slot]) updated[item.slot] = new Set();
+      updated[item.slot].add(copy.uid);
+      onSelectionChange(updated);
+
       setUpgradeMenuFor(null);
     },
-    [resolved, upgradeOptions, onResolvedChange, onItemAdded]
+    [resolved, upgradeOptions, onResolvedChange, onItemAdded, selectedUids, onSelectionChange]
   );
 
   function toggleItem(item: ResolvedItem, group: DisplayGroup) {

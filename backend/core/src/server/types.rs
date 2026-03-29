@@ -84,6 +84,12 @@ pub struct SimRequest {
     pub options: SimOptions,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct TalentBuild {
+    pub name: String,
+    pub talent_string: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct TopGearRequest {
     pub simc_input: String,
@@ -95,6 +101,8 @@ pub struct TopGearRequest {
     pub copy_enchants: bool,
     #[serde(default)]
     pub max_combinations: Option<usize>,
+    #[serde(default)]
+    pub talent_builds: Vec<TalentBuild>,
     #[serde(flatten)]
     pub options: SimOptions,
 }
