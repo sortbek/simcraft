@@ -42,6 +42,35 @@ fn make_item_uid(item: &Value) -> String {
     format!("{}:{}:{}:{}", item_id, bonus_key, origin, slot)
 }
 
+/// Build a slot-agnostic identity key used to mirror selections across paired slots.
+/// Format: "item_id:sorted_bonus_ids:origin"
+fn make_item_identity(item: &Value) -> String {
+    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+    let mut bonus_ids: Vec<u64> = item
+        .get("bonus_ids")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
+        .unwrap_or_default();
+    bonus_ids.sort();
+    let bonus_key = bonus_ids
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    let origin = item
+        .get("origin")
+        .and_then(|v| v.as_str())
+        .unwrap_or("bags");
+    format!("{}:{}:{}", item_id, bonus_key, origin)
+}
+
+/// Convert a UID like "item:bonuses:origin:slot" into "item:bonuses:origin".
+fn uid_identity(uid: &str) -> String {
+    uid.rsplit_once(':')
+        .map(|(prefix, _)| prefix.to_string())
+        .unwrap_or_else(|| uid.to_string())
+}
+
 /// Generate a simc input string with full-set profilesets for Top Gear.
 ///
 /// Returns (simc_input_string, combination_count, combo_metadata).
@@ -752,12 +781,28 @@ fn build_slot_candidates(
             None => continue,
         };
 
-        let selected_uids = selected_items.get(&slot).cloned().unwrap_or_default();
+        let selected_uids: HashSet<String> = selected_items
+            .get(&slot)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
+        // Mirror selections from paired slots (rings/trinkets) using slot-agnostic identity.
+        // This ensures selecting a trinket/ring produces variants for both paired slots.
+        let mut selected_identities: HashSet<String> =
+            selected_uids.iter().map(|uid| uid_identity(uid)).collect();
+        if let Some(paired) = class_data::paired_slot(&slot) {
+            if let Some(paired_uids) = selected_items.get(paired) {
+                selected_identities.extend(paired_uids.iter().map(|uid| uid_identity(uid)));
+            }
+        }
 
         let mut candidates: Vec<Value> = Vec::new();
         for item in slot_items {
             let uid = make_item_uid(item);
-            if selected_uids.contains(&uid) {
+            let identity = make_item_identity(item);
+            if selected_uids.contains(&uid) || selected_identities.contains(&identity) {
                 candidates.push(item.clone());
             }
         }
