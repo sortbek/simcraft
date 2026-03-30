@@ -205,12 +205,17 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         0.0
     };
 
+    let all_gear = extract_all_gear(player);
+    let equipped_gear: serde_json::Map<String, Value> = all_gear.into_iter().collect();
+
     let mut result = json!({
         "player_name": player.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown"),
         "player_class": player.get("specialization")
             .or_else(|| player.get("type"))
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown"),
+        "talents": player.get("talents").and_then(|t| t.as_str()).unwrap_or(""),
+        "equipped_gear": Value::Object(equipped_gear),
         "dps": round1(dps_mean),
         "dps_error": round1(dps_error),
         "dps_error_pct": round2(error_pct),

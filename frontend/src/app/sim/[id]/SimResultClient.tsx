@@ -184,7 +184,7 @@ export default function SimResultClient() {
                     isCurrent
                       ? 'border-gold/40 bg-gold/[0.08] text-gold'
                       : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
-                  }`}
+                    }`}
                 >
                   {formatScenarioLabel(s)}
                 </a>
@@ -263,6 +263,8 @@ export default function SimResultClient() {
             iterations={r.iterations as number | undefined}
             targetError={r.target_error as number | undefined}
             elapsedTime={r.elapsed_time_seconds as number | undefined}
+            equippedGear={r.equipped_gear as Record<string, any>}
+            talents={r.talents as string | undefined}
           />
           {r.stat_weights && (
             <StatWeightsTable statWeights={r.stat_weights as Record<string, number>} />

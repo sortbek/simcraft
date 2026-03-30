@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import DpsHeroCard from './DpsHeroCard';
+import PlayerSnapshot from './PlayerSnapshot';
 
 interface Ability {
   name: string;
@@ -24,6 +25,8 @@ interface ResultsChartProps {
   iterations?: number;
   targetError?: number;
   elapsedTime?: number;
+  equippedGear?: Record<string, any>;
+  talents?: string;
 }
 
 const iconCache = new Map<number, string>();
@@ -103,6 +106,8 @@ export default function ResultsChart({
   iterations,
   targetError,
   elapsedTime,
+  equippedGear,
+  talents,
 }: ResultsChartProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const totalDps = dps || abilities.reduce((s, a) => s + a.portion_dps, 0);
@@ -129,6 +134,16 @@ export default function ResultsChart({
         targetError={targetError}
         elapsedTime={elapsedTime}
       />
+
+      {equippedGear ? (
+        <PlayerSnapshot
+          playerName={playerName}
+          playerClass={playerClass}
+          playerRealm={playerRealm}
+          equippedGear={equippedGear}
+          talents={talents}
+        />
+      ) : null}
 
       <div className="card p-5">
         <h3 className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">
