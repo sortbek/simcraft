@@ -214,15 +214,6 @@ async fn run_simc_subprocess(
         let _ = std::fs::remove_file(&zone_id);
     }
 
-    // On Unix, wrap with stdbuf -oL to force line-buffered stdout so log lines
-    // arrive in real-time instead of sitting in a pipe buffer.
-    #[cfg(unix)]
-    let mut cmd = {
-        let mut c = Command::new("stdbuf");
-        c.arg("-oL").arg(simc_path);
-        c
-    };
-    #[cfg(not(unix))]
     let mut cmd = Command::new(simc_path);
     #[cfg(windows)]
     {
