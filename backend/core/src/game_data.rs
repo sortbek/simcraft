@@ -235,10 +235,7 @@ pub fn get_instance_drops(
                     .unwrap_or_default();
 
                 let item_instance = if is_meta {
-                    encounter_to_instance
-                        .get(eid)
-                        .cloned()
-                        .unwrap_or_default()
+                    encounter_to_instance.get(eid).cloned().unwrap_or_default()
                 } else {
                     instance_name.clone()
                 };

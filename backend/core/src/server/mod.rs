@@ -288,10 +288,7 @@ pub async fn start_with_storage_bind(
         }
         #[cfg(not(feature = "desktop"))]
         {
-            app = app.route(
-                "/api/sims",
-                web::get().to(job_handlers::list_sims_filtered),
-            );
+            app = app.route("/api/sims", web::get().to(job_handlers::list_sims_filtered));
         }
 
         // Serve cached assets from data directory
