@@ -1,19 +1,19 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import DpsHeroCard from './DpsHeroCard';
-import {
-  useItemInfo,
-  useEnchantInfo,
-  useGemInfo,
-  getIconUrl,
-  getWowheadUrl,
-  getWowheadData,
-  QUALITY_COLORS,
-} from '../lib/useItemInfo';
-import type { ItemInfo, EnchantInfo, GemInfo, ItemQuery } from '../lib/useItemInfo';
 import { SLOT_LABELS } from '../lib/types';
+import type { EnchantInfo, GemInfo, ItemInfo, ItemQuery } from '../lib/useItemInfo';
+import {
+    getIconUrl,
+    getWowheadData,
+    getWowheadUrl,
+    QUALITY_COLORS,
+    useEnchantInfo,
+    useGemInfo,
+    useItemInfo,
+} from '../lib/useItemInfo';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
+import DpsHeroCard from './DpsHeroCard';
 
 interface ResultItem {
   slot: string;
@@ -119,6 +119,10 @@ export default function TopGearResults({
     // Overlay best result's changed items
     if (bestResult && bestResult.delta > 0) {
       for (const it of bestResult.items) {
+        if (!it.is_kept && it.slot === 'off_hand' && it.item_id === 0) {
+          delete gearSet.off_hand;
+          continue;
+        }
         if (!it.is_kept && it.item_id > 0) {
           gearSet[it.slot] = { ...it, isUpgrade: true };
         }
@@ -434,6 +438,19 @@ function ResultRow({
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
   const isEquipped = result.items.length === 0 || result.name === 'Currently Equipped';
 
+  const changedItems = result.items.filter((it) => !it.is_kept && it.item_id > 0);
+  const changedSlots = new Set(changedItems.map((it) => it.slot));
+
+  const showBothRings = changedSlots.has('finger1') || changedSlots.has('finger2');
+  const showBothTrinkets = changedSlots.has('trinket1') || changedSlots.has('trinket2');
+
+  const displayItems = result.items.filter((it) => {
+    if (!it.is_kept) return it.item_id > 0;
+    if (showBothRings && (it.slot === 'finger1' || it.slot === 'finger2')) return true;
+    if (showBothTrinkets && (it.slot === 'trinket1' || it.slot === 'trinket2')) return true;
+    return false;
+  });
+
   return (
     <div
       className={`relative overflow-hidden rounded-lg ${
@@ -456,17 +473,15 @@ function ResultRow({
             <span className="text-[12px] text-muted">Currently Equipped</span>
           ) : (
             <div className="flex min-w-0 flex-wrap items-center gap-1">
-              {result.items
-                .filter((it) => !it.is_kept)
-                .map((it, i) => (
-                  <ItemTag
-                    key={i}
-                    item={it}
-                    info={it.item_id > 0 ? itemInfoMap[it.item_id] : undefined}
-                    enchant={it.enchant_id ? enchantInfoMap[it.enchant_id] : undefined}
-                    gem={it.gem_id ? gemInfoMap[it.gem_id] : undefined}
-                  />
-                ))}
+              {displayItems.map((it, i) => (
+                <ItemTag
+                  key={i}
+                  item={it}
+                  info={it.item_id > 0 ? itemInfoMap[it.item_id] : undefined}
+                  enchant={it.enchant_id ? enchantInfoMap[it.enchant_id] : undefined}
+                  gem={it.gem_id ? gemInfoMap[it.gem_id] : undefined}
+                />
+              ))}
             </div>
           )}
 
