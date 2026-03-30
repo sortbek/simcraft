@@ -41,6 +41,12 @@
 html[data-desktop] .desktop-only {
   display: contents;
 }
+.desktop-only-flex {
+  display: none;
+}
+html[data-desktop] .desktop-only-flex {
+  display: flex;
+}
 html[data-desktop] .web-only {
   display: none;
 }
@@ -51,6 +57,11 @@ html[data-desktop] .desktop-drag {
 }
 html[data-desktop] .desktop-no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Web header is taller since there are no window controls */
+html:not([data-desktop]) .desktop-header\:h-11 {
+  height: 3.5rem;
 }
 
 /* Scrollbar */

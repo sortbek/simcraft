@@ -77,20 +77,56 @@ pub struct ParseResult {
     pub talent_loadouts: Vec<TalentLoadout>,
 }
 
-// ---- Enriched Item Info (display metadata from item DB) ----
+// ---- Bonus Resolution Result ----
+
+#[derive(Debug, Clone, Default)]
+pub struct BonusResolved {
+    pub quality: Option<u64>,
+    pub ilevel: Option<u64>,
+    pub tag: Option<String>,
+    pub sockets: Option<u64>,
+    pub upgrade: Option<String>,
+    pub season_id: Option<u64>,
+}
+
+// ---- Item Info (output of item_db::get_item_info) ----
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ItemDisplayInfo {
+pub struct ItemInfo {
+    pub item_id: u64,
     pub name: String,
     pub icon: String,
+    pub ilevel: u64,
     pub quality: u64,
     pub quality_name: String,
-    pub quality_color: String,
     pub tag: String,
     pub upgrade: String,
     pub sockets: u64,
     pub armor_subclass: u64,
     pub inventory_type: u64,
+    pub item_class: u64,
+    pub item_subclass: u64,
+}
+
+impl ItemInfo {
+    /// Fallback for items not found in the DB.
+    pub fn unknown(item_id: u64) -> Self {
+        Self {
+            item_id,
+            name: format!("Item {}", item_id),
+            icon: "inv_misc_questionmark".to_string(),
+            ilevel: 0,
+            quality: 1,
+            quality_name: "common".to_string(),
+            tag: String::new(),
+            upgrade: String::new(),
+            sockets: 0,
+            armor_subclass: 0,
+            inventory_type: 0,
+            item_class: 0,
+            item_subclass: 0,
+        }
+    }
 }
 
 // ---- Resolved Item (output of gear_resolver) ----
@@ -121,6 +157,16 @@ pub struct ResolvedItem {
     pub gem_name: String,
     /// Gem icon (empty if none).
     pub gem_icon: String,
+    /// Season ID from upgrade track (0 if none).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub season_id: u64,
+    /// Whether this item is a catalyst-generated tier alternative.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_catalyst: bool,
+}
+
+fn is_zero(v: &u64) -> bool {
+    *v == 0
 }
 
 // ---- Slot Resolution ----
@@ -140,6 +186,9 @@ pub struct ResolveGearResponse {
     pub slots: std::collections::HashMap<String, SlotResolution>,
     pub excluded: Vec<ExcludedItem>,
     pub talent_loadouts: Vec<TalentLoadout>,
+    /// Number of catalyst charges available (None if not detected in addon export).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub catalyst_charges: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

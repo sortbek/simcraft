@@ -264,6 +264,13 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         }
     }
 
+    // Equipped gear
+    let all_gear = extract_all_gear(player);
+    if !all_gear.is_empty() {
+        let equipped_gear: serde_json::Map<String, Value> = all_gear.into_iter().collect();
+        result["equipped_gear"] = Value::Object(equipped_gear);
+    }
+
     result
 }
 
@@ -395,19 +402,56 @@ pub fn parse_top_gear_result(
 
         let items = combo_metadata.get(combo_name).cloned().unwrap_or_default();
 
-        results.push(json!({
+        // Extract talent_build name and spec from items metadata (if present)
+        let talent_build = items
+            .first()
+            .and_then(|it| it.get("talent_build"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let talent_spec = items
+            .first()
+            .and_then(|it| it.get("talent_spec"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let mut entry = json!({
             "name": combo_name,
             "items": items,
             "dps": round1(mean_dps),
             "delta": round1(mean_dps - base_dps),
-        }));
+        });
+        if !talent_build.is_empty() {
+            entry["talent_build"] = json!(talent_build);
+        }
+        if !talent_spec.is_empty() {
+            entry["talent_spec"] = json!(talent_spec);
+        }
+        results.push(entry);
     }
 
-    // Add the base (equipped) profile
-    let baseline_items = combo_metadata
-        .get("Currently Equipped")
+    // Add the base (equipped) profile — look for exact or prefixed key
+    let baseline_key = combo_metadata
+        .keys()
+        .find(|k| k.starts_with("Currently Equipped"))
+        .cloned();
+    let baseline_items = baseline_key
+        .as_deref()
+        .and_then(|k| combo_metadata.get(k))
         .cloned()
         .unwrap_or_default();
+
+    let baseline_talent = baseline_items
+        .first()
+        .and_then(|it| it.get("talent_build"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let baseline_talent_spec = baseline_items
+        .first()
+        .and_then(|it| it.get("talent_spec"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
 
     let baseline_items = if baseline_items.is_empty() {
         let all_gear = extract_all_gear(player);
@@ -419,12 +463,19 @@ pub fn parse_top_gear_result(
         baseline_items
     };
 
-    results.push(json!({
-        "name": "Currently Equipped",
+    let mut baseline_entry = json!({
+        "name": baseline_key.as_deref().unwrap_or("Currently Equipped"),
         "items": baseline_items,
         "dps": round1(base_dps),
         "delta": 0,
-    }));
+    });
+    if !baseline_talent.is_empty() {
+        baseline_entry["talent_build"] = json!(baseline_talent);
+    }
+    if !baseline_talent_spec.is_empty() {
+        baseline_entry["talent_spec"] = json!(baseline_talent_spec);
+    }
+    results.push(baseline_entry);
 
     results.sort_by(|a, b| {
         let a_dps = a["dps"].as_f64().unwrap_or(0.0);

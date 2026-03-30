@@ -4,11 +4,29 @@
 
 use once_cell::sync::OnceCell;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
-use crate::types::class_data;
+use crate::types::{class_data, BonusResolved, ItemInfo};
+
+// ---- Upgrade Tracks (ranked) ----
+
+/// Ranked upgrade tracks, lowest to highest.
+const TRACK_RANKS: &[&str] = &["Explorer", "Adventurer", "Veteran", "Champion", "Hero", "Myth"];
+
+/// Return the numeric rank of a track name (0-based), or None if unknown.
+pub fn track_rank(track: &str) -> Option<usize> {
+    TRACK_RANKS.iter().position(|&t| track.starts_with(t))
+}
+
+/// Check if an upgrade string meets a minimum track threshold.
+pub fn is_minimum_track(upgrade: &str, minimum: &str) -> bool {
+    match (track_rank(upgrade), track_rank(minimum)) {
+        (Some(item), Some(min)) => item >= min,
+        _ => false,
+    }
+}
 
 // ---- Static Data Stores ----
 
@@ -24,9 +42,39 @@ type UpgradeTrackValue = (u64, u64, u64);
 static UPGRADE_TRACKS: OnceCell<HashMap<UpgradeTrackKey, UpgradeTrackValue>> = OnceCell::new();
 /// Per-step upgrade costs: bonus_id → HashMap<currency_id, amount>
 static UPGRADE_STEP_COSTS: OnceCell<HashMap<u64, HashMap<u64, u64>>> = OnceCell::new();
+/// Squish era → curve ID mapping.
+static SQUISH_ERAS: OnceCell<HashMap<u64, u64>> = OnceCell::new();
+/// Item curves: curve_id → sorted Vec<(old_ilevel, new_ilevel)>.
+static ITEM_CURVES: OnceCell<HashMap<u64, Vec<(u64, u64)>>> = OnceCell::new();
+/// Current season ID (highest seasonId found in upgrade bonuses).
+static CURRENT_SEASON_ID: OnceCell<u64> = OnceCell::new();
 /// Currency metadata: currency_id → (name, icon)
 static CURRENCY_INFO: OnceCell<HashMap<u64, (String, String)>> = OnceCell::new();
 static SEASON_CONFIG: OnceCell<Value> = OnceCell::new();
+static TALENT_TREES: OnceCell<HashMap<u64, Value>> = OnceCell::new();
+
+/// Catalyst item info for a specific class + slot combination.
+#[derive(Debug, Clone)]
+pub struct CatalystTierItem {
+    pub item_id: u64,
+    pub name: String,
+    pub icon: String,
+    /// Whether this item is part of a tier set (has itemSetId).
+    pub has_set: bool,
+}
+
+/// Catalyst conversion data for the current season.
+struct CatalystData {
+    /// Maps (wow_class_id, inventory_type) → tier item info.
+    /// inventory_type 20 (robe) is normalized to 5 (chest).
+    tier_items: HashMap<(u64, u64), CatalystTierItem>,
+    /// Set of all tier item IDs (for "is this already a tier piece?" checks).
+    tier_item_ids: HashSet<u64>,
+    /// Currency ID for catalyst charges (e.g. 3378 for Midnight Catalyst).
+    pub catalyst_currency_id: u64,
+}
+
+static CATALYST: OnceCell<CatalystData> = OnceCell::new();
 
 // ---- Load ----
 
@@ -90,8 +138,9 @@ pub fn load(data_dir: &Path) {
             })
             .collect();
 
-        // Build upgrade group index
+        // Build upgrade group index and find current season ID
         let mut groups: HashMap<u64, Vec<(u64, u64)>> = HashMap::new();
+        let mut max_season_id: u64 = 0;
         for (bid, bonus) in &map {
             if let Some(upgrade) = bonus.get("upgrade") {
                 if let (Some(group), Some(level)) = (
@@ -100,8 +149,14 @@ pub fn load(data_dir: &Path) {
                 ) {
                     groups.entry(group).or_default().push((*bid, level));
                 }
+                if let Some(sid) = upgrade.get("seasonId").and_then(|s| s.as_u64()) {
+                    if sid > max_season_id {
+                        max_season_id = sid;
+                    }
+                }
             }
         }
+        let _ = CURRENT_SEASON_ID.set(max_season_id);
         let mut upgrade_max: HashMap<u64, u64> = HashMap::new();
         for members in groups.values() {
             let max_bonus_id = members
@@ -267,6 +322,160 @@ pub fn load(data_dir: &Path) {
         println!("Loaded season config: {}", name);
         let _ = SEASON_CONFIG.set(cfg);
     }
+
+    // talents.json
+    let talents_path = data_dir.join("talents.json");
+    if talents_path.exists() {
+        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
+            fs::File::open(&talents_path).unwrap(),
+        ))
+        .unwrap_or_default();
+        let map: HashMap<u64, Value> = data
+            .into_iter()
+            .filter_map(|v| {
+                let spec_id = v.get("specId")?.as_u64()?;
+                Some((spec_id, v))
+            })
+            .collect();
+        println!("Loaded {} talent trees", map.len());
+        let _ = TALENT_TREES.set(map);
+    }
+
+    // item-squish-era.json — squish era → curve ID mapping
+    let squish_path = data_dir.join("item-squish-era.json");
+    if squish_path.exists() {
+        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
+            fs::File::open(&squish_path).unwrap(),
+        ))
+        .unwrap_or_default();
+        let map: HashMap<u64, u64> = data
+            .iter()
+            .filter_map(|entry| {
+                let id = entry.get("id")?.as_u64()?;
+                let curve_id = entry.get("curveId")?.as_u64()?;
+                if curve_id > 0 { Some((id, curve_id)) } else { None }
+            })
+            .collect();
+        println!("Loaded {} squish eras", map.len());
+        let _ = SQUISH_ERAS.set(map);
+    }
+
+    // item-curves.json — curve ID → points for ilevel conversion
+    let curves_path = data_dir.join("item-curves.json");
+    if curves_path.exists() {
+        let data: HashMap<String, Value> = serde_json::from_reader(std::io::BufReader::new(
+            fs::File::open(&curves_path).unwrap(),
+        ))
+        .unwrap_or_default();
+        let map: HashMap<u64, Vec<(u64, u64)>> = data
+            .into_iter()
+            .filter_map(|(key, val)| {
+                let curve_id = key.parse::<u64>().ok()?;
+                let points = val.get("points")?.as_array()?;
+                let mut pts: Vec<(u64, u64)> = points
+                    .iter()
+                    .filter_map(|p| {
+                        let old = p.get("playerLevel")?.as_u64()?;
+                        let new = p.get("itemLevel")?.as_u64()?;
+                        Some((old, new))
+                    })
+                    .collect();
+                pts.sort_by_key(|(old, _)| *old);
+                Some((curve_id, pts))
+            })
+            .collect();
+        println!("Loaded {} item curves", map.len());
+        let _ = ITEM_CURVES.set(map);
+    }
+
+    // item-conversions.json — catalyst tier items
+    let conversions_path = data_dir.join("item-conversions.json");
+    if conversions_path.exists() {
+        let data: HashMap<String, Value> = serde_json::from_reader(std::io::BufReader::new(
+            fs::File::open(&conversions_path).unwrap(),
+        ))
+        .unwrap_or_default();
+
+        // Find the latest conversion group (highest numeric key)
+        let latest_group = data
+            .iter()
+            .filter_map(|(k, _)| k.parse::<u64>().ok())
+            .max();
+
+        if let Some(group_id) = latest_group {
+            if let Some(group) = data.get(&group_id.to_string()) {
+                let mut tier_items: HashMap<(u64, u64), CatalystTierItem> = HashMap::new();
+                let mut tier_item_ids: HashSet<u64> = HashSet::new();
+
+                if let Some(items) = group.get("items").and_then(|v| v.as_array()) {
+                    for item in items {
+                        let item_id = match item.get("id").and_then(|v| v.as_u64()) {
+                            Some(id) => id,
+                            None => continue,
+                        };
+                        let mut inv_type = match item.get("inventoryType").and_then(|v| v.as_u64()) {
+                            Some(t) => t,
+                            None => continue,
+                        };
+                        // Normalize robe (20) to chest (5)
+                        if inv_type == 20 {
+                            inv_type = 5;
+                        }
+                        let has_set = item.get("itemSetId").and_then(|v| v.as_u64()).is_some();
+                        let name = item
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let icon = item
+                            .get("icon")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let classes = item
+                            .get("allowableClasses")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect::<Vec<_>>())
+                            .unwrap_or_default();
+
+                        if has_set {
+                            tier_item_ids.insert(item_id);
+                        }
+                        for class_id in &classes {
+                            tier_items.insert(
+                                (*class_id, inv_type),
+                                CatalystTierItem {
+                                    item_id,
+                                    name: name.clone(),
+                                    icon: icon.clone(),
+                                    has_set,
+                                },
+                            );
+                        }
+                    }
+                }
+
+                // Determine catalyst currency ID from season config or default
+                // Current season: 3378 (Midnight Catalyst)
+                let catalyst_currency_id = season_cfg()
+                    .get("catalyst_currency_id")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(3378);
+
+                println!(
+                    "Loaded {} catalyst items (group {}, currency {})",
+                    tier_items.len(),
+                    group_id,
+                    catalyst_currency_id
+                );
+                let _ = CATALYST.set(CatalystData {
+                    tier_items,
+                    tier_item_ids,
+                    catalyst_currency_id,
+                });
+            }
+        }
+    }
 }
 
 // ---- Accessors ----
@@ -299,6 +508,87 @@ pub fn drops_by_encounter() -> &'static HashMap<i64, Vec<Value>> {
     DROPS_BY_ENCOUNTER.get().expect("Game data not loaded")
 }
 
+pub fn talent_tree(spec_id: u64) -> Option<&'static Value> {
+    TALENT_TREES.get()?.get(&spec_id)
+}
+
+/// Return all talent trees that share the same classId as the given specId.
+pub fn talent_trees_for_class(spec_id: u64) -> Vec<&'static Value> {
+    let trees = match TALENT_TREES.get() {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+    let class_id = match trees.get(&spec_id) {
+        Some(t) => t.get("classId").and_then(|v| v.as_u64()),
+        None => return Vec::new(),
+    };
+    let class_id = match class_id {
+        Some(id) => id,
+        None => return Vec::new(),
+    };
+    trees
+        .values()
+        .filter(|t| t.get("classId").and_then(|v| v.as_u64()) == Some(class_id))
+        .collect()
+}
+
+/// Look up the catalyst tier item for a given WoW class ID and inventory type.
+/// Returns None if catalyst data isn't loaded or no tier item exists for that combo.
+pub fn catalyst_tier_item(class_id: u64, inv_type: u64) -> Option<&'static CatalystTierItem> {
+    let cat = CATALYST.get()?;
+    // Normalize robe (20) → chest (5)
+    let inv = if inv_type == 20 { 5 } else { inv_type };
+    cat.tier_items.get(&(class_id, inv))
+}
+
+/// Check if an item_id is a catalyst tier piece.
+pub fn is_catalyst_tier_item(item_id: u64) -> bool {
+    CATALYST
+        .get()
+        .map(|c| c.tier_item_ids.contains(&item_id))
+        .unwrap_or(false)
+}
+
+/// Filter bonus_ids to keep only those that set item level (have `itemLevel` in bonuses.json).
+pub fn filter_ilevel_bonus_ids(bonus_ids: &[u64]) -> Vec<u64> {
+    let bonuses = match BONUSES.get() {
+        Some(b) => b,
+        None => return vec![],
+    };
+    bonus_ids
+        .iter()
+        .filter(|&&bid| {
+            bonuses
+                .get(&bid)
+                .and_then(|b| b.get("itemLevel"))
+                .is_some()
+        })
+        .copied()
+        .collect()
+}
+
+/// Tier set marker bonus ID (13575 for current season).
+/// Added to catalyst items that are part of a tier set.
+const TIER_SET_BONUS_ID: u64 = 13575;
+
+/// Get the tier set marker bonus ID.
+pub fn tier_set_bonus_id() -> u64 {
+    TIER_SET_BONUS_ID
+}
+
+/// Get the catalyst currency ID for the current season (e.g. 3378).
+/// Get the current season ID (highest seasonId found in upgrade bonuses).
+pub fn current_season_id() -> u64 {
+    CURRENT_SEASON_ID.get().copied().unwrap_or(0)
+}
+
+pub fn catalyst_currency_id() -> u64 {
+    CATALYST
+        .get()
+        .map(|c| c.catalyst_currency_id)
+        .unwrap_or(3378)
+}
+
 pub fn upgrade_tracks() -> Option<&'static HashMap<UpgradeTrackKey, UpgradeTrackValue>> {
     UPGRADE_TRACKS.get()
 }
@@ -329,34 +619,79 @@ pub fn upgrade_track_max() -> u64 {
 
 // ---- Bonus Resolution ----
 
-pub fn resolve_bonuses(bonus_ids: &[u64]) -> Value {
-    let mut result = serde_json::json!({});
+pub(crate) fn resolve_bonuses(bonus_ids: &[u64]) -> BonusResolved {
+    let mut result = BonusResolved::default();
+    let mut upgrade_ilevel: Option<u64> = None;
+    let mut level_offset: i64 = 0;
+    let mut ilevel_priority: i64 = -1;
+
     for bid in bonus_ids {
         if let Some(bonus) = bonuses().get(bid) {
-            if let Some(q) = bonus.get("quality") {
-                result["quality"] = q.clone();
+            if let Some(q) = bonus.get("quality").and_then(|q| q.as_u64()) {
+                result.quality = Some(q);
             }
-            if let Some(il) = bonus.get("itemLevel").and_then(|il| il.get("amount")) {
-                result["ilevel"] = il.clone();
+            if let Some(il_obj) = bonus.get("itemLevel") {
+                let priority = il_obj.get("priority").and_then(|p| p.as_i64()).unwrap_or(0);
+                if priority >= ilevel_priority {
+                    if let Some(amount) = il_obj.get("amount").and_then(|a| a.as_u64()) {
+                        result.ilevel = Some(amount);
+                        ilevel_priority = priority;
+                    }
+                }
             }
-            if let Some(tag) = bonus.get("tag") {
-                result["tag"] = tag.clone();
+            if let Some(offset) = bonus.get("levelOffset").and_then(|lo| lo.get("amount")).and_then(|a| a.as_i64()) {
+                level_offset += offset;
             }
-            if let Some(socket) = bonus.get("socket") {
-                result["sockets"] = socket.clone();
+            if let Some(tag) = bonus.get("tag").and_then(|t| t.as_str()) {
+                result.tag = Some(tag.to_string());
             }
-            if let Some(upgrade) = bonus.get("upgrade").and_then(|u| u.get("fullName")) {
-                result["upgrade"] = upgrade.clone();
+            if let Some(socket) = bonus.get("socket").and_then(|s| s.as_u64()) {
+                result.sockets = Some(socket);
+            }
+            if let Some(upgrade) = bonus.get("upgrade") {
+                if let Some(full_name) = upgrade.get("fullName").and_then(|f| f.as_str()) {
+                    result.upgrade = Some(full_name.to_string());
+                }
+                if let Some(il) = upgrade.get("itemLevel").and_then(|i| i.as_u64()) {
+                    upgrade_ilevel = Some(il);
+                }
+                if let Some(sid) = upgrade.get("seasonId").and_then(|s| s.as_u64()) {
+                    result.season_id = Some(sid);
+                }
             }
         }
     }
+
+    // upgrade.itemLevel is the resolved track value — it takes priority
+    // over itemLevel.amount (which can be a curve-based unresolved value)
+    if let Some(il) = upgrade_ilevel {
+        result.ilevel = Some(il);
+    }
+
+    // Apply level offset on top of resolved ilevel
+    if level_offset != 0 {
+        if let Some(il) = result.ilevel {
+            result.ilevel = Some((il as i64 + level_offset).max(0) as u64);
+        }
+    }
+
     result
 }
 
-// ---- Item Info ----
+// ---- Item Lookups ----
 
-pub fn get_item_info(item_id: u64, bonus_ids: Option<&[u64]>) -> Option<Value> {
-    let item = items().get(&item_id)?;
+/// Get the raw JSON entry for an item from the DB.
+pub(crate) fn get_raw_item(item_id: u64) -> Option<&'static Value> {
+    items().get(&item_id)
+}
+
+/// Get inventory type for an item (e.g. 1=head, 7=legs, 13=one-hand, 17=two-hand).
+pub fn get_inventory_type(item_id: u64) -> Option<u64> {
+    get_raw_item(item_id)?.get("inventoryType")?.as_u64()
+}
+
+pub fn get_item_info(item_id: u64, bonus_ids: Option<&[u64]>) -> Option<ItemInfo> {
+    let item = get_raw_item(item_id)?;
 
     let mut quality = item.get("quality").and_then(|q| q.as_u64()).unwrap_or(1);
     let mut ilevel = item.get("itemLevel").and_then(|i| i.as_u64()).unwrap_or(0);
@@ -364,58 +699,41 @@ pub fn get_item_info(item_id: u64, bonus_ids: Option<&[u64]>) -> Option<Value> {
     let mut sockets: u64 = 0;
     let mut upgrade = String::new();
 
+    let mut bonus_set_ilevel = false;
     if let Some(bids) = bonus_ids {
         let resolved = resolve_bonuses(bids);
-        if let Some(q) = resolved.get("quality").and_then(|q| q.as_u64()) {
-            quality = q;
-        }
-        if let Some(i) = resolved.get("ilevel").and_then(|i| i.as_u64()) {
-            ilevel = i;
-        }
-        if let Some(t) = resolved.get("tag").and_then(|t| t.as_str()) {
-            tag = t.to_string();
-        }
-        if let Some(s) = resolved.get("sockets").and_then(|s| s.as_u64()) {
-            sockets = s;
-        }
-        if let Some(u) = resolved.get("upgrade").and_then(|u| u.as_str()) {
-            upgrade = u.to_string();
-        }
+        if let Some(q) = resolved.quality { quality = q; }
+        if let Some(i) = resolved.ilevel { ilevel = i; bonus_set_ilevel = true; }
+        if let Some(t) = resolved.tag { tag = t; }
+        if let Some(s) = resolved.sockets { sockets = s; }
+        if let Some(u) = resolved.upgrade { upgrade = u; }
     }
 
-    let armor_subclass = if item.get("itemClass").and_then(|c| c.as_u64()) == Some(4) {
-        item.get("itemSubClass")
-            .and_then(|s| s.as_u64())
-            .unwrap_or(0)
-    } else {
-        0
-    };
-    let inventory_type = item
-        .get("inventoryType")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    // Only apply squish to the base DB ilevel — bonus-resolved ilevels are already correct
+    if !bonus_set_ilevel {
+        ilevel = squish_ilevel(item_id, ilevel);
+    }
 
     let item_class = item.get("itemClass").and_then(|c| c.as_u64()).unwrap_or(0);
-    let item_subclass = item
-        .get("itemSubClass")
-        .and_then(|s| s.as_u64())
-        .unwrap_or(0);
+    let item_subclass = item.get("itemSubClass").and_then(|s| s.as_u64()).unwrap_or(0);
+    let armor_subclass = if item_class == 4 { item_subclass } else { 0 };
+    let inventory_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
 
-    Some(serde_json::json!({
-        "item_id": item_id,
-        "name": item.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown"),
-        "quality": quality,
-        "quality_name": class_data::quality_name(quality),
-        "icon": item.get("icon").and_then(|i| i.as_str()).unwrap_or("inv_misc_questionmark"),
-        "ilevel": ilevel,
-        "tag": tag,
-        "sockets": sockets,
-        "upgrade": upgrade,
-        "armor_subclass": armor_subclass,
-        "inventory_type": inventory_type,
-        "item_class": item_class,
-        "item_subclass": item_subclass,
-    }))
+    Some(ItemInfo {
+        item_id,
+        name: item.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown").to_string(),
+        icon: item.get("icon").and_then(|i| i.as_str()).unwrap_or("inv_misc_questionmark").to_string(),
+        ilevel,
+        quality,
+        quality_name: class_data::quality_name(quality).to_string(),
+        tag,
+        upgrade,
+        sockets,
+        armor_subclass,
+        inventory_type,
+        item_class,
+        item_subclass,
+    })
 }
 
 pub fn get_enchant_info(enchant_id: u64) -> Option<Value> {
@@ -446,10 +764,67 @@ pub fn get_gem_info(gem_item_id: u64) -> Option<Value> {
     )
 }
 
+/// Check if an item has a squishEra (legacy/timewalking item).
+/// Check if an item has a squishEra (legacy/timewalking item).
+pub fn has_squish_era(item_id: u64) -> bool {
+    get_raw_item(item_id)
+        .and_then(|item| item.get("squishEra"))
+        .is_some()
+}
+
+/// Apply squish era ilevel conversion for an item. Returns the squished ilevel,
+/// or the original ilevel if the item has no squishEra or no matching curve.
+pub fn squish_ilevel(item_id: u64, ilevel: u64) -> u64 {
+    let item = match get_raw_item(item_id) {
+        Some(i) => i,
+        None => return ilevel,
+    };
+    let era = match item.get("squishEra").and_then(|e| e.as_u64()) {
+        Some(e) => e,
+        None => return ilevel,
+    };
+    let curve_id = match SQUISH_ERAS.get().and_then(|m| m.get(&era)) {
+        Some(&c) => c,
+        None => return ilevel,
+    };
+    let points = match ITEM_CURVES.get().and_then(|m| m.get(&curve_id)) {
+        Some(p) => p,
+        None => return ilevel,
+    };
+    interpolate_curve(points, ilevel)
+}
+
+/// Linearly interpolate a curve: find the two surrounding points and lerp.
+fn interpolate_curve(points: &[(u64, u64)], input: u64) -> u64 {
+    if points.is_empty() {
+        return input;
+    }
+    // Clamp to curve bounds
+    if input <= points[0].0 {
+        return points[0].1;
+    }
+    if input >= points[points.len() - 1].0 {
+        return points[points.len() - 1].1;
+    }
+    // Find surrounding points
+    for window in points.windows(2) {
+        let (x0, y0) = window[0];
+        let (x1, y1) = window[1];
+        if input >= x0 && input <= x1 {
+            if x0 == x1 {
+                return y0;
+            }
+            // Linear interpolation
+            let t = (input - x0) as f64 / (x1 - x0) as f64;
+            return (y0 as f64 + t * (y1 as f64 - y0 as f64)).round() as u64;
+        }
+    }
+    input
+}
+
 pub fn get_item_armor_subclass(item_id: u64) -> Option<u64> {
-    let item = items().get(&item_id)?;
-    let item_class = item.get("itemClass")?.as_u64()?;
-    if item_class != 4 {
+    let item = get_raw_item(item_id)?;
+    if item.get("itemClass")?.as_u64()? != 4 {
         return None;
     }
     item.get("itemSubClass")?.as_u64()
@@ -594,10 +969,7 @@ pub fn upgrade_items_by_slot(
                         .and_then(|v: &Value| v.as_u64())
                         .unwrap_or(0);
                     let resolved = resolve_bonuses(&new_bonus_ids);
-                    let new_ilevel = resolved
-                        .get("ilevel")
-                        .and_then(|v: &Value| v.as_u64())
-                        .unwrap_or(base_ilevel);
+                    let new_ilevel = resolved.ilevel.unwrap_or(base_ilevel);
                     updated["ilevel"] = serde_json::json!(new_ilevel);
                 }
                 updated

@@ -31,6 +31,9 @@ interface SimContextType {
   setSimcPostCombos: (v: string) => void;
   simcFooter: string;
   setSimcFooter: (v: string) => void;
+  // Multi-talent compare
+  talentBuilds: { name: string; talentString: string }[];
+  setTalentBuilds: (v: { name: string; talentString: string }[]) => void;
   // Multi-sim scenarios
   scenarios: FightScenario[];
   addScenario: () => void;
@@ -71,6 +74,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [simcRaidActors, setSimcRaidActors] = useState('');
   const [simcPostCombos, setSimcPostCombos] = useState('');
   const [simcFooter, setSimcFooter] = useState('');
+  const [talentBuilds, setTalentBuilds] = useState<{ name: string; talentString: string }[]>([]);
   const [scenarios, setScenarios] = useState<FightScenario[]>([]);
 
   useEffect(() => {
@@ -149,6 +153,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setSimcPostCombos,
         simcFooter,
         setSimcFooter,
+        talentBuilds,
+        setTalentBuilds,
         scenarios,
         addScenario,
         removeScenario,

@@ -2,9 +2,13 @@
 
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import DpsHeroCard from '../../components/DpsHeroCard';
+import GearOverview from '../../components/GearOverview';
+import type { GearItem } from '../../components/GearOverview';
 import ResultsChart from '../../components/ResultsChart';
 import SimStatus from '../../components/SimStatus';
 import StatWeightsTable from '../../components/StatWeightsTable';
+import TalentTree from '../../components/TalentTree';
 import TopGearResults from '../../components/TopGearResults';
 
 import { API_URL } from '../../lib/api';
@@ -244,14 +248,34 @@ export default function SimResultClient() {
         </>
       ) : (
         <>
-          <ResultsChart
+          <DpsHeroCard
+            playerName={r.player_name as string}
+            playerClass={r.player_class as string}
+            playerRealm={r.realm as string | undefined}
             dps={r.dps as number}
             dpsError={r.dps_error as number}
             dpsErrorPct={r.dps_error_pct as number | undefined}
             fightLength={r.fight_length as number}
-            playerName={r.player_name as string}
-            playerClass={r.player_class as string}
-            playerRealm={r.realm as string | undefined}
+            desiredTargets={r.desired_targets as number | undefined}
+            iterations={r.iterations as number | undefined}
+            targetError={r.target_error as number | undefined}
+            elapsedTime={r.elapsed_time_seconds as number | undefined}
+          />
+          {r.equipped_gear && Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 && (
+            <GearOverview
+              gear={r.equipped_gear as Record<string, GearItem>}
+              characterRenderUrl={
+                r.realm && r.player_name
+                  ? `https://simhammer.com/api/blizzard/character/${encodeURIComponent((r.realm as string).toLowerCase())}/${encodeURIComponent((r.player_name as string).toLowerCase())}/media/render`
+                  : null
+              }
+            />
+          )}
+          {typeof r.talent_string === 'string' && r.talent_string && (
+            <TalentTree talentString={r.talent_string as string} />
+          )}
+          <ResultsChart
+            dps={r.dps as number}
             abilities={
               (r.abilities as Array<{
                 name: string;
@@ -259,10 +283,6 @@ export default function SimResultClient() {
                 school: string;
               }>) || []
             }
-            desiredTargets={r.desired_targets as number | undefined}
-            iterations={r.iterations as number | undefined}
-            targetError={r.target_error as number | undefined}
-            elapsedTime={r.elapsed_time_seconds as number | undefined}
           />
           {r.stat_weights && (
             <StatWeightsTable statWeights={r.stat_weights as Record<string, number>} />

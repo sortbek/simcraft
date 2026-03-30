@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ErrorAlert from '../components/ErrorAlert';
-import FloatingSubmitButton from '../components/FloatingSubmitButton';
 import GearItemRow from '../components/GearItemRow';
 import { useSimContext } from '../components/SimContext';
 import { API_URL } from '../lib/api';
@@ -355,12 +354,25 @@ export default function UpgradeComparePage() {
 
       <ErrorAlert message={error} />
 
-      <FloatingSubmitButton
-        onClick={handleSubmit}
-        disabled={submitting || selectedSlots.size === 0 || !hasCurrencies}
-        submitting={submitting}
-        label={submitLabel}
-      />
+      <div className="sticky bottom-0 z-50 -mx-4 bg-gradient-to-t from-[#111] via-[#111] to-transparent px-4 pb-4 pt-6">
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || selectedSlots.size === 0 || !hasCurrencies}
+          className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm"
+        >
+          {submitting ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+                <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              Starting sim…
+            </>
+          ) : (
+            submitLabel
+          )}
+        </button>
+      </div>
     </div>
   );
 }

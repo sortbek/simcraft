@@ -44,26 +44,19 @@ fn dedup_key(item: &RawParsedItem) -> String {
 fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
     let info = item_db::get_item_info(item.item_id, Some(&item.bonus_ids));
 
-    let (name, icon, quality, tag, upgrade, sockets) = if let Some(ref info) = info {
+    // Always resolve bonuses for season_id (needed for catalyst checks)
+    let resolved = item_db::resolve_bonuses(&item.bonus_ids);
+    let season_id = resolved.season_id.unwrap_or(0);
+
+    let (name, icon, quality, tag, upgrade, sockets, db_ilevel) = if let Some(ref info) = info {
         (
-            info.get("name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("Unknown")
-                .to_string(),
-            info.get("icon")
-                .and_then(|i| i.as_str())
-                .unwrap_or("inv_misc_questionmark")
-                .to_string(),
-            info.get("quality").and_then(|q| q.as_u64()).unwrap_or(1),
-            info.get("tag")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string(),
-            info.get("upgrade")
-                .and_then(|u| u.as_str())
-                .unwrap_or("")
-                .to_string(),
-            info.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0),
+            info.name.clone(),
+            info.icon.clone(),
+            info.quality,
+            info.tag.clone(),
+            info.upgrade.clone(),
+            info.sockets,
+            info.ilevel,
         )
     } else {
         let name = if item.name.is_empty() {
@@ -74,19 +67,23 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         (
             name,
             "inv_misc_questionmark".to_string(),
-            1,
-            String::new(),
-            String::new(),
-            0,
+            resolved.quality.unwrap_or(1),
+            resolved.tag.unwrap_or_default(),
+            resolved.upgrade.unwrap_or_default(),
+            resolved.sockets.unwrap_or(0),
+            resolved.ilevel.unwrap_or(0),
         )
     };
 
-    // Resolve ilevel: prefer DB-resolved (accounts for bonuses), fall back to parsed
-    let ilevel = info
-        .as_ref()
-        .and_then(|i| i.get("ilevel").and_then(|v| v.as_u64()))
-        .filter(|&v| v > 0)
-        .unwrap_or(item.ilevel);
+    // When bonuses resolved an upgrade track or ilevel override, use the DB value
+    // (handles upgrade sim). Otherwise prefer parsed ilevel from addon (game client truth).
+    let ilevel = if !upgrade.is_empty() && db_ilevel > 0 {
+        db_ilevel
+    } else if item.ilevel > 0 {
+        item.ilevel
+    } else {
+        db_ilevel
+    };
 
     let enchant_name = if item.enchant_id > 0 {
         item_db::get_enchant_info(item.enchant_id)
@@ -139,18 +136,15 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         enchant_name,
         gem_name,
         gem_icon,
+        season_id,
+        is_catalyst: false,
     }
 }
 
 /// Determine eligible slots for an item using the item DB's inventory_type.
 /// Falls back to raw_slot + paired slots if no DB info available.
 fn eligible_slots(item: &RawParsedItem, spec: &str) -> Vec<String> {
-    let info = item_db::get_item_info(item.item_id, Some(&item.bonus_ids));
-    if let Some(ref info) = info {
-        let inv_type = info
-            .get("inventory_type")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+    if let Some(inv_type) = item_db::get_inventory_type(item.item_id) {
         if inv_type > 0 {
             return class_data::inv_type_to_slots(inv_type, spec)
                 .into_iter()
@@ -168,6 +162,19 @@ fn eligible_slots(item: &RawParsedItem, spec: &str) -> Vec<String> {
 
 /// Resolve a flat list of parsed items into a slot-organized, enriched gear set.
 pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
+    resolve_gear_impl(parse_result, None)
+}
+
+/// Resolve gear with optional catalyst alternative generation.
+/// `catalyst_charges` should be pre-parsed from the raw simc input.
+pub fn resolve_gear_with_catalyst(
+    parse_result: &ParseResult,
+    catalyst_charges: Option<u32>,
+) -> ResolveGearResponse {
+    resolve_gear_impl(parse_result, catalyst_charges)
+}
+
+fn resolve_gear_impl(parse_result: &ParseResult, catalyst_charges: Option<u32>) -> ResolveGearResponse {
     let character = &parse_result.character;
     let spec = character.spec.as_deref().unwrap_or("");
     let class_name = character.class_name.as_deref().unwrap_or("");
@@ -222,7 +229,6 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         if !GEAR_SLOTS.contains(&slot.as_str()) {
             continue;
         }
-
         let dk = dedup_key(item);
         get_seen(&mut seen_per_slot, slot).insert(dk);
 
@@ -238,11 +244,7 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         // Main hand → off hand alternative
         if let Some(mh) = mh_equipped {
             if mh.item_id > 0 {
-                let info = item_db::get_item_info(mh.item_id, Some(&mh.bonus_ids));
-                let inv_type = info
-                    .as_ref()
-                    .and_then(|i| i.get("inventory_type").and_then(|v| v.as_u64()))
-                    .unwrap_or(0);
+                let inv_type = item_db::get_inventory_type(mh.item_id).unwrap_or(0);
                 // Only one-hand weapons cross over (inv_type 13)
                 if inv_type == 13 {
                     let dk = dedup_key(mh);
@@ -259,11 +261,7 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         // Off hand → main hand alternative
         if let Some(oh) = oh_equipped {
             if oh.item_id > 0 {
-                let info = item_db::get_item_info(oh.item_id, Some(&oh.bonus_ids));
-                let inv_type = info
-                    .as_ref()
-                    .and_then(|i| i.get("inventory_type").and_then(|v| v.as_u64()))
-                    .unwrap_or(0);
+                let inv_type = item_db::get_inventory_type(oh.item_id).unwrap_or(0);
                 if inv_type == 13 {
                     let dk = dedup_key(oh);
                     if !get_seen(&mut seen_per_slot, "main_hand").contains(&dk) {
@@ -303,17 +301,11 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         // Weapon type check
         let mut weapon_excluded = false;
         if let Some(weapons) = allowed_weapons {
-            let info = item_db::get_item_info(item.item_id, Some(&item.bonus_ids));
-            if let Some(ref info) = info {
-                let item_class = info.get("item_class").and_then(|v| v.as_u64()).unwrap_or(0);
-                if item_class == 2 {
-                    let weapon_sub = info
-                        .get("item_subclass")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(999);
-                    if !weapons.contains(&weapon_sub) {
-                        weapon_excluded = true;
-                    }
+            if let Some(raw) = item_db::get_raw_item(item.item_id) {
+                let item_class = raw.get("itemClass").and_then(|v| v.as_u64()).unwrap_or(0);
+                let item_subclass = raw.get("itemSubClass").and_then(|v| v.as_u64()).unwrap_or(0);
+                if item_class == 2 && !weapons.contains(&item_subclass) {
+                    weapon_excluded = true;
                 }
             }
         }
@@ -363,6 +355,13 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
             .sort_by(|a, b| b.ilevel.cmp(&a.ilevel));
     }
 
+    // Catalyst pass: generate tier alternatives for non-tier items in tier slots
+    if catalyst_charges.is_some() {
+        if let Some(class_id) = class_data::class_wow_id(class_name) {
+            generate_catalyst_alternatives(&mut slots, class_id);
+        }
+    }
+
     ResolveGearResponse {
         character: CharacterResolveInfo {
             class_name: character.class_name.clone(),
@@ -373,5 +372,190 @@ pub fn resolve_gear(parse_result: &ParseResult) -> ResolveGearResponse {
         slots,
         excluded,
         talent_loadouts: parse_result.talent_loadouts.clone(),
+        catalyst_charges: catalyst_charges,
+    }
+}
+
+/// Inventory type for each slot (used for catalyst item lookup).
+fn slot_to_inv_type(slot: &str) -> Option<u64> {
+    match slot {
+        "head" => Some(1),
+        "shoulder" => Some(3),
+        "chest" => Some(5),
+        "hands" => Some(10),
+        "legs" => Some(7),
+        "back" => Some(16),
+        "wrist" => Some(9),
+        "feet" => Some(8),
+        "waist" => Some(6),
+        _ => None,
+    }
+}
+
+/// Check if an item is on veteran track or higher.
+fn is_minimum_veteran(upgrade: &str) -> bool {
+    item_db::is_minimum_track(upgrade, "Veteran")
+}
+
+/// Build a catalyst variant of a source item for a given slot.
+fn build_catalyst_item(
+    source: &ResolvedItem,
+    tier_info: &item_db::CatalystTierItem,
+    slot: &str,
+) -> ResolvedItem {
+    let tier_item_id = tier_info.item_id;
+
+    // Build catalyst bonus_ids: keep only ilevel-related bonuses from the source,
+    // then add the tier set marker bonus for tier set items.
+    let mut catalyst_bonus_ids = item_db::filter_ilevel_bonus_ids(&source.bonus_ids);
+    if tier_info.has_set {
+        catalyst_bonus_ids.push(item_db::tier_set_bonus_id());
+    }
+    catalyst_bonus_ids.sort();
+
+    // Build simc_string
+    let bonus_str = catalyst_bonus_ids
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join("/");
+    let mut simc_parts = vec![format!(",id={}", tier_item_id)];
+    if !bonus_str.is_empty() {
+        simc_parts.push(format!(",bonus_id={}", bonus_str));
+    }
+    if source.enchant_id > 0 {
+        simc_parts.push(format!(",enchant_id={}", source.enchant_id));
+    }
+    if source.gem_id > 0 {
+        simc_parts.push(format!(",gem_id={}", source.gem_id));
+    }
+    let new_simc = simc_parts.join("");
+
+    // Enrich from the tier item
+    let (name, icon, quality, tag, upgrade) = if let Some(info) = item_db::get_item_info(tier_item_id, Some(&catalyst_bonus_ids)) {
+        (info.name, info.icon, info.quality, info.tag, info.upgrade)
+    } else {
+        (tier_info.name.clone(), tier_info.icon.clone(), 4, String::new(), String::new())
+    };
+
+    let bonus_key = catalyst_bonus_ids
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    let uid = format!("{}:{}:{}:{}", tier_item_id, bonus_key, source.origin.as_str(), slot);
+
+    ResolvedItem {
+        uid,
+        slot: slot.to_string(),
+        item_id: tier_item_id,
+        ilevel: source.ilevel,
+        simc_string: new_simc,
+        origin: source.origin.clone(),
+        bonus_ids: catalyst_bonus_ids,
+        enchant_id: source.enchant_id,
+        gem_id: source.gem_id,
+        name,
+        icon,
+        quality,
+        quality_color: class_data::quality_color(quality).to_string(),
+        tag,
+        upgrade,
+        sockets: 0,
+        enchant_name: source.enchant_name.clone(),
+        gem_name: source.gem_name.clone(),
+        gem_icon: source.gem_icon.clone(),
+        season_id: source.season_id,
+        is_catalyst: true,
+    }
+}
+
+/// Generate catalyst alternatives across all slots.
+/// For each slot, checks every item (equipped + bag). If the item is minimum
+/// veteran track and a catalyst conversion exists, creates the catalyst variant
+/// unless an identical or higher-ilevel version already exists in that slot.
+fn generate_catalyst_alternatives(
+    slots: &mut HashMap<String, SlotResolution>,
+    wow_class_id: u64,
+) {
+    let slot_keys: Vec<String> = slots.keys().cloned().collect();
+
+    for slot_key in &slot_keys {
+        let inv_type = match slot_to_inv_type(slot_key) {
+            Some(t) => t,
+            None => continue,
+        };
+        let tier_info = match item_db::catalyst_tier_item(wow_class_id, inv_type) {
+            Some(t) => t,
+            None => continue,
+        };
+
+        let slot_res = match slots.get(slot_key.as_str()) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        // Collect all items in this slot (equipped + alternatives)
+        let mut sources: Vec<ResolvedItem> = Vec::new();
+        if let Some(ref eq) = slot_res.equipped {
+            sources.push(eq.clone());
+        }
+        sources.extend(slot_res.alternatives.iter().cloned());
+
+        // Collect existing item_ids and their ilevels in this slot for dedup
+        let mut existing: HashMap<u64, u64> = HashMap::new();
+        if let Some(ref eq) = slot_res.equipped {
+            existing.insert(eq.item_id, eq.ilevel);
+        }
+        for alt in &slot_res.alternatives {
+            let entry = existing.entry(alt.item_id).or_insert(0);
+            if alt.ilevel > *entry {
+                *entry = alt.ilevel;
+            }
+        }
+
+        let mut new_catalyst_items: Vec<ResolvedItem> = Vec::new();
+
+        let current_season = item_db::current_season_id();
+
+        for source in &sources {
+            // Skip items that are already catalyst variants
+            if source.is_catalyst {
+                continue;
+            }
+            // Only current season items
+            if source.season_id != current_season {
+                continue;
+            }
+            // Only veteran track or higher
+            if !is_minimum_veteran(&source.upgrade) {
+                continue;
+            }
+            // Skip if source is already the catalyst target item
+            if source.item_id == tier_info.item_id {
+                continue;
+            }
+
+            let catalyst_item = build_catalyst_item(source, tier_info, slot_key);
+
+            // Check if this catalyst item already exists at same or higher ilevel
+            if let Some(&existing_ilevel) = existing.get(&catalyst_item.item_id) {
+                if existing_ilevel >= catalyst_item.ilevel {
+                    continue;
+                }
+            }
+
+            // Track it so we don't create duplicates within this pass
+            let entry = existing.entry(catalyst_item.item_id).or_insert(0);
+            if catalyst_item.ilevel > *entry {
+                *entry = catalyst_item.ilevel;
+            }
+
+            new_catalyst_items.push(catalyst_item);
+        }
+
+        if let Some(slot_res) = slots.get_mut(slot_key.as_str()) {
+            slot_res.alternatives.extend(new_catalyst_items);
+        }
     }
 }
