@@ -89,6 +89,14 @@ export default function TopGearResults({
   const hasEncounterData = results.some((r) => r.items.some((it) => it.encounter));
   type GroupMode = 'rank' | 'encounter';
   const [groupMode, setGroupMode] = useState<GroupMode>('rank');
+  const [selectedResultName, setSelectedResultName] = useState<string | null>(null);
+
+  const selectedResult = useMemo(() => {
+    if (selectedResultName) {
+      return results.find((r) => r.name === selectedResultName) || bestResult;
+    }
+    return bestResult;
+  }, [selectedResultName, results, bestResult]);
 
   const groupedResults = useMemo(() => {
     if (groupMode === 'rank' || !hasEncounterData) return null;
@@ -106,26 +114,28 @@ export default function TopGearResults({
     });
   }, [results, groupMode, hasEncounterData]);
 
-  // Build the full gear set for best result: start with equipped, overlay upgrades
+  // Build the full gear set for selected result: start with equipped, overlay changes
   const bestGearSet = useMemo(() => {
     if (!equippedGear) return {};
-    const gearSet: Record<string, ResultItem & { isUpgrade: boolean }> = {};
+    const gearSet: Record<string, ResultItem & { isUpgrade: boolean; isDowngrade: boolean }> = {};
     // Start with all equipped gear
     for (const slot of ALL_SLOTS) {
       if (equippedGear[slot]) {
-        gearSet[slot] = { ...equippedGear[slot], isUpgrade: false };
+        gearSet[slot] = { ...equippedGear[slot], isUpgrade: false, isDowngrade: false };
       }
     }
-    // Overlay best result's changed items
-    if (bestResult && bestResult.delta > 0) {
-      for (const it of bestResult.items) {
+    // Overlay selected result's changed items
+    if (selectedResult) {
+      const isPositive = selectedResult.delta > 0;
+      const isNegative = selectedResult.delta < 0;
+      for (const it of selectedResult.items) {
         if (!it.is_kept && it.item_id > 0) {
-          gearSet[it.slot] = { ...it, isUpgrade: true };
+          gearSet[it.slot] = { ...it, isUpgrade: isPositive, isDowngrade: isNegative };
         }
       }
     }
     return gearSet;
-  }, [equippedGear, bestResult]);
+  }, [equippedGear, selectedResult]);
 
   // Collect all item queries from results + equipped gear
   const allItemQueries = useMemo(() => {
@@ -196,7 +206,7 @@ export default function TopGearResults({
         playerName={playerName}
         playerClass={playerClass}
         playerRealm={playerRealm}
-        dps={bestResult && bestResult.delta > 0 ? bestResult.dps : baseDps}
+        dps={selectedResult && selectedResult.delta > 0 ? selectedResult.dps : baseDps}
         dpsError={dpsError}
         dpsErrorPct={dpsErrorPct}
         fightLength={fightLength}
@@ -205,10 +215,10 @@ export default function TopGearResults({
         targetError={targetError}
         elapsedTime={elapsedTime}
       >
-        {bestResult && bestResult.delta > 0 ? (
+        {selectedResult && selectedResult.delta > 0 ? (
           <div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-3 py-1.5 text-emerald-400">
             <span className="text-sm font-semibold tabular-nums">
-              +{Math.round(bestResult.delta).toLocaleString()}
+              +{Math.round(selectedResult.delta).toLocaleString()}
             </span>
             <span className="text-xs opacity-60">upgrade</span>
           </div>
@@ -232,7 +242,7 @@ export default function TopGearResults({
           )}
           <div className="relative">
             <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">
-              Best Gear
+              {selectedResultName && selectedResultName !== bestResult?.name ? 'Selected Gear' : 'Best Gear'}
             </p>
             <div
               className={`grid gap-x-4 ${characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'}`}
@@ -244,7 +254,8 @@ export default function TopGearResults({
                     key={slot}
                     slot={slot}
                     item={bestGearSet[slot]}
-                    isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                    isUpgrade={(bestGearSet[slot]).isUpgrade}
+                    isDowngrade={(bestGearSet[slot]).isDowngrade}
                     itemInfoMap={itemInfoMap}
                     enchantInfoMap={enchantInfoMap}
                     gemInfoMap={gemInfoMap}
@@ -260,7 +271,8 @@ export default function TopGearResults({
                     key={slot}
                     slot={slot}
                     item={bestGearSet[slot]}
-                    isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                    isUpgrade={(bestGearSet[slot]).isUpgrade}
+                    isDowngrade={(bestGearSet[slot]).isDowngrade}
                     itemInfoMap={itemInfoMap}
                     enchantInfoMap={enchantInfoMap}
                     gemInfoMap={gemInfoMap}
@@ -278,7 +290,8 @@ export default function TopGearResults({
                   key={slot}
                   slot={slot}
                   item={bestGearSet[slot]}
-                  isUpgrade={(bestGearSet[slot] as { isUpgrade?: boolean })?.isUpgrade}
+                  isUpgrade={(bestGearSet[slot]).isUpgrade}
+                  isDowngrade={(bestGearSet[slot]).isDowngrade}
                   itemInfoMap={itemInfoMap}
                   enchantInfoMap={enchantInfoMap}
                   gemInfoMap={gemInfoMap}
@@ -307,11 +320,10 @@ export default function TopGearResults({
                   <button
                     key={mode}
                     onClick={() => setGroupMode(mode)}
-                    className={`rounded border px-2.5 py-1 text-[11px] font-medium transition-all ${
-                      groupMode === mode
-                        ? 'border-white bg-white text-black'
-                        : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
-                    }`}
+                    className={`rounded border px-2.5 py-1 text-[11px] font-medium transition-all ${groupMode === mode
+                      ? 'border-white bg-white text-black'
+                      : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
+                      }`}
                   >
                     {label}
                   </button>
@@ -338,6 +350,8 @@ export default function TopGearResults({
                       maxDps={maxDps}
                       baseDps={baseDps}
                       isBest={result === results[0] && result.delta > 0}
+                      isSelected={result.name === (selectedResultName || results[0]?.name)}
+                      onSelect={() => setSelectedResultName(result.name)}
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
@@ -355,6 +369,8 @@ export default function TopGearResults({
             itemInfoMap={itemInfoMap}
             enchantInfoMap={enchantInfoMap}
             gemInfoMap={gemInfoMap}
+            selectedResultName={selectedResultName}
+            onSelectResult={setSelectedResultName}
           />
         )}
       </div>
@@ -371,6 +387,8 @@ function RankedResults({
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
+  selectedResultName,
+  onSelectResult,
 }: {
   results: TopGearResult[];
   maxDps: number;
@@ -378,6 +396,8 @@ function RankedResults({
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
+  selectedResultName: string | null;
+  onSelectResult: (name: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? results : results.slice(0, INITIAL_VISIBLE);
@@ -393,6 +413,8 @@ function RankedResults({
           maxDps={maxDps}
           baseDps={baseDps}
           isBest={idx === 0 && result.delta > 0}
+          isSelected={result.name === (selectedResultName || results[0]?.name)}
+          onSelect={() => onSelectResult(result.name)}
           itemInfoMap={itemInfoMap}
           enchantInfoMap={enchantInfoMap}
           gemInfoMap={gemInfoMap}
@@ -418,6 +440,8 @@ function ResultRow({
   maxDps,
   baseDps,
   isBest,
+  isSelected,
+  onSelect,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -427,6 +451,8 @@ function ResultRow({
   maxDps: number;
   baseDps: number;
   isBest: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -436,9 +462,9 @@ function ResultRow({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg ${
-        isBest ? 'ring-1 ring-gold/20' : isEquipped ? 'ring-1 ring-white/5' : ''
-      }`}
+      onClick={onSelect}
+      className={`relative overflow-hidden rounded-lg cursor-pointer transition-colors hover:bg-white/[0.04] ${isSelected && !isBest ? 'ring-1 ring-emerald-500/50 bg-emerald-500/[0.04]' : isBest ? `ring-1 ring-gold/30 ${isSelected ? 'bg-gold/[0.05]' : 'bg-transparent'}` : isEquipped ? 'ring-1 ring-white/5' : ''
+        }`}
     >
       <div
         className="absolute inset-y-0 left-0 bg-white/[0.02]"
@@ -478,13 +504,12 @@ function ResultRow({
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <span
-            className={`flex items-center gap-1.5 font-mono text-[13px] tabular-nums ${
-              result.delta > 0
-                ? 'text-emerald-400'
-                : result.delta < 0
-                  ? 'text-red-400'
-                  : 'text-muted'
-            }`}
+            className={`flex items-center gap-1.5 font-mono text-[13px] tabular-nums ${result.delta > 0
+              ? 'text-emerald-400'
+              : result.delta < 0
+                ? 'text-red-400'
+                : 'text-muted'
+              }`}
           >
             <span>
               {result.delta > 0
@@ -513,6 +538,7 @@ function GearSlotRow({
   slot,
   item,
   isUpgrade,
+  isDowngrade,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -521,6 +547,7 @@ function GearSlotRow({
   slot: string;
   item?: ResultItem;
   isUpgrade?: boolean;
+  isDowngrade?: boolean;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -568,6 +595,15 @@ function GearSlotRow({
           }}
         />
       )}
+      {isDowngrade && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-lg bg-red-500/[0.15] ring-1 ring-red-500/30"
+          style={{
+            maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+            WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+          }}
+        />
+      )}
       <div className="h-7 w-7 shrink-0 overflow-hidden rounded border border-border">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -598,7 +634,11 @@ function GearSlotRow({
             </span>
           ) : isUpgrade ? (
             <span className="shrink-0 rounded bg-emerald-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-emerald-400">
-              New
+              Upgrade
+            </span>
+          ) : isDowngrade ? (
+            <span className="shrink-0 rounded bg-red-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-red-400">
+              Downgrade
             </span>
           ) : null}
           {item.origin === 'vault' && (
@@ -642,12 +682,12 @@ function ItemTag({
     item.item_id > 0
       ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id)
       : undefined;
+  const slotName = SLOT_LABELS[item.slot] || item.slot;
 
   return (
     <div
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
-        kept ? 'opacity-40' : 'bg-white/[0.04]'
-      }`}
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${kept ? 'opacity-40' : 'bg-white/[0.04]'
+        }`}
     >
       <div className="h-4 w-4 shrink-0 overflow-hidden rounded-sm">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -667,10 +707,15 @@ function ItemTag({
         style={{ color: qc }}
         target="_blank"
         rel="noopener noreferrer"
-        onClick={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.preventDefault();
+          // Allow parent row handler to naturally select
+          // We don't stop propagation, so click selects the row
+        }}
       >
         {name}
       </a>
+      <span className="text-[9px] text-muted">({slotName})</span>
       {item.upgrade_levels ? (
         <span className="shrink-0 text-[8px] font-bold uppercase tracking-wider text-emerald-400">
           +{item.upgrade_levels}
