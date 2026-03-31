@@ -47,6 +47,8 @@ interface GearOverviewProps {
   characterRenderUrl?: string | null;
   /** Slots to highlight as upgrades */
   upgradeSlots?: Set<string>;
+  /** Slots to highlight as downgrades */
+  downgradeSlots?: Set<string>;
 }
 
 export default function GearOverview({
@@ -54,6 +56,7 @@ export default function GearOverview({
   title = 'Equipped Gear',
   characterRenderUrl,
   upgradeSlots,
+  downgradeSlots,
 }: GearOverviewProps) {
   const allItemQueries = useMemo(() => {
     const seen = new Set<string>();
@@ -120,6 +123,7 @@ export default function GearOverview({
                       slot={slot}
                       item={gear[slot]}
                       isUpgrade={upgradeSlots?.has(slot)}
+                      isDowngrade={downgradeSlots?.has(slot)}
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
@@ -134,6 +138,7 @@ export default function GearOverview({
                       slot={slot}
                       item={gear[slot]}
                       isUpgrade={upgradeSlots?.has(slot)}
+                      isDowngrade={downgradeSlots?.has(slot)}
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
@@ -149,6 +154,7 @@ export default function GearOverview({
                     slot={slot}
                     item={gear[slot]}
                     isUpgrade={upgradeSlots?.has(slot)}
+                    isDowngrade={downgradeSlots?.has(slot)}
                     itemInfoMap={itemInfoMap}
                     enchantInfoMap={enchantInfoMap}
                     gemInfoMap={gemInfoMap}
@@ -169,6 +175,7 @@ export function GearSlotRow({
   slot,
   item,
   isUpgrade,
+  isDowngrade,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -177,6 +184,7 @@ export function GearSlotRow({
   slot: string;
   item?: GearItem;
   isUpgrade?: boolean;
+  isDowngrade?: boolean;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -224,6 +232,15 @@ export function GearSlotRow({
           }}
         />
       )}
+      {isDowngrade && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-lg bg-red-500/[0.15] ring-1 ring-red-500/30"
+          style={{
+            maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+            WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+          }}
+        />
+      )}
       <div className="h-7 w-7 shrink-0 overflow-hidden rounded border border-border">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -254,7 +271,11 @@ export function GearSlotRow({
             </span>
           ) : isUpgrade ? (
             <span className="shrink-0 rounded bg-emerald-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-emerald-400">
-              New
+              Upgrade
+            </span>
+          ) : isDowngrade ? (
+            <span className="shrink-0 rounded bg-red-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-red-400">
+              Downgrade
             </span>
           ) : null}
           {item.origin === 'vault' && (
