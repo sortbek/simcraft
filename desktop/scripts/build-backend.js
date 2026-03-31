@@ -15,6 +15,9 @@ function copyDir(src, dest) {
       copyDir(srcPath, destPath);
     } else {
       fs.copyFileSync(srcPath, destPath);
+      // Preserve execute permissions (needed for simc/backend binaries on macOS/Linux)
+      const mode = fs.statSync(srcPath).mode;
+      fs.chmodSync(destPath, mode);
     }
   }
 }
