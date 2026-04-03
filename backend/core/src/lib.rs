@@ -1,3 +1,5 @@
+pub mod character_store;
+pub mod route_store;
 pub mod addon_parser;
 pub mod game_data;
 pub mod gear_resolver;

@@ -15,6 +15,7 @@ import { getPointsSpent, CLASS_POINTS, SPEC_POINTS } from '../lib/talentRules';
 import { useTalentTree } from '../lib/useTalentTree';
 import type { TalentTreeData } from '../lib/useTalentTree';
 import TalentTree from './TalentTree';
+import { getCharacters, getTalentBuilds, type SavedTalentBuild } from '../lib/saved-characters';
 
 /** Check if a talent build has all points allocated. */
 function getBuildStatus(
@@ -66,6 +67,7 @@ export default function TalentPicker() {
   const [importValue, setImportValue] = useState('');
   const [importError, setImportError] = useState('');
   const [customLoadouts, setCustomLoadouts] = useState<TalentLoadoutParsed[]>([]);
+  const [savedBuilds, setSavedBuilds] = useState<TalentLoadoutParsed[]>([]);
   const [selectedLoadoutIdx, setSelectedLoadoutIdx] = useState(() => {
     const loadouts = parseTalentLoadouts(simcInput);
     const idx = loadouts.findIndex((l) => l.isActive);
@@ -74,10 +76,47 @@ export default function TalentPicker() {
 
   const addonLoadouts = useMemo(() => parseTalentLoadouts(simcInput), [simcInput]);
 
-  // Merge addon loadouts + custom (imported/blank) loadouts
+  // Fetch saved talent builds for the current character
+  useEffect(() => {
+    if (!simcInput) {
+      setSavedBuilds([]);
+      return;
+    }
+    // Extract name+realm to find the character
+    const nameMatch = simcInput.match(/^\w+="(.+)"$/m);
+    const realmMatch = simcInput.match(/^server=(.+)$/m);
+    if (!nameMatch || !realmMatch) {
+      setSavedBuilds([]);
+      return;
+    }
+    const charName = nameMatch[1];
+    const charRealm = realmMatch[1];
+
+    getCharacters().then((chars) => {
+      const char = chars.find((c) => c.name === charName && c.realm === charRealm);
+      if (!char) {
+        setSavedBuilds([]);
+        return;
+      }
+      getTalentBuilds(char.id).then((builds) => {
+        // Convert to TalentLoadoutParsed, filtering out builds already in addon loadouts
+        const addonStrings = new Set(parseTalentLoadouts(simcInput).map((l) => l.talentString));
+        const extra: TalentLoadoutParsed[] = builds
+          .filter((b) => !addonStrings.has(b.talent_string))
+          .map((b) => ({
+            name: `[${specDisplayName(b.spec)}] ${b.name}`,
+            talentString: b.talent_string,
+            isActive: false,
+          }));
+        setSavedBuilds(extra);
+      });
+    });
+  }, [simcInput]);
+
+  // Merge addon loadouts + saved builds from DB + custom (imported/blank) loadouts
   const allLoadouts = useMemo(
-    () => [...addonLoadouts, ...customLoadouts],
-    [addonLoadouts, customLoadouts]
+    () => [...addonLoadouts, ...savedBuilds, ...customLoadouts],
+    [addonLoadouts, savedBuilds, customLoadouts]
   );
 
   const currentTalent = allLoadouts[selectedLoadoutIdx]?.talentString || '';

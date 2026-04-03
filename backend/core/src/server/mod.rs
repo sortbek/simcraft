@@ -1,6 +1,8 @@
+mod character_handlers;
 mod game_data_handlers;
 mod helpers;
 mod job_handlers;
+mod route_handlers;
 mod sim_handlers;
 mod types;
 mod upgrade_compare;
@@ -149,6 +151,10 @@ pub async fn start_with_storage_bind(
     let log_data = web::Data::new(Arc::new(LogBuffer::new()));
     #[cfg(feature = "desktop")]
     let stats_data = web::Data::new(Arc::new(Mutex::new(SystemStats::new())));
+    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "simhammer.db".to_string());
+    let route_store_data = web::Data::new(Arc::new(crate::route_store::RouteStore::new(&db_url)));
+    let char_store_data =
+        web::Data::new(Arc::new(crate::character_store::CharacterStore::new(&db_url)));
     let frontend = frontend_dir.clone();
     let data = data_dir.clone();
 
@@ -298,6 +304,40 @@ pub async fn start_with_storage_bind(
         {
             app = app.route("/api/sims", web::get().to(job_handlers::list_sims_filtered));
         }
+
+        // Saved dungeon routes
+        app = app
+            .app_data(route_store_data.clone())
+            .route("/api/routes", web::get().to(route_handlers::list_routes))
+            .route("/api/routes", web::post().to(route_handlers::create_route))
+            .route(
+                "/api/routes/{id}",
+                web::delete().to(route_handlers::delete_route),
+            );
+
+        // Saved characters and talent builds
+        app = app
+            .app_data(char_store_data.clone())
+            .route(
+                "/api/characters",
+                web::get().to(character_handlers::list_characters),
+            )
+            .route(
+                "/api/characters",
+                web::post().to(character_handlers::upsert_character),
+            )
+            .route(
+                "/api/characters/{id}",
+                web::delete().to(character_handlers::delete_character),
+            )
+            .route(
+                "/api/characters/{id}/talents",
+                web::get().to(character_handlers::get_talent_builds),
+            )
+            .route(
+                "/api/talent-builds/{id}",
+                web::delete().to(character_handlers::delete_talent_build),
+            );
 
         // Serve cached assets from data directory
         if let Some(ref dir) = data {

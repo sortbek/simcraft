@@ -6,7 +6,7 @@ edition = "2021"
 [features]
 default = []
 desktop = ["dep:sysinfo"]
-web = ["dep:rusqlite"]
+web = []
 postgres = ["dep:tokio-postgres"]
 
 [dependencies]
@@ -29,7 +29,6 @@ optional = true
 [dependencies.rusqlite]
 version = "0.31"
 features = ["bundled"]
-optional = true
 
 [dependencies.tokio-postgres]
 version = "0.7"

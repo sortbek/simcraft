@@ -6,58 +6,6 @@ import { useSimContext } from './SimContext';
 import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import TalentPicker from './TalentPicker';
-import { specDisplayName } from '../lib/types';
-
-/** Adler-32 checksum matching the SimC addon's implementation.
- *  The Lua addon processes raw UTF-8 bytes, so we must do the same. */
-function adler32(s: string): number {
-  const prime = 65521;
-  let s1 = 1;
-  let s2 = 0;
-  const bytes = new TextEncoder().encode(s);
-  for (let i = 0; i < bytes.length; i++) {
-    s1 = (s1 + bytes[i]) % prime;
-    s2 = (s2 + s1) % prime;
-  }
-  return ((s2 << 16) | s1) >>> 0;
-}
-
-/** Validate the SimC addon checksum. Returns null if valid or no checksum present. */
-function validateChecksum(input: string): 'valid' | 'invalid' | null {
-  const match = input.match(/^#\s*Checksum:\s*([0-9a-fA-F]+)\s*$/m);
-  if (!match) return null;
-  const expected = parseInt(match[1], 16);
-  // The checksum covers everything before the checksum line.
-  // The SimC addon may compute with \r\n or \n line endings depending on OS.
-  // Browsers normalize textarea input to \n, so try both.
-  const idx = input.indexOf(match[0]);
-  const body = input.substring(0, idx);
-  if (adler32(body) === expected) return 'valid';
-  if (adler32(body.replace(/\n/g, '\r\n')) === expected) return 'valid';
-  return 'invalid';
-}
-
-function parseCharacterInfo(input: string) {
-  if (!input) return null;
-  const nameMatch = input.match(/^(\w+)="(.+)"$/m);
-  const specMatch = input.match(/^spec=(\w+)/m);
-  if (!nameMatch) return null;
-  // Save last character to localStorage for history page
-  const realmMatch = input.match(/^server=(.+)$/m);
-  if (nameMatch[2] && realmMatch?.[1]) {
-    try {
-      localStorage.setItem(
-        'simhammer_last_character',
-        JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] })
-      );
-    } catch {}
-  }
-  return {
-    className: nameMatch[1],
-    name: nameMatch[2],
-    spec: specMatch?.[1] || 'unknown',
-  };
-}
 
 const EXPERT_TABS = [
   {
@@ -88,20 +36,6 @@ const EXPERT_TABS = [
 ] as const;
 
 type ExpertTabKey = (typeof EXPERT_TABS)[number]['key'];
-
-function CharacterInfoBar({ info }: { info: { className: string; name: string; spec: string } }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-surface-2 px-3.5 py-2">
-      <div className="h-2 w-2 rounded-full bg-gold/70" />
-      <p className="text-xs font-medium text-zinc-300">
-        {info.name}
-        <span className="ml-1.5 font-normal text-zinc-500">
-          {specDisplayName(info.spec)} {info.className}
-        </span>
-      </p>
-    </div>
-  );
-}
 
 function AdvancedOptions() {
   const [open, setOpen] = useState(false);
@@ -346,8 +280,6 @@ function ExpertToggle({
 
 export default function SimSharedConfig() {
   const pathname = usePathname();
-  const { simcInput, setSimcInput } = useSimContext();
-  const checksumStatus = useMemo(() => validateChecksum(simcInput), [simcInput]);
 
   const showConfig =
     pathname === '/quick-sim' ||
@@ -356,38 +288,8 @@ export default function SimSharedConfig() {
     pathname === '/upgrade-compare';
   if (!showConfig) return null;
 
-  const detectedInfo = parseCharacterInfo(simcInput);
-
   return (
     <div className="mb-6 space-y-4">
-      <div className="card space-y-3 p-5">
-        <label className="label-text">SimC Addon Export</label>
-        <textarea
-          value={simcInput}
-          onChange={(e) => setSimcInput(e.target.value)}
-          placeholder="Paste your SimC addon export here..."
-          className="input-field h-40 resize-y font-mono text-[13px] leading-relaxed"
-        />
-        {checksumStatus === 'invalid' && (
-          <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-            <svg
-              className="h-4 w-4 shrink-0 text-amber-400"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            >
-              <path d="M8 1L1 14h14L8 1zM8 6v4M8 12v.5" />
-            </svg>
-            <p className="text-[14px] text-amber-300">
-              This input appears to have been manually edited. Results may not reflect your actual
-              in-game character.
-            </p>
-          </div>
-        )}
-        {detectedInfo && <CharacterInfoBar info={detectedInfo} />}
-      </div>
       <TalentPicker />
       <AdvancedOptions />
     </div>
