@@ -1,15 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import ErrorAlert from '../components/ErrorAlert';
-import { useSimContext } from '../components/SimContext';
-import ToggleButtonGroup from '../components/ToggleButtonGroup';
+import ErrorAlert from '../components/ui/ErrorAlert';
+import { useSimContext } from '../components/sim-config/SimContext';
+import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import type { SeasonConfigResponse, DifficultyDef, DungeonCategory } from '../lib/types';
-import CategorySelector from './CategorySelector';
-import DropSlotList from './DropSlotList';
-import DungeonGrid from './DungeonGrid';
+import CategorySelector from '../components/loot/CategorySelector';
+import DropSlotList from '../components/loot/DropSlotList';
+import DungeonGrid from '../components/loot/DungeonGrid';
 import {
   detectClass,
   detectSpec,
@@ -20,7 +20,7 @@ import {
   type DropItem,
   type Instance,
   type UpgradeTracks,
-} from './types';
+} from '../components/loot/types';
 
 type Category = 'raids' | string;
 

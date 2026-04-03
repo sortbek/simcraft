@@ -1,4 +1,4 @@
-import { API_URL } from '../lib/api';
+import { API_URL } from '../../lib/api';
 import type { Instance } from './types';
 
 interface DungeonGridProps {

@@ -1,21 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSimContext } from './SimContext';
+import { useSimContext } from '../sim-config/SimContext';
 import {
   parseTalentLoadouts,
   SPEC_ID_TO_NAME,
   specDisplayName,
   classColorForSpec,
-} from '../lib/types';
-import type { TalentLoadoutParsed } from '../lib/types';
-import { decodeHeader, decodeNodes } from '../lib/talentDecode';
-import { encodeTalentString } from '../lib/talentEncode';
-import { getPointsSpent, CLASS_POINTS, SPEC_POINTS } from '../lib/talentRules';
-import { useTalentTree } from '../lib/useTalentTree';
-import type { TalentTreeData } from '../lib/useTalentTree';
+} from '../../lib/types';
+import type { TalentLoadoutParsed } from '../../lib/types';
+import { decodeHeader, decodeNodes } from '../../lib/talentDecode';
+import { encodeTalentString } from '../../lib/talentEncode';
+import { getPointsSpent, CLASS_POINTS, SPEC_POINTS } from '../../lib/talentRules';
+import { useTalentTree } from '../../lib/useTalentTree';
+import type { TalentTreeData } from '../../lib/useTalentTree';
 import TalentTree from './TalentTree';
-import { getCharacters, getTalentBuilds, type SavedTalentBuild } from '../lib/saved-characters';
+import { getCharacters, getTalentBuilds, type SavedTalentBuild } from '../../lib/saved-characters';
 
 /** Check if a talent build has all points allocated. */
 function getBuildStatus(

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { DungeonCategory } from '../lib/types';
+import type { DungeonCategory } from '../../lib/types';
 
 interface CategoryTab {
   key: string;

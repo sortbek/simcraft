@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ErrorAlert from '../components/ErrorAlert';
-import GearItemRow from '../components/GearItemRow';
-import { useSimContext } from '../components/SimContext';
+import ErrorAlert from '../components/ui/ErrorAlert';
+import GearItemRow from '../components/gear/GearItemRow';
+import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from '../lib/api';
 import { SLOT_LABELS } from '../lib/types';
 import { QUALITY_COLORS, getIconUrl, useItemInfo, type ItemQuery } from '../lib/useItemInfo';

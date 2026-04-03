@@ -1,6 +1,8 @@
-import { useCallback, useState } from 'react';
-import { useSimContext } from '../components/SimContext';
+import { useCallback, useMemo, useState } from 'react';
+import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from './api';
+import { decodeHeader } from './talentDecode';
+import { SPEC_ID_TO_NAME } from './types';
 import type { FightScenario } from './types';
 import { storeScenarioSiblings, clearScenarioSiblings } from './scenario-siblings';
 
@@ -32,6 +34,17 @@ export function useSimSubmit({ endpoint, buildPayload, validate }: UseSimSubmitO
     scenarios,
     clearScenarios,
   } = useSimContext();
+
+  // Derive spec from selected talent string so the backend can override spec= in the SimC input
+  const specOverride = useMemo(() => {
+    if (!selectedTalent) return '';
+    try {
+      const { specId } = decodeHeader(selectedTalent);
+      return SPEC_ID_TO_NAME[specId] ?? '';
+    } catch {
+      return '';
+    }
+  }, [selectedTalent]);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -66,6 +79,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate }: UseSimSubmitO
         threads,
         ...(batchId ? { batch_id: batchId } : {}),
         ...(selectedTalent ? { talents: selectedTalent } : {}),
+        ...(specOverride ? { spec_override: specOverride } : {}),
         ...(customApl ? { custom_apl: customApl } : {}),
         ...(simcHeader ? { simc_header: simcHeader } : {}),
         ...(simcBasePlayer ? { simc_base_player: simcBasePlayer } : {}),

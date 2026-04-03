@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { API_URL } from '../lib/api';
-import { useSimContext } from '../components/SimContext';
+import { useSimContext } from '../components/sim-config/SimContext';
 
 interface JobSummary {
   id: string;

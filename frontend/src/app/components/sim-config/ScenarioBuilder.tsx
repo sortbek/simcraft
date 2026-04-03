@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useSimContext } from './SimContext';
-import { formatScenarioLabel } from '../lib/scenario-siblings';
-import { API_URL } from '../lib/api';
+import { formatScenarioLabel } from '../../lib/scenario-siblings';
+import { API_URL } from '../../lib/api';
 
 export default function ScenarioBuilder() {
   const { scenarios, addScenario, removeScenario, clearScenarios } = useSimContext();

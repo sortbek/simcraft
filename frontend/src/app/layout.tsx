@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import Sidebar from './components/Sidebar';
-import { SimProvider } from './components/SimContext';
-import SimSharedConfig from './components/SimSharedConfig';
-import UpdateChecker from './components/UpdateChecker';
-import WindowControls from './components/WindowTitlebar';
+import Sidebar from './components/layout/Sidebar';
+import { SimProvider } from './components/sim-config/SimContext';
+import SimSharedConfig from './components/sim-config/SimSharedConfig';
+import UpdateChecker from './components/layout/UpdateChecker';
+import WindowControls from './components/layout/WindowTitlebar';
 import './globals.css';
 import packageJson from '../../package.json';
 

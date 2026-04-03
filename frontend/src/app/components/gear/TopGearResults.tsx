@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import DpsHeroCard from './DpsHeroCard';
+import DpsHeroCard from '../results/DpsHeroCard';
 import GearOverview from './GearOverview';
 import type { GearItem } from './GearOverview';
-import { SLOT_LABELS, specDisplayName } from '../lib/types';
-import type { EnchantInfo, GemInfo, ItemInfo, ItemQuery } from '../lib/useItemInfo';
+import { SLOT_LABELS, specDisplayName } from '../../lib/types';
+import type { EnchantInfo, GemInfo, ItemInfo, ItemQuery } from '../../lib/useItemInfo';
 import {
   getIconUrl,
   getWowheadData,
@@ -14,8 +14,8 @@ import {
   useEnchantInfo,
   useGemInfo,
   useItemInfo,
-} from '../lib/useItemInfo';
-import { useWowheadTooltips } from '../lib/useWowheadTooltips';
+} from '../../lib/useItemInfo';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 
 interface ResultItem {
   slot: string;

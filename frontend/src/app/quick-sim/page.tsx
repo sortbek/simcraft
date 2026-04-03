@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback } from 'react';
-import ErrorAlert from '../components/ErrorAlert';
-import { useSimContext } from '../components/SimContext';
+import ErrorAlert from '../components/ui/ErrorAlert';
+import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 
 export default function QuickSimPage() {

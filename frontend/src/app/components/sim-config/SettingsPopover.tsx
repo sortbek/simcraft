@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSimContext } from './SimContext';
-import { API_URL } from '../lib/api';
+import { API_URL } from '../../lib/api';
 
 const PRESETS = [
   { label: 'Balanced', pct: 0.3, desc: '30%' },

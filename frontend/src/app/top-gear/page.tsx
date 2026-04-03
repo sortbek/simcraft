@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import ErrorAlert from '../components/ErrorAlert';
-import { useSimContext } from '../components/SimContext';
-import TopGearItemSelector from '../components/TopGearItemSelector';
+import ErrorAlert from '../components/ui/ErrorAlert';
+import { useSimContext } from '../components/sim-config/SimContext';
+import TopGearItemSelector from '../components/gear/TopGearItemSelector';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import type { ResolveGearResponse } from '../lib/types';

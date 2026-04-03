@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { FightScenario } from '../lib/types';
+import type { FightScenario } from '../../lib/types';
 
 interface SimContextType {
   simcInput: string;

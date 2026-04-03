@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { decodeHeader, decodeNodes } from '../lib/talentDecode';
-import type { NodeSelection } from '../lib/talentDecode';
-import { encodeTalentString } from '../lib/talentEncode';
+import { decodeHeader, decodeNodes } from '../../lib/talentDecode';
+import type { NodeSelection } from '../../lib/talentDecode';
+import { encodeTalentString } from '../../lib/talentEncode';
 import {
   canSelectNode,
   canDeselectNode,
@@ -14,10 +14,10 @@ import {
   getActiveSubTreeId,
   CLASS_POINTS,
   SPEC_POINTS,
-} from '../lib/talentRules';
-import { useTalentTree } from '../lib/useTalentTree';
-import type { TalentNode, TalentTreeData } from '../lib/useTalentTree';
-import { useWowheadTooltips } from '../lib/useWowheadTooltips';
+} from '../../lib/talentRules';
+import { useTalentTree } from '../../lib/useTalentTree';
+import type { TalentNode, TalentTreeData } from '../../lib/useTalentTree';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 
 interface TalentTreeProps {
   talentString?: string;

@@ -2,14 +2,14 @@
 
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import DpsHeroCard from '../../components/DpsHeroCard';
-import GearOverview from '../../components/GearOverview';
-import type { GearItem } from '../../components/GearOverview';
-import ResultsChart from '../../components/ResultsChart';
-import SimStatus from '../../components/SimStatus';
-import StatWeightsTable from '../../components/StatWeightsTable';
-import TalentTree from '../../components/TalentTree';
-import TopGearResults from '../../components/TopGearResults';
+import DpsHeroCard from '../../components/results/DpsHeroCard';
+import GearOverview from '../../components/gear/GearOverview';
+import type { GearItem } from '../../components/gear/GearOverview';
+import ResultsChart from '../../components/results/ResultsChart';
+import SimStatus from '../../components/results/SimStatus';
+import StatWeightsTable from '../../components/results/StatWeightsTable';
+import TalentTree from '../../components/talents/TalentTree';
+import TopGearResults from '../../components/gear/TopGearResults';
 
 import { API_URL } from '../../lib/api';
 import {

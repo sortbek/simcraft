@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { API_URL } from '../lib/api';
-import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
-import { useWowheadTooltips } from '../lib/useWowheadTooltips';
+import { API_URL } from '../../lib/api';
+import type { ResolveGearResponse, ResolvedItem } from '../../lib/types';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import GearItemRow from './GearItemRow';
-import { useSimContext } from './SimContext';
+import { useSimContext } from '../sim-config/SimContext';
 
 interface UpgradeOption {
   bonus_id: number;
