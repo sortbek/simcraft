@@ -20,18 +20,24 @@ interface JobSummary {
   batch_id: string | null;
 }
 
-const STATUS_STYLES: Record<string, { dot: string; text: string; label: string }> = {
-  done: { dot: 'bg-primary', text: 'text-primary', label: 'Completed' },
-  running: { dot: 'bg-amber-500', text: 'text-amber-500', label: 'Running' },
-  failed: { dot: 'bg-error', text: 'text-error', label: 'Failed' },
-  pending: { dot: 'bg-on-surface-variant', text: 'text-on-surface-variant', label: 'Pending' },
-  cancelled: { dot: 'bg-on-surface-variant', text: 'text-on-surface-variant', label: 'Cancelled' },
+const STATUS_STYLES: Record<string, { dot: string; label: string }> = {
+  done: { dot: 'bg-emerald-500', label: 'Completed' },
+  running: { dot: 'bg-amber-500 animate-pulse', label: 'Running' },
+  failed: { dot: 'bg-red-500', label: 'Failed' },
+  pending: { dot: 'bg-on-surface-variant', label: 'Pending' },
+  cancelled: { dot: 'bg-on-surface-variant', label: 'Cancelled' },
 };
 
 const SIM_TYPE_LABELS: Record<string, string> = {
   quick: 'Quick Sim',
   top_gear: 'Top Gear',
   droptimizer: 'Drop Finder',
+};
+
+const SIM_TYPE_COLORS: Record<string, string> = {
+  quick: 'bg-primary/10 text-primary border-primary/20',
+  top_gear: 'bg-tertiary/10 text-tertiary border-tertiary/20',
+  droptimizer: 'bg-secondary/10 text-secondary border-secondary/20',
 };
 
 function formatDps(value: number): string {
@@ -86,15 +92,13 @@ function SimRow({ sim }: { sim: JobSummary }) {
       href={`/sim/${sim.id}`}
       className={`grid grid-cols-12 px-6 py-5 items-center hover:bg-surface-container-high/40 transition-all cursor-pointer group ${isFailed ? 'opacity-60' : ''}`}
     >
-      {/* Col 1 – Name */}
-      <div className="col-span-4 flex items-center gap-4">
-        <div
-          className={`w-2 h-10 rounded-full transition-opacity ${
-            isFailed
-              ? 'bg-error-container opacity-100'
-              : 'bg-primary-container opacity-0 group-hover:opacity-100'
-          }`}
-        />
+      {/* Col 1 – Status dot */}
+      <div className="col-span-1 flex items-center">
+        <div className={`w-2.5 h-2.5 rounded-full ${status.dot}`} title={status.label} />
+      </div>
+
+      {/* Col 2 – Name */}
+      <div className="col-span-3 flex items-center gap-3 min-w-0">
         <div className="min-w-0">
           <p className="text-sm font-bold text-on-surface truncate">
             {sim.player_name || (isFailed ? 'Failed Simulation' : 'Simulation')}
@@ -104,36 +108,33 @@ function SimRow({ sim }: { sim: JobSummary }) {
           >
             {isFailed && sim.error_message
               ? sim.error_message.slice(0, 60)
-              : sim.player_class || (SIM_TYPE_LABELS[sim.sim_type] || sim.sim_type)}
+              : sim.player_class || sim.sim_type}
           </p>
         </div>
       </div>
 
-      {/* Col 2 – DPS */}
+      {/* Col 3 – Sim Type */}
+      <div className="col-span-2 text-center">
+        <span className={`inline-block px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded border ${SIM_TYPE_COLORS[sim.sim_type] || 'bg-surface-container-highest text-on-surface-variant border-outline-variant/10'}`}>
+          {SIM_TYPE_LABELS[sim.sim_type] || sim.sim_type}
+        </span>
+      </div>
+
+      {/* Col 4 – DPS */}
       <div className="col-span-2 text-right">
         <p className="text-xl font-black text-on-surface font-headline leading-none">
           {sim.dps ? formatDps(sim.dps) : '---'}
         </p>
       </div>
 
-      {/* Col 3 – Fight Style */}
+      {/* Col 5 – Fight Style */}
       <div className="col-span-2 text-center">
         <span className="px-2 py-1 bg-surface-container-highest text-[10px] font-bold uppercase tracking-wider rounded border border-outline-variant/10">
           {sim.fight_style}
         </span>
       </div>
 
-      {/* Col 4 – Status */}
-      <div className="col-span-2 text-center">
-        <div className="flex items-center justify-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-          <span className={`text-[10px] font-bold uppercase tracking-widest ${status.text}`}>
-            {status.label}
-          </span>
-        </div>
-      </div>
-
-      {/* Col 5 – Time */}
+      {/* Col 6 – Time */}
       <div className="col-span-2 text-right">
         <span className="text-[10px] text-on-surface-variant opacity-60">
           {timeAgo(sim.created_at)}
@@ -225,10 +226,11 @@ function SimList({ sims }: { sims: JobSummary[] }) {
   return (
     <div className="bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 shadow-2xl">
       <div className="grid grid-cols-12 px-6 py-4 bg-surface-container-low font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold border-b border-outline-variant/10">
-        <div className="col-span-4">Simulation</div>
+        <div className="col-span-1"></div>
+        <div className="col-span-3">Simulation</div>
+        <div className="col-span-2 text-center">Type</div>
         <div className="col-span-2 text-right">DPS Outcome</div>
         <div className="col-span-2 text-center">Fight Style</div>
-        <div className="col-span-2 text-center">Status</div>
         <div className="col-span-2 text-right">Time</div>
       </div>
       {entries.map((entry) => {
@@ -252,6 +254,9 @@ function StatsOverview({ sims }: { sims: JobSummary[] }) {
   const completedSims = sims.filter((s) => s.status === 'done');
   const completionRate = totalSims > 0 ? (completedSims.length / totalSims) * 100 : 0;
   const bestDps = Math.max(0, ...completedSims.map((s) => s.dps ?? 0));
+  const uniqueCharacters = new Set(
+    sims.filter((s) => s.player_name).map((s) => `${s.player_name}-${s.realm ?? ''}`)
+  ).size;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -262,19 +267,19 @@ function StatsOverview({ sims }: { sims: JobSummary[] }) {
         <p className="text-3xl font-black text-primary font-headline">
           {totalSims.toLocaleString()}
         </p>
-        <div className="w-full h-1 bg-surface-container-highest mt-4 rounded-full overflow-hidden">
-          <div className="h-full bg-primary" style={{ width: `${completionRate}%` }} />
-        </div>
+        <p className="text-[10px] text-outline mt-2">
+          {completedSims.length} completed &middot; {completionRate.toFixed(0)}% success
+        </p>
       </div>
       <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
         <p className="text-xs uppercase font-headline tracking-widest text-on-surface-variant mb-1">
-          Completed
+          Characters
         </p>
         <p className="text-3xl font-black text-tertiary font-headline">
-          {completedSims.length.toLocaleString()}
+          {uniqueCharacters}
         </p>
         <p className="text-[10px] text-outline mt-2">
-          {completionRate.toFixed(0)}% success rate
+          Unique characters simmed
         </p>
       </div>
       <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
