@@ -83,7 +83,7 @@ export default function SettingsPopover() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-[60] mt-2 w-80 rounded-xl bg-surface-container-high p-4 shadow-ambient">
+        <div className="absolute left-0 bottom-full z-[60] mb-2 w-80 rounded-xl bg-surface-container-high p-4 shadow-2xl shadow-black/40">
           {/* Desktop-only settings */}
           {isDesktop && maxThreads > 0 && (
             <>

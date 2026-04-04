@@ -28,6 +28,8 @@ interface TalentTreeProps {
   mini?: boolean;
   /** Skip card wrapper (when rendered inside another card) */
   bare?: boolean;
+  /** Force vertical stacking of the 3 trees */
+  vertical?: boolean;
 }
 
 // Node dimensions in SVG units (posX/posY use ~600 unit spacing)
@@ -47,6 +49,7 @@ export default function TalentTree({
   onTalentStringChange,
   mini,
   bare,
+  vertical,
 }: TalentTreeProps) {
   // In edit mode, freeze the initial talent string so prop changes don't re-decode
   const initialTalentRef = useRef(talentString);
@@ -222,7 +225,7 @@ export default function TalentTree({
   return (
     <div className={bare ? 'space-y-3' : 'card space-y-3 p-4'}>
       {!bare && <p className="text-xs font-medium uppercase tracking-widest text-on-surface-variant/60">Talents</p>}
-      <div className="flex flex-col gap-3 lg:flex-row lg:gap-4">
+      <div className={`flex flex-col gap-3 ${vertical ? '' : 'lg:flex-row lg:gap-4'}`}>
         <TreeSection
           label={tree.className}
           nodes={tree.classNodes}

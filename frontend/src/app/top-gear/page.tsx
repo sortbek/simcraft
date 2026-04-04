@@ -4,9 +4,45 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import { useSimContext } from '../components/sim-config/SimContext';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
+import TalentPicker from '../components/talents/TalentPicker';
+import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import type { ResolveGearResponse } from '../lib/types';
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+  color = 'bg-primary',
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  color?: string;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2.5 cursor-pointer group"
+      onClick={() => onChange(!checked)}
+    >
+      <div
+        className={`w-9 h-5 rounded-full relative p-1 transition-colors shrink-0 ${
+          checked ? color : 'bg-surface-container-highest'
+        }`}
+      >
+        <div
+          className={`w-3 h-3 rounded-full absolute transition-all ${
+            checked ? 'right-1 bg-on-surface' : 'left-1 bg-on-surface-variant'
+          }`}
+        />
+      </div>
+      <span className="text-sm font-headline font-bold text-on-surface-variant group-hover:text-primary transition-colors">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 export default function TopGearPage() {
   const { simcInput, maxCombinations, scenarios, talentBuilds } = useSimContext();
@@ -26,7 +62,6 @@ export default function TopGearPage() {
   const prevUpgradeRef = useRef(false);
   const prevCatalystRef = useRef(false);
 
-  // Resolve gear when simc input, maxUpgrade, or catalyst changes
   useEffect(() => {
     const trimmed = simcInput.trim();
     const inputChanged = trimmed !== prevInputRef.current;
@@ -128,7 +163,6 @@ export default function TopGearPage() {
     return result;
   }, [selectedUids]);
 
-  // Fetch combo count whenever selection changes
   useEffect(() => {
     const hasGearSelection = Object.values(selectedUids).some((s) => s.size > 0);
     const hasTalentCompare = talentBuilds.length > 1;
@@ -239,138 +273,68 @@ export default function TopGearPage() {
     validate,
   });
 
-  if (!resolved) {
-    return (
-      <p className="py-6 text-center text-sm text-muted">
-        {resolving
-          ? 'Resolving gear...'
-          : 'Paste your SimC addon export above to see gear options.'}
-      </p>
-    );
-  } else {
-    console.log(resolved);
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="card flex flex-col gap-4 p-5 sm:flex-row">
-        <label className="group flex flex-1 cursor-pointer items-center gap-3">
-          <div
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              copyEnchants ? 'bg-gold' : 'bg-surface-container-high'
-            }`}
-            onClick={() => setCopyEnchants(!copyEnchants)}
-          >
-            <div
-              className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-                copyEnchants ? 'left-[18px] bg-black' : 'left-0.5 bg-gray-500'
-              }`}
-            />
-          </div>
-          <div>
-            <span className="text-[15px] font-medium text-on-surface-variant transition-colors group-hover:text-white">
-              Copy Enchants
-            </span>
-            <p className="text-[13px] text-on-surface-variant/40">Apply equipped enchants to alternatives</p>
-          </div>
-        </label>
-        <label className="group flex flex-1 cursor-pointer items-center gap-3">
-          <div
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              maxUpgrade ? 'bg-gold' : 'bg-surface-container-high'
-            }`}
-            onClick={() => setMaxUpgrade(!maxUpgrade)}
-          >
-            <div
-              className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-                maxUpgrade ? 'left-[18px] bg-black' : 'left-0.5 bg-gray-500'
-              }`}
-            />
-          </div>
-          <div>
-            <span className="text-[15px] font-medium text-on-surface-variant transition-colors group-hover:text-white">
-              Sim Highest Upgrade
-            </span>
-            <p className="text-[13px] text-on-surface-variant/40">Simulate all items at max upgrade level</p>
-          </div>
-        </label>
+    <div className="space-y-6 pb-20">
+      <TalentPicker />
+
+      {/* Top Gear toggles */}
+      <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 px-6 py-4 flex flex-wrap items-center gap-6">
+        <Toggle checked={copyEnchants} onChange={setCopyEnchants} label="Copy Enchants" />
+        <span className="h-5 w-px bg-outline-variant/20" />
+        <Toggle checked={maxUpgrade} onChange={setMaxUpgrade} label="Sim Highest Upgrade" />
         {catalystCharges != null && catalystCharges > 0 && (
-          <div className="group flex flex-1 items-center gap-3">
-            <div
-              className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors ${
-                catalyst ? 'bg-purple-500' : 'bg-surface-container-high'
-              }`}
-              onClick={() => setCatalyst(!catalyst)}
-            >
-              <div
-                className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-                  catalyst ? 'left-[18px] bg-white' : 'left-0.5 bg-gray-500'
-                }`}
-              />
+          <>
+            <span className="h-5 w-px bg-outline-variant/20" />
+            <div className="flex items-center gap-2.5">
+              <Toggle checked={catalyst} onChange={setCatalyst} label="Revival Catalyst" color="bg-purple-500" />
+              <div className="flex items-center gap-1.5 ml-1">
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={catalystCharges}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v >= 0) setCatalystCharges(v);
+                  }}
+                  className="input-field !w-12 !px-1.5 !py-0.5 text-center !text-[13px]"
+                />
+                <span className="text-[11px] text-on-surface-variant/60">charges</span>
+              </div>
             </div>
-            <div className="flex-1 cursor-pointer" onClick={() => setCatalyst(!catalyst)}>
-              <span className="text-[15px] font-medium text-on-surface-variant transition-colors group-hover:text-white">
-                Revival Catalyst
-              </span>
-              <p className="text-[13px] text-on-surface-variant/40">Convert highest item per slot</p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={0}
-                max={10}
-                value={catalystCharges}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  if (!isNaN(v) && v >= 0) setCatalystCharges(v);
-                }}
-                className="input-field !w-12 !px-1.5 !py-0.5 text-center !text-[13px]"
-              />
-              <span className="text-[13px] text-on-surface-variant/60">charges</span>
-            </div>
-          </div>
+          </>
         )}
       </div>
 
-      <TopGearItemSelector
-        resolved={resolved}
-        selectedUids={selectedUids}
-        onSelectionChange={setSelectedUids}
-        onResolvedChange={setResolved}
-        onItemAdded={(slot, simcString, origin) =>
-          setLocalItems((prev) => [...prev, { slot, simc_string: simcString, origin }])
-        }
-        maxUpgrade={maxUpgrade}
-        comboCount={comboCount}
-        comboError={comboError}
-      />
+      {!resolved ? (
+        <p className="py-6 text-center text-sm text-muted">
+          {resolving
+            ? 'Resolving gear...'
+            : 'Paste your SimC addon export to see gear options.'}
+        </p>
+      ) : (
+        <TopGearItemSelector
+          resolved={resolved}
+          selectedUids={selectedUids}
+          onSelectionChange={setSelectedUids}
+          onResolvedChange={setResolved}
+          onItemAdded={(slot, simcString, origin) =>
+            setLocalItems((prev) => [...prev, { slot, simc_string: simcString, origin }])
+          }
+          maxUpgrade={maxUpgrade}
+          comboCount={comboCount}
+          comboError={comboError}
+        />
+      )}
 
       <ErrorAlert message={error} />
 
-      <div className="sticky bottom-0 z-30 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-6">
-        <button
-          onClick={submit}
-          disabled={submitting}
-          className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm"
-        >
-          {submitting ? (
-            <>
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                <path
-                  d="M14 8a6 6 0 00-6-6"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Starting sim…
-            </>
-          ) : (
-            buttonLabel('Find Top Gear')
-          )}
-        </button>
-      </div>
+      <ConfigFooter
+        onSubmit={submit}
+        submitting={submitting}
+        buttonLabel={buttonLabel('Find Top Gear')}
+        disabled={!resolved}
+      />
     </div>
   );
 }

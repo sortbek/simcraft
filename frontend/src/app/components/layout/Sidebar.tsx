@@ -49,11 +49,8 @@ export default function Sidebar() {
     <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-64 flex-col bg-[#0e0e0e] border-r border-outline-variant/20 shadow-[10px_0_30px_rgba(0,0,0,0.5)]">
       {/* Logo */}
       <div className="desktop-drag shrink-0 px-6 pt-6 pb-8">
-        <div className="desktop-no-drag font-headline text-primary font-black uppercase text-xs mb-1">
+        <div className="desktop-no-drag font-headline text-primary font-black tracking-tighter text-xl">
           SimHammer
-        </div>
-        <div className="text-on-surface-variant/50 text-[10px] uppercase font-bold tracking-tighter">
-          The Obsidian Forge
         </div>
       </div>
 

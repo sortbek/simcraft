@@ -263,6 +263,7 @@ export default function SimResultClient() {
             iterations={r.iterations as number | undefined}
             targetError={r.target_error as number | undefined}
             elapsedTime={r.elapsed_time_seconds as number | undefined}
+            baseDps={r.base_dps as number | undefined}
           />
           {r.equipped_gear &&
             Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 ? (

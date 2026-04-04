@@ -8,6 +8,8 @@ import { API_URL } from '../lib/api';
 import { SLOT_LABELS } from '../lib/types';
 import { QUALITY_COLORS, getIconUrl, useItemInfo, type ItemQuery } from '../lib/useItemInfo';
 import { useSimSubmit } from '../lib/useSimSubmit';
+import TalentPicker from '../components/talents/TalentPicker';
+import ConfigFooter from '../components/sim-config/ConfigPanel';
 
 // ---- Types ----
 
@@ -223,7 +225,8 @@ export default function UpgradeComparePage() {
       : buttonLabel(`Sim Upgrades (${comboCount} combos)`);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
+      <TalentPicker />
       {/* Explainer */}
       <div className="rounded-lg bg-surface-container-high/50 px-4 py-3">
         <p className="text-[15px] leading-relaxed text-on-surface-variant">
@@ -354,30 +357,12 @@ export default function UpgradeComparePage() {
 
       <ErrorAlert message={error} />
 
-      <div className="sticky bottom-0 z-30 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-6">
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || selectedSlots.size === 0 || !hasCurrencies}
-          className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm"
-        >
-          {submitting ? (
-            <>
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                <path
-                  d="M14 8a6 6 0 00-6-6"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Starting sim…
-            </>
-          ) : (
-            submitLabel
-          )}
-        </button>
-      </div>
+      <ConfigFooter
+        onSubmit={handleSubmit}
+        submitting={submitting}
+        buttonLabel={submitLabel}
+        disabled={selectedSlots.size === 0 || !hasCurrencies}
+      />
     </div>
   );
 }

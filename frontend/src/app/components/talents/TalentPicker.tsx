@@ -58,10 +58,10 @@ function getBuildStatus(
 
 type ViewMode = 'collapsed' | 'view' | 'edit';
 
-export default function TalentPicker() {
+export default function TalentPicker({ defaultView = 'collapsed', compact = false }: { defaultView?: ViewMode; compact?: boolean }) {
   const { simcInput, selectedTalent, setSelectedTalent, talentBuilds, setTalentBuilds } =
     useSimContext();
-  const [viewMode, setViewMode] = useState<ViewMode>('collapsed');
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [compareMode, setCompareMode] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importValue, setImportValue] = useState('');
@@ -486,13 +486,14 @@ export default function TalentPicker() {
 
       {/* Tree content */}
       {viewMode !== 'collapsed' && !compareMode && (
-        <div className="border-t border-outline-variant/10 p-4">
-          {viewMode === 'view' && currentTalent && <TalentTree talentString={currentTalent} bare />}
+        <div className={`border-t border-outline-variant/10 p-4 ${compact ? 'max-h-[280px] overflow-auto' : ''}`}>
+          {viewMode === 'view' && currentTalent && <TalentTree talentString={currentTalent} bare vertical={compact} />}
           {viewMode === 'edit' && specId && (
             <TalentTree
               talentString={selectedTalent || currentTalent}
               editable
               bare
+              vertical={compact}
               specId={specId}
               onTalentStringChange={handleEditorChange}
             />

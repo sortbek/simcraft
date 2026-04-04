@@ -3,7 +3,6 @@ import Script from 'next/script';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
 import { SimProvider } from './components/sim-config/SimContext';
-import SimSharedConfig from './components/sim-config/SimSharedConfig';
 import UpdateChecker from './components/layout/UpdateChecker';
 import './globals.css';
 import packageJson from '../../package.json';
@@ -34,8 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Sidebar />
           <div className="pl-64">
             <TopBar />
-            <main className="mx-auto max-w-5xl px-8 py-8">
-              <SimSharedConfig />
+            <main className="mx-auto max-w-screen-2xl px-8 py-8">
               {children}
             </main>
             <footer className="mt-16 border-t border-outline-variant/10 py-8">

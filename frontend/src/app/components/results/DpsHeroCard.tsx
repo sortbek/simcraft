@@ -13,6 +13,8 @@ interface DpsHeroCardProps {
   iterations?: number;
   targetError?: number;
   elapsedTime?: number;
+  /** Baseline DPS to show delta (e.g. base_dps from top gear results) */
+  baseDps?: number;
   /** Optional content rendered between the DPS number and the metadata bar */
   children?: React.ReactNode;
 }
@@ -65,8 +67,12 @@ export default function DpsHeroCard({
   targetError,
   desiredTargets,
   elapsedTime,
+  baseDps,
   children,
 }: DpsHeroCardProps) {
+  const dpsDelta = baseDps != null && baseDps > 0 ? dps - baseDps : null;
+  const dpsDeltaPct = baseDps != null && baseDps > 0 ? ((dps - baseDps) / baseDps) * 100 : null;
+
   const hasMetadata =
     (dpsError != null && dpsError > 0) ||
     fightLength != null ||
@@ -147,10 +153,18 @@ export default function DpsHeroCard({
             <div className="text-primary font-headline font-black text-7xl md:text-8xl tracking-tighter flex items-baseline gap-2 tabular-nums">
               {Math.round(dps).toLocaleString()} <span className="text-2xl font-bold opacity-50">DPS</span>
             </div>
+            {dpsDelta != null && dpsDeltaPct != null && (
+              <div className="text-on-surface-variant text-xs flex items-center gap-2">
+                <span className={`font-bold ${dpsDelta >= 0 ? 'text-emerald-400' : 'text-error'}`}>
+                  {dpsDelta >= 0 ? '+' : ''}{dpsDeltaPct.toFixed(1)}%
+                </span>
+                <span className="opacity-50">vs previous simulation</span>
+              </div>
+            )}
           </div>
+          {children}
         </div>
       </div>
-      {children}
       {/* Metadata strip */}
       {hasMetadata && (
         <div className="relative z-10 bg-surface-container-lowest/80 backdrop-blur-md border-t border-outline-variant/10 grid grid-cols-2 md:grid-cols-5 px-8 py-4 gap-4">

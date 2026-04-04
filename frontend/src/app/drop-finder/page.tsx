@@ -10,6 +10,8 @@ import type { SeasonConfigResponse, DifficultyDef, DungeonCategory } from '../li
 import CategorySelector from '../components/loot/CategorySelector';
 import DropSlotList from '../components/loot/DropSlotList';
 import DungeonGrid from '../components/loot/DungeonGrid';
+import TalentPicker from '../components/talents/TalentPicker';
+import ConfigFooter from '../components/sim-config/ConfigPanel';
 import {
   detectClass,
   detectSpec,
@@ -335,15 +337,16 @@ export default function DropFinderPage() {
       : buttonLabel(`Find Upgrades (${selected.size} items)`);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
+      <TalentPicker />
       <CategorySelector
-        category={category}
-        onChange={(key) => {
-          setCategory(key);
-          setSelectedId('');
-        }}
-        dungeonCats={dungeonCats}
-      />
+          category={category}
+          onChange={(key) => {
+            setCategory(key);
+            setSelectedId('');
+          }}
+          dungeonCats={dungeonCats}
+        />
 
       {category && hasImages ? (
         <DungeonGrid
@@ -500,44 +503,19 @@ export default function DropFinderPage() {
           />
 
           <ErrorAlert message={error} />
-
-          <div className="sticky bottom-0 z-30 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-6">
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || selected.size === 0 || !hasCharacter}
-              className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm"
-            >
-              {submitting ? (
-                <>
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 16 16" fill="none">
-                    <circle
-                      cx="8"
-                      cy="8"
-                      r="6"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      opacity="0.25"
-                    />
-                    <path
-                      d="M14 8a6 6 0 00-6-6"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  Starting sim…
-                </>
-              ) : (
-                submitLabel
-              )}
-            </button>
-          </div>
         </>
       )}
 
       {!selectedId && !loading && !category && (
         <p className="py-6 text-center text-sm text-muted">Select a category to get started.</p>
       )}
+
+      <ConfigFooter
+        onSubmit={handleSubmit}
+        submitting={submitting}
+        buttonLabel={submitLabel}
+        disabled={selected.size === 0 || !hasCharacter}
+      />
     </div>
   );
 }

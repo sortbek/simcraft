@@ -37,8 +37,8 @@ export default function LogConsole({ lines }: { lines: string[] }) {
   }
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between rounded-t-lg bg-surface-container px-3 py-1.5">
+    <div className="w-full border border-outline-variant/10 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between bg-surface-container-high px-4 py-2">
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60" />
           <span className="text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
@@ -52,7 +52,7 @@ export default function LogConsole({ lines }: { lines: string[] }) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="max-h-[320px] overflow-y-auto rounded-b-lg bg-surface-container-lowest p-3 font-mono text-[13px] leading-[1.7]"
+        className="max-h-[320px] overflow-y-auto bg-surface-container-low p-4 font-mono text-[13px] leading-[1.7]"
       >
         {lines.map((line, i) => (
           <div key={i} className={`whitespace-pre-wrap break-all ${classifyLine(line)}`}>
