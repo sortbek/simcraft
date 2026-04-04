@@ -16,6 +16,14 @@ const STAT_DISPLAY_NAMES: Record<string, string> = {
   weapon_dps: 'Weapon DPS',
 };
 
+const BAR_COLORS = [
+  'bg-primary',
+  'bg-primary-container',
+  'bg-on-surface-variant',
+  'bg-on-surface-variant opacity-40',
+  'bg-on-surface-variant opacity-40',
+];
+
 export default function StatWeightsTable({ statWeights }: StatWeightsTableProps) {
   const entries = Object.entries(statWeights)
     .map(([key, value]) => ({
@@ -27,20 +35,22 @@ export default function StatWeightsTable({ statWeights }: StatWeightsTableProps)
   const maxWeight = entries.length > 0 ? entries[0].weight : 1;
 
   return (
-    <div className="card p-5">
-      <h3 className="mb-5 text-xs font-medium uppercase tracking-widest text-muted">
+    <div className="bg-surface-container-low rounded-xl p-8 border border-outline-variant/10">
+      <h3 className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant mb-6">
         Stat Weights
       </h3>
-      <div className="space-y-3">
-        {entries.map(({ stat, weight }) => (
-          <div key={stat}>
-            <div className="mb-1.5 flex justify-between text-[15px]">
-              <span className="text-gray-300">{stat}</span>
-              <span className="font-mono tabular-nums text-white">{weight.toFixed(4)}</span>
+      <div className="space-y-6">
+        {entries.map(({ stat, weight }, i) => (
+          <div key={stat} className="flex flex-col gap-2">
+            <div className="flex justify-between text-xs font-headline font-bold uppercase tracking-tight">
+              <span>{stat}</span>
+              <span className={i === 0 ? 'text-primary' : 'text-on-surface'}>
+                {weight.toFixed(2)}
+              </span>
             </div>
-            <div className="h-1 w-full overflow-hidden rounded-full bg-bg">
+            <div className="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
               <div
-                className="h-full rounded-full bg-gold/70 transition-all"
+                className={`h-full rounded-full ${BAR_COLORS[Math.min(i, BAR_COLORS.length - 1)]}`}
                 style={{ width: `${(weight / maxWeight) * 100}%` }}
               />
             </div>

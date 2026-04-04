@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../../lib/api';
 import type { ResolveGearResponse, ResolvedItem } from '../../lib/types';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
@@ -81,18 +81,6 @@ export default function TopGearItemSelector({
   const [upgradeMenuFor, setUpgradeMenuFor] = useState<string | null>(null);
   const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOption[]>([]);
   const [loadingUpgrades, setLoadingUpgrades] = useState(false);
-  const headerRef = useRef<HTMLDivElement>(null);
-  const [headerVisible, setHeaderVisible] = useState(true);
-
-  useEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(([entry]) => setHeaderVisible(entry.isIntersecting), {
-      threshold: 0,
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
 
   useWowheadTooltips([resolved]);
 
@@ -368,8 +356,8 @@ export default function TopGearItemSelector({
     comboCount > effectiveMaxCombinations
       ? 'bg-red-500/10 text-red-400'
       : comboCount > 0
-        ? 'bg-surface-2 text-white'
-        : 'bg-surface-2 text-muted';
+        ? 'bg-surface-container-high text-white'
+        : 'bg-surface-container-high text-muted';
 
   const hasSelection = Object.values(selectedUids).some((s) => s.size > 0);
   const allVaultSelected = vaultUids.length > 0 && vaultUids.every((c) => selectedUids[c.slot]?.has(c.uid));
@@ -407,7 +395,7 @@ export default function TopGearItemSelector({
         <button
           type="button"
           onClick={deselectAll}
-          className="rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-white/[0.04] hover:text-gray-300 transition-colors"
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-on-surface-variant/50 hover:bg-white/[0.04] hover:text-on-surface transition-colors"
         >
           Clear
         </button>
@@ -420,13 +408,7 @@ export default function TopGearItemSelector({
 
   return (
     <div className="space-y-4">
-      {!headerVisible && (
-        <div className="fixed left-0 right-0 top-12 z-40 flex items-center justify-between border-b border-border/50 bg-surface/90 px-4 py-2 backdrop-blur-sm">
-          <p className="text-xs font-medium uppercase tracking-widest text-muted">Select Items</p>
-          {quickSelectBar}
-        </div>
-      )}
-      <div ref={headerRef} className="flex items-center justify-between">
+      <div className="sticky top-14 z-30 -mx-8 flex items-center justify-between border-b border-outline-variant/20 bg-background/90 px-8 py-2 backdrop-blur-sm">
         <p className="text-xs font-medium uppercase tracking-widest text-muted">Select Items</p>
         {quickSelectBar}
       </div>
@@ -434,7 +416,7 @@ export default function TopGearItemSelector({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {visibleGroups.map(({ group, equipped, alternatives }) => (
           <div key={group.label} className="card space-y-1 p-3.5">
-            <p className="mb-2 text-[13px] font-semibold uppercase tracking-widest text-muted">
+            <p className="mb-2 font-headline text-[13px] font-semibold uppercase tracking-widest text-muted">
               {group.label}
             </p>
 
@@ -463,7 +445,7 @@ export default function TopGearItemSelector({
             ))}
 
             {equipped.length > 0 && alternatives.length > 0 && (
-              <div className="!my-1.5 border-t border-border/50" />
+              <div className="!my-1.5 border-t border-outline-variant/20" />
             )}
 
             {alternatives.map((item, altIdx) => (
@@ -532,7 +514,7 @@ function UpgradeButton({
         className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
           isMenuOpen
             ? 'bg-gold/20 text-gold'
-            : 'text-gray-600 hover:bg-white/[0.05] hover:text-gray-400'
+            : 'text-on-surface-variant/50 hover:bg-white/[0.05] hover:text-on-surface-variant'
         }`}
         title="Add copy at different upgrade level"
       >
@@ -548,7 +530,7 @@ function UpgradeButton({
         </svg>
       </button>
       {isMenuOpen && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-border bg-surface py-1 shadow-xl">
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-outline-variant/20 bg-surface-container py-1 shadow-xl">
           {onCatalystConvert && (
             <button
               type="button"
@@ -566,7 +548,7 @@ function UpgradeButton({
             </button>
           )}
           {onCatalystConvert && item.upgrade && (
-            <div className="my-1 border-t border-border/50" />
+            <div className="my-1 border-t border-outline-variant/20" />
           )}
           {item.upgrade && (
             <>
@@ -590,7 +572,7 @@ function UpgradeButton({
                       className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[13px] ${
                         isCurrent
                           ? 'cursor-default text-muted'
-                          : 'text-gray-300 hover:bg-white/[0.05] hover:text-white'
+                          : 'text-on-surface hover:bg-white/[0.05] hover:text-white'
                       }`}
                     >
                       <span>{opt.fullName}</span>

@@ -265,7 +265,7 @@ export default function SimResultClient() {
             elapsedTime={r.elapsed_time_seconds as number | undefined}
           />
           {r.equipped_gear &&
-            Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 && (
+            Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 ? (
               <GearOverview
                 gear={r.equipped_gear as Record<string, GearItem>}
                 characterRenderUrl={
@@ -274,7 +274,10 @@ export default function SimResultClient() {
                     : null
                 }
               />
-            )}
+            ) : null}
+          {r.stat_weights ? (
+            <StatWeightsTable statWeights={r.stat_weights as Record<string, number>} />
+          ) : null}
           {typeof r.talent_string === 'string' && r.talent_string && (
             <TalentTree talentString={r.talent_string as string} />
           )}
@@ -288,14 +291,11 @@ export default function SimResultClient() {
               }>) || []
             }
           />
-          {r.stat_weights && (
-            <StatWeightsTable statWeights={r.stat_weights as Record<string, number>} />
-          )}
         </>
       )}
 
       {/* Footer links */}
-      <div className="flex items-center justify-center gap-3 pb-4 text-xs text-muted">
+      <div className="flex items-center justify-center gap-3 pb-4 text-[10px] uppercase tracking-wider text-on-surface-variant/40">
         {typeof r.simc_version === 'string' && (
           <>
             {typeof r.simc_git_revision === 'string' && r.simc_git_revision ? (

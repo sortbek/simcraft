@@ -93,28 +93,28 @@ export default function SimStatus({
   return (
     <div className="flex flex-col items-center justify-center space-y-6 py-16">
       <div className="relative">
-        <div className="h-12 w-12 animate-spin rounded-full border-2 border-zinc-800 border-t-gold" />
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary" />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-gold/60" />
+          <div className="h-2 w-2 animate-pulse rounded-full bg-primary/60" />
         </div>
       </div>
 
       <div className="text-center">
-        <p className="text-sm font-semibold text-zinc-100">{title}</p>
-        {progressDetail && <p className="mt-1 text-[13px] text-zinc-500">{progressDetail}</p>}
+        <p className="text-sm font-semibold text-on-surface">{title}</p>
+        {progressDetail && <p className="mt-1 text-[13px] text-on-surface-variant/60">{progressDetail}</p>}
       </div>
 
       <div className="w-72">
-        <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+        <div className="h-1 w-full overflow-hidden rounded-full bg-surface-container-highest">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-gold-dark to-gold transition-all duration-700"
+            className="h-full rounded-full bg-gradient-to-r from-primary-container to-primary transition-all duration-700"
             style={{ width: `${Math.max(displayProgress, status === 'pending' ? 2 : 5)}%` }}
           />
         </div>
         <div className="mt-2 flex items-center justify-between">
-          <p className="font-mono text-[12px] tabular-nums text-zinc-500">{displayProgress}%</p>
+          <p className="font-mono text-[12px] tabular-nums text-on-surface-variant/60">{displayProgress}%</p>
           {cpuUsage !== null && (
-            <p className="font-mono text-[12px] tabular-nums text-zinc-500">
+            <p className="font-mono text-[12px] tabular-nums text-on-surface-variant/60">
               CPU {Math.round(cpuUsage)}%
             </p>
           )}
@@ -126,14 +126,14 @@ export default function SimStatus({
           <button
             onClick={handleCancel}
             disabled={cancelling}
-            className="rounded-lg px-3 py-1 text-[14px] text-gray-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="rounded-lg px-3 py-1 text-[14px] text-on-surface-variant/60 transition-colors hover:bg-red-500/10 hover:text-error"
           >
             {cancelling ? 'Cancelling...' : 'Cancel Sim'}
           </button>
           {onToggleLogs && (
             <button
               onClick={onToggleLogs}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[14px] text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[14px] text-on-surface-variant/60 transition-colors hover:bg-white/5 hover:text-on-surface-variant"
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -168,17 +168,17 @@ export default function SimStatus({
               >
                 <path d="M12 5L6.5 10.5L4 8" />
               </svg>
-              <span className="text-[13px] text-gray-400">{stage}</span>
+              <span className="text-[13px] text-on-surface-variant">{stage}</span>
             </div>
           ))}
           {progressStage && (
             <div className="flex items-center gap-2">
               <div className="flex h-3 w-3 shrink-0 items-center justify-center">
-                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" />
+                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
               </div>
-              <span className="text-[13px] text-gray-400">
+              <span className="text-[13px] text-on-surface-variant">
                 {progressStage}
-                {progressDetail && <span className="text-gray-500"> · {progressDetail}</span>}
+                {progressDetail && <span className="text-on-surface-variant/60"> · {progressDetail}</span>}
               </span>
             </div>
           )}

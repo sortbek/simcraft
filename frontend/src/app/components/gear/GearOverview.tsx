@@ -98,7 +98,7 @@ export default function GearOverview({
   if (Object.keys(gear).length === 0) return null;
 
   return (
-    <div className="card relative overflow-hidden p-5">
+    <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 relative overflow-hidden">
       {characterRenderUrl && (
         <img
           src={characterRenderUrl}
@@ -110,7 +110,9 @@ export default function GearOverview({
         />
       )}
       <div className="relative">
-        <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted">{title}</p>
+        <h3 className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant mb-8 border-b border-outline-variant/10 pb-4">
+          {title}
+        </h3>
         {(() => {
           const gridCols = characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2';
           return (
@@ -197,10 +199,10 @@ export function GearSlotRow({
       <div
         className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}
       >
-        <div className="h-7 w-7 shrink-0 rounded border border-border bg-white/[0.03]" />
+        <div className="h-7 w-7 shrink-0 rounded-md bg-surface-container-high" />
         <div className={rtl ? 'text-right' : ''}>
-          <p className="text-[13px] text-gray-600">{SLOT_LABELS[slot] || slot}</p>
-          <p className="text-[11px] text-gray-700">Empty</p>
+          <p className="text-[13px] text-on-surface-variant">{SLOT_LABELS[slot] || slot}</p>
+          <p className="text-[11px] text-on-surface-variant/50">Empty</p>
         </div>
       </div>
     );
@@ -241,7 +243,7 @@ export function GearSlotRow({
           }}
         />
       )}
-      <div className="h-7 w-7 shrink-0 overflow-hidden rounded border border-border">
+      <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md border border-outline-variant/20">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={getIconUrl(icon)}

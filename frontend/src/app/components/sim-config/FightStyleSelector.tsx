@@ -32,7 +32,7 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
       >
         <span>{activeLabel}</span>
         <svg
-          className={`h-4 w-4 text-zinc-500 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-on-surface-variant/60 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
@@ -44,7 +44,7 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
         </svg>
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-border bg-surface-2 py-1 shadow-lg shadow-black/40">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg bg-surface-container-high py-1 shadow-lg shadow-black/40">
           {FIGHT_STYLES.map((fs) => (
             <button
               key={fs.value}
@@ -56,7 +56,7 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
               className={`flex w-full px-3.5 py-2 text-left text-sm transition-colors ${
                 fs.value === value
                   ? 'bg-gold/[0.08] text-gold'
-                  : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+                  : 'text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
               }`}
             >
               {fs.label}

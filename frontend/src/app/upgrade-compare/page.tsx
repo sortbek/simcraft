@@ -225,8 +225,8 @@ export default function UpgradeComparePage() {
   return (
     <div className="space-y-6">
       {/* Explainer */}
-      <div className="rounded-lg border border-border/50 bg-surface-2/50 px-4 py-3">
-        <p className="text-[15px] leading-relaxed text-zinc-400">
+      <div className="rounded-lg bg-surface-container-high/50 px-4 py-3">
+        <p className="text-[15px] leading-relaxed text-on-surface-variant">
           Find the best way to spend your{' '}
           <span className="font-medium text-gold/80">Dawncrest upgrade currencies</span>. Select
           which equipped items to consider, and SimHammer will test every valid upgrade combination
@@ -246,14 +246,14 @@ export default function UpgradeComparePage() {
             .map((c) => (
               <div
                 key={c.id}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-surface-2 px-2 py-1"
+                className="flex items-center gap-1.5 rounded-md bg-surface-container-high px-2 py-1"
               >
                 <img
                   src={getIconUrl(c.icon || 'inv_misc_questionmark')}
                   alt=""
                   className="h-4 w-4 shrink-0 rounded-sm"
                 />
-                <span className="text-[13px] text-gray-400">{c.name}</span>
+                <span className="text-[13px] text-on-surface-variant">{c.name}</span>
                 <span className="font-mono text-[13px] tabular-nums text-white">{c.amount}</span>
               </div>
             ))}
@@ -267,7 +267,7 @@ export default function UpgradeComparePage() {
             Select Items to Upgrade
           </p>
           {comboCount > 0 && (
-            <span className="rounded-md bg-surface-2 px-2.5 py-1 font-mono text-xs text-white">
+            <span className="rounded-md bg-surface-container-high px-2.5 py-1 font-mono text-xs text-on-surface">
               {comboCount.toLocaleString()} combo{comboCount !== 1 ? 's' : ''}
             </span>
           )}
@@ -312,7 +312,7 @@ export default function UpgradeComparePage() {
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.candidates)}
-                      className="text-[12px] text-zinc-500 hover:text-zinc-300"
+                      className="text-[12px] text-on-surface-variant/60 hover:text-on-surface-variant"
                     >
                       {allSelected ? 'Deselect' : 'Select all'}
                     </button>
@@ -354,7 +354,7 @@ export default function UpgradeComparePage() {
 
       <ErrorAlert message={error} />
 
-      <div className="sticky bottom-0 z-50 -mx-4 bg-gradient-to-t from-[#111] via-[#111] to-transparent px-4 pb-4 pt-6">
+      <div className="sticky bottom-0 z-30 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-6">
         <button
           onClick={handleSubmit}
           disabled={submitting || selectedSlots.size === 0 || !hasCurrencies}

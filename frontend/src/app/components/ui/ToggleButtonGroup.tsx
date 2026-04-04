@@ -19,10 +19,10 @@ export default function ToggleButtonGroup<T extends string | number>({
         <button
           key={String(opt.key)}
           onClick={() => onChange(opt.key)}
-          className={`rounded-lg border font-medium transition-all duration-150 ${padding} ${
+          className={`rounded-lg font-medium transition-all duration-150 ${padding} ${
             value === opt.key
-              ? 'border-gold/40 bg-gold/[0.08] text-gold'
-              : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
+              ? 'bg-primary/10 text-primary'
+              : 'bg-surface-container-high text-on-surface-variant/60 hover:bg-surface-container-highest hover:text-on-surface-variant'
           }`}
         >
           {opt.label}

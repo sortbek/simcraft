@@ -294,7 +294,7 @@ export default function TalentPicker() {
               <path d="M2 2h12v12H2zM5 6h6M5 10h4" />
             </svg>
           </div>
-          <span className="text-xs font-medium text-zinc-300">Talents</span>
+          <span className="text-xs font-medium text-on-surface-variant">Talents</span>
           {allLoadouts.length >= 2 && (
             <select
               value={selectedLoadoutIdx}
@@ -304,7 +304,7 @@ export default function TalentPicker() {
                 setSelectedTalent(allLoadouts[idx].talentString);
                 if (viewMode === 'edit') setViewMode('view');
               }}
-              className="input-field !w-auto !border-transparent !bg-surface-2 !px-2.5 !py-1 !text-[13px]"
+              className="input-field !w-auto !border-transparent !bg-surface-container-high !px-2.5 !py-1 !text-[13px]"
             >
               {allLoadouts.map((l, i) => (
                 <option key={`${l.name}-${i}`} value={i}>
@@ -323,7 +323,7 @@ export default function TalentPicker() {
                 className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
                   compareMode
                     ? 'bg-gold/10 font-medium text-gold'
-                    : 'text-zinc-500 hover:bg-surface-2 hover:text-zinc-300'
+                    : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
                 }`}
               >
                 Compare{talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
@@ -333,14 +333,14 @@ export default function TalentPicker() {
                 className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
                   showImport
                     ? 'bg-gold/10 font-medium text-gold'
-                    : 'text-zinc-500 hover:bg-surface-2 hover:text-zinc-300'
+                    : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
                 }`}
               >
                 Import
               </button>
               <button
                 onClick={handleBlankBuild}
-                className="rounded-md px-2.5 py-1 text-[13px] text-zinc-500 transition-all hover:bg-surface-2 hover:text-zinc-300"
+                className="rounded-md px-2.5 py-1 text-[13px] text-on-surface-variant/60 transition-all hover:bg-surface-container-high hover:text-on-surface-variant"
               >
                 Blank
               </button>
@@ -350,7 +350,7 @@ export default function TalentPicker() {
                   className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
                     viewMode === 'edit'
                       ? 'bg-gold/10 font-medium text-gold'
-                      : 'text-zinc-500 hover:bg-surface-2 hover:text-zinc-300'
+                      : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
                   }`}
                 >
                   {viewMode === 'edit' ? 'Done' : 'Edit'}
@@ -363,7 +363,7 @@ export default function TalentPicker() {
               setViewMode((v) => (v === 'collapsed' ? 'view' : 'collapsed'));
               setShowImport(false);
             }}
-            className="rounded-md px-2.5 py-1 text-[13px] text-zinc-500 transition-all hover:bg-surface-2 hover:text-zinc-300"
+            className="rounded-md px-2.5 py-1 text-[13px] text-on-surface-variant/60 transition-all hover:bg-surface-container-high hover:text-on-surface-variant"
           >
             {viewMode !== 'collapsed' ? 'Hide' : 'Show'}
           </button>
@@ -372,7 +372,7 @@ export default function TalentPicker() {
 
       {/* Import bar */}
       {showImport && viewMode !== 'collapsed' && (
-        <div className="border-t border-border/50 px-4 py-3">
+        <div className="border-t border-outline-variant/10 px-4 py-3">
           <div className="flex gap-2">
             <input
               type="text"
@@ -399,7 +399,7 @@ export default function TalentPicker() {
 
       {/* Compare mode — talent tree card grid */}
       {compareMode && viewMode !== 'collapsed' && (
-        <div className="border-t border-border/50 px-4 py-3">
+        <div className="border-t border-outline-variant/10 px-4 py-3">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[12px] font-medium uppercase tracking-wider text-muted">
               Select builds to compare
@@ -430,7 +430,7 @@ export default function TalentPicker() {
                   className={`group relative overflow-hidden rounded-lg border p-2 text-left transition-all ${
                     checked
                       ? 'border-gold/40 bg-gold/[0.04]'
-                      : 'border-border bg-surface hover:border-zinc-600'
+                      : 'border-transparent bg-surface-container-low hover:bg-surface-container-high'
                   }`}
                 >
                   {/* Spec label (only when different from base spec) */}
@@ -455,7 +455,7 @@ export default function TalentPicker() {
                       className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
                         checked
                           ? 'border-gold bg-gold'
-                          : 'border-zinc-600 group-hover:border-zinc-500'
+                          : 'border-outline-variant group-hover:border-outline-variant/60'
                       }`}
                     >
                       {checked && (
@@ -471,7 +471,7 @@ export default function TalentPicker() {
                       )}
                     </div>
                     <span
-                      className={`truncate text-[12px] font-medium ${checked ? 'text-zinc-200' : 'text-zinc-500'}`}
+                      className={`truncate text-[12px] font-medium ${checked ? 'text-on-surface' : 'text-on-surface-variant/60'}`}
                     >
                       {l.name}
                       {l.isActive ? ' (eq)' : ''}
@@ -486,7 +486,7 @@ export default function TalentPicker() {
 
       {/* Tree content */}
       {viewMode !== 'collapsed' && !compareMode && (
-        <div className="border-t border-border/50 p-4">
+        <div className="border-t border-outline-variant/10 p-4">
           {viewMode === 'view' && currentTalent && <TalentTree talentString={currentTalent} bare />}
           {viewMode === 'edit' && specId && (
             <TalentTree

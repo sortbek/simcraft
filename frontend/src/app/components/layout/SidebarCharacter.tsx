@@ -58,18 +58,18 @@ export default function SidebarCharacter() {
   }, [simcInput, refreshCharacters]);
 
   return (
-    <div className="shrink-0 border-b border-border/60 px-3 py-2">
+    <div className="shrink-0 px-3 py-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] font-medium transition-all duration-150 ${
+        className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-headline font-bold text-xs uppercase transition-all duration-150 ${
           open
-            ? 'bg-gold/[0.08] text-gold'
-            : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+            ? 'bg-primary-container/10 text-primary'
+            : 'text-on-surface-variant hover:bg-surface hover:text-white'
         }`}
       >
         <svg
           className={`h-4 w-4 shrink-0 transition-colors ${
-            open ? 'text-gold' : 'text-zinc-600 group-hover:text-zinc-400'
+            open ? 'text-gold' : 'text-on-surface-variant/40 group-hover:text-on-surface-variant'
           }`}
           viewBox="0 0 16 16"
           fill="none"
@@ -85,7 +85,7 @@ export default function SidebarCharacter() {
           {characterInfo ? (
             <>
               <div className="truncate text-[14px] leading-tight">{characterInfo.name}</div>
-              <div className="truncate text-[11px] font-normal text-zinc-500">
+              <div className="truncate text-[11px] font-normal text-on-surface-variant/60">
                 {specDisplayName(characterInfo.spec)} {characterInfo.className}
               </div>
             </>
@@ -94,7 +94,7 @@ export default function SidebarCharacter() {
           )}
         </div>
         <svg
-          className={`h-3 w-3 shrink-0 text-zinc-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={`h-3 w-3 shrink-0 text-on-surface-variant/40 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 12 12"
           fill="none"
           stroke="currentColor"
@@ -117,23 +117,23 @@ export default function SidebarCharacter() {
                   <div
                     key={char.id}
                     className={`flex items-center justify-between rounded-md px-2.5 py-1.5 ${
-                      isActive ? 'bg-gold/[0.08]' : 'hover:bg-white/[0.03]'
+                      isActive ? 'bg-gold/[0.08]' : 'hover:bg-surface-container'
                     }`}
                   >
                     <button
                       onClick={() => setSimcInput(char.simc_input)}
                       className={`min-w-0 flex-1 text-left transition-colors ${
-                        isActive ? 'text-gold' : 'text-zinc-400 hover:text-zinc-200'
+                        isActive ? 'text-gold' : 'text-on-surface-variant hover:text-on-surface'
                       }`}
                     >
                       <div className="truncate text-[13px] font-medium">{char.name}</div>
-                      <div className="truncate text-[11px] text-zinc-600">
+                      <div className="truncate text-[11px] text-on-surface-variant/50">
                         {specDisplayName(char.spec)} {char.class}
                       </div>
                     </button>
                     <button
                       onClick={() => deleteCharacter(char.id).then(refreshCharacters)}
-                      className="ml-2 shrink-0 text-[13px] text-zinc-700 hover:text-red-400 transition-colors"
+                      className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 hover:text-red-400 transition-colors"
                     >
                       &times;
                     </button>
@@ -147,7 +147,7 @@ export default function SidebarCharacter() {
             value={simcInput}
             onChange={(e) => setSimcInput(e.target.value)}
             placeholder="Paste SimC addon export..."
-            className="h-28 w-full resize-y rounded-lg border border-border bg-surface-2 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-zinc-300 placeholder-zinc-600 focus:border-gold/30 focus:outline-none"
+            className="h-28 w-full resize-y rounded-lg bg-surface-container-high px-2.5 py-2 font-mono text-[11px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:ring-1 focus:ring-primary/30 focus:outline-none"
           />
         </div>
       )}

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../lib/api';
 import { useSimContext } from '../components/sim-config/SimContext';
 
@@ -20,18 +20,12 @@ interface JobSummary {
   batch_id: string | null;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  done: 'bg-emerald-500',
-  running: 'bg-amber-500',
-  failed: 'bg-red-500',
-  pending: 'bg-zinc-500',
-  cancelled: 'bg-zinc-600',
-};
-
-const FIGHT_STYLE_SHORT: Record<string, string> = {
-  Patchwerk: 'Patch',
-  HecticAddCleave: 'Cleave',
-  LightMovement: 'Move',
+const STATUS_STYLES: Record<string, { dot: string; text: string; label: string }> = {
+  done: { dot: 'bg-primary', text: 'text-primary', label: 'Completed' },
+  running: { dot: 'bg-amber-500', text: 'text-amber-500', label: 'Running' },
+  failed: { dot: 'bg-error', text: 'text-error', label: 'Failed' },
+  pending: { dot: 'bg-on-surface-variant', text: 'text-on-surface-variant', label: 'Pending' },
+  cancelled: { dot: 'bg-on-surface-variant', text: 'text-on-surface-variant', label: 'Cancelled' },
 };
 
 const SIM_TYPE_LABELS: Record<string, string> = {
@@ -39,6 +33,12 @@ const SIM_TYPE_LABELS: Record<string, string> = {
   top_gear: 'Top Gear',
   droptimizer: 'Drop Finder',
 };
+
+function formatDps(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return Math.round(value).toLocaleString();
+}
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -75,54 +75,75 @@ function extractCharacter(simcInput: string): { name: string; realm: string } | 
   return null;
 }
 
-function SimRow({ sim, compact }: { sim: JobSummary; compact?: boolean }) {
+/* ── Row ─────────────────────────────────────────────────── */
+
+function SimRow({ sim }: { sim: JobSummary }) {
+  const isFailed = sim.status === 'failed';
+  const status = STATUS_STYLES[sim.status] || STATUS_STYLES.pending;
+
   return (
     <Link
       href={`/sim/${sim.id}`}
-      className={`flex items-center gap-3 transition-colors hover:bg-white/[0.03] ${compact ? 'px-4 py-2' : 'px-5 py-3'}`}
+      className={`grid grid-cols-12 px-6 py-5 items-center hover:bg-surface-container-high/40 transition-all cursor-pointer group ${isFailed ? 'opacity-60' : ''}`}
     >
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_COLORS[sim.status] || STATUS_COLORS.pending}`}
-      />
-      {!compact && (
-        <span className="shrink-0 rounded-md bg-gold/[0.08] px-2 py-0.5 text-[12px] font-medium text-gold">
-          {SIM_TYPE_LABELS[sim.sim_type] || sim.sim_type}
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        {sim.player_name ? (
-          <span className={`block truncate text-zinc-200 ${compact ? 'text-xs' : 'text-sm'}`}>
-            {sim.player_name}
-            {sim.player_class && <span className="ml-1.5 text-zinc-500">{sim.player_class}</span>}
-          </span>
-        ) : sim.status === 'failed' ? (
-          <span className={`block truncate text-red-400/80 ${compact ? 'text-xs' : 'text-sm'}`}>
-            {sim.error_message || 'Failed'}
-          </span>
-        ) : (
-          <span className={`block truncate text-zinc-500 ${compact ? 'text-xs' : 'text-sm'}`}>
-            {sim.status === 'running' ? 'Simulating...' : 'Pending...'}
-          </span>
-        )}
+      {/* Col 1 – Name */}
+      <div className="col-span-4 flex items-center gap-4">
+        <div
+          className={`w-2 h-10 rounded-full transition-opacity ${
+            isFailed
+              ? 'bg-error-container opacity-100'
+              : 'bg-primary-container opacity-0 group-hover:opacity-100'
+          }`}
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-on-surface truncate">
+            {sim.player_name || (isFailed ? 'Failed Simulation' : 'Simulation')}
+          </p>
+          <p
+            className={`text-[10px] font-medium truncate ${isFailed ? 'text-error' : 'text-on-surface-variant'}`}
+          >
+            {isFailed && sim.error_message
+              ? sim.error_message.slice(0, 60)
+              : sim.player_class || (SIM_TYPE_LABELS[sim.sim_type] || sim.sim_type)}
+          </p>
+        </div>
       </div>
-      <span
-        className={`shrink-0 text-right font-mono tabular-nums text-zinc-200 ${compact ? 'w-16 text-xs' : 'w-20 text-sm'}`}
-      >
-        {sim.dps ? Math.round(sim.dps).toLocaleString() : '—'}
-      </span>
-      <span
-        className={`hidden shrink-0 text-right text-zinc-500 sm:block ${compact ? 'w-12 text-[12px]' : 'w-20 text-[13px]'}`}
-      >
-        {FIGHT_STYLE_SHORT[sim.fight_style] || sim.fight_style}
-      </span>
-      <span
-        className={`shrink-0 text-right text-zinc-600 ${compact ? 'w-12 text-[12px]' : 'w-14 text-[13px]'}`}
-      >
-        {timeAgo(sim.created_at)}
-      </span>
+
+      {/* Col 2 – DPS */}
+      <div className="col-span-2 text-right">
+        <p className="text-xl font-black text-on-surface font-headline leading-none">
+          {sim.dps ? formatDps(sim.dps) : '---'}
+        </p>
+      </div>
+
+      {/* Col 3 – Fight Style */}
+      <div className="col-span-2 text-center">
+        <span className="px-2 py-1 bg-surface-container-highest text-[10px] font-bold uppercase tracking-wider rounded border border-outline-variant/10">
+          {sim.fight_style}
+        </span>
+      </div>
+
+      {/* Col 4 – Status */}
+      <div className="col-span-2 text-center">
+        <div className="flex items-center justify-center gap-2">
+          <div className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${status.text}`}>
+            {status.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Col 5 – Time */}
+      <div className="col-span-2 text-right">
+        <span className="text-[10px] text-on-surface-variant opacity-60">
+          {timeAgo(sim.created_at)}
+        </span>
+      </div>
     </Link>
   );
 }
+
+/* ── Grouping ────────────────────────────────────────────── */
 
 type HistoryEntry =
   | { type: 'single'; sim: JobSummary }
@@ -133,15 +154,13 @@ function groupByBatch(sims: JobSummary[]): HistoryEntry[] {
   const batchMap = new Map<string, JobSummary[]>();
   const singles: { index: number; sim: JobSummary }[] = [];
 
-  // First pass: group batched sims
   sims.forEach((sim, index) => {
     if (sim.batch_id) {
       let group = batchMap.get(sim.batch_id);
       if (!group) {
         group = [];
         batchMap.set(sim.batch_id, group);
-        // Reserve position of first item in batch
-        singles.push({ index, sim }); // placeholder
+        singles.push({ index, sim });
       }
       group.push(sim);
     } else {
@@ -149,7 +168,6 @@ function groupByBatch(sims: JobSummary[]): HistoryEntry[] {
     }
   });
 
-  // Build output preserving original order
   const seen = new Set<string>();
   for (const { sim } of singles) {
     if (sim.batch_id) {
@@ -166,15 +184,13 @@ function groupByBatch(sims: JobSummary[]): HistoryEntry[] {
 function BatchGroup({ entry }: { entry: Extract<HistoryEntry, { type: 'batch' }> }) {
   const first = entry.sims[0];
   const simType = SIM_TYPE_LABELS[first?.sim_type] || first?.sim_type || 'Sim';
-  const bestDps = Math.max(...entry.sims.map((s) => s.dps ?? 0));
 
   return (
-    <div className="border-b border-border last:border-b-0">
-      {/* Batch header */}
-      <div className="flex items-center gap-3 px-5 py-3">
-        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-gold/10">
+    <div className="border-b border-outline-variant/10">
+      <div className="bg-surface-container/50 px-6 py-3 flex items-center justify-between border-b border-outline-variant/5">
+        <span className="flex items-center gap-2 text-[10px] font-bold uppercase text-primary tracking-widest">
           <svg
-            className="h-3 w-3 text-gold"
+            className="h-4 w-4"
             viewBox="0 0 16 16"
             fill="none"
             stroke="currentColor"
@@ -183,48 +199,42 @@ function BatchGroup({ entry }: { entry: Extract<HistoryEntry, { type: 'batch' }>
           >
             <path d="M2 4h12M2 8h12M2 12h12" />
           </svg>
-        </div>
-        <div className="min-w-0 flex-1">
-          <span className="text-sm font-medium text-zinc-200">
-            {simType} &middot; {entry.sims.length} Scenarios
-          </span>
+          {simType} &middot; {entry.sims.length} Scenarios
           {first?.player_name && (
-            <span className="ml-2 text-xs text-zinc-500">{first.player_name}</span>
+            <span className="text-on-surface-variant opacity-60 normal-case tracking-normal ml-2">
+              {first.player_name}
+            </span>
           )}
-        </div>
-        <span className="shrink-0 rounded-md bg-gold/[0.08] px-2 py-0.5 text-[12px] font-medium text-gold">
-          {simType}
         </span>
-        {bestDps > 0 && (
-          <span className="w-20 shrink-0 text-right font-mono text-sm tabular-nums text-zinc-200">
-            {Math.round(bestDps).toLocaleString()}
-          </span>
-        )}
-        <span className="w-14 shrink-0 text-right text-[13px] text-zinc-600">
+        <span className="text-[10px] text-on-surface-variant opacity-60">
           {timeAgo(first?.created_at)}
         </span>
       </div>
-      {/* Batch items — indented */}
-      <div className="border-t border-border/50 bg-surface-2/50 pl-4">
-        <div className="divide-y divide-border/30">
-          {entry.sims.map((sim) => (
-            <SimRow key={sim.id} sim={sim} compact />
-          ))}
-        </div>
-      </div>
+      {entry.sims.map((sim) => (
+        <SimRow key={sim.id} sim={sim} />
+      ))}
     </div>
   );
 }
+
+/* ── Table ────────────────────────────────────────────────── */
 
 function SimList({ sims }: { sims: JobSummary[] }) {
   const entries = groupByBatch(sims);
 
   return (
-    <div className="card overflow-hidden">
+    <div className="bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 shadow-2xl">
+      <div className="grid grid-cols-12 px-6 py-4 bg-surface-container-low font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold border-b border-outline-variant/10">
+        <div className="col-span-4">Simulation</div>
+        <div className="col-span-2 text-right">DPS Outcome</div>
+        <div className="col-span-2 text-center">Fight Style</div>
+        <div className="col-span-2 text-center">Status</div>
+        <div className="col-span-2 text-right">Time</div>
+      </div>
       {entries.map((entry) => {
         if (entry.type === 'single') {
           return (
-            <div key={entry.sim.id} className="border-b border-border last:border-b-0">
+            <div key={entry.sim.id} className="border-b border-outline-variant/10">
               <SimRow sim={entry.sim} />
             </div>
           );
@@ -234,6 +244,55 @@ function SimList({ sims }: { sims: JobSummary[] }) {
     </div>
   );
 }
+
+/* ── Stats Overview ──────────────────────────────────────── */
+
+function StatsOverview({ sims }: { sims: JobSummary[] }) {
+  const totalSims = sims.length;
+  const completedSims = sims.filter((s) => s.status === 'done');
+  const completionRate = totalSims > 0 ? (completedSims.length / totalSims) * 100 : 0;
+  const bestDps = Math.max(0, ...completedSims.map((s) => s.dps ?? 0));
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
+        <p className="text-xs uppercase font-headline tracking-widest text-on-surface-variant mb-1">
+          Total Sims
+        </p>
+        <p className="text-3xl font-black text-primary font-headline">
+          {totalSims.toLocaleString()}
+        </p>
+        <div className="w-full h-1 bg-surface-container-highest mt-4 rounded-full overflow-hidden">
+          <div className="h-full bg-primary" style={{ width: `${completionRate}%` }} />
+        </div>
+      </div>
+      <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
+        <p className="text-xs uppercase font-headline tracking-widest text-on-surface-variant mb-1">
+          Completed
+        </p>
+        <p className="text-3xl font-black text-tertiary font-headline">
+          {completedSims.length.toLocaleString()}
+        </p>
+        <p className="text-[10px] text-outline mt-2">
+          {completionRate.toFixed(0)}% success rate
+        </p>
+      </div>
+      <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
+        <p className="text-xs uppercase font-headline tracking-widest text-on-surface-variant mb-1">
+          Best DPS
+        </p>
+        <p className="text-3xl font-black text-on-surface font-headline">
+          {bestDps > 0 ? formatDps(bestDps) : '—'}
+        </p>
+        <p className="text-[10px] text-outline mt-2">
+          Highest recorded result
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Page ─────────────────────────────────────────────────── */
 
 export default function HistoryPage() {
   const { simcInput } = useSimContext();
@@ -246,7 +305,6 @@ export default function HistoryPage() {
     setIsDesktop(!!window.electronAPI);
   }, []);
 
-  // Desktop: fetch all sims
   useEffect(() => {
     if (isDesktop !== true) return;
     setLoading(true);
@@ -257,7 +315,6 @@ export default function HistoryPage() {
       .finally(() => setLoading(false));
   }, [isDesktop]);
 
-  // Web: extract character from simc input (or localStorage fallback) and fetch filtered history
   useEffect(() => {
     if (isDesktop !== false) return;
     let char = extractCharacter(simcInput);
@@ -282,21 +339,49 @@ export default function HistoryPage() {
       .finally(() => setLoading(false));
   }, [isDesktop, simcInput]);
 
+  function handleExportCsv() {
+    const header =
+      'id,status,sim_type,created_at,player_name,player_class,realm,dps,fight_style,iterations\n';
+    const rows = sims
+      .map((s) =>
+        [
+          s.id,
+          s.status,
+          s.sim_type,
+          s.created_at,
+          s.player_name ?? '',
+          s.player_class ?? '',
+          s.realm ?? '',
+          s.dps ?? '',
+          s.fight_style,
+          s.iterations,
+        ].join(',')
+      )
+      .join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'simhammer-history.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (isDesktop === null) return null;
 
   if (loading) {
     return (
       <div className="py-12 text-center">
-        <p className="text-sm text-muted">Loading history...</p>
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary" />
+        <p className="mt-4 text-sm text-on-surface-variant">Loading history...</p>
       </div>
     );
   }
 
-  // Web without simc input pasted
   if (!isDesktop && !character) {
     return (
       <div className="py-12 text-center">
-        <p className="text-sm text-muted">
+        <p className="text-sm text-on-surface-variant/60">
           Paste your SimC addon export to see your character&apos;s sim history.
         </p>
       </div>
@@ -306,7 +391,7 @@ export default function HistoryPage() {
   if (sims.length === 0) {
     return (
       <div className="py-12 text-center">
-        <p className="text-sm text-muted">
+        <p className="text-sm text-on-surface-variant/60">
           {character
             ? `No simulations found for ${character.name} on ${character.realm}.`
             : 'No simulations yet.'}
@@ -315,5 +400,44 @@ export default function HistoryPage() {
     );
   }
 
-  return <SimList sims={sims} />;
+  return (
+    <div>
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
+        <div>
+          <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface">
+            Simulation <span className="text-primary">History</span>
+          </h1>
+          <p className="text-on-surface-variant max-w-xl mt-2">
+            Review and compare past simulations. Click any row to view detailed results.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setSims([])}
+            className="px-4 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-xs font-bold uppercase tracking-widest text-[#d2c5b0] hover:text-primary transition-all"
+          >
+            Clear History
+          </button>
+          <button
+            onClick={handleExportCsv}
+            className="px-6 py-2 bg-primary-container text-on-primary rounded-lg text-xs font-bold uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Bento Stats Overview */}
+      <StatsOverview sims={sims} />
+
+      {/* History Table */}
+      <SimList sims={sims} />
+    </div>
+  );
 }

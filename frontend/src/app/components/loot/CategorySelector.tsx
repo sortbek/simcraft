@@ -45,7 +45,7 @@ export default function CategorySelector({
           className={`card p-4 text-center transition-all ${category === cat.key ? 'border-gold/50 bg-gold/[0.03]' : 'hover:border-gold/20'}`}
         >
           <div
-            className={`mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-lg ${category === cat.key ? 'bg-gold/20' : 'bg-gold/10'}`}
+            className={`mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-lg ${category === cat.key ? 'bg-primary/20' : 'bg-primary/10'}`}
           >
             <svg
               className="h-5 w-5 text-gold"
@@ -60,7 +60,7 @@ export default function CategorySelector({
             </svg>
           </div>
           <p
-            className={`text-[15px] font-semibold transition-colors ${category === cat.key ? 'text-gold' : 'text-white'}`}
+            className={`text-[15px] font-semibold transition-colors ${category === cat.key ? 'text-primary' : 'text-on-surface'}`}
           >
             {cat.label}
           </p>

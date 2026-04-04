@@ -5,13 +5,11 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import SettingsPopover from '../sim-config/SettingsPopover';
 import DesktopAppLink from './DesktopAppLink';
-import SidebarCharacter from './SidebarCharacter';
 import SidebarRoutes from './SidebarRoutes';
 
 interface NavItem {
   href: string;
   label: string;
-  icon: string;
   matchPaths: string[];
   children?: { href: string; label: string }[];
 }
@@ -19,20 +17,17 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     href: '/quick-sim',
-    label: 'Quick Sim',
-    icon: 'M13 8l-5 5-5-5M3 3h10',
+    label: 'QUICK SIM',
     matchPaths: ['/quick-sim'],
   },
   {
     href: '/top-gear',
-    label: 'Top Gear',
-    icon: 'M8 1l2 4 4.5.7-3.2 3.1.8 4.5L8 11l-4.1 2.3.8-4.5L1.5 5.7 6 5z',
+    label: 'TOP GEAR',
     matchPaths: ['/top-gear'],
   },
   {
     href: '/drop-finder',
-    label: 'Upgrades',
-    icon: 'M7 7m-4.5 0a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0-9 0M10.5 10.5L14 14',
+    label: 'UPGRADES',
     matchPaths: ['/drop-finder', '/upgrade-compare'],
     children: [
       { href: '/drop-finder', label: 'Drop Finder' },
@@ -41,8 +36,7 @@ const navItems: NavItem[] = [
   },
   {
     href: '/history',
-    label: 'History',
-    icon: 'M8 8m-6.5 0a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0M8 4.5V8l2.5 2.5',
+    label: 'HISTORY',
     matchPaths: ['/history'],
   },
 ];
@@ -52,24 +46,21 @@ export default function Sidebar() {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   return (
-    <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-56 flex-col border-r border-border/60 bg-surface">
+    <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-64 flex-col bg-[#0e0e0e] border-r border-outline-variant/20 shadow-[10px_0_30px_rgba(0,0,0,0.5)]">
       {/* Logo */}
-      <div className="desktop-drag flex h-14 shrink-0 items-center gap-2.5 px-5">
-        <div className="desktop-no-drag flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-b from-gold to-gold-dark shadow-sm">
-            <svg className="h-3.5 w-3.5 text-black" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M3 2l10 6-10 6V2z" />
-            </svg>
-          </div>
-          <span className="text-[15px] font-bold tracking-tight text-gray-100">SimHammer</span>
+      <div className="desktop-drag shrink-0 px-6 pt-6 pb-8">
+        <div className="desktop-no-drag font-headline text-primary font-black uppercase text-xs mb-1">
+          SimHammer
+        </div>
+        <div className="text-on-surface-variant/50 text-[10px] uppercase font-bold tracking-tighter">
+          The Obsidian Forge
         </div>
       </div>
 
-      <SidebarCharacter />
       <SidebarRoutes />
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = item.matchPaths.some(
             (p) => pathname === p || pathname.startsWith(p + '/')
@@ -86,30 +77,17 @@ export default function Sidebar() {
                     setExpandedGroup(isExpanded && !isActive ? null : item.label);
                   }
                 }}
-                className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-150 ${
+                className={`flex items-center gap-3 px-6 py-3 font-headline font-bold text-xs uppercase transition-all ${
                   isActive
-                    ? 'bg-gold/[0.08] text-gold'
-                    : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+                    ? 'bg-primary-container/10 text-primary border-r-4 border-primary'
+                    : 'text-on-surface-variant hover:bg-surface hover:text-white'
                 }`}
               >
-                <svg
-                  className={`h-4 w-4 shrink-0 transition-colors ${
-                    isActive ? 'text-gold' : 'text-zinc-600 group-hover:text-zinc-400'
-                  }`}
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d={item.icon} />
-                </svg>
                 {item.label}
               </Link>
 
               {hasChildren && isExpanded && (
-                <div className="ml-[26px] mt-0.5 space-y-0.5 border-l border-border/60 pl-3">
+                <div className="border-t border-outline-variant/20 mt-1">
                   {item.children!.map((child) => {
                     const childActive =
                       pathname === child.href || pathname.startsWith(child.href + '/');
@@ -117,10 +95,10 @@ export default function Sidebar() {
                       <Link
                         key={child.href}
                         href={child.href}
-                        className={`block rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
+                        className={`flex items-center gap-3 px-6 py-2 font-headline font-bold text-[10px] uppercase transition-all ${
                           childActive
-                            ? 'font-medium text-gold'
-                            : 'text-zinc-500 hover:text-zinc-300'
+                            ? 'text-primary'
+                            : 'text-on-surface-variant hover:text-primary'
                         }`}
                       >
                         {child.label}
@@ -135,7 +113,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="shrink-0 border-t border-border/60 px-3 py-3">
+      <div className="mt-auto shrink-0 px-4 py-3 border-t border-outline-variant/20">
         <div className="flex items-center justify-between">
           <SettingsPopover />
           <DesktopAppLink />

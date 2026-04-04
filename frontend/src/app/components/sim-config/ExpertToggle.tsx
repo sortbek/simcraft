@@ -50,20 +50,20 @@ export default function ExpertToggle({
   const [open, setOpen] = useState(hasContent);
 
   return (
-    <div className="space-y-3 border-t border-border/60 pt-3">
+    <div className="space-y-3 border-t border-outline-variant/10 pt-3">
       <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-2.5">
         <div
           className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-            open ? 'bg-gold' : 'border border-border bg-surface-2'
+            open ? 'bg-gold' : 'bg-surface-container-highest'
           }`}
         >
           <div
             className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-              open ? 'left-[18px] bg-black' : 'left-0.5 bg-gray-500'
+              open ? 'left-[18px] bg-black' : 'left-0.5 bg-on-surface-variant'
             }`}
           />
         </div>
-        <span className="text-sm font-medium text-zinc-300">Expert Mode</span>
+        <span className="text-sm font-medium text-on-surface-variant">Expert Mode</span>
         {!open && hasContent && (
           <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
             Modified
@@ -77,12 +77,12 @@ export default function ExpertToggle({
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
+                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                   activeTab === tab.key
-                    ? 'border-gold/40 bg-gold/[0.08] text-gold'
+                    ? 'bg-primary/10 text-primary'
                     : expertValues[tab.key].trim()
-                      ? 'border-gold/30 bg-gold/[0.06] text-gold hover:border-gold/50'
-                      : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
+                      ? 'bg-primary/[0.06] text-gold hover:bg-primary/10'
+                      : 'bg-surface-container-high text-on-surface-variant/60 hover:bg-surface-container-highest hover:text-on-surface-variant'
                 }`}
               >
                 {tab.label}
@@ -98,7 +98,7 @@ export default function ExpertToggle({
             placeholder={`Paste ${activeTabInfo.label.toLowerCase()} SimC input here...`}
             className="input-field h-32 resize-y font-mono text-xs"
           />
-          <p className="text-[13px] text-zinc-600">{activeTabInfo.desc}</p>
+          <p className="text-[13px] text-on-surface-variant/40">{activeTabInfo.desc}</p>
         </div>
       )}
     </div>

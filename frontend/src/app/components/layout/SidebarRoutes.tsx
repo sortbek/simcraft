@@ -50,18 +50,18 @@ export default function SidebarRoutes() {
   }, [routeName, routeString, refreshRoutes]);
 
   return (
-    <div className="shrink-0 border-b border-border/60 px-3 py-2">
+    <div className="shrink-0 px-3 py-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] font-medium transition-all duration-150 ${
+        className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-headline font-bold text-xs uppercase transition-all duration-150 ${
           open
-            ? 'bg-gold/[0.08] text-gold'
-            : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+            ? 'bg-primary-container/10 text-primary'
+            : 'text-on-surface-variant hover:bg-surface hover:text-white'
         }`}
       >
         <svg
           className={`h-4 w-4 shrink-0 transition-colors ${
-            open ? 'text-gold' : 'text-zinc-600 group-hover:text-zinc-400'
+            open ? 'text-gold' : 'text-on-surface-variant/40 group-hover:text-on-surface-variant'
           }`}
           viewBox="0 0 16 16"
           fill="none"
@@ -76,7 +76,7 @@ export default function SidebarRoutes() {
           {activeRouteName ? (
             <>
               <div className="truncate text-[14px] leading-tight">Routes</div>
-              <div className="truncate text-[11px] font-normal text-zinc-500">
+              <div className="truncate text-[11px] font-normal text-on-surface-variant/60">
                 {activeRouteName}
               </div>
             </>
@@ -85,7 +85,7 @@ export default function SidebarRoutes() {
           )}
         </div>
         <svg
-          className={`h-3 w-3 shrink-0 text-zinc-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={`h-3 w-3 shrink-0 text-on-surface-variant/40 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 12 12"
           fill="none"
           stroke="currentColor"
@@ -104,20 +104,20 @@ export default function SidebarRoutes() {
               <div
                 key={route.id}
                 className={`flex items-center justify-between rounded-md px-2.5 py-1.5 ${
-                  isActive ? 'bg-gold/[0.08]' : 'hover:bg-white/[0.03]'
+                  isActive ? 'bg-gold/[0.08]' : 'hover:bg-surface-container'
                 }`}
               >
                 <button
                   onClick={() => handleLoadRoute(route.mdt_string)}
                   className={`min-w-0 truncate text-[13px] transition-colors ${
-                    isActive ? 'font-medium text-gold' : 'text-zinc-400 hover:text-zinc-200'
+                    isActive ? 'font-medium text-gold' : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
                   {route.name}
                 </button>
                 <button
                   onClick={() => deleteSavedRoute(route.id).then(refreshRoutes)}
-                  className="ml-2 shrink-0 text-[13px] text-zinc-700 hover:text-red-400 transition-colors"
+                  className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 hover:text-red-400 transition-colors"
                 >
                   &times;
                 </button>
@@ -126,20 +126,20 @@ export default function SidebarRoutes() {
           })}
 
           {showForm ? (
-            <div className="space-y-1.5 rounded-lg bg-surface-2 p-2">
+            <div className="space-y-1.5 rounded-lg bg-surface-container-high p-2">
               <input
                 type="text"
                 value={routeName}
                 onChange={(e) => setRouteName(e.target.value)}
                 placeholder="Route name..."
-                className="w-full rounded border border-border bg-bg px-2 py-1 text-[12px] text-zinc-300 placeholder-zinc-600 focus:border-gold/30 focus:outline-none"
+                className="w-full rounded bg-surface-container-high px-2 py-1 text-[12px] text-on-surface placeholder-on-surface-variant/30 focus:ring-1 focus:ring-primary/30 focus:outline-none"
                 autoFocus
               />
               <textarea
                 value={routeString}
                 onChange={(e) => setRouteString(e.target.value)}
                 placeholder="Paste MDT route string..."
-                className="h-20 w-full resize-y rounded border border-border bg-bg px-2 py-1 font-mono text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-gold/30 focus:outline-none"
+                className="h-20 w-full resize-y rounded bg-surface-container-high px-2 py-1 font-mono text-[11px] text-on-surface placeholder-on-surface-variant/30 focus:ring-1 focus:ring-primary/30 focus:outline-none"
               />
               <div className="flex gap-1.5">
                 <button
@@ -155,7 +155,7 @@ export default function SidebarRoutes() {
                     setRouteName('');
                     setRouteString('');
                   }}
-                  className="rounded px-2.5 py-1 text-[12px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="rounded px-2.5 py-1 text-[12px] text-on-surface-variant/60 hover:text-on-surface transition-colors"
                 >
                   Cancel
                 </button>
@@ -164,7 +164,7 @@ export default function SidebarRoutes() {
           ) : (
             <button
               onClick={() => setShowForm(true)}
-              className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] text-zinc-500 transition-colors hover:text-zinc-300"
+              className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
             >
               <span className="text-[15px] leading-none">+</span>
               Save new route

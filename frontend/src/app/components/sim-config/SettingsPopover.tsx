@@ -65,7 +65,7 @@ export default function SettingsPopover() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex h-7 items-center gap-1.5 rounded-md px-2 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-200"
+        className="flex h-7 items-center gap-1.5 rounded-md px-2 text-on-surface-variant/60 transition-colors hover:bg-surface-container-high hover:text-on-surface-variant"
       >
         <svg
           className="h-3.5 w-3.5"
@@ -83,15 +83,15 @@ export default function SettingsPopover() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-[60] mt-2 w-80 rounded-xl border border-border bg-surface p-4 shadow-xl shadow-black/40">
+        <div className="absolute right-0 top-full z-[60] mt-2 w-80 rounded-xl bg-surface-container-high p-4 shadow-ambient">
           {/* Desktop-only settings */}
           {isDesktop && maxThreads > 0 && (
             <>
               {/* CPU Threads */}
               <div>
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[15px] font-medium text-gray-300">CPU Threads</span>
-                  <span className="rounded border border-border bg-surface-2 px-2 py-0.5 font-mono text-xs tabular-nums text-white">
+                  <span className="text-[15px] font-medium text-on-surface-variant">CPU Threads</span>
+                  <span className="rounded bg-surface-container-highest px-2 py-0.5 font-mono text-xs tabular-nums text-on-surface">
                     {threads}/{maxThreads}
                   </span>
                 </div>
@@ -103,14 +103,14 @@ export default function SettingsPopover() {
                       <button
                         key={preset.label}
                         onClick={() => setThreads(t)}
-                        className={`flex-1 rounded-lg border px-2 py-2 text-center transition-all ${
+                        className={`flex-1 rounded-lg px-2 py-2 text-center transition-all ${
                           active
-                            ? 'border-white bg-white text-black'
-                            : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
+                            ? 'bg-white text-black'
+                            : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
                         }`}
                       >
                         <span className="block text-[14px] font-medium">{preset.label}</span>
-                        <span className="mt-0.5 block text-[12px] text-gray-600">{t} threads</span>
+                        <span className="mt-0.5 block text-[12px] text-on-surface-variant/40">{t} threads</span>
                       </button>
                     );
                   })}
@@ -118,9 +118,9 @@ export default function SettingsPopover() {
               </div>
 
               {/* Max Combinations */}
-              <div className="mt-4 border-t border-border pt-4">
+              <div className="mt-4 border-t border-outline-variant/10 pt-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-[15px] font-medium text-gray-300">Max Gear Combos</span>
+                  <span className="text-[15px] font-medium text-on-surface-variant">Max Gear Combos</span>
                   <input
                     type="number"
                     min={10}
@@ -131,7 +131,7 @@ export default function SettingsPopover() {
                       const n = parseInt(e.target.value, 10);
                       if (Number.isFinite(n) && n > 0) setMaxCombinations(n);
                     }}
-                    className="w-20 rounded border border-border bg-surface-2 px-2 py-1 text-center font-mono text-xs tabular-nums text-white [appearance:textfield] focus:border-gold/50 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-20 rounded bg-surface-container-highest px-2 py-1 text-center font-mono text-xs tabular-nums text-on-surface [appearance:textfield] focus:outline-none focus:ring-1 focus:ring-gold/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
               </div>

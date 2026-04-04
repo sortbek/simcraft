@@ -257,7 +257,7 @@ export default function TopGearPage() {
         <label className="group flex flex-1 cursor-pointer items-center gap-3">
           <div
             className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              copyEnchants ? 'bg-gold' : 'border border-border bg-surface-2'
+              copyEnchants ? 'bg-gold' : 'bg-surface-container-high'
             }`}
             onClick={() => setCopyEnchants(!copyEnchants)}
           >
@@ -268,16 +268,16 @@ export default function TopGearPage() {
             />
           </div>
           <div>
-            <span className="text-[15px] font-medium text-gray-300 transition-colors group-hover:text-white">
+            <span className="text-[15px] font-medium text-on-surface-variant transition-colors group-hover:text-white">
               Copy Enchants
             </span>
-            <p className="text-[13px] text-gray-600">Apply equipped enchants to alternatives</p>
+            <p className="text-[13px] text-on-surface-variant/40">Apply equipped enchants to alternatives</p>
           </div>
         </label>
         <label className="group flex flex-1 cursor-pointer items-center gap-3">
           <div
             className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              maxUpgrade ? 'bg-gold' : 'border border-border bg-surface-2'
+              maxUpgrade ? 'bg-gold' : 'bg-surface-container-high'
             }`}
             onClick={() => setMaxUpgrade(!maxUpgrade)}
           >
@@ -288,17 +288,17 @@ export default function TopGearPage() {
             />
           </div>
           <div>
-            <span className="text-[15px] font-medium text-gray-300 transition-colors group-hover:text-white">
+            <span className="text-[15px] font-medium text-on-surface-variant transition-colors group-hover:text-white">
               Sim Highest Upgrade
             </span>
-            <p className="text-[13px] text-gray-600">Simulate all items at max upgrade level</p>
+            <p className="text-[13px] text-on-surface-variant/40">Simulate all items at max upgrade level</p>
           </div>
         </label>
         {catalystCharges != null && catalystCharges > 0 && (
           <div className="group flex flex-1 items-center gap-3">
             <div
               className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors ${
-                catalyst ? 'bg-purple-500' : 'border border-border bg-surface-2'
+                catalyst ? 'bg-purple-500' : 'bg-surface-container-high'
               }`}
               onClick={() => setCatalyst(!catalyst)}
             >
@@ -309,10 +309,10 @@ export default function TopGearPage() {
               />
             </div>
             <div className="flex-1 cursor-pointer" onClick={() => setCatalyst(!catalyst)}>
-              <span className="text-[15px] font-medium text-gray-300 transition-colors group-hover:text-white">
+              <span className="text-[15px] font-medium text-on-surface-variant transition-colors group-hover:text-white">
                 Revival Catalyst
               </span>
-              <p className="text-[13px] text-gray-600">Convert highest item per slot</p>
+              <p className="text-[13px] text-on-surface-variant/40">Convert highest item per slot</p>
             </div>
             <div className="flex items-center gap-1.5">
               <input
@@ -326,7 +326,7 @@ export default function TopGearPage() {
                 }}
                 className="input-field !w-12 !px-1.5 !py-0.5 text-center !text-[13px]"
               />
-              <span className="text-[13px] text-gray-500">charges</span>
+              <span className="text-[13px] text-on-surface-variant/60">charges</span>
             </div>
           </div>
         )}
@@ -347,7 +347,7 @@ export default function TopGearPage() {
 
       <ErrorAlert message={error} />
 
-      <div className="sticky bottom-0 z-50 -mx-4 bg-gradient-to-t from-[#111] via-[#111] to-transparent px-4 pb-4 pt-6">
+      <div className="sticky bottom-0 z-30 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-6">
         <button
           onClick={submit}
           disabled={submitting}

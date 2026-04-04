@@ -66,11 +66,11 @@ export default function AdvancedOptions() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-5 py-3.5 transition-colors hover:bg-white/[0.02]"
+        className="flex w-full items-center justify-between px-5 py-3.5 transition-colors hover:bg-surface-container-high"
       >
         <div className="flex items-center gap-2.5">
           <svg
-            className="h-4 w-4 text-zinc-500"
+            className="h-4 w-4 text-on-surface-variant/60"
             viewBox="0 0 16 16"
             fill="none"
             stroke="currentColor"
@@ -81,7 +81,7 @@ export default function AdvancedOptions() {
             <circle cx="8" cy="8" r="2" />
             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
           </svg>
-          <span className="text-sm font-medium text-zinc-300">Advanced Options</span>
+          <span className="text-sm font-medium text-on-surface-variant">Advanced Options</span>
           {!open && !isDefault && (
             <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
               Modified
@@ -89,7 +89,7 @@ export default function AdvancedOptions() {
           )}
         </div>
         <svg
-          className={`h-3.5 w-3.5 text-zinc-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 text-on-surface-variant/40 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
@@ -101,7 +101,7 @@ export default function AdvancedOptions() {
         </svg>
       </button>
       {open && (
-        <div className="animate-fade-in space-y-5 border-t border-border px-5 pb-5">
+        <div className="animate-fade-in space-y-5 border-t border-outline-variant/10 px-5 pb-5">
           <div className="grid grid-cols-3 gap-4 pt-4">
             <div className="space-y-2">
               <label className="label-text">Fight Style</label>
@@ -119,7 +119,7 @@ export default function AdvancedOptions() {
                   onChange={(e) => setFightLength(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="w-16 text-right font-mono text-sm tabular-nums text-white">
+                <span className="w-16 text-right font-mono text-sm tabular-nums text-on-surface">
                   {Math.floor(fightLength / 60)}:{String(fightLength % 60).padStart(2, '0')}
                 </span>
               </div>
@@ -135,7 +135,7 @@ export default function AdvancedOptions() {
                   onChange={(e) => setTargetCount(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="w-6 text-right font-mono text-sm tabular-nums text-white">
+                <span className="w-6 text-right font-mono text-sm tabular-nums text-on-surface">
                   {targetCount}
                 </span>
               </div>
@@ -152,7 +152,7 @@ export default function AdvancedOptions() {
               placeholder="Custom APL or expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list=1)..."
               className="input-field h-28 resize-y font-mono text-xs"
             />
-            <p className="text-[13px] text-zinc-600">
+            <p className="text-[13px] text-on-surface-variant/40">
               Override action priority lists or set expansion-specific options. Injected after the
               base actor.
             </p>

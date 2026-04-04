@@ -95,7 +95,7 @@ export default function DropSlotList({
                 className={`rounded border px-2.5 py-1 text-[13px] font-medium transition-all ${
                   groupMode === mode
                     ? 'border-white bg-white text-black'
-                    : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
+                    : 'border-transparent bg-surface-container-high text-on-surface-variant/60 hover:bg-surface-container-highest hover:text-on-surface-variant'
                 }`}
               >
                 {label}
@@ -104,13 +104,13 @@ export default function DropSlotList({
           </div>
           <button
             onClick={onSelectAll}
-            className="text-[13px] text-gray-500 transition-colors hover:text-white"
+            className="text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
           >
             Select all
           </button>
           <button
             onClick={onClear}
-            className="text-[13px] text-gray-500 transition-colors hover:text-white"
+            className="text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
           >
             Clear
           </button>
@@ -119,9 +119,9 @@ export default function DropSlotList({
 
       {(groupMode === 'instance' ? instanceSorted : slotSorted).map(([groupLabel, items]) => (
         <div key={groupLabel} className="card p-4">
-          <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-widest text-muted">
+          <h3 className="mb-3 font-headline text-[13px] font-semibold uppercase tracking-wider text-on-surface-variant/60">
             {groupLabel}
-            <span className="ml-1.5 font-normal normal-case tracking-normal text-gray-600">
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-on-surface-variant/40">
               ({items.length})
             </span>
           </h3>
@@ -172,7 +172,7 @@ function DropItemCard({
       className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-all ${
         isSelected
           ? 'border-gold/40 bg-gold/10'
-          : 'border-border bg-surface-2 hover:border-gray-500'
+          : 'border-transparent bg-surface-container-high hover:bg-surface-container-highest'
       }`}
     >
       <div className="relative shrink-0">
@@ -201,10 +201,10 @@ function DropItemCard({
         >
           {item.name}
         </a>
-        {item.encounter && <span className="text-[12px] text-zinc-500">{item.encounter}</span>}
+        {item.encounter && <span className="text-[12px] text-on-surface-variant/60">{item.encounter}</span>}
       </div>
       <span
-        className={`shrink-0 text-[13px] tabular-nums text-gray-600 ${isOffSpec ? 'opacity-60' : ''}`}
+        className={`shrink-0 text-[13px] tabular-nums text-on-surface-variant/40 ${isOffSpec ? 'opacity-60' : ''}`}
       >
         {resolved.ilvl}
       </span>

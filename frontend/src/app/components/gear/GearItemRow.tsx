@@ -67,7 +67,7 @@ export default function GearItemRow({
           <input type="checkbox" checked={checked} onChange={onToggle} className="peer sr-only" />
           <div
             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border transition-all ${
-              checked ? 'border-gold bg-gold' : 'border-gray-600 group-hover:border-gray-500'
+              checked ? 'border-gold bg-gold' : 'border-outline-variant group-hover:border-outline-variant/40'
             }`}
           >
             {checked && (

@@ -35,7 +35,7 @@ const NODE_SIZE = 260;
 const ICON_SIZE = 210;
 const PADDING = 200;
 
-const GOLD = '#C8992A';
+const GOLD = '#f2bf4e';
 const DIM = 'rgba(255,255,255,0.15)';
 const DIM_ICON = 0.3;
 const LOCKED_ICON = 0.15;
@@ -221,7 +221,7 @@ export default function TalentTree({
 
   return (
     <div className={bare ? 'space-y-3' : 'card space-y-3 p-4'}>
-      {!bare && <p className="text-xs font-medium uppercase tracking-widest text-muted">Talents</p>}
+      {!bare && <p className="text-xs font-medium uppercase tracking-widest text-on-surface-variant/60">Talents</p>}
       <div className="flex flex-col gap-3 lg:flex-row lg:gap-4">
         <TreeSection
           label={tree.className}
@@ -236,7 +236,7 @@ export default function TalentTree({
           onChoiceCycle={handleChoiceCycle}
           pointsDisplay={`${classSpent}/${CLASS_POINTS}`}
         />
-        <div className="hidden h-auto w-px bg-border lg:block" />
+        <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />
         <TreeSection
           label={tree.specName}
           nodes={tree.specNodes}
@@ -252,7 +252,7 @@ export default function TalentTree({
         />
         {activeHeroNodes.length > 0 && (
           <>
-            <div className="hidden h-auto w-px bg-border lg:block" />
+            <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />
             <TreeSection
               label={selectedSubTree?.name ?? 'Hero'}
               nodes={activeHeroNodes}
@@ -330,11 +330,11 @@ function TreeSection({
   return (
     <div className={compact ? 'w-[180px] shrink-0' : 'min-w-0 flex-1'}>
       <div className="mb-1 flex items-center justify-center gap-2">
-        <p className="text-center text-[12px] font-medium uppercase tracking-wider text-muted">
+        <p className="text-center text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
           {label}
         </p>
         {pointsDisplay && (
-          <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[12px] font-bold tabular-nums text-muted">
+          <span className="rounded bg-surface-container-high px-1.5 py-0.5 text-[12px] font-bold tabular-nums text-on-surface-variant/60">
             {pointsDisplay}
           </span>
         )}

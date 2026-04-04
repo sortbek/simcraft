@@ -68,10 +68,10 @@ export default function SimTypeCards() {
           >
             <Link
               href={sim.href}
-              className={`group relative block rounded-xl border px-4 py-3.5 transition-all duration-200 ${
+              className={`group relative block rounded-xl px-4 py-3.5 transition-all duration-200 ${
                 isActive
-                  ? 'border-gold/40 bg-gold/[0.04] shadow-glow'
-                  : 'border-border bg-surface hover:border-zinc-600 hover:bg-surface-2'
+                  ? 'bg-surface-container shadow-glow'
+                  : 'bg-surface-container-low hover:bg-surface-container-high'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -95,12 +95,12 @@ export default function SimTypeCards() {
                 <div className="min-w-0">
                   <h2
                     className={`text-sm font-semibold transition-colors ${
-                      isActive ? 'text-gold' : 'text-zinc-200 group-hover:text-white'
+                      isActive ? 'text-gold' : 'text-on-surface group-hover:text-white'
                     }`}
                   >
                     {sim.label}
                   </h2>
-                  <p className="hidden truncate text-[13px] text-zinc-500 sm:block">
+                  <p className="hidden truncate text-[13px] text-on-surface-variant/60 sm:block">
                     {sim.description}
                   </p>
                 </div>
@@ -109,7 +109,7 @@ export default function SimTypeCards() {
 
             {hasChildren && isOpen && (
               <div className="absolute left-0 right-0 top-full z-50 pt-1">
-                <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xl">
+                <div className="overflow-hidden rounded-lg bg-surface-container-high shadow-ambient">
                   {sim.children!.map((child) => {
                     const childActive =
                       pathname === child.href || pathname.startsWith(child.href + '/');
@@ -120,12 +120,12 @@ export default function SimTypeCards() {
                         className={`flex items-center gap-2.5 px-3.5 py-2.5 transition-colors ${
                           childActive
                             ? 'bg-gold/[0.08] text-gold'
-                            : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white'
+                            : 'text-on-surface-variant hover:bg-white/[0.04] hover:text-on-surface'
                         }`}
                       >
                         <div className="min-w-0">
                           <p className="text-[15px] font-medium">{child.label}</p>
-                          <p className="text-[12px] text-zinc-500">{child.description}</p>
+                          <p className="text-[12px] text-on-surface-variant/60">{child.description}</p>
                         </div>
                       </Link>
                     );

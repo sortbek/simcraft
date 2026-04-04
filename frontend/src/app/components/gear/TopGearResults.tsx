@@ -248,7 +248,7 @@ export default function TopGearResults({
             <span className="text-xs opacity-60">upgrade</span>
           </div>
         ) : (
-          <p className="mt-4 text-sm text-zinc-500">Current gear is already optimal.</p>
+          <p className="mt-4 text-sm text-on-surface-variant">Current gear is already optimal.</p>
         )}
       </DpsHeroCard>
 
@@ -281,9 +281,9 @@ export default function TopGearResults({
                   <button
                     key={mode}
                     onClick={() => setGroupMode(mode)}
-                    className={`rounded border px-2.5 py-1 text-[13px] font-medium transition-all ${groupMode === mode
-                      ? 'border-white bg-white text-black'
-                      : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-white'
+                    className={`rounded px-2.5 py-1 text-[13px] font-medium transition-all ${groupMode === mode
+                      ? 'bg-white text-black'
+                      : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
                       }`}
                   >
                     {label}
@@ -299,8 +299,8 @@ export default function TopGearResults({
           <div className="space-y-6">
             {groupedResults.map(([encounter, group]) => (
               <div key={encounter}>
-                <div className="mb-2 flex items-center gap-2 border-b border-border/50 pb-1.5">
-                  <span className="text-[14px] font-semibold text-gray-300">{encounter}</span>
+                <div className="mb-2 flex items-center gap-2 border-b border-outline-variant/20 pb-1.5">
+                  <span className="font-headline text-[14px] font-semibold text-on-surface">{encounter}</span>
                   <span className="font-mono text-[12px] text-muted">{group.length} items</span>
                 </div>
                 <div className="space-y-1">
@@ -384,7 +384,7 @@ function RankedResults({
       {hasMore && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-2 w-full rounded-lg border border-border bg-surface-2 py-2 text-xs text-zinc-400 transition-all hover:border-zinc-600 hover:text-zinc-200"
+          className="mt-2 w-full rounded-lg bg-surface-container-high py-2 text-xs text-on-surface-variant transition-all hover:bg-surface-container-highest hover:text-on-surface"
         >
           {expanded
             ? 'Show less'
@@ -456,7 +456,7 @@ function ResultRow({
       <div className="relative flex items-center justify-between gap-3 px-3 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {rank != null && (
-            <span className="w-5 shrink-0 text-right font-mono text-[12px] tabular-nums text-gray-600">
+            <span className="w-5 shrink-0 text-right font-mono text-[12px] tabular-nums text-on-surface-variant/50">
               {rank}
             </span>
           )}
@@ -502,7 +502,7 @@ function ResultRow({
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <span
-            className={`flex items-center gap-1.5 font-mono text-[15px] tabular-nums ${result.delta > 0
+            className={`flex items-center gap-1.5 font-headline font-mono text-[15px] tabular-nums ${result.delta > 0
               ? 'text-emerald-400'
               : result.delta < 0
                 ? 'text-red-400'
@@ -523,7 +523,7 @@ function ResultRow({
               </span>
             )}
           </span>
-          <span className="w-16 text-right font-mono text-sm tabular-nums text-gray-300">
+          <span className="w-16 text-right font-mono text-sm tabular-nums text-on-surface">
             {Math.round(result.dps).toLocaleString()}
           </span>
         </div>
