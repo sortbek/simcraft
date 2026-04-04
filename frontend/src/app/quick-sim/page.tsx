@@ -108,6 +108,11 @@ export default function QuickSimPage() {
   const lastSim = useLastSim(characterInfo?.name ?? null, characterInfo?.realm ?? null);
   const equippedGear = useEquippedGear(simcInput);
 
+  const insetUrl =
+    characterInfo?.realm && characterInfo?.name
+      ? `https://simhammer.com/api/blizzard/character/${encodeURIComponent(characterInfo.realm.toLowerCase())}/${encodeURIComponent(characterInfo.name.toLowerCase())}/media/inset`
+      : null;
+
   const renderUrl =
     characterInfo?.realm && characterInfo?.name
       ? `https://simhammer.com/api/blizzard/character/${encodeURIComponent(characterInfo.realm.toLowerCase())}/${encodeURIComponent(characterInfo.name.toLowerCase())}/media/render`
@@ -140,9 +145,9 @@ export default function QuickSimPage() {
       {characterInfo && (
         <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 p-6 flex items-center justify-between">
           <div className="flex items-center gap-5">
-            {renderUrl && (
+            {insetUrl && (
               <img
-                src={renderUrl}
+                src={insetUrl}
                 alt=""
                 className="w-16 h-16 rounded-full border-2 border-outline-variant/30 object-cover"
                 onError={(e) => {
@@ -185,7 +190,7 @@ export default function QuickSimPage() {
         </div>
       )}
 
-      <TalentPicker defaultView="view" />
+      <TalentPicker defaultView="view" hideCompare />
       {equippedGear && (
         <GearOverview
           gear={equippedGear}

@@ -58,7 +58,7 @@ function getBuildStatus(
 
 type ViewMode = 'collapsed' | 'view' | 'edit';
 
-export default function TalentPicker({ defaultView = 'collapsed', compact = false }: { defaultView?: ViewMode; compact?: boolean }) {
+export default function TalentPicker({ defaultView = 'collapsed', compact = false, hideCompare = false }: { defaultView?: ViewMode; compact?: boolean; hideCompare?: boolean }) {
   const { simcInput, selectedTalent, setSelectedTalent, talentBuilds, setTalentBuilds } =
     useSimContext();
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
@@ -318,16 +318,18 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
         <div className="flex items-center gap-1">
           {viewMode !== 'collapsed' && (
             <>
-              <button
-                onClick={() => setCompareMode((v) => !v)}
-                className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
-                  compareMode
-                    ? 'bg-gold/10 font-medium text-gold'
-                    : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
-                }`}
-              >
-                Compare{talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
-              </button>
+              {!hideCompare && (
+                <button
+                  onClick={() => setCompareMode((v) => !v)}
+                  className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
+                    compareMode
+                      ? 'bg-gold/10 font-medium text-gold'
+                      : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
+                  }`}
+                >
+                  Compare{talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
+                </button>
+              )}
               <button
                 onClick={() => setShowImport((v) => !v)}
                 className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
