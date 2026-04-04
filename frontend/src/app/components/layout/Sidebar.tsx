@@ -84,7 +84,7 @@ export default function Sidebar() {
               </Link>
 
               {hasChildren && isExpanded && (
-                <div className="border-t border-outline-variant/20 mt-1">
+                <div className="ml-6 border-l border-outline-variant/20 mt-1 space-y-0.5">
                   {item.children!.map((child) => {
                     const childActive =
                       pathname === child.href || pathname.startsWith(child.href + '/');
@@ -92,10 +92,10 @@ export default function Sidebar() {
                       <Link
                         key={child.href}
                         href={child.href}
-                        className={`flex items-center gap-3 px-6 py-2 font-headline font-bold text-[10px] uppercase transition-all ${
+                        className={`flex items-center gap-3 pl-4 pr-6 py-2 font-headline font-bold text-[10px] uppercase transition-all ${
                           childActive
                             ? 'text-primary'
-                            : 'text-on-surface-variant hover:text-primary'
+                            : 'text-on-surface-variant/60 hover:text-primary'
                         }`}
                       >
                         {child.label}
