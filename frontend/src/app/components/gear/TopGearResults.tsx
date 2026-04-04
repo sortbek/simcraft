@@ -86,26 +86,43 @@ export default function TopGearResults({
   targetError,
   elapsedTime,
 }: TopGearResultsProps) {
-  const maxDps = results.length > 0 ? results[0].dps : baseDps;
-  const bestResult = results.length > 0 ? results[0] : null;
-
   // Droptimizer grouping — only available when items have encounter data
   const hasEncounterData = results.some((r) => r.items.some((it) => it.encounter));
+
+  // Deduplicate multi-slot items (rings, trinkets): keep only the best slot variant per item_id
+  const activeResults = useMemo(() => {
+    if (!hasEncounterData) return results;
+    const bestByItem = new Map<string, TopGearResult>();
+    for (const r of results) {
+      const item = r.items[0];
+      if (!item) continue;
+      const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}`;
+      const existing = bestByItem.get(key);
+      if (!existing || r.dps > existing.dps) {
+        bestByItem.set(key, r);
+      }
+    }
+    return [...bestByItem.values()].sort((a, b) => b.delta - a.delta);
+  }, [results, hasEncounterData]);
+
+  const maxDps = activeResults.length > 0 ? activeResults[0].dps : baseDps;
+  const bestResult = activeResults.length > 0 ? activeResults[0] : null;
+
   type GroupMode = 'rank' | 'encounter';
-  const [groupMode, setGroupMode] = useState<GroupMode>('rank');
+  const [groupMode, setGroupMode] = useState<GroupMode>(hasEncounterData ? 'encounter' : 'rank');
   const [selectedResultName, setSelectedResultName] = useState<string | null>(null);
 
   const selectedResult = useMemo(() => {
     if (selectedResultName) {
-      return results.find((r) => r.name === selectedResultName) || bestResult;
+      return activeResults.find((r) => r.name === selectedResultName) || bestResult;
     }
     return bestResult;
-  }, [selectedResultName, results, bestResult]);
+  }, [selectedResultName, activeResults, bestResult]);
 
   const groupedResults = useMemo(() => {
     if (groupMode === 'rank' || !hasEncounterData) return null;
     const groups: Record<string, TopGearResult[]> = {};
-    for (const result of results) {
+    for (const result of activeResults) {
       const encounter = result.items[0]?.encounter || 'Unknown';
       if (!groups[encounter]) groups[encounter] = [];
       groups[encounter].push(result);
@@ -291,17 +308,34 @@ export default function TopGearResults({
                 ))}
               </div>
             )}
-            <span className="font-mono text-[13px] text-muted">{results.length} results</span>
+            <span className="font-mono text-[13px] text-muted">{activeResults.length} results</span>
           </div>
         </div>
 
         {groupMode === 'encounter' && groupedResults ? (
           <div className="space-y-6">
-            {groupedResults.map(([encounter, group]) => (
+            {groupedResults.map(([encounter, group]) => {
+              const bestDelta = Math.max(...group.map((r) => r.delta));
+              const avgDelta = group.length > 0 ? group.reduce((s, r) => s + Math.max(0, r.delta), 0) / group.length : 0;
+              return (
               <div key={encounter}>
-                <div className="mb-2 flex items-center gap-2 border-b border-outline-variant/20 pb-1.5">
-                  <span className="font-headline text-[14px] font-semibold text-on-surface">{encounter}</span>
-                  <span className="font-mono text-[12px] text-muted">{group.length} items</span>
+                <div className="mb-3 flex items-center justify-between border-b border-outline-variant/20 pb-2">
+                  <div className="flex items-center gap-3">
+                    <span className="font-headline text-[14px] font-bold text-on-surface">{encounter}</span>
+                    <span className="font-mono text-[12px] text-muted">{group.length} items</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-[11px]">
+                    <span className="text-on-surface-variant/60">
+                      Expected: <span className={`font-bold ${avgDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
+                        {avgDelta > 0 ? `+${((avgDelta / baseDps) * 100).toFixed(2)}%` : '—'}
+                      </span>
+                    </span>
+                    <span className="text-on-surface-variant/60">
+                      Best: <span className={`font-bold ${bestDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
+                        {bestDelta > 0 ? `+${((bestDelta / baseDps) * 100).toFixed(2)}%` : '—'}
+                      </span>
+                    </span>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   {group.map((result) => (
@@ -310,8 +344,8 @@ export default function TopGearResults({
                       result={result}
                       maxDps={maxDps}
                       baseDps={baseDps}
-                      isBest={result === results[0] && result.delta > 0}
-                      isSelected={result.name === (selectedResultName || results[0]?.name)}
+                      isBest={result === activeResults[0] && result.delta > 0}
+                      isSelected={result.name === (selectedResultName || activeResults[0]?.name)}
                       onSelect={() => setSelectedResultName(result.name)}
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
@@ -320,11 +354,12 @@ export default function TopGearResults({
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <RankedResults
-            results={results}
+            results={activeResults}
             maxDps={maxDps}
             baseDps={baseDps}
             itemInfoMap={itemInfoMap}
