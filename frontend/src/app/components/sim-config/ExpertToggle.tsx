@@ -1,32 +1,33 @@
 'use client';
 
 import { useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
 
 const EXPERT_TABS = [
   {
     key: 'header',
-    label: 'Header',
-    desc: 'Injected before the base actor. Use for global options and initial overrides.',
+    labelKey: 'config.headerTab',
+    descKey: 'config.headerDesc',
   },
   {
     key: 'base_player',
-    label: 'Base Player',
-    desc: 'Injected after the base actor definition. Use for custom APL (actions=...) or player-specific overrides.',
+    labelKey: 'config.basePlayerTab',
+    descKey: 'config.basePlayerDesc',
   },
   {
     key: 'raid_actors',
-    label: 'Raid Actors',
-    desc: 'Extremely experimental! Adds additional raid actors. Disables single_actor_batch when used.',
+    labelKey: 'config.raidActorsTab',
+    descKey: 'config.raidActorsDesc',
   },
   {
     key: 'post_combos',
-    label: 'Post Combos',
-    desc: 'Injected after all profileset combinations. Use for additional actors after gear combos.',
+    labelKey: 'config.postCombosTab',
+    descKey: 'config.postCombosDesc',
   },
   {
     key: 'footer',
-    label: 'Footer',
-    desc: 'Injected at the very end. Use for dungeon routes, fight overrides, or custom enemy configs.',
+    labelKey: 'config.footerTab',
+    descKey: 'config.footerDesc',
   },
 ] as const;
 
@@ -47,6 +48,7 @@ export default function ExpertToggle({
   expertSetters: Record<ExpertTabKey, (v: string) => void>;
   activeTabInfo: (typeof EXPERT_TABS)[number];
 }) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(hasContent);
 
   return (
@@ -63,10 +65,10 @@ export default function ExpertToggle({
             }`}
           />
         </div>
-        <span className="text-sm font-medium text-on-surface-variant">Expert Mode</span>
+        <span className="text-sm font-medium text-on-surface-variant">{t('config.expertMode')}</span>
         {!open && hasContent && (
           <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
-            Modified
+            {t('config.modified')}
           </span>
         )}
       </button>
@@ -85,7 +87,7 @@ export default function ExpertToggle({
                       : 'bg-surface-container-high text-on-surface-variant/60 hover:bg-surface-container-highest hover:text-on-surface-variant'
                 }`}
               >
-                {tab.label}
+                {t(tab.labelKey)}
                 {expertValues[tab.key].trim() && activeTab !== tab.key && (
                   <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-gold" />
                 )}
@@ -95,10 +97,10 @@ export default function ExpertToggle({
           <textarea
             value={expertValues[activeTab]}
             onChange={(e) => expertSetters[activeTab](e.target.value)}
-            placeholder={`Paste ${activeTabInfo.label.toLowerCase()} SimC input here...`}
+            placeholder={t('config.pasteSimcTab', { label: t(activeTabInfo.labelKey).toLowerCase() })}
             className="input-field h-32 resize-y font-mono text-xs"
           />
-          <p className="text-[13px] text-on-surface-variant/40">{activeTabInfo.desc}</p>
+          <p className="text-[13px] text-on-surface-variant/40">{t(activeTabInfo.descKey)}</p>
         </div>
       )}
     </div>

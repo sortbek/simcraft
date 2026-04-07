@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { API_URL } from '../../lib/api';
+import { useLanguage } from '../../lib/i18n';
 import LogConsole from './LogConsole';
 
 interface SimStatusProps {
@@ -69,12 +70,13 @@ export default function SimStatus({
   showLogs,
   onToggleLogs,
 }: SimStatusProps) {
+  const { t } = useLanguage();
   const isRunning = status === 'running';
   const isPending = status === 'pending';
   const [cancelling, setCancelling] = useState(false);
   const displayProgress = useSmoothedProgress(progress);
   const cpuUsage = useCpuUsage(isRunning);
-  const title = progressStage || (isPending ? 'Queued' : 'Simulating');
+  const title = progressStage || (isPending ? t('results.queued') : t('results.simulating'));
   const hasStages = stagesCompleted && stagesCompleted.length > 0;
 
   async function handleCancel() {
@@ -128,7 +130,7 @@ export default function SimStatus({
             disabled={cancelling}
             className="rounded-lg px-3 py-1 text-[14px] text-on-surface-variant/60 transition-colors hover:bg-red-500/10 hover:text-error"
           >
-            {cancelling ? 'Cancelling...' : 'Cancel Sim'}
+            {cancelling ? t('results.cancelling') : t('results.cancelSim')}
           </button>
           {onToggleLogs && (
             <button
@@ -147,7 +149,7 @@ export default function SimStatus({
                 <rect x="2" y="3" width="12" height="10" rx="1.5" />
                 <path d="M5 7l2 2 2-2" />
               </svg>
-              {showLogs ? 'Hide Logs' : 'Show Logs'}
+              {showLogs ? t('results.hideLogs') : t('results.showLogs')}
             </button>
           )}
         </div>

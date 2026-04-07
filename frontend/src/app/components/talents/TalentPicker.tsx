@@ -16,6 +16,7 @@ import { useTalentTree } from '../../lib/useTalentTree';
 import type { TalentTreeData } from '../../lib/useTalentTree';
 import TalentTree from './TalentTree';
 import { getCharacters, getTalentBuilds, type SavedTalentBuild } from '../../lib/saved-characters';
+import { useLanguage } from '../../lib/i18n';
 
 /** Check if a talent build has all points allocated. */
 function getBuildStatus(
@@ -59,6 +60,7 @@ function getBuildStatus(
 type ViewMode = 'collapsed' | 'view' | 'edit';
 
 export default function TalentPicker({ defaultView = 'collapsed', compact = false, hideCompare = false }: { defaultView?: ViewMode; compact?: boolean; hideCompare?: boolean }) {
+  const { t } = useLanguage();
   const { simcInput, selectedTalent, setSelectedTalent, talentBuilds, setTalentBuilds } =
     useSimContext();
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
@@ -210,7 +212,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
       if (!header.specId) throw new Error('Invalid');
       importedSpecId = header.specId;
     } catch {
-      setImportError('Invalid talent string. Paste a WoW talent export string.');
+      setImportError(t('talent.invalidString'));
       return;
     }
 
@@ -224,7 +226,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
     setShowImport(false);
     setImportValue('');
     setViewMode('view');
-  }, [importValue, customLoadouts.length, addCustomLoadout, specId]);
+  }, [importValue, customLoadouts.length, addCustomLoadout, specId, t]);
 
   // Start from scratch
   const handleBlankBuild = useCallback(() => {
@@ -309,7 +311,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
               {allLoadouts.map((l, i) => (
                 <option key={`${l.name}-${i}`} value={i}>
                   {l.name}
-                  {l.isActive ? ' (equipped)' : ''}
+                  {l.isActive ? ` ${t('talent.equipped')}` : ''}
                 </option>
               ))}
             </select>
@@ -327,7 +329,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
                       : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
                   }`}
                 >
-                  Compare{talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
+                  {t('talent.compare')}{talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
                 </button>
               )}
               <button
@@ -338,13 +340,13 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
                     : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
                 }`}
               >
-                Import
+                {t('talent.import')}
               </button>
               <button
                 onClick={handleBlankBuild}
                 className="rounded-md px-2.5 py-1 text-[13px] text-on-surface-variant/60 transition-all hover:bg-surface-container-high hover:text-on-surface-variant"
               >
-                Blank
+                {t('talent.blank')}
               </button>
               {!compareMode && (
                 <button
@@ -355,7 +357,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
                       : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
                   }`}
                 >
-                  {viewMode === 'edit' ? 'Done' : 'Edit'}
+                  {viewMode === 'edit' ? t('common.done') : t('talent.edit')}
                 </button>
               )}
             </>
@@ -367,7 +369,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
             }}
             className="rounded-md px-2.5 py-1 text-[13px] text-on-surface-variant/60 transition-all hover:bg-surface-container-high hover:text-on-surface-variant"
           >
-            {viewMode !== 'collapsed' ? 'Hide' : 'Show'}
+            {viewMode !== 'collapsed' ? t('common.hide') : t('common.show')}
           </button>
         </div>
       </div>
@@ -384,7 +386,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
                 setImportError('');
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleImport()}
-              placeholder="Paste talent export string or Wowhead URL..."
+              placeholder={t('talent.pasteExportPlaceholder')}
               className="input-field !py-1.5 !text-[13px]"
               autoFocus
             />
@@ -392,7 +394,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
               onClick={handleImport}
               className="shrink-0 rounded-lg bg-gold/10 px-3 py-1.5 text-[13px] font-medium text-gold transition-colors hover:bg-gold/20"
             >
-              Apply
+              {t('common.apply')}
             </button>
           </div>
           {importError && <p className="mt-1.5 text-[13px] text-red-400">{importError}</p>}
@@ -404,11 +406,11 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
         <div className="border-t border-outline-variant/10 px-4 py-3">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[12px] font-medium uppercase tracking-wider text-muted">
-              Select builds to compare
+              {t('talent.selectBuildsCompare')}
             </p>
             {talentBuilds.length > 1 && (
               <p className="text-[12px] text-gold/70">
-                {talentBuilds.length} builds &times; gear combos
+                {t('talent.buildsGearCombos', { count: talentBuilds.length })}
               </p>
             )}
           </div>
@@ -476,7 +478,7 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
                       className={`truncate text-[12px] font-medium ${checked ? 'text-on-surface' : 'text-on-surface-variant/60'}`}
                     >
                       {l.name}
-                      {l.isActive ? ' (eq)' : ''}
+                      {l.isActive ? ` ${t('talent.equippedShort')}` : ''}
                     </span>
                   </div>
                 </button>

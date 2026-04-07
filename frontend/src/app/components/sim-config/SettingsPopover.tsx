@@ -2,15 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSimContext } from './SimContext';
+import { useLanguage } from '../../lib/i18n';
 import { API_URL } from '../../lib/api';
 
 const PRESETS = [
-  { label: 'Balanced', pct: 0.3, desc: '30%' },
-  { label: 'Performance', pct: 0.6, desc: '60%' },
-  { label: 'Maximum', pct: 0.9, desc: '90%' },
+  { labelKey: 'settings.balanced', pct: 0.3, desc: '30%' },
+  { labelKey: 'settings.performance', pct: 0.6, desc: '60%' },
+  { labelKey: 'settings.maximum', pct: 0.9, desc: '90%' },
 ] as const;
 
 export default function SettingsPopover() {
+  const { t } = useLanguage();
   const { threads, setThreads, maxCombinations, setMaxCombinations } = useSimContext();
   const [open, setOpen] = useState(false);
   const [maxThreads, setMaxThreads] = useState(0);
@@ -79,7 +81,7 @@ export default function SettingsPopover() {
           <circle cx="8" cy="8" r="2" />
           <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
         </svg>
-        <span className="text-[13px] font-medium">Settings</span>
+        <span className="text-[13px] font-medium">{t('common.settings')}</span>
       </button>
 
       {open && (
@@ -90,27 +92,27 @@ export default function SettingsPopover() {
               {/* CPU Threads */}
               <div>
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[15px] font-medium text-on-surface-variant">CPU Threads</span>
+                  <span className="text-[15px] font-medium text-on-surface-variant">{t('settings.cpuThreads')}</span>
                   <span className="rounded bg-surface-container-highest px-2 py-0.5 font-mono text-xs tabular-nums text-on-surface">
                     {threads}/{maxThreads}
                   </span>
                 </div>
                 <div className="flex gap-1.5">
                   {PRESETS.map((preset, idx) => {
-                    const t = Math.max(1, Math.round(maxThreads * preset.pct));
+                    const threadCount = Math.max(1, Math.round(maxThreads * preset.pct));
                     const active = selectedIdx === idx;
                     return (
                       <button
-                        key={preset.label}
-                        onClick={() => setThreads(t)}
+                        key={preset.labelKey}
+                        onClick={() => setThreads(threadCount)}
                         className={`flex-1 rounded-lg px-2 py-2 text-center transition-all ${
                           active
                             ? 'bg-white text-black'
                             : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
                         }`}
                       >
-                        <span className="block text-[14px] font-medium">{preset.label}</span>
-                        <span className="mt-0.5 block text-[12px] text-on-surface-variant/40">{t} threads</span>
+                        <span className="block text-[14px] font-medium">{t(preset.labelKey)}</span>
+                        <span className="mt-0.5 block text-[12px] text-on-surface-variant/40">{threadCount} {t('settings.threads')}</span>
                       </button>
                     );
                   })}
@@ -120,7 +122,7 @@ export default function SettingsPopover() {
               {/* Max Combinations */}
               <div className="mt-4 border-t border-outline-variant/10 pt-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-[15px] font-medium text-on-surface-variant">Max Gear Combos</span>
+                  <span className="text-[15px] font-medium text-on-surface-variant">{t('settings.maxGearCombos')}</span>
                   <input
                     type="number"
                     min={10}

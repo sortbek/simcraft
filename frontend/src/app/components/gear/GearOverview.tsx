@@ -10,7 +10,9 @@ import {
   getWowheadData,
   QUALITY_COLORS,
 } from '../../lib/useItemInfo';
+import { useLanguage } from '../../lib/i18n';
 import type { ItemInfo, EnchantInfo, GemInfo, ItemQuery } from '../../lib/useItemInfo';
+import { localizedItemName, localizedEnchantName, localizedGemName, useItemNames } from '../../lib/useItemInfo';
 import { SLOT_LABELS } from '../../lib/types';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 
@@ -53,11 +55,13 @@ interface GearOverviewProps {
 
 export default function GearOverview({
   gear,
-  title = 'Equipped Gear',
+  title,
   characterRenderUrl,
   upgradeSlots,
   downgradeSlots,
 }: GearOverviewProps) {
+  const { t } = useLanguage();
+  const resolvedTitle = title ?? t('gear.equippedGear');
   const allItemQueries = useMemo(() => {
     const seen = new Set<string>();
     const queries: ItemQuery[] = [];
@@ -111,7 +115,7 @@ export default function GearOverview({
       )}
       <div className="relative">
         <h3 className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant mb-8 border-b border-outline-variant/10 pb-4">
-          {title}
+          {resolvedTitle}
         </h3>
         {(() => {
           const gridCols = characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2';
@@ -192,6 +196,8 @@ export function GearSlotRow({
   gemInfoMap: Record<number, GemInfo>;
   align?: 'left' | 'right';
 }) {
+  const { t, locale } = useLanguage();
+  useItemNames();
   const rtl = align === 'right';
 
   if (!item || item.item_id <= 0) {
@@ -202,7 +208,7 @@ export function GearSlotRow({
         <div className="h-7 w-7 shrink-0 rounded-md bg-surface-container-high" />
         <div className={rtl ? 'text-right' : ''}>
           <p className="text-[13px] text-on-surface-variant">{SLOT_LABELS[slot] || slot}</p>
-          <p className="text-[11px] text-on-surface-variant/50">Empty</p>
+          <p className="text-[11px] text-on-surface-variant/50">{t('gear.empty')}</p>
         </div>
       </div>
     );
@@ -212,7 +218,7 @@ export function GearSlotRow({
   const enchant = item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined;
   const gem = item.gem_id ? gemInfoMap[item.gem_id] : undefined;
   const qc = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
-  const name = info?.name || item.name || `Item ${item.item_id}`;
+  const name = localizedItemName(item.item_id, info?.name || item.name || `Item ${item.item_id}`, locale);
   const icon = info?.icon || 'inv_misc_questionmark';
   const whData =
     item.item_id > 0
@@ -257,7 +263,7 @@ export function GearSlotRow({
       <div className={`min-w-0 flex-1 ${rtl ? 'text-right' : ''}`}>
         <div className={`flex items-center gap-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
           <a
-            href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
+            href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
             data-wowhead={whData}
             className="truncate text-[13px] font-medium leading-tight no-underline"
             style={{ color: qc }}
@@ -273,11 +279,11 @@ export function GearSlotRow({
             </span>
           ) : isUpgrade ? (
             <span className="shrink-0 rounded bg-emerald-500/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-              Upgrade
+              {t('gear.upgrade')}
             </span>
           ) : isDowngrade ? (
             <span className="shrink-0 rounded bg-red-500/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-red-400">
-              Downgrade
+              {t('gear.downgrade')}
             </span>
           ) : null}
           {item.origin === 'vault' && (
@@ -291,11 +297,11 @@ export function GearSlotRow({
           {item.ilevel > 0 && ` · ${item.ilevel}`}
           {info?.tag && ` · ${info.tag}`}
           {gem?.name ? (
-            <span className="text-sky-400/70"> · {gem.name}</span>
+            <span className="text-sky-400/70"> · {localizedGemName(gem, locale)}</span>
           ) : (
-            (info?.sockets ?? 0) > 0 && <span className="text-sky-400/70"> · Socket</span>
+            (info?.sockets ?? 0) > 0 && <span className="text-sky-400/70"> · {(info?.sockets ?? 0) > 1 ? t('gear.sockets') : t('gear.socket')}</span>
           )}
-          {enchant?.name && <span className="text-emerald-400/70"> · {enchant.name}</span>}
+          {enchant?.name && <span className="text-emerald-400/70"> · {localizedEnchantName(enchant, locale)}</span>}
         </p>
       </div>
     </div>

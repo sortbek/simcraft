@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useLanguage } from '../../lib/i18n';
 
 function classifyLine(line: string): string {
   if (line.startsWith('SimulationCraft ')) return 'text-primary/70';
@@ -21,6 +22,7 @@ function classifyLine(line: string): string {
 }
 
 export default function LogConsole({ lines }: { lines: string[] }) {
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const isAutoScroll = useRef(true);
 
@@ -42,11 +44,11 @@ export default function LogConsole({ lines }: { lines: string[] }) {
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60" />
           <span className="text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
-            SimC Output
+            {t('results.simcOutput')}
           </span>
         </div>
         <span className="font-mono text-[12px] tabular-nums text-on-surface-variant/40">
-          {lines.length} lines
+          {t('results.logLines', { count: lines.length })}
         </span>
       </div>
       <div

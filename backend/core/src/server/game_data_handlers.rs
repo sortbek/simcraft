@@ -6,6 +6,16 @@ use super::types::*;
 use crate::addon_parser;
 use crate::game_data;
 use crate::gear_resolver;
+use crate::item_db;
+
+pub(super) async fn get_item_names() -> HttpResponse {
+    match item_db::item_names() {
+        Some(names) => HttpResponse::Ok()
+            .insert_header(("Cache-Control", "public, max-age=3600"))
+            .json(names),
+        None => HttpResponse::Ok().json(json!({})),
+    }
+}
 
 pub(super) async fn get_item_info(
     path: web::Path<u64>,

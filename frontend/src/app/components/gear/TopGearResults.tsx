@@ -6,15 +6,16 @@ import GearOverview from './GearOverview';
 import type { GearItem } from './GearOverview';
 import { SLOT_LABELS, specDisplayName } from '../../lib/types';
 import type { EnchantInfo, GemInfo, ItemInfo, ItemQuery } from '../../lib/useItemInfo';
+import { localizedItemName, localizedEnchantName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import {
   getIconUrl,
   getWowheadData,
-  getWowheadUrl,
   QUALITY_COLORS,
   useEnchantInfo,
   useGemInfo,
   useItemInfo,
 } from '../../lib/useItemInfo';
+import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 
 interface ResultItem {
@@ -86,6 +87,7 @@ export default function TopGearResults({
   targetError,
   elapsedTime,
 }: TopGearResultsProps) {
+  const { t } = useLanguage();
   // Droptimizer grouping — only available when items have encounter data
   const hasEncounterData = results.some((r) => r.items.some((it) => it.encounter));
 
@@ -262,10 +264,10 @@ export default function TopGearResults({
             <span className="text-sm font-semibold tabular-nums">
               +{Math.round(selectedResult.delta).toLocaleString()}
             </span>
-            <span className="text-xs opacity-60">upgrade</span>
+            <span className="text-xs opacity-60">{t('gear.upgradeText')}</span>
           </div>
         ) : (
-          <p className="mt-4 text-sm text-on-surface-variant">Current gear is already optimal.</p>
+          <p className="mt-4 text-sm text-on-surface-variant">{t('gear.currentGearOptimal')}</p>
         )}
       </DpsHeroCard>
 
@@ -274,7 +276,7 @@ export default function TopGearResults({
         <>
           <GearOverview
             gear={bestGearSet}
-            title={selectedResultName && selectedResultName !== bestResult?.name ? 'Selected Gear' : 'Best Gear'}
+            title={selectedResultName && selectedResultName !== bestResult?.name ? t('gear.selectedGear') : t('gear.bestGear')}
             characterRenderUrl={characterRenderUrl}
             upgradeSlots={upgradeSlots}
             downgradeSlots={downgradeSlots}
@@ -285,15 +287,15 @@ export default function TopGearResults({
       {/* Rankings */}
       <div className="card p-5">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs font-medium uppercase tracking-widest text-muted">Rankings</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-muted">{t('gear.rankings')}</p>
           <div className="flex items-center gap-3">
             {hasEncounterData && (
               <div className="flex gap-1">
                 {(
                   [
-                    ['rank', 'By Rank'],
-                    ['encounter', 'By Boss'],
-                  ] as const
+                    ['rank', t('gear.byRank')],
+                    ['encounter', t('gear.byBoss')],
+                  ] as [GroupMode, string][]
                 ).map(([mode, label]) => (
                   <button
                     key={mode}
@@ -308,7 +310,7 @@ export default function TopGearResults({
                 ))}
               </div>
             )}
-            <span className="font-mono text-[13px] text-muted">{activeResults.length} results</span>
+            <span className="font-mono text-[13px] text-muted">{t('gear.resultsCount', { count: activeResults.length })}</span>
           </div>
         </div>
 
@@ -322,16 +324,16 @@ export default function TopGearResults({
                 <div className="mb-3 flex items-center justify-between border-b border-outline-variant/20 pb-2">
                   <div className="flex items-center gap-3">
                     <span className="font-headline text-[14px] font-bold text-on-surface">{encounter}</span>
-                    <span className="font-mono text-[12px] text-muted">{group.length} items</span>
+                    <span className="font-mono text-[12px] text-muted">{t('gear.itemsCount', { count: group.length })}</span>
                   </div>
                   <div className="flex items-center gap-4 text-[11px]">
                     <span className="text-on-surface-variant/60">
-                      Expected: <span className={`font-bold ${avgDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
+                      {t('gear.expectedUpgrade')}<span className={`font-bold ${avgDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
                         {avgDelta > 0 ? `+${((avgDelta / baseDps) * 100).toFixed(2)}%` : '—'}
                       </span>
                     </span>
                     <span className="text-on-surface-variant/60">
-                      Best: <span className={`font-bold ${bestDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
+                      {t('gear.bestUpgrade')}<span className={`font-bold ${bestDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
                         {bestDelta > 0 ? `+${((bestDelta / baseDps) * 100).toFixed(2)}%` : '—'}
                       </span>
                     </span>
@@ -395,6 +397,7 @@ function RankedResults({
   selectedResultName: string | null;
   onSelectResult: (name: string) => void;
 }) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? results : results.slice(0, INITIAL_VISIBLE);
   const hasMore = results.length > INITIAL_VISIBLE;
@@ -422,8 +425,8 @@ function RankedResults({
           className="mt-2 w-full rounded-lg bg-surface-container-high py-2 text-xs text-on-surface-variant transition-all hover:bg-surface-container-highest hover:text-on-surface"
         >
           {expanded
-            ? 'Show less'
-            : `Show all ${results.length} results (+${results.length - INITIAL_VISIBLE} more)`}
+            ? t('common.showLess')
+            : t('gear.showAllResults', { count: results.length, more: results.length - INITIAL_VISIBLE })}
         </button>
       )}
     </div>
@@ -453,6 +456,7 @@ function ResultRow({
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
 }) {
+  const { t } = useLanguage();
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
   const isEquipped = result.items.length === 0 || result.name.startsWith('Currently Equipped');
   const hasTalentBuild = !!result.talent_build;
@@ -502,7 +506,7 @@ function ResultRow({
             if (isEquipped) {
               return (
                 <div className="flex items-center gap-2">
-                  <span className="text-[14px] text-muted">Currently Equipped</span>
+                  <span className="text-[14px] text-muted">{t('gear.currentlyEquipped')}</span>
                   {talentBadge}
                 </div>
               );
@@ -531,7 +535,7 @@ function ResultRow({
 
           {isBest && (
             <span className="shrink-0 rounded bg-gold/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-gold">
-              Best
+              {t('gear.best')}
             </span>
           )}
         </div>
@@ -578,8 +582,10 @@ function ItemTag({
   enchant?: EnchantInfo;
   gem?: GemInfo;
 }) {
+  const { locale } = useLanguage();
+  useItemNames();
   const qc = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
-  const name = info?.name || item.name || `Item ${item.item_id}`;
+  const name = localizedItemName(item.item_id, info?.name || item.name || `Item ${item.item_id}`, locale);
   const icon = info?.icon || 'inv_misc_questionmark';
   const kept = item.is_kept;
   const whData =
@@ -605,7 +611,7 @@ function ItemTag({
         />
       </div>
       <a
-        href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
+        href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
         data-wowhead={whData}
         className="max-w-[120px] truncate text-[13px] font-medium no-underline"
         style={{ color: qc }}
@@ -630,8 +636,8 @@ function ItemTag({
         </span>
       ) : null}
       {enchant?.name && (
-        <span className="max-w-[70px] truncate text-[11px] text-emerald-400/70" title={enchant.name}>
-          {enchant.name}
+        <span className="max-w-[70px] truncate text-[11px] text-emerald-400/70" title={localizedEnchantName(enchant, locale)}>
+          {localizedEnchantName(enchant, locale)}
         </span>
       )}
     </div>

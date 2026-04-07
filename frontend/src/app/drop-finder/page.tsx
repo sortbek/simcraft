@@ -12,6 +12,7 @@ import DropSlotList from '../components/loot/DropSlotList';
 import DungeonGrid from '../components/loot/DungeonGrid';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import { useLanguage } from '../lib/i18n';
 import {
   detectClass,
   detectSpec,
@@ -165,6 +166,7 @@ function Spinner() {
 // --- Page ---
 
 export default function DropFinderPage() {
+  const { t } = useLanguage();
   const { simcInput } = useSimContext();
 
   // Spec selection: main spec on by default, off-specs toggleable
@@ -264,22 +266,22 @@ export default function DropFinderPage() {
   const instanceOptions = useMemo(() => {
     const list = isRaid ? raids : dungeonInstances;
     return [
-      { key: allKey, label: `All ${isRaid ? 'Raids' : 'Dungeons'}` },
+      { key: allKey, label: isRaid ? t('loot.allRaids') : t('loot.allDungeons') },
       ...list.map((inst) => ({ key: String(inst.id), label: inst.name })),
     ];
-  }, [isRaid, raids, dungeonInstances, allKey]);
+  }, [isRaid, raids, dungeonInstances, allKey, t]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];
     return [
-      { key: 0, label: 'Base' },
+      { key: 0, label: t('dropFinder.base') },
       ...currentTrackInfo.levels.map((lvl) => ({
         key: lvl.level,
         label: `${currentTrackInfo.name} ${lvl.level}/${lvl.max_level}`,
         sublabel: String(lvl.ilvl),
       })),
     ];
-  }, [currentTrackInfo]);
+  }, [currentTrackInfo, t]);
 
   function selectAll() {
     if (!drops) return;
@@ -290,7 +292,7 @@ export default function DropFinderPage() {
 
   const headerLabel =
     selectedInstance?.name ||
-    (selectedId.startsWith('type:') ? `All ${isRaid ? 'Raids' : 'Dungeons'}` : '');
+    (selectedId.startsWith('type:') ? (isRaid ? t('loot.allRaids') : t('loot.allDungeons')) : '');
 
   // Sim submission
   const buildPayload = useCallback(() => {
@@ -319,9 +321,9 @@ export default function DropFinderPage() {
   }, [drops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
 
   const validate = useCallback(() => {
-    if (!drops || selected.size === 0) return 'Select at least one item to sim.';
+    if (!drops || selected.size === 0) return t('validation.selectItems');
     return null;
-  }, [drops, selected]);
+  }, [drops, selected, t]);
 
   const {
     submit: handleSubmit,
@@ -331,10 +333,10 @@ export default function DropFinderPage() {
   } = useSimSubmit({ endpoint: '/api/droptimizer/sim', buildPayload, validate });
 
   const submitLabel = !hasCharacter
-    ? 'Paste SimC export to simulate'
+    ? t('validation.pasteSimcDropFinder')
     : selected.size === 0
-      ? 'Select items to simulate'
-      : buttonLabel(`Find Upgrades (${selected.size} items)`);
+      ? t('validation.selectItemsDropFinder')
+      : buttonLabel(t('button.findUpgrades', { count: selected.size }));
 
   return (
     <div className="space-y-6 pb-20">
@@ -354,11 +356,11 @@ export default function DropFinderPage() {
           onChange={setSelectedId}
           instances={activeInstances}
           allKey={allKey}
-          allLabel={isRaid ? 'All Raids' : `All ${activeDungeonCat?.cat.label ?? 'Dungeons'}`}
+          allLabel={isRaid ? t('loot.allRaids') : t('loot.allDungeons')}
         />
       ) : category ? (
         <div className="card p-5">
-          <label className="label-text">{isRaid ? 'Select Raid' : 'Select Dungeon'}</label>
+          <label className="label-text">{isRaid ? t('dropFinder.selectRaid') : t('dropFinder.selectDungeon')}</label>
           <ToggleButtonGroup
             value={selectedId}
             onChange={setSelectedId}
@@ -370,7 +372,7 @@ export default function DropFinderPage() {
       {(isRaid || isDungeon) && selectedId && activeDifficulties.length > 0 && (
         <div className="card space-y-4 p-5">
           <div>
-            <label className="label-text">Difficulty</label>
+            <label className="label-text">{t('dropFinder.difficulty')}</label>
             <div className="flex flex-wrap gap-1.5">
               {activeDifficulties.map((d) => {
                 const currentDiff = isRaid ? difficulty : dungeonDiff;
@@ -422,7 +424,7 @@ export default function DropFinderPage() {
 
           {currentTrackInfo && drops && (
             <div>
-              <label className="label-text">Upgrade Level</label>
+              <label className="label-text">{t('dropFinder.upgradeLevel')}</label>
               <ToggleButtonGroup
                 value={upgradeLevel}
                 onChange={setUpgradeLevel}
@@ -437,8 +439,7 @@ export default function DropFinderPage() {
       {className ? (
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-xs text-on-surface-variant">
-            Showing loot for{' '}
-            <span className="font-medium text-gold">{className.replace('_', ' ')}</span>
+            {t('dropFinder.showingLoot', { class: className.replace('_', ' ') })}
           </p>
           {allSpecs.length > 1 && (
             <>
@@ -458,7 +459,7 @@ export default function DropFinderPage() {
                       }`}
                     >
                       {formatSpecName(spec)}
-                      {isMain && <span className="ml-1 text-[11px] opacity-50">main</span>}
+                      {isMain && <span className="ml-1 text-[11px] opacity-50">{t('dropFinder.mainSpec')}</span>}
                     </button>
                   );
                 })}
@@ -468,7 +469,7 @@ export default function DropFinderPage() {
         </div>
       ) : (
         <p className="text-xs text-muted">
-          Paste a SimC export above to filter drops for your class.
+          {t('dropFinder.pasteExport')}
         </p>
       )}
 
@@ -476,7 +477,7 @@ export default function DropFinderPage() {
 
       {!loading && selectedId && !drops && (
         <p className="py-6 text-center text-sm text-muted">
-          No equippable drops found for this instance.
+          {t('dropFinder.noDrops')}
         </p>
       )}
 
@@ -507,7 +508,7 @@ export default function DropFinderPage() {
       )}
 
       {!selectedId && !loading && !category && (
-        <p className="py-6 text-center text-sm text-muted">Select a category to get started.</p>
+        <p className="py-6 text-center text-sm text-muted">{t('dropFinder.selectCategory')}</p>
       )}
 
       <ConfigFooter

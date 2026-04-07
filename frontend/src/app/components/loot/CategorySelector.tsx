@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useLanguage } from '../../lib/i18n';
 import type { DungeonCategory } from '../../lib/types';
 
 interface CategoryTab {
@@ -18,11 +19,12 @@ export default function CategorySelector({
   onChange,
   dungeonCats,
 }: CategorySelectorProps) {
+  const { t } = useLanguage();
   const tabs = useMemo(() => {
     const result: CategoryTab[] = [
       {
         key: 'raids',
-        label: 'Raids',
+        label: t('loot.raids'),
         icon: 'M8 1l2 4 4.5.7-3.2 3.1.8 4.5L8 11l-4.1 2.3.8-4.5L1.5 5.7 6 5z',
       },
     ];
@@ -34,7 +36,7 @@ export default function CategorySelector({
       result.push({ key: dc.cat.key, label: dc.cat.label, icon });
     }
     return result;
-  }, [dungeonCats]);
+  }, [dungeonCats, t]);
 
   return (
     <div className="grid grid-cols-3 gap-3">

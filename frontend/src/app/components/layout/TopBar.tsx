@@ -12,6 +12,7 @@ import {
 import WindowControls from './WindowTitlebar';
 import DesktopAppLink from './DesktopAppLink';
 import { useIsDesktop } from '../../lib/useIsDesktop';
+import { useLanguage } from '../../lib/i18n';
 
 function parseCharacterInfo(input: string) {
   if (!input) return null;
@@ -36,6 +37,7 @@ function parseCharacterInfo(input: string) {
 
 export default function TopBar() {
   const isDesktop = useIsDesktop();
+  const { t } = useLanguage();
   const [editing, setEditing] = useState(false);
   const [showChars, setShowChars] = useState(false);
   const [characters, setCharacters] = useState<SavedCharacter[]>([]);
@@ -117,7 +119,7 @@ export default function TopBar() {
               </span>
             </span>
           ) : (
-            <span className="text-sm text-on-surface-variant/50">No character</span>
+            <span className="text-sm text-on-surface-variant/50">{t('layout.noCharacter')}</span>
           )}
           {characters.length > 0 && (
             <svg
@@ -141,7 +143,7 @@ export default function TopBar() {
           <span className="max-w-48 truncate font-mono text-[11px] text-on-surface-variant/40">
             {simcInput
               ? simcInput.split('\n')[0].slice(0, 40) + (simcInput.length > 40 ? '...' : '')
-              : 'Paste SimC export...'}
+              : t('layout.pasteSimcExport')}
           </span>
         </button>
 
@@ -204,7 +206,7 @@ export default function TopBar() {
               onKeyDown={(e) => {
                 if (e.key === 'Escape') setEditing(false);
               }}
-              placeholder="Paste your SimC addon export here..."
+              placeholder={t('layout.pasteSimcExportFull')}
               className="h-48 w-full resize-y rounded-lg bg-surface-container px-4 py-3 font-mono text-[12px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
             />
           </div>

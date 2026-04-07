@@ -1,19 +1,21 @@
 'use client';
 
+import { useLanguage } from '../../lib/i18n';
+
 interface StatWeightsTableProps {
   statWeights: Record<string, number>;
 }
 
-const STAT_DISPLAY_NAMES: Record<string, string> = {
-  intellect: 'Intellect',
-  strength: 'Strength',
-  agility: 'Agility',
-  stamina: 'Stamina',
-  crit_rating: 'Critical Strike',
-  haste_rating: 'Haste',
-  mastery_rating: 'Mastery',
-  versatility_rating: 'Versatility',
-  weapon_dps: 'Weapon DPS',
+const STAT_TRANSLATION_KEYS: Record<string, string> = {
+  intellect: 'stat.intellect',
+  strength: 'stat.strength',
+  agility: 'stat.agility',
+  stamina: 'stat.stamina',
+  crit_rating: 'stat.criticalStrike',
+  haste_rating: 'stat.haste',
+  mastery_rating: 'stat.mastery',
+  versatility_rating: 'stat.versatility',
+  weapon_dps: 'stat.weaponDps',
 };
 
 const BAR_COLORS = [
@@ -25,9 +27,10 @@ const BAR_COLORS = [
 ];
 
 export default function StatWeightsTable({ statWeights }: StatWeightsTableProps) {
+  const { t } = useLanguage();
   const entries = Object.entries(statWeights)
     .map(([key, value]) => ({
-      stat: STAT_DISPLAY_NAMES[key] || key.replace(/_/g, ' '),
+      stat: STAT_TRANSLATION_KEYS[key] ? t(STAT_TRANSLATION_KEYS[key]) : key.replace(/_/g, ' '),
       weight: value,
     }))
     .sort((a, b) => b.weight - a.weight);
@@ -37,7 +40,7 @@ export default function StatWeightsTable({ statWeights }: StatWeightsTableProps)
   return (
     <div className="bg-surface-container-low rounded-xl p-8 border border-outline-variant/10">
       <h3 className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant mb-6">
-        Stat Weights
+        {t('results.statWeights')}
       </h3>
       <div className="space-y-6">
         {entries.map(({ stat, weight }, i) => (

@@ -244,6 +244,10 @@ pub async fn start_with_storage_bind(
             )
             // Game data routes
             .route(
+                "/api/item-names",
+                web::get().to(game_data_handlers::get_item_names),
+            )
+            .route(
                 "/api/item-info/{id}",
                 web::get().to(game_data_handlers::get_item_info),
             )

@@ -8,8 +8,10 @@ import {
   deleteSavedRoute,
   type SavedRoute,
 } from '../../lib/saved-routes';
+import { useLanguage } from '../../lib/i18n';
 
 export default function SidebarRoutes() {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [routeName, setRouteName] = useState('');
@@ -75,13 +77,13 @@ export default function SidebarRoutes() {
         <div className="min-w-0 flex-1">
           {activeRouteName ? (
             <>
-              <div className="truncate text-[14px] leading-tight">Routes</div>
+              <div className="truncate text-[14px] leading-tight">{t('layout.routes')}</div>
               <div className="truncate text-[11px] font-normal text-on-surface-variant/60">
                 {activeRouteName}
               </div>
             </>
           ) : (
-            'Routes'
+            t('layout.routes')
           )}
         </div>
         <svg
@@ -131,14 +133,14 @@ export default function SidebarRoutes() {
                 type="text"
                 value={routeName}
                 onChange={(e) => setRouteName(e.target.value)}
-                placeholder="Route name..."
+                placeholder={t('layout.routeNamePlaceholder')}
                 className="w-full rounded bg-surface-container-high px-2 py-1 text-[12px] text-on-surface placeholder-on-surface-variant/30 focus:ring-1 focus:ring-primary/30 focus:outline-none"
                 autoFocus
               />
               <textarea
                 value={routeString}
                 onChange={(e) => setRouteString(e.target.value)}
-                placeholder="Paste MDT route string..."
+                placeholder={t('layout.pasteMdtString')}
                 className="h-20 w-full resize-y rounded bg-surface-container-high px-2 py-1 font-mono text-[11px] text-on-surface placeholder-on-surface-variant/30 focus:ring-1 focus:ring-primary/30 focus:outline-none"
               />
               <div className="flex gap-1.5">
@@ -147,7 +149,7 @@ export default function SidebarRoutes() {
                   disabled={!routeName.trim() || !routeString.trim()}
                   className="rounded bg-gold/10 px-2.5 py-1 text-[12px] font-medium text-gold transition-colors hover:bg-gold/20 disabled:opacity-40"
                 >
-                  Save
+                  {t('common.save')}
                 </button>
                 <button
                   onClick={() => {
@@ -157,7 +159,7 @@ export default function SidebarRoutes() {
                   }}
                   className="rounded px-2.5 py-1 text-[12px] text-on-surface-variant/60 hover:text-on-surface transition-colors"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -167,7 +169,7 @@ export default function SidebarRoutes() {
               className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
             >
               <span className="text-[15px] leading-none">+</span>
-              Save new route
+              {t('layout.saveNewRoute')}
             </button>
           )}
         </div>

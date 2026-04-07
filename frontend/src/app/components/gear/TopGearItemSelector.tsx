@@ -6,6 +6,8 @@ import type { ResolveGearResponse, ResolvedItem } from '../../lib/types';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import GearItemRow from './GearItemRow';
 import { useSimContext } from '../sim-config/SimContext';
+import { useLanguage } from '../../lib/i18n';
+import { localizedItemName, localizedUpgrade, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 
 interface UpgradeOption {
   bonus_id: number;
@@ -33,29 +35,26 @@ interface DisplayGroup {
 }
 
 const DISPLAY_GROUPS: DisplayGroup[] = [
-  { label: 'Head', slots: ['head'] },
-  { label: 'Neck', slots: ['neck'] },
-  { label: 'Shoulder', slots: ['shoulder'] },
-  { label: 'Back', slots: ['back'] },
-  { label: 'Chest', slots: ['chest'] },
-  { label: 'Wrist', slots: ['wrist'] },
-  { label: 'Hands', slots: ['hands'] },
-  { label: 'Waist', slots: ['waist'] },
-  { label: 'Legs', slots: ['legs'] },
-  { label: 'Feet', slots: ['feet'] },
-  { label: 'Rings', slots: ['finger1', 'finger2'] },
-  { label: 'Trinkets', slots: ['trinket1', 'trinket2'] },
-  { label: 'Main Hand', slots: ['main_hand'] },
-  { label: 'Off Hand', slots: ['off_hand'] },
+  { label: 'slot.head', slots: ['head'] },
+  { label: 'slot.neck', slots: ['neck'] },
+  { label: 'slot.shoulder', slots: ['shoulder'] },
+  { label: 'slot.back', slots: ['back'] },
+  { label: 'slot.chest', slots: ['chest'] },
+  { label: 'slot.wrist', slots: ['wrist'] },
+  { label: 'slot.hands', slots: ['hands'] },
+  { label: 'slot.waist', slots: ['waist'] },
+  { label: 'slot.legs', slots: ['legs'] },
+  { label: 'slot.feet', slots: ['feet'] },
+  { label: 'slot.rings', slots: ['finger1', 'finger2'] },
+  { label: 'slot.trinkets', slots: ['trinket1', 'trinket2'] },
+  { label: 'slot.mainHand', slots: ['main_hand'] },
+  { label: 'slot.offHand', slots: ['off_hand'] },
 ];
 
 function getIconUrl(iconName: string): string {
   return `https://render.worldofwarcraft.com/icons/56/${iconName}.jpg`;
 }
 
-function getWowheadUrl(itemId: number): string {
-  return `https://www.wowhead.com/item=${itemId}`;
-}
 
 function getWowheadData(item: ResolvedItem): string {
   const parts: string[] = [];
@@ -76,6 +75,8 @@ export default function TopGearItemSelector({
   comboCount,
   comboError,
 }: TopGearItemSelectorProps) {
+  const { t, locale } = useLanguage();
+  useItemNames();
   const { maxCombinations } = useSimContext();
   const effectiveMaxCombinations = maxCombinations ?? 500;
   const [upgradeMenuFor, setUpgradeMenuFor] = useState<string | null>(null);
@@ -291,19 +292,24 @@ export default function TopGearItemSelector({
 
   function itemDetails(item: ResolvedItem): { text: string; color?: string }[] {
     const parts: { text: string; color?: string }[] = [];
-    if (item.origin === 'vault') parts.push({ text: 'Great Vault', color: 'text-amber-400/80' });
-    if (item.is_catalyst) parts.push({ text: 'Catalyst', color: 'text-purple-400/80' });
+    if (item.origin === 'vault') parts.push({ text: t('gear.greatVault'), color: 'text-amber-400/80' });
+    if (item.is_catalyst) parts.push({ text: t('gear.catalyst'), color: 'text-purple-400/80' });
     if (item.tag) parts.push({ text: item.tag });
-    if (item.upgrade) parts.push({ text: item.upgrade });
+    if (item.upgrade) parts.push({ text: localizedUpgrade(item.upgrade, t) });
     if (item.gem_name) {
-      parts.push({ text: item.gem_name, color: 'text-sky-400/70' });
+      parts.push({ text: localizedItemName(item.gem_id, item.gem_name, locale), color: 'text-sky-400/70' });
     } else if (item.sockets > 0) {
       parts.push({
-        text: `${item.sockets > 1 ? item.sockets + ' ' : ''}Socket${item.sockets > 1 ? 's' : ''}`,
+        text: `${item.sockets > 1 ? item.sockets + ' ' : ''}${item.sockets > 1 ? t('gear.sockets') : t('gear.socket')}`,
         color: 'text-sky-400/70',
       });
     }
-    if (item.enchant_name) parts.push({ text: item.enchant_name, color: 'text-emerald-400/70' });
+    if (item.enchant_name) {
+      const enchantName = item.enchant_item_id
+        ? localizedItemName(item.enchant_item_id, item.enchant_name, locale)
+        : item.enchant_name;
+      parts.push({ text: enchantName, color: 'text-emerald-400/70' });
+    }
     return parts;
   }
 
@@ -324,7 +330,7 @@ export default function TopGearItemSelector({
     return (
       <div className="card p-8 text-center">
         <p className="text-sm text-muted">
-          No alternative items found. Make sure your SimC addon exports bag items.
+          {t('gear.noAlternativesFound')}
         </p>
       </div>
     );
@@ -375,7 +381,7 @@ export default function TopGearItemSelector({
               : 'text-amber-400/60 hover:bg-amber-400/10 hover:text-amber-300'
           }`}
         >
-          Vault
+          {t('gear.vault')}
         </button>
       )}
       {catalystUids.length > 0 && (
@@ -388,7 +394,7 @@ export default function TopGearItemSelector({
               : 'text-purple-400/60 hover:bg-purple-400/10 hover:text-purple-300'
           }`}
         >
-          Catalyst
+          {t('gear.catalyst')}
         </button>
       )}
       {hasSelection && (
@@ -397,7 +403,7 @@ export default function TopGearItemSelector({
           onClick={deselectAll}
           className="rounded-md px-2 py-1 text-[11px] font-medium text-on-surface-variant/50 hover:bg-white/[0.04] hover:text-on-surface transition-colors"
         >
-          Clear
+          {t('common.clear')}
         </button>
       )}
       <span className={`rounded-md px-2.5 py-1 font-mono text-xs ${comboColorClass}`}>
@@ -409,7 +415,7 @@ export default function TopGearItemSelector({
   return (
     <div className="space-y-4">
       <div className="sticky top-14 z-30 -mx-8 flex items-center justify-between border-b border-outline-variant/20 bg-background/90 px-8 py-2 backdrop-blur-sm">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted">Select Items</p>
+        <p className="text-xs font-medium uppercase tracking-widest text-muted">{t('gear.selectItems')}</p>
         {quickSelectBar}
       </div>
 
@@ -417,19 +423,19 @@ export default function TopGearItemSelector({
         {visibleGroups.map(({ group, equipped, alternatives }) => (
           <div key={group.label} className="card space-y-1 p-3.5">
             <p className="mb-2 font-headline text-[13px] font-semibold uppercase tracking-widest text-muted">
-              {group.label}
+              {t(group.label)}
             </p>
 
             {equipped.map((item, eqIdx) => (
               <GearItemRow
                 key={`eq-${eqIdx}`}
                 icon={item.icon}
-                name={item.name}
+                name={localizedItemName(item.item_id, item.name, locale)}
                 nameColor={item.quality_color}
                 details={itemDetails(item)}
                 ilevel={item.ilevel}
                 equipped
-                href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
+                href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
                 wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
               >
                 <UpgradeButton
@@ -452,7 +458,7 @@ export default function TopGearItemSelector({
               <GearItemRow
                 key={`alt-${altIdx}`}
                 icon={item.icon}
-                name={item.name}
+                name={localizedItemName(item.item_id, item.name, locale)}
                 nameColor={item.quality_color}
                 details={itemDetails(item)}
                 ilevel={item.ilevel}
@@ -461,7 +467,7 @@ export default function TopGearItemSelector({
                 onToggle={() => toggleItem(item, group)}
                 vault={item.origin === 'vault'}
                 catalyst={item.is_catalyst}
-                href={item.item_id > 0 ? getWowheadUrl(item.item_id) : undefined}
+                href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
                 wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
               >
                 <UpgradeButton
@@ -499,6 +505,7 @@ function UpgradeButton({
   onUpgradeSelect: (opt: UpgradeOption) => void;
   onCatalystConvert?: () => void;
 }) {
+  const { t } = useLanguage();
   if (!item.upgrade && !onCatalystConvert) return null;
   const isMenuOpen = upgradeMenuFor === item.uid;
 
@@ -516,7 +523,7 @@ function UpgradeButton({
             ? 'bg-gold/20 text-gold'
             : 'text-on-surface-variant/50 hover:bg-white/[0.05] hover:text-on-surface-variant'
         }`}
-        title="Add copy at different upgrade level"
+        title={t('gear.addUpgradedCopy')}
       >
         <svg
           className="h-3 w-3"
@@ -544,7 +551,7 @@ function UpgradeButton({
               <svg className="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a1 1 0 011 1v2.07A5.001 5.001 0 0113 9a5 5 0 01-10 0 5.001 5.001 0 014-4.93V2a1 1 0 011-1zm0 5a3 3 0 100 6 3 3 0 000-6z" />
               </svg>
-              Convert to Catalyst
+              {t('gear.convertToCatalyst')}
             </button>
           )}
           {onCatalystConvert && item.upgrade && (
@@ -553,9 +560,9 @@ function UpgradeButton({
           {item.upgrade && (
             <>
               {loadingUpgrades ? (
-                <div className="px-3 py-2 text-[13px] text-muted">Loading...</div>
+                <div className="px-3 py-2 text-[13px] text-muted">{t('common.loading')}</div>
               ) : upgradeOptions.length === 0 ? (
-                <div className="px-3 py-2 text-[13px] text-muted">No options</div>
+                <div className="px-3 py-2 text-[13px] text-muted">{t('gear.noUpgradeOptions')}</div>
               ) : (
                 upgradeOptions.map((opt) => {
                   const isCurrent = item.bonus_ids.includes(opt.bonus_id);

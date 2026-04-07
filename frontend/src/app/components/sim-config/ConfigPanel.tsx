@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
+import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
@@ -26,6 +27,7 @@ export default function ConfigFooter({
   buttonLabel,
   disabled,
 }: ConfigFooterProps) {
+  const { t } = useLanguage();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [expertActiveTab, setExpertActiveTab] = useState<ExpertTabKey>('footer');
   const {
@@ -85,7 +87,7 @@ export default function ConfigFooter({
             {/* Header with reset */}
             <div className="flex items-center justify-between">
               <span className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant">
-                Simulation Options
+                {t('config.simulationOptions')}
               </span>
               <button
                 type="button"
@@ -102,20 +104,20 @@ export default function ConfigFooter({
                 }}
                 className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant/50 hover:text-error transition-colors"
               >
-                Reset to Defaults
+                {t('config.resetToDefaults')}
               </button>
             </div>
             {/* Row 1: Fight config */}
             <div className="grid grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  Fight Style
+                  {t('config.fightStyle')}
                 </label>
                 <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
               </div>
               <div className="space-y-2">
                 <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  Fight Length
+                  {t('config.fightLength')}
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -129,13 +131,13 @@ export default function ConfigFooter({
                   />
                   <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 min-w-[4.5rem] text-center">
                     <span className="font-mono text-primary text-sm font-bold tabular-nums">{fightLengthLabel}</span>
-                    <span className="text-[9px] text-on-surface-variant/50 ml-1">sec</span>
+                    <span className="text-[9px] text-on-surface-variant/50 ml-1">{t('config.sec')}</span>
                   </div>
                 </div>
               </div>
               <div className="space-y-2">
                 <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  Number of Bosses
+                  {t('config.numberOfBosses')}
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -148,7 +150,7 @@ export default function ConfigFooter({
                   />
                   <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 min-w-[4.5rem] text-center">
                     <span className="font-mono text-primary text-sm font-bold tabular-nums">{targetCount}</span>
-                    <span className="text-[9px] text-on-surface-variant/50 ml-1">{targetCount === 1 ? 'boss' : 'bosses'}</span>
+                    <span className="text-[9px] text-on-surface-variant/50 ml-1">{targetCount === 1 ? t('config.boss') : t('config.bosses')}</span>
                   </div>
                 </div>
               </div>
@@ -163,12 +165,12 @@ export default function ConfigFooter({
             {/* Row 4: Custom APL */}
             <div className="space-y-2">
               <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Custom APL / SimC Options
+                {t('config.customAplSimcOptions')}
               </label>
               <textarea
                 value={customApl}
                 onChange={(e) => setCustomApl(e.target.value)}
-                placeholder="Custom APL or expansion options..."
+                placeholder={t('config.customAplPlaceholder')}
                 className="input-field h-20 resize-y font-mono text-xs"
               />
             </div>
@@ -196,7 +198,7 @@ export default function ConfigFooter({
             <span className="font-mono tabular-nums">{fightLengthLabel}</span>
             <span className="h-4 w-px bg-outline-variant/30" />
             <span className="font-mono tabular-nums">
-              {targetCount} {targetCount === 1 ? 'boss' : 'bosses'}
+              {targetCount} {targetCount === 1 ? t('config.boss') : t('config.bosses')}
             </span>
           </div>
 
@@ -216,7 +218,7 @@ export default function ConfigFooter({
               <circle cx="8" cy="8" r="2" />
               <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
             </svg>
-            {drawerOpen ? 'Close' : 'Options'}
+            {drawerOpen ? t('common.close') : t('common.options')}
           </button>
 
           {/* Run button */}
@@ -232,7 +234,7 @@ export default function ConfigFooter({
                   <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
                   <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
-                Running…
+                {t('config.running')}
               </>
             ) : (
               buttonLabel

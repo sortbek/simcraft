@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useSimContext } from './SimContext';
+import { useLanguage } from '../../lib/i18n';
 import { formatScenarioLabel } from '../../lib/scenario-siblings';
 import { API_URL } from '../../lib/api';
 
 export default function ScenarioBuilder() {
+  const { t } = useLanguage();
   const { scenarios, addScenario, removeScenario, clearScenarios } = useSimContext();
   const [maxScenarios, setMaxScenarios] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -23,14 +25,14 @@ export default function ScenarioBuilder() {
   return (
     <div className="space-y-3 border-t border-outline-variant/10 pt-2">
       <div className="flex items-center justify-between">
-        <label className="label-text">Scenarios</label>
+        <label className="label-text">{t('config.scenarios')}</label>
         {scenarios.length > 0 && (
           <button
             type="button"
             onClick={clearScenarios}
             className="text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface-variant"
           >
-            Clear all
+            {t('common.clearAll')}
           </button>
         )}
       </div>
@@ -71,10 +73,10 @@ export default function ScenarioBuilder() {
           disabled={scenarios.length >= maxScenarios}
           className="text-[14px] font-medium text-gold transition-colors hover:text-gold/80 disabled:cursor-not-allowed disabled:text-on-surface-variant/40"
         >
-          + Add current config
+          {t('config.addCurrentConfig')}
         </button>
         <p className="text-[13px] text-on-surface-variant/40">
-          Run multiple fight configurations with the same setup
+          {t('config.scenarioHelp')}
         </p>
       </div>
     </div>

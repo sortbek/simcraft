@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
 
 interface Ability {
   name: string;
@@ -76,6 +77,7 @@ function formatDps(value: number): string {
 }
 
 export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const totalDps = dps || abilities.reduce((s, a) => s + a.portion_dps, 0);
   const top = abilities.slice(0, 15);
@@ -89,7 +91,7 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
   return (
     <div className="bg-surface-container-low rounded-xl p-8 border border-outline-variant/10">
       <h3 className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant mb-8 border-b border-outline-variant/10 pb-4">
-        Damage Breakdown
+        {t('results.damageBreakdown')}
       </h3>
       <div className="space-y-4">
         {top.map((a, i) => {

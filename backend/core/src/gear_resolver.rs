@@ -85,16 +85,16 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         db_ilevel
     };
 
-    let enchant_name = if item.enchant_id > 0 {
+    let (enchant_name, enchant_item_id) = if item.enchant_id > 0 {
         item_db::get_enchant_info(item.enchant_id)
-            .and_then(|e| {
-                e.get("name")
-                    .and_then(|n| n.as_str())
-                    .map(|s| s.to_string())
+            .map(|e| {
+                let name = e.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let item_id = e.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                (name, item_id)
             })
             .unwrap_or_default()
     } else {
-        String::new()
+        (String::new(), 0)
     };
 
     let (gem_name, gem_icon) = if item.gem_id > 0 {
@@ -134,6 +134,7 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         upgrade,
         sockets,
         enchant_name,
+        enchant_item_id,
         gem_name,
         gem_icon,
         season_id,
@@ -488,6 +489,7 @@ pub fn build_catalyst_item(
         upgrade,
         sockets: 0,
         enchant_name: source.enchant_name.clone(),
+        enchant_item_id: source.enchant_item_id,
         gem_name: source.gem_name.clone(),
         gem_icon: source.gem_icon.clone(),
         season_id: source.season_id,

@@ -21,6 +21,7 @@ export interface ResolvedItem {
   upgrade: string;
   sockets: number;
   enchant_name: string;
+  enchant_item_id?: number;
   gem_name: string;
   gem_icon: string;
   is_catalyst?: boolean;

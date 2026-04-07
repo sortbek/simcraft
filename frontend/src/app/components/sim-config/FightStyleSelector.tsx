@@ -1,18 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
 
 const FIGHT_STYLES = [
-  { value: 'Patchwerk', label: 'Patchwerk' },
-  { value: 'CastingPatchwerk', label: 'Casting Patchwerk' },
-  { value: 'HecticAddCleave', label: 'Hectic Add Cleave' },
-  { value: 'CleaveAdd', label: 'Cleave Add' },
-  { value: 'LightMovement', label: 'Light Movement' },
-  { value: 'HeavyMovement', label: 'Heavy Movement' },
-  { value: 'DungeonSlice', label: 'Dungeon Slice' },
-  { value: 'DungeonRoute', label: 'Dungeon Route' },
-  { value: 'HelterSkelter', label: 'Helter Skelter' },
-];
+  { value: 'Patchwerk', labelKey: 'fightStyle.patchwerk' },
+  { value: 'CastingPatchwerk', labelKey: 'fightStyle.castingPatchwerk' },
+  { value: 'HecticAddCleave', labelKey: 'fightStyle.hecticAddCleave' },
+  { value: 'CleaveAdd', labelKey: 'fightStyle.cleaveAdd' },
+  { value: 'LightMovement', labelKey: 'fightStyle.lightMovement' },
+  { value: 'HeavyMovement', labelKey: 'fightStyle.heavyMovement' },
+  { value: 'DungeonSlice', labelKey: 'fightStyle.dungeonSlice' },
+  { value: 'DungeonRoute', labelKey: 'fightStyle.dungeonRoute' },
+  { value: 'HelterSkelter', labelKey: 'fightStyle.helterSkelter' },
+] as const;
 
 interface FightStyleSelectorProps {
   value: string;
@@ -20,8 +21,10 @@ interface FightStyleSelectorProps {
 }
 
 export default function FightStyleSelector({ value, onChange }: FightStyleSelectorProps) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
-  const activeLabel = FIGHT_STYLES.find((fs) => fs.value === value)?.label ?? value;
+  const match = FIGHT_STYLES.find((fs) => fs.value === value);
+  const activeLabel = match ? t(match.labelKey) : value;
 
   return (
     <div className="relative" onBlur={() => setOpen(false)}>
@@ -59,7 +62,7 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
                   : 'text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
               }`}
             >
-              {fs.label}
+              {t(fs.labelKey)}
             </button>
           ))}
         </div>

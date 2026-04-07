@@ -153,6 +153,9 @@ pub struct ResolvedItem {
     pub sockets: u64,
     /// Enchant display name (empty if none).
     pub enchant_name: String,
+    /// Item ID of the enchant scroll (for localized name lookup).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub enchant_item_id: u64,
     /// Gem display name (empty if none).
     pub gem_name: String,
     /// Gem icon (empty if none).

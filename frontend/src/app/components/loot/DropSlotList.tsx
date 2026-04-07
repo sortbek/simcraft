@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
+import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
 import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 
@@ -46,6 +48,7 @@ export default function DropSlotList({
   upgradeTracks,
   headerLabel,
 }: DropSlotListProps) {
+  const { t } = useLanguage();
   const [groupMode, setGroupMode] = useState<GroupMode>('slot');
   const totalItems = Object.values(drops).reduce((n, items) => n + items.length, 0);
 
@@ -76,7 +79,7 @@ export default function DropSlotList({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted">
-          {headerLabel} &mdash; {totalItems} items
+          {headerLabel} &mdash; {t('gear.itemsCount', { count: totalItems })}
           {selected.size > 0 && (
             <span className="ml-1.5 text-gold">({selected.size} selected)</span>
           )}
@@ -85,9 +88,9 @@ export default function DropSlotList({
           <div className="flex gap-1">
             {(
               [
-                ['instance', 'By Instance'],
-                ['slot', 'By Slot'],
-              ] as const
+                ['instance', t('loot.byInstance')],
+                ['slot', t('loot.bySlot')],
+              ] as [GroupMode, string][]
             ).map(([mode, label]) => (
               <button
                 key={mode}
@@ -106,7 +109,7 @@ export default function DropSlotList({
             onClick={onSelectAll}
             className="text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
           >
-            Select all
+            {t('common.selectAll')}
           </button>
           <button
             onClick={onClear}
@@ -162,6 +165,8 @@ function DropItemCard({
   upgradeLevel: number;
   upgradeTracks: UpgradeTracks;
 }) {
+  const { t, locale } = useLanguage();
+  useItemNames();
   const resolved = resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks);
   const effectiveBonusId = getTrackInfo(item, difficulty, dungeonDiff)?.bonus_id;
   const isOffSpec = item.off_spec === true;
@@ -184,7 +189,7 @@ function DropItemCard({
         {isOffSpec && (
           <div
             className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-black"
-            title="Off-spec: may not drop for your main spec"
+            title={t('loot.offSpecWarning')}
           >
             !
           </div>
@@ -192,14 +197,14 @@ function DropItemCard({
       </div>
       <div className={`min-w-0 ${isOffSpec ? 'opacity-60' : ''}`}>
         <a
-          href={`https://www.wowhead.com/item=${item.item_id}`}
+          href={getWowheadUrl(item.item_id, locale)}
           data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
           className={`block text-[14px] font-medium leading-tight ${QUALITY_COLORS[resolved.quality] || 'text-gray-400'}`}
         >
-          {item.name}
+          {localizedItemName(item.item_id, item.name, locale)}
         </a>
         {item.encounter && <span className="text-[12px] text-on-surface-variant/60">{item.encounter}</span>}
       </div>

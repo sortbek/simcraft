@@ -9,6 +9,7 @@ import {
   deleteCharacter,
   type SavedCharacter,
 } from '../../lib/saved-characters';
+import { useLanguage } from '../../lib/i18n';
 
 function parseCharacterInfo(input: string) {
   if (!input) return null;
@@ -32,6 +33,7 @@ function parseCharacterInfo(input: string) {
 }
 
 export default function SidebarCharacter() {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [characters, setCharacters] = useState<SavedCharacter[]>([]);
   const { simcInput, setSimcInput } = useSimContext();
@@ -90,7 +92,7 @@ export default function SidebarCharacter() {
               </div>
             </>
           ) : (
-            'Character'
+            t('layout.character')
           )}
         </div>
         <svg
@@ -146,7 +148,7 @@ export default function SidebarCharacter() {
           <textarea
             value={simcInput}
             onChange={(e) => setSimcInput(e.target.value)}
-            placeholder="Paste SimC addon export..."
+            placeholder={t('layout.pasteSimcExport')}
             className="h-28 w-full resize-y rounded-lg bg-surface-container-high px-2.5 py-2 font-mono text-[11px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:ring-1 focus:ring-primary/30 focus:outline-none"
           />
         </div>

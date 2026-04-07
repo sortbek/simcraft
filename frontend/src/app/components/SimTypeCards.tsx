@@ -3,46 +3,47 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { useLanguage } from '../lib/i18n';
 
 interface SimType {
   href: string;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: string;
   matchPaths: string[];
-  children?: { href: string; label: string; description: string }[];
+  children?: { href: string; labelKey: string; descriptionKey: string }[];
 }
 
 const simTypes: SimType[] = [
   {
     href: '/quick-sim',
-    label: 'Quick Sim',
-    description: 'DPS, ability breakdown, and stat weights.',
+    labelKey: 'page.quickSim',
+    descriptionKey: 'page.quickSimDesc',
     icon: 'M13 8l-5 5-5-5M3 3h10',
     matchPaths: ['/quick-sim'],
   },
   {
     href: '/top-gear',
-    label: 'Top Gear',
-    description: 'Find the best gear from your bags.',
+    labelKey: 'page.topGear',
+    descriptionKey: 'page.topGearDesc',
     icon: 'M8 1l2 4 4.5.7-3.2 3.1.8 4.5L8 11l-4.1 2.3.8-4.5L1.5 5.7 6 5z',
     matchPaths: ['/top-gear'],
   },
   {
     href: '/drop-finder',
-    label: 'Upgrades',
-    description: 'Find and sim gear upgrades.',
+    labelKey: 'page.upgrades',
+    descriptionKey: 'page.upgradesDesc',
     icon: 'M7 7m-4.5 0a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0-9 0M10.5 10.5L14 14',
     matchPaths: ['/drop-finder', '/upgrade-compare'],
     children: [
-      { href: '/drop-finder', label: 'Drop Finder', description: 'Sim raid & dungeon loot' },
-      { href: '/upgrade-compare', label: 'Crest Upgrades', description: 'Best Dawncrest path' },
+      { href: '/drop-finder', labelKey: 'page.dropFinder', descriptionKey: 'page.dropFinderDesc' },
+      { href: '/upgrade-compare', labelKey: 'page.crestUpgrades', descriptionKey: 'page.crestUpgradesDesc' },
     ],
   },
   {
     href: '/history',
-    label: 'History',
-    description: 'View recent simulation results.',
+    labelKey: 'page.history',
+    descriptionKey: 'page.historyDesc',
     icon: 'M8 8m-6.5 0a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0M8 4.5V8l2.5 2.5',
     matchPaths: ['/history'],
   },
@@ -50,6 +51,7 @@ const simTypes: SimType[] = [
 
 export default function SimTypeCards() {
   const pathname = usePathname();
+  const { t } = useLanguage();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   return (
@@ -57,13 +59,14 @@ export default function SimTypeCards() {
       {simTypes.map((sim) => {
         const isActive = sim.matchPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
         const hasChildren = sim.children && sim.children.length > 0;
-        const isOpen = openMenu === sim.label;
+        const label = t(sim.labelKey);
+        const isOpen = openMenu === sim.labelKey;
 
         return (
           <div
-            key={sim.label}
+            key={sim.labelKey}
             className="relative"
-            onMouseEnter={() => hasChildren && setOpenMenu(sim.label)}
+            onMouseEnter={() => hasChildren && setOpenMenu(sim.labelKey)}
             onMouseLeave={() => setOpenMenu(null)}
           >
             <Link
@@ -98,10 +101,10 @@ export default function SimTypeCards() {
                       isActive ? 'text-gold' : 'text-on-surface group-hover:text-white'
                     }`}
                   >
-                    {sim.label}
+                    {label}
                   </h2>
                   <p className="hidden truncate text-[13px] text-on-surface-variant/60 sm:block">
-                    {sim.description}
+                    {t(sim.descriptionKey)}
                   </p>
                 </div>
               </div>
@@ -124,8 +127,8 @@ export default function SimTypeCards() {
                         }`}
                       >
                         <div className="min-w-0">
-                          <p className="text-[15px] font-medium">{child.label}</p>
-                          <p className="text-[12px] text-on-surface-variant/60">{child.description}</p>
+                          <p className="text-[15px] font-medium">{t(child.labelKey)}</p>
+                          <p className="text-[12px] text-on-surface-variant/60">{t(child.descriptionKey)}</p>
                         </div>
                       </Link>
                     );

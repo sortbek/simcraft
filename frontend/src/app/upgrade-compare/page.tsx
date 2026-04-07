@@ -10,6 +10,8 @@ import { QUALITY_COLORS, getIconUrl, useItemInfo, type ItemQuery } from '../lib/
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import { useLanguage } from '../lib/i18n';
+import { localizedItemName, useItemNames } from '../lib/useItemInfo';
 
 // ---- Types ----
 
@@ -93,6 +95,8 @@ function useUpgradeData(simcInput: string) {
 // ---- Page ----
 
 export default function UpgradeComparePage() {
+  const { t, locale } = useLanguage();
+  useItemNames();
   const { simcInput, maxCombinations } = useSimContext();
 
   const { data, loading } = useUpgradeData(simcInput);
@@ -213,16 +217,16 @@ export default function UpgradeComparePage() {
   if (!hasCharacter) {
     return (
       <p className="py-6 text-center text-sm text-muted">
-        Paste your SimC addon export above to begin.
+        {t('upgradeCompare.pasteExport')}
       </p>
     );
   }
 
   const submitLabel = !hasCurrencies
-    ? 'No upgrade currencies found'
+    ? t('upgradeCompare.noCurrencies')
     : selectedSlots.size === 0
-      ? 'Select items to upgrade'
-      : buttonLabel(`Sim Upgrades (${comboCount} combos)`);
+      ? t('upgradeCompare.selectItemsButton')
+      : buttonLabel(t('button.simUpgrades', { count: comboCount }));
 
   return (
     <div className="space-y-6 pb-20">
@@ -230,10 +234,7 @@ export default function UpgradeComparePage() {
       {/* Explainer */}
       <div className="rounded-lg bg-surface-container-high/50 px-4 py-3">
         <p className="text-[15px] leading-relaxed text-on-surface-variant">
-          Find the best way to spend your{' '}
-          <span className="font-medium text-gold/80">Dawncrest upgrade currencies</span>. Select
-          which equipped items to consider, and SimHammer will test every valid upgrade combination
-          within your budget to find which gives the most DPS.
+          {t('upgradeCompare.explainer')}
         </p>
       </div>
 
@@ -241,7 +242,7 @@ export default function UpgradeComparePage() {
       {hasCurrencies && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[12px] font-medium uppercase tracking-widest text-muted">
-            Budget
+            {t('upgradeCompare.budget')}
           </span>
           {Object.values(currencies)
             .filter((c) => c.name)
@@ -267,11 +268,11 @@ export default function UpgradeComparePage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium uppercase tracking-widest text-muted">
-            Select Items to Upgrade
+            {t('upgradeCompare.selectItems')}
           </p>
           {comboCount > 0 && (
             <span className="rounded-md bg-surface-container-high px-2.5 py-1 font-mono text-xs text-on-surface">
-              {comboCount.toLocaleString()} combo{comboCount !== 1 ? 's' : ''}
+              {t('upgradeCompare.combosCount', { count: comboCount.toLocaleString() })}
             </span>
           )}
         </div>
@@ -290,7 +291,7 @@ export default function UpgradeComparePage() {
           </div>
         ) : candidates.length === 0 ? (
           <div className="card p-8 text-center">
-            <p className="text-sm text-muted">No upgradeable equipped items found.</p>
+            <p className="text-sm text-muted">{t('upgradeCompare.noUpgradeable')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -309,7 +310,7 @@ export default function UpgradeComparePage() {
                         className="h-4 w-4 shrink-0 rounded-sm"
                       />
                       <p className="text-[13px] font-semibold uppercase tracking-widest text-muted">
-                        {group.currency?.name || `Currency ${group.currencyId}`}
+                        {group.currency?.name || t('upgradeCompare.unknownCurrency', { id: group.currencyId })}
                       </p>
                     </div>
                     <button
@@ -317,7 +318,7 @@ export default function UpgradeComparePage() {
                       onClick={() => toggleGroup(group.candidates)}
                       className="text-[12px] text-on-surface-variant/60 hover:text-on-surface-variant"
                     >
-                      {allSelected ? 'Deselect' : 'Select all'}
+                      {allSelected ? t('common.deselect') : t('common.selectAll')}
                     </button>
                   </div>
 
@@ -329,7 +330,7 @@ export default function UpgradeComparePage() {
                       <GearItemRow
                         key={c.slot}
                         icon={info?.icon || 'inv_misc_questionmark'}
-                        name={info?.name || `Item ${c.item_id}`}
+                        name={localizedItemName(c.item_id, info?.name || `Item ${c.item_id}`, locale)}
                         nameColor={qc}
                         details={[
                           { text: SLOT_LABELS[c.slot] || c.slot },

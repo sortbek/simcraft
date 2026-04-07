@@ -17,6 +17,7 @@ import {
 } from '../../lib/talentRules';
 import { useTalentTree } from '../../lib/useTalentTree';
 import type { TalentNode, TalentTreeData } from '../../lib/useTalentTree';
+import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 
 interface TalentTreeProps {
@@ -176,6 +177,8 @@ export default function TalentTree({
     [editable, nodeMap]
   );
 
+  const { t, locale } = useLanguage();
+
   useWowheadTooltips([selections]);
 
   if (!tree || !selections) {
@@ -224,7 +227,7 @@ export default function TalentTree({
 
   return (
     <div className={bare ? 'space-y-3' : 'card space-y-3 p-4'}>
-      {!bare && <p className="text-xs font-medium uppercase tracking-widest text-on-surface-variant/60">Talents</p>}
+      {!bare && <p className="text-xs font-medium uppercase tracking-widest text-on-surface-variant/60">{t('config.talents')}</p>}
       <div className={`flex flex-col gap-3 ${vertical ? '' : 'lg:flex-row lg:gap-4'}`}>
         <TreeSection
           label={tree.className}
@@ -420,6 +423,7 @@ function TalentNodeSvg({
   onRightClick?: (nodeId: number) => void;
   onChoiceCycle?: (nodeId: number) => void;
 }) {
+  const { locale } = useLanguage();
   const isSelected = !!selection;
   const isChoice = node.type === 'choice' && node.entries.length > 1;
   const isInteractable = editable && (selectable || isSelected);
@@ -552,7 +556,7 @@ function TalentNodeSvg({
           height={NODE_SIZE}
         >
           <a
-            href={`https://www.wowhead.com/spell=${spellId}`}
+            href={`https://${locale === 'en_US' || !locale ? 'www' : locale.split('_')[0]}.wowhead.com/spell=${spellId}`}
             data-wowhead={`spell=${spellId}`}
             style={{ display: 'block', width: '100%', height: '100%' }}
             target="_blank"

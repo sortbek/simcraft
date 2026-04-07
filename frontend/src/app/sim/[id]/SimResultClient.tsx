@@ -12,6 +12,7 @@ import TalentTree from '../../components/talents/TalentTree';
 import TopGearResults from '../../components/gear/TopGearResults';
 
 import { API_URL } from '../../lib/api';
+import { useLanguage } from '../../lib/i18n';
 import {
   getScenarioSiblings,
   formatScenarioLabel,
@@ -30,6 +31,7 @@ interface JobData {
 }
 
 export default function SimResultClient() {
+  const { t } = useLanguage();
   const params = useParams();
   const paramId = params.id as string;
 
@@ -112,7 +114,7 @@ export default function SimResultClient() {
   if (fetchError) {
     return (
       <div className="card border-red-500/20 bg-red-500/[0.03] p-6">
-        <p className="mb-1 text-sm font-semibold text-red-400">Error</p>
+        <p className="mb-1 text-sm font-semibold text-red-400">{t('common.error')}</p>
         <p className="text-sm text-red-400/60">{fetchError}</p>
       </div>
     );
@@ -129,7 +131,7 @@ export default function SimResultClient() {
   if (job.status === 'cancelled') {
     return (
       <div className="card border-amber-500/20 bg-amber-500/[0.03] p-6 text-center">
-        <p className="text-sm font-semibold text-amber-400">Simulation Cancelled</p>
+        <p className="text-sm font-semibold text-amber-400">{t('results.simulationCancelled')}</p>
       </div>
     );
   }
@@ -137,9 +139,9 @@ export default function SimResultClient() {
   if (job.status === 'failed') {
     return (
       <div className="card border-red-500/20 bg-red-500/[0.03] p-6">
-        <p className="mb-2 text-sm font-semibold text-red-400">Simulation Failed</p>
+        <p className="mb-2 text-sm font-semibold text-red-400">{t('results.simulationFailed')}</p>
         <p className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-red-400/60">
-          {job.error || 'Unknown error'}
+          {job.error || t('results.unknownError')}
         </p>
       </div>
     );
@@ -163,7 +165,7 @@ export default function SimResultClient() {
   }
 
   if (!job.result) {
-    return <p className="text-sm text-muted">No result data available.</p>;
+    return <p className="text-sm text-muted">{t('results.noResultData')}</p>;
   }
 
   const r = job.result;
@@ -175,7 +177,7 @@ export default function SimResultClient() {
         <div className="card p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="shrink-0 text-[13px] uppercase tracking-wider text-muted">
-              Scenarios
+              {t('results.scenarios')}
             </span>
             <span className="h-4 w-px shrink-0 bg-border" />
             {siblings.map((s) => {
@@ -320,7 +322,7 @@ export default function SimResultClient() {
           rel="noopener noreferrer"
           className="transition-colors hover:text-white"
         >
-          Raw JSON
+          {t('results.rawJson')}
         </a>
         <span className="h-3 w-px bg-border" />
         <a
@@ -329,14 +331,14 @@ export default function SimResultClient() {
           rel="noopener noreferrer"
           className="transition-colors hover:text-white"
         >
-          Raw Input
+          {t('results.rawInput')}
         </a>
         <span className="h-3 w-px bg-border" />
         <a
           href={`${API_URL}/api/sim/${id}/data.csv`}
           className="transition-colors hover:text-white"
         >
-          CSV
+          {t('results.csv')}
         </a>
         <span className="h-3 w-px bg-border" />
         <a
@@ -345,7 +347,7 @@ export default function SimResultClient() {
           rel="noopener noreferrer"
           className="transition-colors hover:text-white"
         >
-          HTML Report
+          {t('results.htmlReport')}
         </a>
         <span className="h-3 w-px bg-border" />
         <a
@@ -354,7 +356,7 @@ export default function SimResultClient() {
           rel="noopener noreferrer"
           className="transition-colors hover:text-white"
         >
-          Text Output
+          {t('results.textOutput')}
         </a>
       </div>
     </div>

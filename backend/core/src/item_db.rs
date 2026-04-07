@@ -61,6 +61,8 @@ static CURRENCY_INFO: OnceCell<HashMap<u64, (String, String)>> = OnceCell::new()
 static ITEM_LIMIT_CATS: OnceCell<HashMap<u64, (u64, u64)>> = OnceCell::new();
 static SEASON_CONFIG: OnceCell<Value> = OnceCell::new();
 static TALENT_TREES: OnceCell<HashMap<u64, Value>> = OnceCell::new();
+/// Localized item names: item_id → { locale → name }
+static ITEM_NAMES: OnceCell<HashMap<u64, HashMap<String, String>>> = OnceCell::new();
 
 /// Catalyst item info for a specific class + slot combination.
 #[derive(Debug, Clone)]
@@ -520,12 +522,43 @@ pub fn load(data_dir: &Path) {
             }
         }
     }
+
+    // item-names.json — localized item names
+    let names_path = data_dir.join("item-names.json");
+    if names_path.exists() {
+        let raw: Value = serde_json::from_reader(std::io::BufReader::new(
+            fs::File::open(&names_path).unwrap(),
+        ))
+        .unwrap_or_default();
+        let mut map: HashMap<u64, HashMap<String, String>> = HashMap::new();
+        if let Some(sparse) = raw.get("ItemSparse").and_then(|v| v.as_object()) {
+            for (id_str, locales) in sparse {
+                if let Ok(id) = id_str.parse::<u64>() {
+                    if let Some(obj) = locales.as_object() {
+                        let locale_map: HashMap<String, String> = obj
+                            .iter()
+                            .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                            .collect();
+                        if !locale_map.is_empty() {
+                            map.insert(id, locale_map);
+                        }
+                    }
+                }
+            }
+        }
+        println!("Loaded {} localized item names", map.len());
+        let _ = ITEM_NAMES.set(map);
+    }
 }
 
 // ---- Accessors ----
 
 pub fn items() -> &'static HashMap<u64, Value> {
     ITEMS.get().expect("Game data not loaded")
+}
+
+pub fn item_names() -> Option<&'static HashMap<u64, HashMap<String, String>>> {
+    ITEM_NAMES.get()
 }
 
 pub fn enchants() -> &'static HashMap<u64, Value> {
@@ -827,7 +860,8 @@ pub fn get_enchant_info(enchant_id: u64) -> Option<Value> {
         .or_else(|| enchant.get("displayName"))
         .and_then(|n| n.as_str())
         .unwrap_or("");
-    Some(serde_json::json!({ "enchant_id": enchant_id, "name": name }))
+    let item_id = enchant.get("itemId").and_then(|v| v.as_u64()).unwrap_or(0);
+    Some(serde_json::json!({ "enchant_id": enchant_id, "name": name, "item_id": item_id }))
 }
 
 pub fn get_gem_info(gem_item_id: u64) -> Option<Value> {

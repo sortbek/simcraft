@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { API_URL } from '../../lib/api';
+import { useLanguage } from '../../lib/i18n';
 
 interface DpsHeroCardProps {
   playerName: string;
@@ -70,6 +71,7 @@ export default function DpsHeroCard({
   baseDps,
   children,
 }: DpsHeroCardProps) {
+  const { t } = useLanguage();
   const dpsDelta = baseDps != null && baseDps > 0 ? dps - baseDps : null;
   const dpsDeltaPct = baseDps != null && baseDps > 0 ? ((dps - baseDps) / baseDps) * 100 : null;
 
@@ -151,14 +153,14 @@ export default function DpsHeroCard({
           </p>
           <div className="space-y-1">
             <div className="text-primary font-headline font-black text-7xl md:text-8xl tracking-tighter flex items-baseline gap-2 tabular-nums">
-              {Math.round(dps).toLocaleString()} <span className="text-2xl font-bold opacity-50">DPS</span>
+              {Math.round(dps).toLocaleString()} <span className="text-2xl font-bold opacity-50">{t('results.dps')}</span>
             </div>
             {dpsDelta != null && dpsDeltaPct != null && (
               <div className="text-on-surface-variant text-xs flex items-center gap-2">
                 <span className={`font-bold ${dpsDelta >= 0 ? 'text-emerald-400' : 'text-error'}`}>
                   {dpsDelta >= 0 ? '+' : ''}{dpsDeltaPct.toFixed(1)}%
                 </span>
-                <span className="opacity-50">vs previous simulation</span>
+                <span className="opacity-50">{t('results.vsPreviousSim')}</span>
               </div>
             )}
           </div>
@@ -170,29 +172,29 @@ export default function DpsHeroCard({
         <div className="relative z-10 bg-surface-container-lowest/80 backdrop-blur-md border-t border-outline-variant/10 grid grid-cols-2 md:grid-cols-5 px-8 py-4 gap-4">
           {dpsError != null && dpsError > 0 && (
             <MetaStat
-              label="Error (Δ)"
+              label={t('results.error')}
               value={`± ${Math.round(dpsError).toLocaleString()}${dpsErrorPct != null ? ` (${dpsErrorPct}%)` : ''}`}
             />
           )}
           {fightLength != null && (
-            <MetaStat label="Fight Length" value={formatDuration(fightLength)} border />
+            <MetaStat label={t('results.fightLength')} value={formatDuration(fightLength)} border />
           )}
           {desiredTargets != null && desiredTargets > 0 && (
             <MetaStat
-              label="Targets"
-              value={desiredTargets === 1 ? '1 (Patchwerk)' : `${desiredTargets} Targets`}
+              label={t('results.targets')}
+              value={desiredTargets === 1 ? '1 (Patchwerk)' : `${desiredTargets} ${t('results.targets')}`}
               border
             />
           )}
           {iterations != null && iterations > 0 && (
             <MetaStat
-              label="Iterations"
+              label={t('results.iterations')}
               value={iterations.toLocaleString()}
-              note={targetError != null && targetError > 0 ? 'Smart Sim' : undefined}
+              note={targetError != null && targetError > 0 ? t('results.smartSim') : undefined}
               border
             />
           )}
-          {elapsedTime != null && <MetaStat label="Elapsed" value={formatElapsed(elapsedTime)} border />}
+          {elapsedTime != null && <MetaStat label={t('results.elapsed')} value={formatElapsed(elapsedTime)} border />}
         </div>
       )}
     </section>

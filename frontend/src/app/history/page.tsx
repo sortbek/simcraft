@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../lib/api';
+import { useLanguage } from '../lib/i18n';
 import { useSimContext } from '../components/sim-config/SimContext';
 
 interface JobSummary {
@@ -46,14 +47,14 @@ function formatDps(value: number): string {
   return Math.round(value).toLocaleString();
 }
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: (key: string, params?: Record<string, string | number>) => string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('time.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('time.minutesAgo', { m: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return t('time.hoursAgo', { h: hours });
+  return t('time.daysAgo', { d: Math.floor(hours / 24) });
 }
 
 function extractCharacter(simcInput: string): { name: string; realm: string } | null {
@@ -84,8 +85,21 @@ function extractCharacter(simcInput: string): { name: string; realm: string } | 
 /* ── Row ─────────────────────────────────────────────────── */
 
 function SimRow({ sim }: { sim: JobSummary }) {
+  const { t } = useLanguage();
   const isFailed = sim.status === 'failed';
   const status = STATUS_STYLES[sim.status] || STATUS_STYLES.pending;
+  const statusLabel = {
+    done: t('status.completed'),
+    running: t('status.running'),
+    failed: t('status.failed'),
+    pending: t('status.pending'),
+    cancelled: t('status.cancelled'),
+  }[sim.status] || t('status.pending');
+  const simTypeLabel = {
+    quick: t('simType.quickSim'),
+    top_gear: t('simType.topGear'),
+    droptimizer: t('simType.dropFinder'),
+  }[sim.sim_type] || sim.sim_type;
 
   return (
     <Link
@@ -94,14 +108,14 @@ function SimRow({ sim }: { sim: JobSummary }) {
     >
       {/* Col 1 – Status dot */}
       <div className="col-span-1 flex items-center">
-        <div className={`w-2.5 h-2.5 rounded-full ${status.dot}`} title={status.label} />
+        <div className={`w-2.5 h-2.5 rounded-full ${status.dot}`} title={statusLabel} />
       </div>
 
       {/* Col 2 – Name */}
       <div className="col-span-3 flex items-center gap-3 min-w-0">
         <div className="min-w-0">
           <p className="text-sm font-bold text-on-surface truncate">
-            {sim.player_name || (isFailed ? 'Failed Simulation' : 'Simulation')}
+            {sim.player_name || (isFailed ? t('history.failedSimulation') : t('history.simulation'))}
           </p>
           <p
             className={`text-[10px] font-medium truncate ${isFailed ? 'text-error' : 'text-on-surface-variant'}`}
@@ -116,7 +130,7 @@ function SimRow({ sim }: { sim: JobSummary }) {
       {/* Col 3 – Sim Type */}
       <div className="col-span-2 text-center">
         <span className={`inline-block px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded border ${SIM_TYPE_COLORS[sim.sim_type] || 'bg-surface-container-highest text-on-surface-variant border-outline-variant/10'}`}>
-          {SIM_TYPE_LABELS[sim.sim_type] || sim.sim_type}
+          {simTypeLabel}
         </span>
       </div>
 
@@ -137,7 +151,7 @@ function SimRow({ sim }: { sim: JobSummary }) {
       {/* Col 6 – Time */}
       <div className="col-span-2 text-right">
         <span className="text-[10px] text-on-surface-variant opacity-60">
-          {timeAgo(sim.created_at)}
+          {timeAgo(sim.created_at, t)}
         </span>
       </div>
     </Link>
@@ -183,8 +197,13 @@ function groupByBatch(sims: JobSummary[]): HistoryEntry[] {
 }
 
 function BatchGroup({ entry }: { entry: Extract<HistoryEntry, { type: 'batch' }> }) {
+  const { t } = useLanguage();
   const first = entry.sims[0];
-  const simType = SIM_TYPE_LABELS[first?.sim_type] || first?.sim_type || 'Sim';
+  const simType = ({
+    quick: t('simType.quickSim'),
+    top_gear: t('simType.topGear'),
+    droptimizer: t('simType.dropFinder'),
+  } as Record<string, string>)[first?.sim_type] || first?.sim_type || 'Sim';
 
   return (
     <div className="border-b border-outline-variant/10">
@@ -200,7 +219,7 @@ function BatchGroup({ entry }: { entry: Extract<HistoryEntry, { type: 'batch' }>
           >
             <path d="M2 4h12M2 8h12M2 12h12" />
           </svg>
-          {simType} &middot; {entry.sims.length} Scenarios
+          {simType} &middot; {t('history.scenariosCount', { count: entry.sims.length })}
           {first?.player_name && (
             <span className="text-on-surface-variant opacity-60 normal-case tracking-normal ml-2">
               {first.player_name}
@@ -208,7 +227,7 @@ function BatchGroup({ entry }: { entry: Extract<HistoryEntry, { type: 'batch' }>
           )}
         </span>
         <span className="text-[10px] text-on-surface-variant opacity-60">
-          {timeAgo(first?.created_at)}
+          {timeAgo(first?.created_at, t)}
         </span>
       </div>
       {entry.sims.map((sim) => (
@@ -221,17 +240,18 @@ function BatchGroup({ entry }: { entry: Extract<HistoryEntry, { type: 'batch' }>
 /* ── Table ────────────────────────────────────────────────── */
 
 function SimList({ sims }: { sims: JobSummary[] }) {
+  const { t } = useLanguage();
   const entries = groupByBatch(sims);
 
   return (
     <div className="bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 shadow-2xl">
       <div className="grid grid-cols-12 px-6 py-4 bg-surface-container-low font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold border-b border-outline-variant/10">
         <div className="col-span-1"></div>
-        <div className="col-span-3">Simulation</div>
-        <div className="col-span-2 text-center">Type</div>
-        <div className="col-span-2 text-right">DPS Outcome</div>
-        <div className="col-span-2 text-center">Fight Style</div>
-        <div className="col-span-2 text-right">Time</div>
+        <div className="col-span-3">{t('history.simulation')}</div>
+        <div className="col-span-2 text-center">{t('history.type')}</div>
+        <div className="col-span-2 text-right">{t('history.dpsOutcome')}</div>
+        <div className="col-span-2 text-center">{t('history.fightStyle')}</div>
+        <div className="col-span-2 text-right">{t('history.time')}</div>
       </div>
       {entries.map((entry) => {
         if (entry.type === 'single') {
@@ -250,6 +270,7 @@ function SimList({ sims }: { sims: JobSummary[] }) {
 /* ── Stats Overview ──────────────────────────────────────── */
 
 function StatsOverview({ sims }: { sims: JobSummary[] }) {
+  const { t } = useLanguage();
   const totalSims = sims.length;
   const completedSims = sims.filter((s) => s.status === 'done');
   const completionRate = totalSims > 0 ? (completedSims.length / totalSims) * 100 : 0;
@@ -262,35 +283,35 @@ function StatsOverview({ sims }: { sims: JobSummary[] }) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
       <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
         <p className="text-xs uppercase font-headline tracking-widest text-on-surface-variant mb-1">
-          Total Sims
+          {t('history.totalSims')}
         </p>
         <p className="text-3xl font-black text-primary font-headline">
           {totalSims.toLocaleString()}
         </p>
         <p className="text-[10px] text-outline mt-2">
-          {completedSims.length} completed &middot; {completionRate.toFixed(0)}% success
+          {t('history.completionRate', { count: completedSims.length, pct: completionRate.toFixed(0) })}
         </p>
       </div>
       <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
         <p className="text-xs uppercase font-headline tracking-widest text-on-surface-variant mb-1">
-          Characters
+          {t('history.characters')}
         </p>
         <p className="text-3xl font-black text-tertiary font-headline">
           {uniqueCharacters}
         </p>
         <p className="text-[10px] text-outline mt-2">
-          Unique characters simmed
+          {t('history.uniqueCharacters')}
         </p>
       </div>
       <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 shadow-xl">
         <p className="text-xs uppercase font-headline tracking-widest text-on-surface-variant mb-1">
-          Best DPS
+          {t('history.bestDps')}
         </p>
         <p className="text-3xl font-black text-on-surface font-headline">
           {bestDps > 0 ? formatDps(bestDps) : '—'}
         </p>
         <p className="text-[10px] text-outline mt-2">
-          Highest recorded result
+          {t('history.highestResult')}
         </p>
       </div>
     </div>
@@ -300,6 +321,7 @@ function StatsOverview({ sims }: { sims: JobSummary[] }) {
 /* ── Page ─────────────────────────────────────────────────── */
 
 export default function HistoryPage() {
+  const { t } = useLanguage();
   const { simcInput } = useSimContext();
   const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
   const [sims, setSims] = useState<JobSummary[]>([]);
@@ -378,7 +400,7 @@ export default function HistoryPage() {
     return (
       <div className="py-12 text-center">
         <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary" />
-        <p className="mt-4 text-sm text-on-surface-variant">Loading history...</p>
+        <p className="mt-4 text-sm text-on-surface-variant">{t('history.loading')}</p>
       </div>
     );
   }
@@ -387,7 +409,7 @@ export default function HistoryPage() {
     return (
       <div className="py-12 text-center">
         <p className="text-sm text-on-surface-variant/60">
-          Paste your SimC addon export to see your character&apos;s sim history.
+          {t('history.pasteExportWeb')}
         </p>
       </div>
     );
@@ -398,8 +420,8 @@ export default function HistoryPage() {
       <div className="py-12 text-center">
         <p className="text-sm text-on-surface-variant/60">
           {character
-            ? `No simulations found for ${character.name} on ${character.realm}.`
-            : 'No simulations yet.'}
+            ? t('history.noCharacterSims', { name: character.name, realm: character.realm })
+            : t('history.noSimulations')}
         </p>
       </div>
     );
@@ -411,10 +433,10 @@ export default function HistoryPage() {
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
         <div>
           <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface">
-            Simulation <span className="text-primary">History</span>
+            {t('history.title')}
           </h1>
           <p className="text-on-surface-variant max-w-xl mt-2">
-            Review and compare past simulations. Click any row to view detailed results.
+            {t('history.subtitle')}
           </p>
         </div>
         <div className="flex gap-3">
@@ -422,7 +444,7 @@ export default function HistoryPage() {
             onClick={() => setSims([])}
             className="px-4 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-xs font-bold uppercase tracking-widest text-[#d2c5b0] hover:text-primary transition-all"
           >
-            Clear History
+            {t('history.clearHistory')}
           </button>
           <button
             onClick={handleExportCsv}
@@ -433,7 +455,7 @@ export default function HistoryPage() {
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            Export CSV
+            {t('history.exportCsv')}
           </button>
         </div>
       </div>

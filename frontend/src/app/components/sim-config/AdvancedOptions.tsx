@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
+import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 
 export default function AdvancedOptions() {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ExpertTabKey>('footer');
   const {
@@ -81,10 +83,10 @@ export default function AdvancedOptions() {
             <circle cx="8" cy="8" r="2" />
             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
           </svg>
-          <span className="text-sm font-medium text-on-surface-variant">Advanced Options</span>
+          <span className="text-sm font-medium text-on-surface-variant">{t('config.advancedOptions')}</span>
           {!open && !isDefault && (
             <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
-              Modified
+              {t('config.modified')}
             </span>
           )}
         </div>
@@ -104,11 +106,11 @@ export default function AdvancedOptions() {
         <div className="animate-fade-in space-y-5 border-t border-outline-variant/10 px-5 pb-5">
           <div className="grid grid-cols-3 gap-4 pt-4">
             <div className="space-y-2">
-              <label className="label-text">Fight Style</label>
+              <label className="label-text">{t('config.fightStyle')}</label>
               <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
             </div>
             <div className="space-y-2">
-              <label className="label-text">Fight Length</label>
+              <label className="label-text">{t('config.fightLength')}</label>
               <div className="flex items-center gap-3">
                 <input
                   type="range"
@@ -125,7 +127,7 @@ export default function AdvancedOptions() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="label-text">Number of Bosses</label>
+              <label className="label-text">{t('config.numberOfBosses')}</label>
               <div className="flex items-center gap-3">
                 <input
                   type="range"
@@ -145,16 +147,15 @@ export default function AdvancedOptions() {
           <ScenarioBuilder />
 
           <div className="space-y-2">
-            <label className="label-text">Custom APL / SimC Options</label>
+            <label className="label-text">{t('config.customAplSimcOptions')}</label>
             <textarea
               value={customApl}
               onChange={(e) => setCustomApl(e.target.value)}
-              placeholder="Custom APL or expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list=1)..."
+              placeholder={t('config.customAplPlaceholder')}
               className="input-field h-28 resize-y font-mono text-xs"
             />
             <p className="text-[13px] text-on-surface-variant/40">
-              Override action priority lists or set expansion-specific options. Injected after the
-              base actor.
+              {t('config.customAplHelp')}
             </p>
           </div>
 

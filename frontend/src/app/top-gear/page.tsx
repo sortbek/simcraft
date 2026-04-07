@@ -9,6 +9,7 @@ import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import type { ResolveGearResponse } from '../lib/types';
+import { useLanguage } from '../lib/i18n';
 
 function Toggle({
   checked,
@@ -46,6 +47,7 @@ function Toggle({
 
 export default function TopGearPage() {
   const { simcInput, maxCombinations, scenarios, talentBuilds } = useSimContext();
+  const { t } = useLanguage();
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
   const [localItems, setLocalItems] = useState<
@@ -200,7 +202,7 @@ export default function TopGearPage() {
         });
         if (!res.ok) {
           setComboCount(0);
-          setComboError('Failed to calculate combinations. Try selecting fewer items.');
+          setComboError(t('validation.tooManyCombinations'));
           return;
         }
         const data = await res.json();
@@ -209,7 +211,7 @@ export default function TopGearPage() {
       } catch (e: unknown) {
         if (e instanceof Error && e.name !== 'AbortError') {
           setComboCount(0);
-          setComboError('Failed to calculate combinations. Try selecting fewer items.');
+          setComboError(t('validation.tooManyCombinations'));
         }
       }
     })();
@@ -229,6 +231,7 @@ export default function TopGearPage() {
     catalystCharges,
     buildSelectedUidsJson,
     buildSubmitInput,
+    t,
   ]);
 
   const buildPayload = useCallback(
@@ -263,9 +266,9 @@ export default function TopGearPage() {
   );
 
   const validate = useCallback(() => {
-    if (!resolved) return 'No gear resolved';
+    if (!resolved) return t('validation.noGearResolved');
     return null;
-  }, [resolved]);
+  }, [resolved, t]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
     endpoint: '/api/top-gear/sim',
@@ -279,14 +282,14 @@ export default function TopGearPage() {
 
       {/* Top Gear toggles */}
       <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 px-6 py-4 flex flex-wrap items-center gap-6">
-        <Toggle checked={copyEnchants} onChange={setCopyEnchants} label="Copy Enchants" />
+        <Toggle checked={copyEnchants} onChange={setCopyEnchants} label={t('topGear.copyEnchants')} />
         <span className="h-5 w-px bg-outline-variant/20" />
-        <Toggle checked={maxUpgrade} onChange={setMaxUpgrade} label="Sim Highest Upgrade" />
+        <Toggle checked={maxUpgrade} onChange={setMaxUpgrade} label={t('topGear.simHighestUpgrade')} />
         {catalystCharges != null && catalystCharges > 0 && (
           <>
             <span className="h-5 w-px bg-outline-variant/20" />
             <div className="flex items-center gap-2.5">
-              <Toggle checked={catalyst} onChange={setCatalyst} label="Revival Catalyst" color="bg-purple-500" />
+              <Toggle checked={catalyst} onChange={setCatalyst} label={t('topGear.revivalCatalyst')} color="bg-purple-500" />
               <div className="flex items-center gap-1.5 ml-1">
                 <input
                   type="number"
@@ -299,7 +302,7 @@ export default function TopGearPage() {
                   }}
                   className="input-field !w-12 !px-1.5 !py-0.5 text-center !text-[13px]"
                 />
-                <span className="text-[11px] text-on-surface-variant/60">charges</span>
+                <span className="text-[11px] text-on-surface-variant/60">{t('topGear.charges')}</span>
               </div>
             </div>
           </>
@@ -309,8 +312,8 @@ export default function TopGearPage() {
       {!resolved ? (
         <p className="py-6 text-center text-sm text-muted">
           {resolving
-            ? 'Resolving gear...'
-            : 'Paste your SimC addon export to see gear options.'}
+            ? t('topGear.resolvingGear')
+            : t('topGear.pasteExport')}
         </p>
       ) : (
         <TopGearItemSelector
@@ -332,7 +335,7 @@ export default function TopGearPage() {
       <ConfigFooter
         onSubmit={submit}
         submitting={submitting}
-        buttonLabel={buttonLabel('Find Top Gear')}
+        buttonLabel={buttonLabel(t('button.findTopGear'))}
         disabled={!resolved}
       />
     </div>

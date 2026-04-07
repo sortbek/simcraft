@@ -11,6 +11,7 @@ import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { specDisplayName } from '../lib/types';
 import { API_URL } from '../lib/api';
 import type { ResolveGearResponse } from '../lib/types';
+import { useLanguage } from '../lib/i18n';
 
 function parseCharacterInfo(input: string) {
   if (!input) return null;
@@ -103,6 +104,7 @@ function useEquippedGear(simcInput: string): Record<string, GearItem> | null {
 
 export default function QuickSimPage() {
   const { simcInput } = useSimContext();
+  const { t } = useLanguage();
 
   const characterInfo = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
   const lastSim = useLastSim(characterInfo?.name ?? null, characterInfo?.realm ?? null);
@@ -128,10 +130,10 @@ export default function QuickSimPage() {
 
   const validate = useCallback(() => {
     if (simcInput.trim().length < 10) {
-      return 'SimC input is too short. Paste your full addon export.';
+      return t('validation.simcTooShort');
     }
     return null;
-  }, [simcInput]);
+  }, [simcInput, t]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
     endpoint: '/api/sim',
@@ -178,7 +180,7 @@ export default function QuickSimPage() {
               href={`/sim/${lastSim.id}`}
               className="text-right transition-colors hover:opacity-80"
             >
-              <div className="text-[10px] uppercase text-on-surface-variant/50 mb-1">Last Sim</div>
+              <div className="text-[10px] uppercase text-on-surface-variant/50 mb-1">{t('quickSim.lastSim')}</div>
               <div className="font-headline font-black text-2xl text-primary tabular-nums">
                 {Math.round(lastSim.dps).toLocaleString()}
               </div>
@@ -194,7 +196,7 @@ export default function QuickSimPage() {
       {equippedGear && (
         <GearOverview
           gear={equippedGear}
-          title="Equipped Gear"
+          title={t('gear.equippedGear')}
           characterRenderUrl={renderUrl}
         />
       )}
@@ -203,7 +205,7 @@ export default function QuickSimPage() {
       <ConfigFooter
         onSubmit={submit}
         submitting={submitting}
-        buttonLabel={buttonLabel('Run Simulation')}
+        buttonLabel={buttonLabel(t('button.runSimulation'))}
         disabled={simcInput.trim().length < 10}
       />
     </div>

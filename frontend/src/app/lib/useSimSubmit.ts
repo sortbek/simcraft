@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from './api';
+import { useLanguage } from './i18n';
 import { decodeHeader } from './talentDecode';
 import { SPEC_ID_TO_NAME } from './types';
 import type { FightScenario } from './types';
@@ -19,6 +20,7 @@ interface UseSimSubmitOptions {
 }
 
 export function useSimSubmit({ endpoint, buildPayload, validate }: UseSimSubmitOptions) {
+  const { t } = useLanguage();
   const {
     fightStyle,
     threads,
@@ -102,7 +104,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate }: UseSimSubmitO
           });
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
-            throw new Error(data.detail || `Server error ${res.status}`);
+            throw new Error(data.detail || t('validation.serverError', { status: res.status }));
           }
           return res.json();
         })
@@ -135,11 +137,11 @@ export function useSimSubmit({ endpoint, buildPayload, validate }: UseSimSubmitO
           clearScenarios();
           window.location.href = `/sim/${siblings[0].id}`;
         } else {
-          throw new Error('All scenario submissions failed');
+          throw new Error(t('validation.allScenariosFailed'));
         }
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to submit sim');
+      setError(err instanceof Error ? err.message : t('validation.submitFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -160,14 +162,17 @@ export function useSimSubmit({ endpoint, buildPayload, validate }: UseSimSubmitO
     simcFooter,
     scenarios,
     clearScenarios,
+    t,
   ]);
 
   const buttonLabel = useCallback(
     (defaultLabel: string) =>
       scenarios.length > 0
-        ? `Run ${scenarios.length} Scenario${scenarios.length > 1 ? 's' : ''}`
+        ? scenarios.length > 1
+          ? t('button.runScenarios', { count: scenarios.length })
+          : t('button.runScenario', { count: scenarios.length })
         : defaultLabel,
-    [scenarios.length]
+    [scenarios.length, t]
   );
 
   return { submit, submitting, error, setError, buttonLabel };

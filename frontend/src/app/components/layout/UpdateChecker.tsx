@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
 
 export default function UpdateChecker() {
+  const { t } = useLanguage();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [version, setVersion] = useState('');
   const [installing, setInstalling] = useState(false);
@@ -74,23 +76,23 @@ export default function UpdateChecker() {
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-200">Update available</p>
-          <p className="mt-0.5 text-xs text-gray-400">SimHammer v{version} is ready to install.</p>
-          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+          <p className="text-sm font-medium text-gray-200">{t('layout.updateAvailable')}</p>
+          <p className="mt-0.5 text-xs text-gray-400">{t('layout.updateReady', { version })}</p>
+          {error && <p className="mt-1 text-xs text-red-400">{t('layout.updateFailed')}</p>}
           <div className="mt-3 flex gap-2">
             <button
               onClick={handleInstall}
               disabled={installing}
               className="rounded bg-gold px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-gold/90 disabled:opacity-50"
             >
-              {installing ? `Downloading ${progress}%` : 'Install & restart'}
+              {installing ? t('layout.downloading', { progress }) : t('layout.installRestart')}
             </button>
             <button
               onClick={() => setUpdateAvailable(false)}
               disabled={installing}
               className="rounded px-3 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-200"
             >
-              Later
+              {t('layout.later')}
             </button>
           </div>
         </div>

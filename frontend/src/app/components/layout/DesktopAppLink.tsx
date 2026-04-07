@@ -1,4 +1,9 @@
+'use client';
+
+import { useLanguage } from '../../lib/i18n';
+
 export default function DesktopAppLink() {
+  const { t } = useLanguage();
   return (
     <a
       href="https://github.com/sortbek/simcraft/releases/latest"
@@ -17,7 +22,7 @@ export default function DesktopAppLink() {
       >
         <path d="M8 12V3M5 9l3 3 3-3M3 14h10" />
       </svg>
-      Desktop App
+      {t('layout.desktopApp')}
     </a>
   );
 }
