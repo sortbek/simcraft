@@ -87,9 +87,13 @@ async function fetchGameData(dataDir) {
   console.log(`[dev] Downloading ${files.length} data files...`);
   for (const file of files) {
     process.stdout.write(`  ${file}... `);
-    const buf = await download(`${BASE_URL}/${file}`);
-    fs.writeFileSync(path.join(dataDir, file), buf);
-    console.log("ok");
+    try {
+      const buf = await download(`${BASE_URL}/${file}`);
+      fs.writeFileSync(path.join(dataDir, file), buf);
+      console.log("ok");
+    } catch (err) {
+      console.log(`skipped (${err.message})`);
+    }
   }
 
   // Copy season-config.json (manually maintained, not on Raidbots)
