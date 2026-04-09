@@ -187,6 +187,7 @@
   "loot.bySlot": "Per Slot",
   "loot.offSpecWarning": "Off-spec: potrebbe non droppare per la tua spec principale",
   "loot.allRaids": "Tutti i Raid",
+  "loot.allCrafted": "Tutti gli artigianali",
 
   "talent.equipped": "(indossato)",
   "talent.equippedShort": "(ind)",
@@ -211,6 +212,12 @@
   "page.crestUpgradesDesc": "Miglior percorso Stemma dell'Alba",
   "page.history": "Cronologia",
   "page.historyDesc": "Visualizza i risultati delle simulazioni recenti.",
+
+  "nav.advanced": "AVANZATO",
+
+  "advanced.title": "Input SimC grezzo",
+  "advanced.description": "Incolla o scrivi input SimulationCraft grezzo. Verrà inviato direttamente a SimC senza alcuna elaborazione.",
+  "advanced.placeholder": "Incolla il tuo input SimC grezzo qui...\n\nEsempio:\nwarrior=\"Guerriero\"\nlevel=80\nrace=human\nspec=fury\n...",
 
   "home.selectSimType": "Seleziona un tipo di simulazione sopra per iniziare.",
 

@@ -213,6 +213,22 @@ export default function DropFinderPage() {
     specName,
   } = useDropFinderData(simcInput, activeSpecs);
 
+  // Count equipped embellished items (bonus 8960 = embellishment limit category 512)
+  const equippedEmbellishments = useMemo(() => {
+    if (!simcInput) return 0;
+    let count = 0;
+    // Match equipped item lines (not commented out with #)
+    for (const line of simcInput.split('\n')) {
+      if (line.startsWith('#') || !line.includes('bonus_id=')) continue;
+      const match = line.match(/bonus_id=([0-9/:]+)/);
+      if (match) {
+        const ids = match[1].split(/[/:]/).map(Number);
+        if (ids.includes(8960)) count++;
+      }
+    }
+    return count;
+  }, [simcInput]);
+
   const hasCharacter = simcInput.trim().length >= 10;
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [difficulty, setDifficulty] = useState('heroic');
@@ -227,6 +243,7 @@ export default function DropFinderPage() {
   const isRaid = category === 'raids';
   const activeDungeonCat = dungeonCats.find((dc) => dc.cat.key === category);
   const isDungeon = !!activeDungeonCat;
+  const isCrafted = activeDungeonCat?.cat.key === 'crafted';
   const selectedInstance =
     selectedId && !selectedId.startsWith('type:')
       ? instances.find((i) => String(i.id) === selectedId)
@@ -266,7 +283,7 @@ export default function DropFinderPage() {
   const instanceOptions = useMemo(() => {
     const list = isRaid ? raids : dungeonInstances;
     return [
-      { key: allKey, label: isRaid ? t('loot.allRaids') : t('loot.allDungeons') },
+      { key: allKey, label: isRaid ? t('loot.allRaids') : isCrafted ? t('loot.allCrafted') : t('loot.allDungeons') },
       ...list.map((inst) => ({ key: String(inst.id), label: inst.name })),
     ];
   }, [isRaid, raids, dungeonInstances, allKey, t]);
@@ -345,12 +362,19 @@ export default function DropFinderPage() {
           category={category}
           onChange={(key) => {
             setCategory(key);
-            setSelectedId('');
+            // Auto-select pool for crafted (no instance picker needed)
+            const dc = dungeonCats.find((d) => d.cat.key === key);
+            if (dc?.cat.key === 'crafted') {
+              setSelectedId(String(dc.cat.poolInstanceId));
+              setDungeonDiff(dc.cat.defaultDifficulty);
+            } else {
+              setSelectedId('');
+            }
           }}
           dungeonCats={dungeonCats}
         />
 
-      {category && hasImages ? (
+      {category && !isCrafted && hasImages ? (
         <DungeonGrid
           value={selectedId}
           onChange={setSelectedId}
@@ -358,7 +382,7 @@ export default function DropFinderPage() {
           allKey={allKey}
           allLabel={isRaid ? t('loot.allRaids') : t('loot.allDungeons')}
         />
-      ) : category ? (
+      ) : category && !isCrafted ? (
         <div className="card p-5">
           <label className="label-text">{isRaid ? t('dropFinder.selectRaid') : t('dropFinder.selectDungeon')}</label>
           <ToggleButtonGroup
@@ -409,7 +433,7 @@ export default function DropFinderPage() {
                         ilvl {ilvl}
                       </span>
                     )}
-                    {d.track ? (
+                    {d.track && !isCrafted ? (
                       <span
                         className={`mt-0.5 text-[12px] font-semibold ${tc?.text ?? 'text-on-surface-variant'} ${isActive ? 'opacity-100' : 'opacity-60'}`}
                       >
@@ -501,6 +525,7 @@ export default function DropFinderPage() {
             upgradeLevel={upgradeLevel}
             upgradeTracks={upgradeTracks}
             headerLabel={headerLabel}
+            equippedEmbellishments={equippedEmbellishments}
           />
 
           <ErrorAlert message={error} />

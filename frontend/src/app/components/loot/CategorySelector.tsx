@@ -29,10 +29,14 @@ export default function CategorySelector({
       },
     ];
     for (const dc of dungeonCats) {
-      const icon =
-        dc.cat.key === 'mplus'
-          ? 'M8 1v14M1 8h14M4 4l8 8M12 4l-8 8'
-          : 'M2 2h12v12H2zM5 5h6M5 8h6M5 11h3';
+      let icon: string;
+      if (dc.cat.key === 'mplus') {
+        icon = 'M8 1v14M1 8h14M4 4l8 8M12 4l-8 8';
+      } else if (dc.cat.key === 'crafted') {
+        icon = 'M4 1l4 5 4-5M3 6h10l-1 5H4L3 6zM5 11v3h6v-3';
+      } else {
+        icon = 'M2 2h12v12H2zM5 5h6M5 8h6M5 11h3';
+      }
       result.push({ key: dc.cat.key, label: dc.cat.label, icon });
     }
     return result;

@@ -40,6 +40,11 @@ export default function Sidebar() {
       label: t('nav.history'),
       matchPaths: ['/history'],
     },
+    {
+      href: '/advanced',
+      label: t('nav.advanced'),
+      matchPaths: ['/advanced'],
+    },
   ];
 
   return (

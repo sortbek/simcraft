@@ -187,6 +187,7 @@
   "loot.bySlot": "Por ranura",
   "loot.offSpecWarning": "Otra especialización: puede que no te caiga en tu especialización principal",
   "loot.allRaids": "Todas las bandas",
+  "loot.allCrafted": "Todos los fabricados",
 
   "talent.equipped": "(equipado)",
   "talent.equippedShort": "(eq)",
@@ -211,6 +212,12 @@
   "page.crestUpgradesDesc": "Mejor camino de Crestaalba",
   "page.history": "Historial",
   "page.historyDesc": "Revisa los resultados de simulaciones recientes.",
+
+  "nav.advanced": "AVANZADO",
+
+  "advanced.title": "Entrada SimC sin procesar",
+  "advanced.description": "Pega o escribe entrada de SimulationCraft sin procesar. Se enviará directamente a SimC sin ningún procesamiento.",
+  "advanced.placeholder": "Pega tu entrada SimC sin procesar aquí...\n\nEjemplo:\nwarrior=\"Guerrero\"\nlevel=80\nrace=human\nspec=fury\n...",
 
   "home.selectSimType": "Selecciona un tipo de simulación arriba para empezar.",
 

@@ -298,13 +298,19 @@ pub fn load(data_dir: &Path) {
     }
 
     // Build encounter -> items index
+    // Each item gets a `_source_instance_id` field so get_instance_drops can filter
+    // items that share encounter IDs across multiple instances (e.g. profession pools).
     let mut drops: HashMap<i64, Vec<Value>> = HashMap::new();
     if let Some(items_map) = ITEMS.get() {
         for item in items_map.values() {
             if let Some(sources) = item.get("sources").and_then(|s| s.as_array()) {
                 for src in sources {
                     if let Some(eid) = src.get("encounterId").and_then(|e| e.as_i64()) {
-                        drops.entry(eid).or_default().push(item.clone());
+                        let mut entry = item.clone();
+                        if let Some(iid) = src.get("instanceId").and_then(|v| v.as_i64()) {
+                            entry.as_object_mut().map(|o| o.insert("_source_instance_id".to_string(), serde_json::json!(iid)));
+                        }
+                        drops.entry(eid).or_default().push(entry);
                     }
                 }
             }

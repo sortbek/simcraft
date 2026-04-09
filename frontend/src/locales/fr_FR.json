@@ -187,6 +187,7 @@
   "loot.bySlot": "Par emplacement",
   "loot.offSpecWarning": "Spé secondaire : peut ne pas tomber pour ta spé principale",
   "loot.allRaids": "Tous les raids",
+  "loot.allCrafted": "Tous les fabriqués",
 
   "talent.equipped": "(équipé)",
   "talent.equippedShort": "(éq)",
@@ -211,6 +212,12 @@
   "page.crestUpgradesDesc": "Meilleur chemin d'Emblème de l'aube",
   "page.history": "Historique",
   "page.historyDesc": "Consulte les résultats de simulations récentes.",
+
+  "nav.advanced": "AVANCÉ",
+
+  "advanced.title": "Entrée SimC brute",
+  "advanced.description": "Colle ou écris une entrée SimulationCraft brute. Elle sera envoyée directement à SimC sans aucun traitement.",
+  "advanced.placeholder": "Colle ton entrée SimC brute ici...\n\nExemple :\nwarrior=\"Guerrier\"\nlevel=80\nrace=human\nspec=fury\n...",
 
   "home.selectSimType": "Sélectionne un type de simulation ci-dessus pour commencer.",
 

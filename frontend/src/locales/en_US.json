@@ -187,6 +187,7 @@
   "loot.bySlot": "By Slot",
   "loot.offSpecWarning": "Off-spec: may not drop for your main spec",
   "loot.allRaids": "All Raids",
+  "loot.allCrafted": "All Crafted",
   "loot.allDungeons": "All Dungeons",
 
   "talent.equipped": "(equipped)",
@@ -212,6 +213,12 @@
   "page.crestUpgradesDesc": "Best Dawncrest path",
   "page.history": "History",
   "page.historyDesc": "View recent simulation results.",
+
+  "nav.advanced": "ADVANCED",
+
+  "advanced.title": "Raw SimC Input",
+  "advanced.description": "Paste or write raw SimulationCraft input. This will be sent directly to SimC without any processing.",
+  "advanced.placeholder": "Paste your raw SimC input here...\n\nExample:\nwarrior=\"Warrior\"\nlevel=80\nrace=human\nspec=fury\n...",
 
   "home.selectSimType": "Select a simulation type above to get started.",
 

@@ -40,6 +40,7 @@ export interface DropItem {
   dungeon_info?: Record<string, TrackInfo>;
   specs?: number[];
   off_spec?: boolean;
+  embellished?: boolean;
 }
 
 export const QUALITY_COLORS: Record<number, string> = {

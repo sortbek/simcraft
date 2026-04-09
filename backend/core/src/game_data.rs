@@ -95,6 +95,14 @@ pub fn get_instance_drops(
     for eid in encounter_ids.keys() {
         if let Some(items_list) = drops_map.get(eid) {
             for item in items_list {
+                // For meta-instances, only include items sourced from this specific instance
+                if is_meta {
+                    let source_iid = item.get("_source_instance_id").and_then(|v| v.as_i64()).unwrap_or(0);
+                    if source_iid != instance_id {
+                        continue;
+                    }
+                }
+
                 let item_id = item.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
                 if !seen.insert(item_id) {
                     continue;
@@ -254,6 +262,17 @@ pub fn get_instance_drops(
                 });
                 if !item_specs.is_empty() {
                     item_json["specs"] = serde_json::json!(item_specs);
+                }
+
+                // Check for embellishment (item_limit_category 512)
+                let bonus_lists: Vec<u64> = item
+                    .get("bonusLists")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
+                    .unwrap_or_default();
+                let limit_cats = item_db::get_item_limit_categories(&bonus_lists);
+                if limit_cats.contains_key(&512) {
+                    item_json["embellished"] = serde_json::json!(true);
                 }
 
                 // Compute off-spec flag: can the main spec use this item?

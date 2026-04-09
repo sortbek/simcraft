@@ -82,6 +82,9 @@ pub struct SimRequest {
     pub sim_type: String,
     #[serde(default)]
     pub max_upgrade: bool,
+    /// When true, send simc_input directly to SimC without any processing.
+    #[serde(default)]
+    pub raw: bool,
     #[serde(flatten)]
     pub options: SimOptions,
 }

@@ -34,6 +34,7 @@ interface DropSlotListProps {
   upgradeLevel: number;
   upgradeTracks: UpgradeTracks;
   headerLabel: string;
+  equippedEmbellishments?: number;
 }
 
 export default function DropSlotList({
@@ -47,12 +48,26 @@ export default function DropSlotList({
   upgradeLevel,
   upgradeTracks,
   headerLabel,
+  equippedEmbellishments = 0,
 }: DropSlotListProps) {
   const { t } = useLanguage();
   const [groupMode, setGroupMode] = useState<GroupMode>('slot');
   const totalItems = Object.values(drops).reduce((n, items) => n + items.length, 0);
 
   const allItems = useMemo(() => Object.values(drops).flat(), [drops]);
+
+  // Count selected embellished items
+  const selectedEmbellished = useMemo(() => {
+    let count = 0;
+    for (const items of Object.values(drops)) {
+      for (const item of items) {
+        if (item.embellished && selected.has(item.item_id)) count++;
+      }
+    }
+    return count;
+  }, [drops, selected]);
+
+  const embellishmentsFull = equippedEmbellishments + selectedEmbellished >= 2;
 
   const instanceSorted = useMemo(() => {
     const groups = new Map<string, DropItem[]>();
@@ -139,6 +154,7 @@ export default function DropSlotList({
                 dungeonDiff={dungeonDiff}
                 upgradeLevel={upgradeLevel}
                 upgradeTracks={upgradeTracks}
+                embellishmentsFull={embellishmentsFull}
               />
             ))}
           </div>
@@ -156,6 +172,7 @@ function DropItemCard({
   dungeonDiff,
   upgradeLevel,
   upgradeTracks,
+  embellishmentsFull,
 }: {
   item: DropItem;
   isSelected: boolean;
@@ -164,29 +181,44 @@ function DropItemCard({
   dungeonDiff: string;
   upgradeLevel: number;
   upgradeTracks: UpgradeTracks;
+  embellishmentsFull: boolean;
 }) {
   const { t, locale } = useLanguage();
   useItemNames();
   const resolved = resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks);
   const effectiveBonusId = getTrackInfo(item, difficulty, dungeonDiff)?.bonus_id;
   const isOffSpec = item.off_spec === true;
+  const isEmbellished = item.embellished === true;
+  const embellishDisabled = isEmbellished && embellishmentsFull && !isSelected;
 
   return (
     <button
-      onClick={onToggle}
+      onClick={embellishDisabled ? undefined : onToggle}
       className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-all ${
-        isSelected
-          ? 'border-gold/40 bg-gold/10'
-          : 'border-transparent bg-surface-container-high hover:bg-surface-container-highest'
+        embellishDisabled
+          ? 'border-transparent bg-surface-container-high opacity-40 cursor-not-allowed'
+          : isSelected
+            ? 'border-gold/40 bg-gold/10'
+            : 'border-transparent bg-surface-container-high hover:bg-surface-container-highest'
       }`}
     >
       <div className="relative shrink-0">
         <img
           src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`}
           alt=""
-          className={`h-6 w-6 rounded ${isOffSpec ? 'opacity-60' : ''}`}
+          className={`h-6 w-6 rounded ${isOffSpec || embellishDisabled ? 'opacity-60' : ''}`}
         />
-        {isOffSpec && (
+        {isEmbellished && (
+          <div
+            className={`absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-bold ${
+              embellishDisabled ? 'bg-red-500 text-white' : 'bg-purple-500 text-white'
+            }`}
+            title={embellishDisabled ? 'Embellishment limit reached (2/2)' : 'Embellished'}
+          >
+            E
+          </div>
+        )}
+        {isOffSpec && !isEmbellished && (
           <div
             className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-black"
             title={t('loot.offSpecWarning')}

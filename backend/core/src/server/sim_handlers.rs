@@ -22,15 +22,20 @@ pub(super) async fn create_sim(
     simc_path: web::Data<PathBuf>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
-    let mut simc_input = if req.max_upgrade {
-        game_data::upgrade_simc_input(&req.simc_input)
-    } else {
+    let simc_input = if req.raw {
         req.simc_input.clone()
+    } else {
+        let mut input = if req.max_upgrade {
+            game_data::upgrade_simc_input(&req.simc_input)
+        } else {
+            req.simc_input.clone()
+        };
+        input = apply_talent_override(&input, &req.options.talents);
+        input = apply_spec_override(&input, &req.options.spec_override);
+        input = crate::talent_normalize::normalize_simc_talents(&input);
+        input = inject_expert_fields(&input, &req.options);
+        input
     };
-    simc_input = apply_talent_override(&simc_input, &req.options.talents);
-    simc_input = apply_spec_override(&simc_input, &req.options.spec_override);
-    simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
-    simc_input = inject_expert_fields(&simc_input, &req.options);
 
     if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
         return resp;
@@ -51,7 +56,10 @@ pub(super) async fn create_sim(
     // Spawn background task
     let store_clone = store.get_ref().clone();
     let simc = simc_path.get_ref().clone();
-    let options = req.options.to_json_with_sim_type(&req.sim_type);
+    let mut options = req.options.to_json_with_sim_type(&req.sim_type);
+    if req.raw {
+        options["raw"] = serde_json::json!(true);
+    }
     let job_id_clone = job_id.clone();
     let logs = log_buffer.get_ref().clone();
     let jid_logs = job_id.clone();

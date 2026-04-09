@@ -40,6 +40,17 @@
         { "key": "heroic",  "label": "Heroic",  "track": "Adventurer", "level": 2, "sortOrder": 2 },
         { "key": "mythic",  "label": "Mythic",  "track": "Champion",   "level": 1, "sortOrder": 3 }
       ]
+    },
+    {
+      "key": "crafted",
+      "label": "Crafted",
+      "poolInstanceId": -88,
+      "defaultDifficulty": "crafted-champion",
+      "difficulties": [
+        { "key": "crafted-champion", "label": "Base",            "track": "Champion", "level": 5, "sortOrder": 1 },
+        { "key": "crafted-hero",     "label": "Hero Dawncrest",   "track": "Hero",     "level": 5, "sortOrder": 2 },
+        { "key": "crafted-myth",     "label": "Myth Dawncrest",   "track": "Myth",     "level": 5, "sortOrder": 3 }
+      ]
     }
   ],
 
@@ -81,6 +92,9 @@
     "mythic+9":  { "track": "Hero",       "level": 2 },
     "mythic+10": { "track": "Hero",       "level": 3 },
     "vault+7-9": { "track": "Hero",       "level": 4 },
-    "vault+10":  { "track": "Myth",       "level": 1 }
+    "vault+10":         { "track": "Myth",       "level": 1 },
+    "crafted-champion": { "track": "Champion",   "level": 5 },
+    "crafted-hero":     { "track": "Hero",       "level": 5 },
+    "crafted-myth":     { "track": "Myth",       "level": 5 }
   }
 }

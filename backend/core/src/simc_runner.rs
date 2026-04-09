@@ -170,6 +170,7 @@ const STAGED_THRESHOLD: usize = 10;
 #[allow(clippy::too_many_arguments)]
 async fn run_simc_subprocess(
     simc_path: &Path,
+    raw: bool,
     job_id: &str,
     simc_input: &str,
     fight_style: &str,
@@ -230,29 +231,35 @@ async fn run_simc_subprocess(
     if generate_html {
         cmd.arg(format!("html={}", html_file.display()));
     }
-    cmd.arg(format!("iterations={}", iterations))
-        .arg(format!("target_error={}", target_error))
-        .arg(format!("threads={}", threads))
-        .arg(format!(
-            "calculate_scale_factors={}",
-            if calculate_scale_factors { "1" } else { "0" }
-        ));
 
-    // For dungeon routes, fight_style/max_time/overrides are defined in the input
-    // file itself — don't override them with CLI args.
-    if is_dungeon_route {
-        cmd.arg(format!("desired_targets={}", desired_targets));
+    if raw {
+        // Raw mode: only set output format and threads, let the input control everything else
+        cmd.arg(format!("threads={}", threads));
     } else {
-        cmd.arg(format!("fight_style={}", fight_style))
-            .arg(format!("desired_targets={}", desired_targets))
-            .arg(format!("max_time={}", max_time));
-        for opt in OVERRIDES {
-            cmd.arg(*opt);
+        cmd.arg(format!("iterations={}", iterations))
+            .arg(format!("target_error={}", target_error))
+            .arg(format!("threads={}", threads))
+            .arg(format!(
+                "calculate_scale_factors={}",
+                if calculate_scale_factors { "1" } else { "0" }
+            ));
+
+        // For dungeon routes, fight_style/max_time/overrides are defined in the input
+        // file itself — don't override them with CLI args.
+        if is_dungeon_route {
+            cmd.arg(format!("desired_targets={}", desired_targets));
+        } else {
+            cmd.arg(format!("fight_style={}", fight_style))
+                .arg(format!("desired_targets={}", desired_targets))
+                .arg(format!("max_time={}", max_time));
+            for opt in OVERRIDES {
+                cmd.arg(*opt);
+            }
         }
     }
     for opt in SIM_OPTIONS {
         if opt.starts_with("single_actor_batch=") {
-            if single_actor_batch {
+            if !raw && single_actor_batch {
                 cmd.arg(*opt);
             }
             continue;
@@ -525,8 +532,14 @@ pub async fn run_simc(
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
+    let raw = options
+        .get("raw")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     run_simc_subprocess(
         simc_path,
+        raw,
         job_id,
         simc_input,
         fight_style,
@@ -587,6 +600,7 @@ pub async fn run_simc_staged(
             .unwrap_or(0.2);
         return run_simc_subprocess(
             simc_path,
+            false, // not raw
             job_id,
             simc_input,
             fight_style,
@@ -647,6 +661,7 @@ pub async fn run_simc_staged(
 
         let stage_result = run_simc_subprocess(
             simc_path,
+            false, // not raw
             job_id,
             &current_input,
             fight_style,

@@ -187,6 +187,7 @@
   "loot.bySlot": "Nach Platz",
   "loot.offSpecWarning": "Off-Spec: Fällt möglicherweise nicht für deine Hauptspezialisierung",
   "loot.allRaids": "Alle Schlachtzüge",
+  "loot.allCrafted": "Alle Handwerksgegenstände",
 
   "talent.equipped": "(angelegt)",
   "talent.equippedShort": "(ang.)",
@@ -211,6 +212,12 @@
   "page.crestUpgradesDesc": "Bester Morgendämmerungswappen-Pfad",
   "page.history": "Verlauf",
   "page.historyDesc": "Letzte Simulationsergebnisse ansehen.",
+
+  "nav.advanced": "ERWEITERT",
+
+  "advanced.title": "Rohe SimC-Eingabe",
+  "advanced.description": "Füge rohe SimulationCraft-Eingabe ein oder schreibe sie. Diese wird direkt und ohne Verarbeitung an SimC gesendet.",
+  "advanced.placeholder": "Füge hier deine rohe SimC-Eingabe ein...\n\nBeispiel:\nwarrior=\"Krieger\"\nlevel=80\nrace=human\nspec=fury\n...",
 
   "home.selectSimType": "Wähle oben einen Simulationstyp aus, um zu beginnen.",
 
