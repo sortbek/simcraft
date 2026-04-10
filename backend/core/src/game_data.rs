@@ -231,6 +231,14 @@ pub fn get_instance_drops(
                                             "track": track, "level": level, "max_level": tm,
                                         }),
                                     );
+                                } else if let Some(fixed_ilvl) = entry.get("fixedIlvl").and_then(|v| v.as_u64()) {
+                                    let fixed_quality = entry.get("fixedQuality").and_then(|v| v.as_u64()).unwrap_or(3);
+                                    dungeon_info.insert(
+                                        diff_key.clone(),
+                                        serde_json::json!({
+                                            "ilvl": fixed_ilvl, "bonus_id": 0, "quality": fixed_quality,
+                                        }),
+                                    );
                                 }
                             }
                         }

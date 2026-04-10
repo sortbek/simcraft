@@ -253,6 +253,118 @@
           ]
         }
       ]
+    },
+    {
+      "key": "pvp-conquest",
+      "label": "PVP Conquest",
+      "poolInstanceId": -85,
+      "defaultDifficulty": "pvp-conquest",
+      "difficulties": [
+        { "key": "pvp-conquest", "label": "Conquest", "track": "Champion", "level": 1, "sortOrder": 1 }
+      ]
+    },
+    {
+      "key": "pvp-honor",
+      "label": "PVP Honor",
+      "poolInstanceId": -84,
+      "defaultDifficulty": "pvp-honor",
+      "difficulties": [
+        { "key": "pvp-honor", "label": "Honor", "track": null, "level": 0, "sortOrder": 1, "fixedIlvl": 217, "fixedQuality": 3 }
+      ]
+    },
+    {
+      "key": "pvp-bloody-tokens",
+      "label": "PVP Bloody Tokens",
+      "poolInstanceId": -86,
+      "defaultDifficulty": "pvp-bloody-tokens",
+      "difficulties": [
+        { "key": "pvp-bloody-tokens", "label": "Bloody Tokens", "track": "Veteran", "level": 4, "sortOrder": 1 }
+      ]
+    },
+    {
+      "key": "pvp-profession",
+      "label": "PVP Profession",
+      "poolInstanceId": -90,
+      "defaultDifficulty": "pvp-prof-gladiator",
+      "difficulties": [
+        { "key": "pvp-prof-combatant", "label": "Galactic Combatant's",  "track": null, "level": 0, "sortOrder": 1, "fixedIlvl": 214, "fixedQuality": 3 },
+        { "key": "pvp-prof-aspirant",  "label": "Galactic Aspirant's",   "track": null, "level": 0, "sortOrder": 2, "fixedIlvl": 233, "fixedQuality": 3 },
+        { "key": "pvp-prof-gladiator", "label": "Galactic Gladiator's",  "track": null, "level": 0, "sortOrder": 3, "fixedIlvl": 246, "fixedQuality": 4 }
+      ]
+    },
+    {
+      "key": "rare-profession",
+      "label": "Rare Profession",
+      "poolInstanceId": -89,
+      "defaultDifficulty": "rare-prof-veteran",
+      "difficulties": [
+        { "key": "rare-prof-base",       "label": "Base",                 "track": null, "level": 0, "sortOrder": 1, "fixedIlvl": 214, "fixedQuality": 3 },
+        { "key": "rare-prof-adventurer", "label": "Adventurer Dawncrest", "track": null, "level": 0, "sortOrder": 2, "fixedIlvl": 233, "fixedQuality": 3 },
+        { "key": "rare-prof-veteran",    "label": "Veteran Dawncrest",    "track": null, "level": 0, "sortOrder": 3, "fixedIlvl": 246, "fixedQuality": 4 }
+      ]
+    },
+    {
+      "key": "catalyst",
+      "label": "Catalyst",
+      "poolInstanceId": -87,
+      "defaultDifficulty": "catalyst-champion-1",
+      "difficultyGroups": [
+        {
+          "label": "Adventurer",
+          "difficulties": [
+            { "key": "catalyst-adventurer-1", "label": "1/6", "track": "Adventurer", "level": 1, "sortOrder": 1 },
+            { "key": "catalyst-adventurer-2", "label": "2/6", "track": "Adventurer", "level": 2, "sortOrder": 2 },
+            { "key": "catalyst-adventurer-3", "label": "3/6", "track": "Adventurer", "level": 3, "sortOrder": 3 },
+            { "key": "catalyst-adventurer-4", "label": "4/6", "track": "Adventurer", "level": 4, "sortOrder": 4 },
+            { "key": "catalyst-adventurer-5", "label": "5/6", "track": "Adventurer", "level": 5, "sortOrder": 5 },
+            { "key": "catalyst-adventurer-6", "label": "6/6", "track": "Adventurer", "level": 6, "sortOrder": 6 }
+          ]
+        },
+        {
+          "label": "Veteran",
+          "difficulties": [
+            { "key": "catalyst-veteran-1", "label": "1/6", "track": "Veteran", "level": 1, "sortOrder": 1 },
+            { "key": "catalyst-veteran-2", "label": "2/6", "track": "Veteran", "level": 2, "sortOrder": 2 },
+            { "key": "catalyst-veteran-3", "label": "3/6", "track": "Veteran", "level": 3, "sortOrder": 3 },
+            { "key": "catalyst-veteran-4", "label": "4/6", "track": "Veteran", "level": 4, "sortOrder": 4 },
+            { "key": "catalyst-veteran-5", "label": "5/6", "track": "Veteran", "level": 5, "sortOrder": 5 },
+            { "key": "catalyst-veteran-6", "label": "6/6", "track": "Veteran", "level": 6, "sortOrder": 6 }
+          ]
+        },
+        {
+          "label": "Champion",
+          "difficulties": [
+            { "key": "catalyst-champion-1", "label": "1/6", "track": "Champion", "level": 1, "sortOrder": 1 },
+            { "key": "catalyst-champion-2", "label": "2/6", "track": "Champion", "level": 2, "sortOrder": 2 },
+            { "key": "catalyst-champion-3", "label": "3/6", "track": "Champion", "level": 3, "sortOrder": 3 },
+            { "key": "catalyst-champion-4", "label": "4/6", "track": "Champion", "level": 4, "sortOrder": 4 },
+            { "key": "catalyst-champion-5", "label": "5/6", "track": "Champion", "level": 5, "sortOrder": 5 },
+            { "key": "catalyst-champion-6", "label": "6/6", "track": "Champion", "level": 6, "sortOrder": 6 }
+          ]
+        },
+        {
+          "label": "Hero",
+          "difficulties": [
+            { "key": "catalyst-hero-1", "label": "1/6", "track": "Hero", "level": 1, "sortOrder": 1 },
+            { "key": "catalyst-hero-2", "label": "2/6", "track": "Hero", "level": 2, "sortOrder": 2 },
+            { "key": "catalyst-hero-3", "label": "3/6", "track": "Hero", "level": 3, "sortOrder": 3 },
+            { "key": "catalyst-hero-4", "label": "4/6", "track": "Hero", "level": 4, "sortOrder": 4 },
+            { "key": "catalyst-hero-5", "label": "5/6", "track": "Hero", "level": 5, "sortOrder": 5 },
+            { "key": "catalyst-hero-6", "label": "6/6", "track": "Hero", "level": 6, "sortOrder": 6 }
+          ]
+        },
+        {
+          "label": "Myth",
+          "difficulties": [
+            { "key": "catalyst-myth-1", "label": "1/6", "track": "Myth", "level": 1, "sortOrder": 1 },
+            { "key": "catalyst-myth-2", "label": "2/6", "track": "Myth", "level": 2, "sortOrder": 2 },
+            { "key": "catalyst-myth-3", "label": "3/6", "track": "Myth", "level": 3, "sortOrder": 3 },
+            { "key": "catalyst-myth-4", "label": "4/6", "track": "Myth", "level": 4, "sortOrder": 4 },
+            { "key": "catalyst-myth-5", "label": "5/6", "track": "Myth", "level": 5, "sortOrder": 5 },
+            { "key": "catalyst-myth-6", "label": "6/6", "track": "Myth", "level": 6, "sortOrder": 6 }
+          ]
+        }
+      ]
     }
   ],
   "encounterOverrides": [
@@ -426,6 +538,45 @@
     "prey-nightmare": { "track": "Champion", "level": 1 },
     "prey-vault-normal": { "track": "Veteran", "level": 1 },
     "prey-vault-hard": { "track": "Champion", "level": 1 },
-    "prey-vault-nightmare": { "track": "Hero", "level": 1 }
+    "prey-vault-nightmare": { "track": "Hero", "level": 1 },
+    "pvp-conquest": { "track": "Champion", "level": 1 },
+    "pvp-honor": { "fixedIlvl": 217, "fixedQuality": 3 },
+    "pvp-bloody-tokens": { "track": "Veteran", "level": 4 },
+    "pvp-prof-combatant": { "fixedIlvl": 214, "fixedQuality": 3 },
+    "pvp-prof-aspirant":  { "fixedIlvl": 233, "fixedQuality": 3 },
+    "pvp-prof-gladiator": { "fixedIlvl": 246, "fixedQuality": 4 },
+    "rare-prof-base":       { "fixedIlvl": 214, "fixedQuality": 3 },
+    "rare-prof-adventurer": { "fixedIlvl": 223, "fixedQuality": 3 },
+    "rare-prof-veteran":    { "fixedIlvl": 246, "fixedQuality": 4 },
+    "catalyst-adventurer-1": { "track": "Adventurer", "level": 1 },
+    "catalyst-adventurer-2": { "track": "Adventurer", "level": 2 },
+    "catalyst-adventurer-3": { "track": "Adventurer", "level": 3 },
+    "catalyst-adventurer-4": { "track": "Adventurer", "level": 4 },
+    "catalyst-adventurer-5": { "track": "Adventurer", "level": 5 },
+    "catalyst-adventurer-6": { "track": "Adventurer", "level": 6 },
+    "catalyst-veteran-1": { "track": "Veteran", "level": 1 },
+    "catalyst-veteran-2": { "track": "Veteran", "level": 2 },
+    "catalyst-veteran-3": { "track": "Veteran", "level": 3 },
+    "catalyst-veteran-4": { "track": "Veteran", "level": 4 },
+    "catalyst-veteran-5": { "track": "Veteran", "level": 5 },
+    "catalyst-veteran-6": { "track": "Veteran", "level": 6 },
+    "catalyst-champion-1": { "track": "Champion", "level": 1 },
+    "catalyst-champion-2": { "track": "Champion", "level": 2 },
+    "catalyst-champion-3": { "track": "Champion", "level": 3 },
+    "catalyst-champion-4": { "track": "Champion", "level": 4 },
+    "catalyst-champion-5": { "track": "Champion", "level": 5 },
+    "catalyst-champion-6": { "track": "Champion", "level": 6 },
+    "catalyst-hero-1": { "track": "Hero", "level": 1 },
+    "catalyst-hero-2": { "track": "Hero", "level": 2 },
+    "catalyst-hero-3": { "track": "Hero", "level": 3 },
+    "catalyst-hero-4": { "track": "Hero", "level": 4 },
+    "catalyst-hero-5": { "track": "Hero", "level": 5 },
+    "catalyst-hero-6": { "track": "Hero", "level": 6 },
+    "catalyst-myth-1": { "track": "Myth", "level": 1 },
+    "catalyst-myth-2": { "track": "Myth", "level": 2 },
+    "catalyst-myth-3": { "track": "Myth", "level": 3 },
+    "catalyst-myth-4": { "track": "Myth", "level": 4 },
+    "catalyst-myth-5": { "track": "Myth", "level": 5 },
+    "catalyst-myth-6": { "track": "Myth", "level": 6 }
   }
 }

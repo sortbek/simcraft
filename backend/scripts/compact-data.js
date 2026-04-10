@@ -104,9 +104,9 @@ function compactItems(inputPath, outputPath) {
     // Current expansion or has drop sources: keep drop-related fields
     if (isCurrent || hasSources) {
       const out = pickFields(item, ITEM_DROP_FIELDS);
-      // Strip sources down to just encounterId
+      // Strip sources down to encounterId + instanceId
       if (out.sources) {
-        out.sources = out.sources.map(s => ({ encounterId: s.encounterId }));
+        out.sources = out.sources.map(s => ({ encounterId: s.encounterId, instanceId: s.instanceId }));
       }
       return out;
     }
