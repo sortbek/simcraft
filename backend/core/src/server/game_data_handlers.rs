@@ -113,6 +113,20 @@ pub(super) async fn get_gem_info(path: web::Path<u64>) -> HttpResponse {
     HttpResponse::Ok().json(result)
 }
 
+pub(super) async fn list_enchants(query: web::Query<EnchantListQuery>) -> HttpResponse {
+    let enchants = game_data::list_enchants_for_slot(query.expansion, &query.slot);
+    HttpResponse::Ok()
+        .insert_header(("Cache-Control", "public, max-age=3600"))
+        .json(enchants)
+}
+
+pub(super) async fn list_gems(query: web::Query<GemListQuery>) -> HttpResponse {
+    let gems = game_data::list_gems(query.expansion);
+    HttpResponse::Ok()
+        .insert_header(("Cache-Control", "public, max-age=3600"))
+        .json(gems)
+}
+
 pub(super) async fn get_max_upgrade_ilevels(body: web::Json<Vec<Value>>) -> HttpResponse {
     let mut results: HashMap<String, u64> = HashMap::new();
     for item in body.iter().take(200) {

@@ -888,7 +888,76 @@ pub fn get_gem_info(gem_item_id: u64) -> Option<Value> {
     )
 }
 
-/// Check if an item has a squishEra (legacy/timewalking item).
+/// Convert a SimC slot name to the WoW inventory type bitmask used in enchantments.json.
+/// Returns 0 for main_hand (weapon enchants have invTypeMask=0).
+fn slot_to_inv_type_mask(slot: &str) -> u64 {
+    match slot {
+        "head" => 2,           // 1 << 1 (invType 1)
+        "neck" => 4,           // 1 << 2 (invType 2)
+        "shoulder" => 8,       // 1 << 3 (invType 3)
+        "chest" => 1048608,    // (1 << 5) | (1 << 20) (invType 5 + Robe 20)
+        "waist" => 64,         // 1 << 6 (invType 6)
+        "legs" => 128,         // 1 << 7 (invType 7)
+        "feet" => 256,         // 1 << 8 (invType 8)
+        "wrist" => 512,        // 1 << 9 (invType 9)
+        "hands" => 1024,       // 1 << 10 (invType 10)
+        "finger1" | "finger2" => 2048, // 1 << 11 (invType 11)
+        "back" => 65536,       // 1 << 16 (invType 16)
+        _ => 0,
+    }
+}
+
+/// List all enchantments for a given expansion and slot.
+/// Returns full enchant JSON values (excluding gems which have slot="socket").
+pub fn list_enchants_for_slot(expansion: u64, slot: &str) -> Vec<Value> {
+    let is_weapon = slot == "main_hand";
+    let mask = slot_to_inv_type_mask(slot);
+
+    enchants()
+        .values()
+        .filter(|e| {
+            // Must match expansion
+            let exp = e.get("expansion").and_then(|v| v.as_u64()).unwrap_or(0);
+            if exp != expansion {
+                return false;
+            }
+            // Exclude gems
+            if e.get("slot").and_then(|v| v.as_str()) == Some("socket") {
+                return false;
+            }
+            let reqs = match e.get("equipRequirements") {
+                Some(r) => r,
+                None => return false,
+            };
+            let inv_mask = reqs.get("invTypeMask").and_then(|v| v.as_u64()).unwrap_or(0);
+            let item_class = reqs.get("itemClass").and_then(|v| v.as_u64()).unwrap_or(0);
+
+            if is_weapon {
+                // Weapon enchants have invTypeMask=0 and itemClass=2 (weapon)
+                inv_mask == 0 && item_class == 2
+            } else if mask == 0 {
+                false
+            } else {
+                (inv_mask & mask) != 0
+            }
+        })
+        .cloned()
+        .collect()
+}
+
+/// List all gems for a given expansion.
+/// Gems are identified by having slot="socket" in enchantments.json.
+pub fn list_gems(expansion: u64) -> Vec<Value> {
+    enchants()
+        .values()
+        .filter(|e| {
+            let exp = e.get("expansion").and_then(|v| v.as_u64()).unwrap_or(0);
+            exp == expansion && e.get("slot").and_then(|v| v.as_str()) == Some("socket")
+        })
+        .cloned()
+        .collect()
+}
+
 /// Check if an item has a squishEra (legacy/timewalking item).
 pub fn has_squish_era(item_id: u64) -> bool {
     get_raw_item(item_id)

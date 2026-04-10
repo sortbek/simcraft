@@ -194,6 +194,31 @@ pub(super) struct DropsQuery {
     pub spec: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub(super) struct EnchantListQuery {
+    pub expansion: u64,
+    pub slot: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct GemListQuery {
+    pub expansion: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EnchantGemSimRequest {
+    pub simc_input: String,
+    /// Map of slot -> list of enchant IDs to sim
+    pub enchant_selections: HashMap<String, Vec<u64>>,
+    /// Gem options: flat list of gem item IDs to sim across all socketed slots
+    #[serde(default)]
+    pub gem_options: Vec<u64>,
+    #[serde(default)]
+    pub max_combinations: Option<usize>,
+    #[serde(flatten)]
+    pub options: SimOptions,
+}
+
 fn default_iterations() -> u32 {
     1000
 }

@@ -195,6 +195,23 @@ pub async fn start_with_storage_bind(
                 "/api/droptimizer/sim",
                 web::post().to(sim_handlers::create_droptimizer_sim),
             )
+            // Enchant & Gem routes
+            .route(
+                "/api/enchant-gem/sim",
+                web::post().to(sim_handlers::create_enchant_gem_sim),
+            )
+            .route(
+                "/api/enchant-gem/combo-count",
+                web::post().to(sim_handlers::get_enchant_gem_combo_count),
+            )
+            .route(
+                "/api/enchants",
+                web::get().to(game_data_handlers::list_enchants),
+            )
+            .route(
+                "/api/gems",
+                web::get().to(game_data_handlers::list_gems),
+            )
             // Upgrade compare routes
             .route(
                 "/api/upgrade-compare/prepare",
