@@ -112,6 +112,12 @@ pub struct TopGearRequest {
     pub catalyst: bool,
     #[serde(default)]
     pub catalyst_charges: Option<u32>,
+    /// Enchant selections: slot -> list of enchant IDs to sim
+    #[serde(default)]
+    pub enchant_selections: HashMap<String, Vec<u64>>,
+    /// Gem options: flat list of gem item IDs to sim across all socketed slots
+    #[serde(default)]
+    pub gem_options: Vec<u64>,
     #[serde(flatten)]
     pub options: SimOptions,
 }

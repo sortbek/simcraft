@@ -175,6 +175,22 @@ pub(super) async fn create_top_gear_sim(
         (client, _) => client,
     };
 
+    // Collect item IDs that have sockets (from all resolved items)
+    let socketed_item_ids: std::collections::HashSet<u64> = resolved
+        .slots
+        .values()
+        .flat_map(|res| {
+            let mut ids = Vec::new();
+            if let Some(eq) = &res.equipped {
+                if eq.sockets > 0 { ids.push(eq.item_id); }
+            }
+            for alt in &res.alternatives {
+                if alt.sockets > 0 { ids.push(alt.item_id); }
+            }
+            ids
+        })
+        .collect();
+
     let (generated_input, combo_count, combo_metadata) =
         match profileset_generator::generate_top_gear_input_with_talents(
             &base_profile,
@@ -183,6 +199,9 @@ pub(super) async fn create_top_gear_sim(
             max_combinations,
             &talent_builds,
             catalyst_charges,
+            &req.enchant_selections,
+            &req.gem_options,
+            &socketed_item_ids,
         ) {
             Ok(r) => r,
             Err(e) => {
@@ -190,7 +209,9 @@ pub(super) async fn create_top_gear_sim(
             }
         };
 
-    if combo_count == 0 && req.talent_builds.len() <= 1 {
+    let has_enchant_gem = req.enchant_selections.values().any(|v| !v.is_empty())
+        || !req.gem_options.is_empty();
+    if combo_count == 0 && req.talent_builds.len() <= 1 && !has_enchant_gem {
         return HttpResponse::BadRequest().json(json!({
             "detail": "No alternative items selected. Select at least one non-equipped item or multiple talent builds."
         }));
@@ -306,6 +327,21 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
         (client, _) => client,
     };
 
+    let socketed_item_ids: std::collections::HashSet<u64> = resolved
+        .slots
+        .values()
+        .flat_map(|res| {
+            let mut ids = Vec::new();
+            if let Some(eq) = &res.equipped {
+                if eq.sockets > 0 { ids.push(eq.item_id); }
+            }
+            for alt in &res.alternatives {
+                if alt.sockets > 0 { ids.push(alt.item_id); }
+            }
+            ids
+        })
+        .collect();
+
     match profileset_generator::generate_top_gear_input_with_talents(
         &base_profile,
         &items_by_slot,
@@ -313,6 +349,9 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
         max_combinations,
         &talent_builds,
         catalyst_charges,
+        &req.enchant_selections,
+        &req.gem_options,
+        &socketed_item_ids,
     ) {
         Ok((_, count, _)) => HttpResponse::Ok().json(json!({ "combo_count": count })),
         Err(e) => {
@@ -392,4 +431,153 @@ pub(super) async fn create_droptimizer_sim(
         status: "pending".to_string(),
         created_at,
     })
+}
+
+// ---- Enchant & Gem sim ----
+
+pub(super) async fn create_enchant_gem_sim(
+    req: web::Json<EnchantGemSimRequest>,
+    store: web::Data<Arc<dyn JobStorage>>,
+    simc_path: web::Data<PathBuf>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
+) -> HttpResponse {
+    let simc_input = apply_spec_override(
+        &apply_talent_override(&req.simc_input, &req.options.talents),
+        &req.options.spec_override,
+    );
+    let simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let resolved = gear_resolver::resolve_gear(&parse_result);
+    let base_profile = resolved.base_profile.clone();
+
+    let server_max = *crate::storage::MAX_COMBINATIONS;
+    let max_combinations = match (req.max_combinations, server_max) {
+        (Some(client), s) if s > 0 => Some(client.min(s)),
+        (None, s) if s > 0 => Some(s),
+        (client, _) => client,
+    };
+
+    let socketed_item_ids: std::collections::HashSet<u64> = resolved
+        .slots
+        .values()
+        .flat_map(|res| {
+            let mut ids = Vec::new();
+            if let Some(eq) = &res.equipped {
+                if eq.sockets > 0 { ids.push(eq.item_id); }
+            }
+            for alt in &res.alternatives {
+                if alt.sockets > 0 { ids.push(alt.item_id); }
+            }
+            ids
+        })
+        .collect();
+
+    let (generated_input, combo_count, combo_metadata) =
+        match profileset_generator::generate_enchant_gem_input(
+            &base_profile,
+            &req.enchant_selections,
+            &req.gem_options,
+            &socketed_item_ids,
+            max_combinations,
+        ) {
+            Ok(r) => r,
+            Err(e) => {
+                return HttpResponse::BadRequest().json(json!({"detail": e}));
+            }
+        };
+
+    if combo_count == 0 {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "No enchant or gem options selected. Select at least two options for a slot."
+        }));
+    }
+
+    let generated_input = inject_expert_fields(&generated_input, &req.options);
+
+    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+        return resp;
+    }
+
+    let job = Job::new(
+        generated_input.clone(),
+        "enchant_gem".to_string(),
+        req.options.iterations,
+        req.options.fight_style.clone(),
+        req.options.target_error,
+    );
+    let job_id = job.id.clone();
+    let created_at = job.created_at.clone();
+
+    let meta_json = serde_json::to_string(&json!({
+        "_combo_metadata": combo_metadata,
+        "_combo_count": combo_count,
+    }))
+    .unwrap_or_default();
+
+    let mut job = job;
+    job.combo_metadata_json = Some(meta_json);
+    job.batch_id = req.options.batch_id.clone();
+    store.insert(job);
+
+    spawn_staged_sim(
+        store.get_ref().clone(),
+        simc_path.get_ref().clone(),
+        req.options.to_json(),
+        job_id.clone(),
+        generated_input,
+        combo_count,
+        log_buffer.get_ref().clone(),
+    );
+
+    HttpResponse::Ok().json(SimResponse {
+        id: job_id,
+        status: "pending".to_string(),
+        created_at,
+    })
+}
+
+pub(super) async fn get_enchant_gem_combo_count(
+    req: web::Json<EnchantGemSimRequest>,
+) -> HttpResponse {
+    let simc_input = apply_spec_override(
+        &apply_talent_override(&req.simc_input, &req.options.talents),
+        &req.options.spec_override,
+    );
+    let simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
+    let parse_result = addon_parser::parse_simc_input(&simc_input);
+    let resolved = gear_resolver::resolve_gear(&parse_result);
+    let base_profile = resolved.base_profile.clone();
+
+    let server_max = *crate::storage::MAX_COMBINATIONS;
+    let max_combinations = match (req.max_combinations, server_max) {
+        (Some(client), s) if s > 0 => Some(client.min(s)),
+        (None, s) if s > 0 => Some(s),
+        (client, _) => client,
+    };
+
+    let socketed_item_ids: std::collections::HashSet<u64> = resolved
+        .slots
+        .values()
+        .flat_map(|res| {
+            let mut ids = Vec::new();
+            if let Some(eq) = &res.equipped {
+                if eq.sockets > 0 { ids.push(eq.item_id); }
+            }
+            for alt in &res.alternatives {
+                if alt.sockets > 0 { ids.push(alt.item_id); }
+            }
+            ids
+        })
+        .collect();
+
+    match profileset_generator::generate_enchant_gem_input(
+        &base_profile,
+        &req.enchant_selections,
+        &req.gem_options,
+        &socketed_item_ids,
+        max_combinations,
+    ) {
+        Ok((_, count, _)) => HttpResponse::Ok().json(json!({"combo_count": count})),
+        Err(e) => HttpResponse::BadRequest().json(json!({"detail": e})),
+    }
 }

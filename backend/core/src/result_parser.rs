@@ -343,6 +343,10 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
             .replace('_', " ");
         let name = title_case(&name);
 
+        let sockets = crate::item_db::get_item_info(item_id, Some(&bonus_ids))
+            .map(|info| info.sockets)
+            .unwrap_or(0);
+
         baseline.insert(
             slot.clone(),
             json!({
@@ -353,6 +357,7 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
                 "bonus_ids": bonus_ids,
                 "enchant_id": enchant_id,
                 "gem_id": gem_id,
+                "sockets": sockets,
                 "is_kept": true,
             }),
         );
