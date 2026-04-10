@@ -332,6 +332,18 @@ pub fn generate_top_gear_input_with_talents(
             }
         }
 
+        // If not replacing gems, check if a diamond is already equipped.
+        // Diamonds are unique-equipped (max 1), so don't add more.
+        if !replace_gems {
+            let has_equipped_diamond = equipped_gear.values().any(|simc| {
+                let gid = extract_gem_id(simc);
+                gid > 0 && is_diamond(gid)
+            });
+            if has_equipped_diamond {
+                gems.retain(|g| !is_diamond(*g));
+            }
+        }
+
         // If diamond always-use: separate diamonds from colored gems.
         // Try the diamond in EACH socketed slot position (like Raidbots).
         let diamond_ids: Vec<u64> = if diamond_always_use {
