@@ -737,7 +737,17 @@ pub fn generate_top_gear_input_with_talents(
 
         // For the first talent + baseline gear: emit a gem-only combo
         // (baseline gear with gem combo applied, no enchant or gear changes)
+        // Skip if the gem combo doesn't actually change any equipped slot.
         if talent_idx == 0 && gem_combo_opt.is_some() {
+            let any_gem_change = GEAR_SLOTS.iter().any(|slot| {
+                let slot_str = slot.to_string();
+                equipped_gear.get(&slot_str)
+                    .map(|gear_val| gem_simc(&slot_str, gear_val) != *gear_val)
+                    .unwrap_or(false)
+            });
+            if !any_gem_change {
+                // Gem combo doesn't change anything on baseline gear, skip
+            } else {
             let combo_name = format!("Combo {}", combo_number);
             lines.push(format!("### {}", combo_name));
             for slot in GEAR_SLOTS {
@@ -760,6 +770,7 @@ pub fn generate_top_gear_input_with_talents(
             }
             combo_metadata.insert(combo_name, combo_items);
             combo_number += 1;
+        } // end any_gem_change else
         }
 
         // For the first talent + baseline gear, we still need enchant/gem-only combos

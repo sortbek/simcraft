@@ -92,6 +92,7 @@ function statLabel(stat: { type: string; amount: number }): string {
     agility: 'Agi',
     strength: 'Str',
     intellect: 'Int',
+    stragiint: 'Primary',
     stamina: 'Sta',
     armor: 'Armor',
   };
@@ -111,11 +112,11 @@ function enchantDetails(e: EnchantOption): { text: string; color?: string }[] {
 
 function gemDetails(g: GemOption): { text: string; color?: string }[] {
   const parts: { text: string; color?: string }[] = [];
-  if (g.stats && g.stats.length > 0) {
+  // For diamonds (quality 4), use displayName which includes the special effect
+  if ((g.quality ?? 0) >= 4 && g.displayName) {
+    parts.push({ text: g.displayName });
+  } else if (g.stats && g.stats.length > 0) {
     parts.push({ text: g.stats.map(statLabel).join(', ') });
-  }
-  if (g.craftingQuality) {
-    parts.push({ text: `Rank ${g.craftingQuality}`, color: 'text-on-surface-variant/40' });
   }
   return parts;
 }
@@ -255,15 +256,17 @@ export default function EnchantGemSelector({
         </p>
         <div className="flex items-center gap-3">
           {hasAnyGemSelected && (
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={replaceGems}
-                onChange={(e) => onReplaceGemsChange(e.target.checked)}
-                className="accent-gold w-3.5 h-3.5"
-              />
-              <span className="text-[11px] text-on-surface-variant/70">{t('enchantGem.replaceGems')}</span>
-            </label>
+            <div
+              className="flex items-center gap-2 cursor-pointer group"
+              onClick={() => onReplaceGemsChange(!replaceGems)}
+            >
+              <div className={`w-8 h-[18px] rounded-full relative transition-colors shrink-0 ${replaceGems ? 'bg-gold' : 'bg-surface-container-highest'}`}>
+                <div className={`w-3 h-3 rounded-full absolute top-[3px] transition-all ${replaceGems ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`} />
+              </div>
+              <span className="text-[11px] font-semibold text-on-surface-variant group-hover:text-gold transition-colors">
+                {t('enchantGem.replaceGems')}
+              </span>
+            </div>
           )}
           <button
             onClick={() =>
@@ -280,59 +283,66 @@ export default function EnchantGemSelector({
         </div>
       </div>
 
-      {/* Diamonds section */}
-      {diamonds.length > 0 && (
-        <div className="card space-y-1 p-3.5">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="font-headline text-[13px] font-semibold uppercase tracking-widest text-amber-400">
-              {t('enchantGem.diamonds')}
-            </p>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={diamondAlwaysUse}
-                  onChange={(e) => onDiamondAlwaysUseChange(e.target.checked)}
-                  className="accent-amber-400 w-3.5 h-3.5"
-                />
-                <span className="text-[11px] text-on-surface-variant/70">{t('enchantGem.alwaysUse')}</span>
-              </label>
-              {diamondAlwaysUse && (
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={maxColors}
-                    onChange={(e) => onMaxColorsChange(e.target.checked)}
-                    className="accent-amber-400 w-3.5 h-3.5"
-                  />
-                  <span className="text-[11px] text-on-surface-variant/70">{t('enchantGem.onlyMaxColors')}</span>
-                </label>
-              )}
+      {/* Diamond toggles bar */}
+      {diamonds.length > 0 && diamonds.some((d) => d.itemId && gemSelections.has(d.itemId)) && (
+        <div className="flex items-center gap-4 px-1">
+          <div
+            className="flex items-center gap-2 cursor-pointer group"
+            onClick={() => onDiamondAlwaysUseChange(!diamondAlwaysUse)}
+          >
+            <div className={`w-8 h-[18px] rounded-full relative transition-colors shrink-0 ${diamondAlwaysUse ? 'bg-amber-500' : 'bg-surface-container-highest'}`}>
+              <div className={`w-3 h-3 rounded-full absolute top-[3px] transition-all ${diamondAlwaysUse ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`} />
             </div>
+            <span className="text-[11px] font-semibold text-on-surface-variant group-hover:text-amber-400 transition-colors">
+              {t('enchantGem.alwaysUse')}
+            </span>
           </div>
-          {diamonds.map((d) => {
-            const gemItemId = d.itemId!;
-            if (!gemItemId) return null;
-            const isSelected = gemSelections.has(gemItemId);
-
-            return (
-              <GearItemRow
-                key={d.id}
-                icon={d.itemIcon || ''}
-                name={d.itemName || d.displayName}
-                nameColor={isSelected ? 'text-amber-400' : 'text-on-surface'}
-                details={gemDetails(d)}
-                selectable
-                checked={isSelected}
-                onToggle={() => onGemToggle('', gemItemId)}
-              />
-            );
-          })}
+          {diamondAlwaysUse && (
+            <div
+              className="flex items-center gap-2 cursor-pointer group"
+              onClick={() => onMaxColorsChange(!maxColors)}
+            >
+              <div className={`w-8 h-[18px] rounded-full relative transition-colors shrink-0 ${maxColors ? 'bg-amber-500' : 'bg-surface-container-highest'}`}>
+                <div className={`w-3 h-3 rounded-full absolute top-[3px] transition-all ${maxColors ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`} />
+              </div>
+              <span className="text-[11px] font-semibold text-on-surface-variant group-hover:text-amber-400 transition-colors">
+                {t('enchantGem.onlyMaxColors')}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Colored gems by group */}
+      {/* All gems in one grid — diamonds + colored groups */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {/* Diamonds card */}
+        {diamonds.length > 0 && (
+          <div className="card space-y-1 p-3.5">
+            <div className="mb-2">
+              <p className="font-headline text-[13px] font-semibold uppercase tracking-widest text-amber-400">
+                {t('enchantGem.diamonds')}
+              </p>
+            </div>
+            {diamonds.map((d) => {
+              const gemItemId = d.itemId!;
+              if (!gemItemId) return null;
+              const isSelected = gemSelections.has(gemItemId);
+
+              return (
+                <GearItemRow
+                  key={d.id}
+                  icon={d.itemIcon || ''}
+                  name={d.itemName || d.displayName}
+                  nameColor={isSelected ? 'text-amber-400' : 'text-on-surface'}
+                  details={gemDetails(d)}
+                  selectable
+                  checked={isSelected}
+                  onToggle={() => onGemToggle('', gemItemId)}
+                />
+              );
+            })}
+          </div>
+        )}
         {gemGroups.map(({ color, gems }) => {
           const groupIds = gems.map((g) => g.itemId!).filter(Boolean);
           const groupSelected = groupIds.length > 0 && groupIds.every((id) => gemSelections.has(id));
