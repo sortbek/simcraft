@@ -207,6 +207,86 @@ export default function TopGearItemSelector({
     [resolved, upgradeOptions, onResolvedChange, onItemAdded, selectedUids, onSelectionChange]
   );
 
+  const SOCKET_BONUS_ID = 13668;
+
+  const addSocketCopy = useCallback(
+    (item: ResolvedItem) => {
+      if (item.sockets > 0) return; // already has socket
+      const newBonusIds = [...item.bonus_ids, SOCKET_BONUS_ID];
+      const newSimcString = item.simc_string.replace(
+        /bonus_id=[0-9/:]+/,
+        `bonus_id=${newBonusIds.join('/')}`
+      );
+      const copyOrigin = 'bags';
+      const copy: ResolvedItem = {
+        ...item,
+        origin: copyOrigin as ResolvedItem['origin'],
+        uid: `${item.item_id}:${[...newBonusIds].sort((a, b) => a - b).join(':')}:${copyOrigin}:${item.slot}`,
+        bonus_ids: newBonusIds,
+        simc_string: newSimcString,
+        sockets: 1,
+        gem_id: 0,
+        gem_name: '',
+        gem_icon: '',
+      };
+      const updatedSlots = { ...resolved.slots };
+      const slotRes = updatedSlots[item.slot];
+      if (slotRes) {
+        updatedSlots[item.slot] = {
+          ...slotRes,
+          alternatives: [...slotRes.alternatives, copy],
+        };
+      }
+      onResolvedChange({ ...resolved, slots: updatedSlots });
+      onItemAdded(item.slot, newSimcString, item.origin);
+      const updated: Record<string, Set<string>> = {};
+      for (const [k, v] of Object.entries(selectedUids)) {
+        updated[k] = new Set(v);
+      }
+      if (!updated[item.slot]) updated[item.slot] = new Set();
+      updated[item.slot].add(copy.uid);
+      onSelectionChange(updated);
+      setUpgradeMenuFor(null);
+    },
+    [resolved, onResolvedChange, onItemAdded, selectedUids, onSelectionChange]
+  );
+
+  const removeGemCopy = useCallback(
+    (item: ResolvedItem) => {
+      if (!item.gem_id) return;
+      const newSimcString = item.simc_string.replace(/,?gem_id=\d+/, '');
+      const copyOrigin = 'bags';
+      const copy: ResolvedItem = {
+        ...item,
+        origin: copyOrigin as ResolvedItem['origin'],
+        uid: `${item.item_id}:${[...item.bonus_ids].sort((a, b) => a - b).join(':')}:nogem:${item.slot}`,
+        simc_string: newSimcString,
+        gem_id: 0,
+        gem_name: '',
+        gem_icon: '',
+      };
+      const updatedSlots = { ...resolved.slots };
+      const slotRes = updatedSlots[item.slot];
+      if (slotRes) {
+        updatedSlots[item.slot] = {
+          ...slotRes,
+          alternatives: [...slotRes.alternatives, copy],
+        };
+      }
+      onResolvedChange({ ...resolved, slots: updatedSlots });
+      onItemAdded(item.slot, newSimcString, item.origin);
+      const updated: Record<string, Set<string>> = {};
+      for (const [k, v] of Object.entries(selectedUids)) {
+        updated[k] = new Set(v);
+      }
+      if (!updated[item.slot]) updated[item.slot] = new Set();
+      updated[item.slot].add(copy.uid);
+      onSelectionChange(updated);
+      setUpgradeMenuFor(null);
+    },
+    [resolved, onResolvedChange, onItemAdded, selectedUids, onSelectionChange]
+  );
+
   function toggleItem(item: ResolvedItem, group: DisplayGroup) {
     applyToggle(item, group, {
       ...Object.fromEntries(Object.entries(selectedUids).map(([k, v]) => [k, new Set(v)])),
@@ -446,6 +526,8 @@ export default function TopGearItemSelector({
                   onUpgradeClick={() => openUpgradeMenu(item, item.uid)}
                   onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)}
                   onCatalystConvert={item.can_catalyst ? () => convertToCatalyst(item) : undefined}
+                  onAddSocket={item.sockets === 0 && ['head', 'neck', 'wrist', 'waist', 'finger1', 'finger2'].includes(item.slot) ? () => addSocketCopy(item) : undefined}
+                  onRemoveGem={item.gem_id > 0 ? () => removeGemCopy(item) : undefined}
                 />
               </GearItemRow>
             ))}
@@ -478,6 +560,8 @@ export default function TopGearItemSelector({
                   onUpgradeClick={() => openUpgradeMenu(item, item.uid)}
                   onUpgradeSelect={(opt) => addUpgradedCopy(item, opt)}
                   onCatalystConvert={item.can_catalyst ? () => convertToCatalyst(item) : undefined}
+                  onAddSocket={item.sockets === 0 && ['head', 'neck', 'wrist', 'waist', 'finger1', 'finger2'].includes(item.slot) ? () => addSocketCopy(item) : undefined}
+                  onRemoveGem={item.gem_id > 0 ? () => removeGemCopy(item) : undefined}
                 />
               </GearItemRow>
             ))}
@@ -496,6 +580,8 @@ function UpgradeButton({
   onUpgradeClick,
   onUpgradeSelect,
   onCatalystConvert,
+  onAddSocket,
+  onRemoveGem,
 }: {
   item: ResolvedItem;
   upgradeMenuFor: string | null;
@@ -504,9 +590,11 @@ function UpgradeButton({
   onUpgradeClick: () => void;
   onUpgradeSelect: (opt: UpgradeOption) => void;
   onCatalystConvert?: () => void;
+  onAddSocket?: () => void;
+  onRemoveGem?: () => void;
 }) {
   const { t } = useLanguage();
-  if (!item.upgrade && !onCatalystConvert) return null;
+  if (!item.upgrade && !onCatalystConvert && !onAddSocket && !onRemoveGem) return null;
   const isMenuOpen = upgradeMenuFor === item.uid;
 
   return (
@@ -554,7 +642,41 @@ function UpgradeButton({
               {t('gear.convertToCatalyst')}
             </button>
           )}
-          {onCatalystConvert && item.upgrade && (
+          {onAddSocket && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onAddSocket();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-sky-300 hover:bg-sky-500/10 hover:text-sky-200"
+            >
+              <svg className="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M8 4v8M4 8h8" />
+                <circle cx="8" cy="8" r="6" />
+              </svg>
+              {t('gear.addSocket')}
+            </button>
+          )}
+          {onRemoveGem && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onRemoveGem();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-red-300 hover:bg-red-500/10 hover:text-red-200"
+            >
+              <svg className="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M4 8h8" />
+                <circle cx="8" cy="8" r="6" />
+              </svg>
+              {t('gear.removeGem')}
+            </button>
+          )}
+          {(onCatalystConvert || onAddSocket || onRemoveGem) && item.upgrade && (
             <div className="my-1 border-t border-outline-variant/20" />
           )}
           {item.upgrade && (

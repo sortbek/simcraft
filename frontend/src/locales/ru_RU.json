@@ -1,6 +1,7 @@
 {
   "nav.quickSim": "БЫСТРАЯ СИМ",
   "nav.topGear": "TOP GEAR",
+  "nav.enchantGem": "ЧАРЫ И КАМНИ",
   "nav.upgrades": "УЛУЧШЕНИЯ",
   "nav.dropFinder": "Drop Finder",
   "nav.crestUpgrades": "Улучшения гербов",
@@ -210,6 +211,8 @@
   "page.dropFinderDesc": "Просимулируй добычу из рейдов и подземелий",
   "page.crestUpgrades": "Улучшения гербов",
   "page.crestUpgradesDesc": "Лучший путь Герба Рассвета",
+  "page.enchantGem": "Чары и Камни",
+  "page.enchantGemDesc": "Найдите лучшие чары и камни.",
   "page.history": "История",
   "page.historyDesc": "Просмотр результатов последних симуляций.",
 

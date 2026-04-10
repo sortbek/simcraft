@@ -1,14 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import { useSimContext } from '../components/sim-config/SimContext';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
+import EnchantGemSelector from '../components/gear/EnchantGemSelector';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
-import type { ResolveGearResponse } from '../lib/types';
+import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useLanguage } from '../lib/i18n';
 
 function Toggle({
@@ -60,6 +61,8 @@ export default function TopGearPage() {
   const [resolving, setResolving] = useState(false);
   const [comboCount, setComboCount] = useState(0);
   const [comboError, setComboError] = useState('');
+  const [enchantSelections, setEnchantSelections] = useState<Record<string, Set<number>>>({});
+  const [gemSelections, setGemSelections] = useState<Set<number>>(new Set());
   const prevInputRef = useRef('');
   const prevUpgradeRef = useRef(false);
   const prevCatalystRef = useRef(false);
@@ -100,16 +103,6 @@ export default function TopGearPage() {
           }
           const data: ResolveGearResponse = await res.json();
 
-          const hasAlternatives = Object.values(data.slots).some(
-            (slot) => slot.alternatives.length > 0
-          );
-          if (!hasAlternatives) {
-            setResolved(null);
-            setSelectedUids({});
-            setLocalItems([]);
-            return;
-          }
-
           setResolved(data);
 
           if (inputChanged && data.catalyst_charges != null) {
@@ -119,6 +112,8 @@ export default function TopGearPage() {
           if (inputChanged) {
             setSelectedUids({});
             setLocalItems([]);
+            setEnchantSelections({});
+            setGemSelections(new Set());
           }
         } catch {
           setResolved(null);
@@ -131,6 +126,60 @@ export default function TopGearPage() {
     );
     return () => clearTimeout(timer);
   }, [simcInput, maxUpgrade, catalyst]);
+
+  // Build equipped slots map for EnchantGemSelector
+  const equippedSlots = useMemo<Record<string, ResolvedItem>>(() => {
+    if (!resolved) return {};
+    const map: Record<string, ResolvedItem> = {};
+    for (const [slot, res] of Object.entries(resolved.slots)) {
+      if (res.equipped) map[slot] = res.equipped;
+    }
+    return map;
+  }, [resolved]);
+
+  const enchantSelectionsArray = useMemo(() => {
+    const result: Record<string, number[]> = {};
+    for (const [slot, ids] of Object.entries(enchantSelections)) {
+      if (ids.size > 0) result[slot] = Array.from(ids);
+    }
+    return result;
+  }, [enchantSelections]);
+
+  const gemOptionsArray = useMemo(() => Array.from(gemSelections), [gemSelections]);
+
+  const onEnchantToggle = useCallback((slot: string, id: number) => {
+    setEnchantSelections((prev) => {
+      const set = new Set(prev[slot] || []);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      return { ...prev, [slot]: set };
+    });
+  }, []);
+
+  const onGemToggle = useCallback((_slot: string, id: number) => {
+    setGemSelections((prev) => {
+      const set = new Set(prev);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      return set;
+    });
+  }, []);
+
+  const onSelectAllEnchants = useCallback((slot: string, ids: number[]) => {
+    setEnchantSelections((prev) => ({ ...prev, [slot]: new Set(ids) }));
+  }, []);
+
+  const onDeselectAllEnchants = useCallback((slot: string) => {
+    setEnchantSelections((prev) => ({ ...prev, [slot]: new Set() }));
+  }, []);
+
+  const onSelectAllGems = useCallback((_slot: string, ids: number[]) => {
+    setGemSelections(new Set(ids));
+  }, []);
+
+  const onDeselectAllGems = useCallback((_slot: string) => {
+    setGemSelections(new Set());
+  }, []);
 
   const buildSubmitInput = useCallback((): string => {
     let result = simcInput;
@@ -168,7 +217,9 @@ export default function TopGearPage() {
   useEffect(() => {
     const hasGearSelection = Object.values(selectedUids).some((s) => s.size > 0);
     const hasTalentCompare = talentBuilds.length > 1;
-    if (!resolved || (!hasGearSelection && !hasTalentCompare)) {
+    const hasEnchantGem = Object.values(enchantSelectionsArray).some((v) => v.length > 0)
+      || gemOptionsArray.length > 0;
+    if (!resolved || (!hasGearSelection && !hasTalentCompare && !hasEnchantGem)) {
       setComboCount(0);
       setComboError('');
       return;
@@ -197,6 +248,8 @@ export default function TopGearPage() {
               : {}),
             catalyst,
             ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
+            enchant_selections: enchantSelectionsArray,
+            gem_options: gemOptionsArray,
           }),
           signal: controller.signal,
         });
@@ -229,6 +282,8 @@ export default function TopGearPage() {
     talentBuilds,
     catalyst,
     catalystCharges,
+    enchantSelectionsArray,
+    gemOptionsArray,
     buildSelectedUidsJson,
     buildSubmitInput,
     t,
@@ -252,6 +307,8 @@ export default function TopGearPage() {
         : {}),
       catalyst,
       ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
+      enchant_selections: enchantSelectionsArray,
+      gem_options: gemOptionsArray,
     }),
     [
       buildSubmitInput,
@@ -262,6 +319,8 @@ export default function TopGearPage() {
       talentBuilds,
       catalyst,
       catalystCharges,
+      enchantSelectionsArray,
+      gemOptionsArray,
     ]
   );
 
@@ -316,18 +375,31 @@ export default function TopGearPage() {
             : t('topGear.pasteExport')}
         </p>
       ) : (
-        <TopGearItemSelector
-          resolved={resolved}
-          selectedUids={selectedUids}
-          onSelectionChange={setSelectedUids}
-          onResolvedChange={setResolved}
-          onItemAdded={(slot, simcString, origin) =>
-            setLocalItems((prev) => [...prev, { slot, simc_string: simcString, origin }])
-          }
-          maxUpgrade={maxUpgrade}
-          comboCount={comboCount}
-          comboError={comboError}
-        />
+        <>
+          <TopGearItemSelector
+            resolved={resolved}
+            selectedUids={selectedUids}
+            onSelectionChange={setSelectedUids}
+            onResolvedChange={setResolved}
+            onItemAdded={(slot, simcString, origin) =>
+              setLocalItems((prev) => [...prev, { slot, simc_string: simcString, origin }])
+            }
+            maxUpgrade={maxUpgrade}
+            comboCount={comboCount}
+            comboError={comboError}
+          />
+          <EnchantGemSelector
+            equippedSlots={equippedSlots}
+            enchantSelections={enchantSelections}
+            gemSelections={gemSelections}
+            onEnchantToggle={onEnchantToggle}
+            onGemToggle={onGemToggle}
+            onSelectAllEnchants={onSelectAllEnchants}
+            onDeselectAllEnchants={onDeselectAllEnchants}
+            onSelectAllGems={onSelectAllGems}
+            onDeselectAllGems={onDeselectAllGems}
+          />
+        </>
       )}
 
       <ErrorAlert message={error} />

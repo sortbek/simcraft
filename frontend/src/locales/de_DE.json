@@ -1,6 +1,7 @@
 {
   "nav.quickSim": "SCHNELLSIM",
   "nav.topGear": "BESTE AUSR.",
+  "nav.enchantGem": "VERZAUBERUNGEN & EDELSTEINE",
   "nav.upgrades": "UPGRADES",
   "nav.dropFinder": "Drop-Finder",
   "nav.crestUpgrades": "Wappen-Upgrades",
@@ -210,6 +211,8 @@
   "page.dropFinderDesc": "Simuliere Raid- & Dungeon-Beute",
   "page.crestUpgrades": "Wappen-Upgrades",
   "page.crestUpgradesDesc": "Bester Morgendämmerungswappen-Pfad",
+  "page.enchantGem": "Verzauberungen & Edelsteine",
+  "page.enchantGemDesc": "Finde die besten Verzauberungen und Edelsteine.",
   "page.history": "Verlauf",
   "page.historyDesc": "Letzte Simulationsergebnisse ansehen.",
 

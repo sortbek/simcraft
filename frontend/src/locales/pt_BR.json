@@ -1,6 +1,7 @@
 {
   "nav.quickSim": "SIM RÁPIDA",
   "nav.topGear": "TOP GEAR",
+  "nav.enchantGem": "ENCANTAMENTOS E GEMAS",
   "nav.upgrades": "MELHORIAS",
   "nav.dropFinder": "Drop Finder",
   "nav.crestUpgrades": "Melhorias de Brasão",
@@ -210,6 +211,8 @@
   "page.dropFinderDesc": "Simule o loot de raides e masmorras",
   "page.crestUpgrades": "Melhorias de Brasão",
   "page.crestUpgradesDesc": "Melhor caminho de Brasão da Aurora",
+  "page.enchantGem": "Encantamentos e Gemas",
+  "page.enchantGemDesc": "Encontre os melhores encantamentos e gemas.",
   "page.history": "Histórico",
   "page.historyDesc": "Veja resultados de simulações recentes.",
 

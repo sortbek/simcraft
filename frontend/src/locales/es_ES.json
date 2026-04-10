@@ -1,6 +1,7 @@
 {
   "nav.quickSim": "SIM RÁPIDA",
   "nav.topGear": "MEJOR EQUIPO",
+  "nav.enchantGem": "ENCANTAMIENTOS Y GEMAS",
   "nav.upgrades": "MEJORAS",
   "nav.dropFinder": "Buscador de Botín",
   "nav.crestUpgrades": "Mejoras de Crestas",
@@ -210,6 +211,8 @@
   "page.dropFinderDesc": "Simula botín de bandas y mazmorras",
   "page.crestUpgrades": "Mejoras de crestas",
   "page.crestUpgradesDesc": "Mejor camino de Crestaalba",
+  "page.enchantGem": "Encantamientos y Gemas",
+  "page.enchantGemDesc": "Encuentra los mejores encantamientos y gemas.",
   "page.history": "Historial",
   "page.historyDesc": "Revisa los resultados de simulaciones recientes.",
 

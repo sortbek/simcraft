@@ -1,6 +1,7 @@
 {
   "nav.quickSim": "SIM RAPIDE",
   "nav.topGear": "TOP GEAR",
+  "nav.enchantGem": "ENCHANTEMENTS ET GEMMES",
   "nav.upgrades": "AMÉLIORATIONS",
   "nav.dropFinder": "Butin",
   "nav.crestUpgrades": "Améliorations d'emblème",
@@ -210,6 +211,8 @@
   "page.dropFinderDesc": "Simule le butin des raids et donjons",
   "page.crestUpgrades": "Améliorations d'emblème",
   "page.crestUpgradesDesc": "Meilleur chemin d'Emblème de l'aube",
+  "page.enchantGem": "Enchantements et Gemmes",
+  "page.enchantGemDesc": "Trouvez les meilleurs enchantements et gemmes.",
   "page.history": "Historique",
   "page.historyDesc": "Consulte les résultats de simulations récentes.",
 

@@ -169,7 +169,7 @@ export default function SimResultClient() {
   }
 
   const r = job.result;
-  const isTopGear = r.type === 'top_gear';
+  const isTopGear = r.type === 'top_gear' || r.type === 'enchant_gem';
 
   return (
     <div className="space-y-6">

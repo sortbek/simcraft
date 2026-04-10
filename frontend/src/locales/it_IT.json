@@ -1,6 +1,7 @@
 {
   "nav.quickSim": "SIM RAPIDA",
   "nav.topGear": "TOP GEAR",
+  "nav.enchantGem": "INCANTAMENTI E GEMME",
   "nav.upgrades": "POTENZIAMENTI",
   "nav.dropFinder": "Drop Finder",
   "nav.crestUpgrades": "Potenziamenti Stemma",
@@ -210,6 +211,8 @@
   "page.dropFinderDesc": "Simula il bottino di raid e dungeon",
   "page.crestUpgrades": "Potenziamenti Stemma",
   "page.crestUpgradesDesc": "Miglior percorso Stemma dell'Alba",
+  "page.enchantGem": "Incantamenti e Gemme",
+  "page.enchantGemDesc": "Trova i migliori incantamenti e gemme.",
   "page.history": "Cronologia",
   "page.historyDesc": "Visualizza i risultati delle simulazioni recenti.",
 

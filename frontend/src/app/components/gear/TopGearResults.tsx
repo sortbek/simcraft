@@ -30,6 +30,8 @@ interface ResultItem {
   encounter?: string;
   origin?: string;
   upgrade_levels?: number;
+  /** Enchant/gem metadata entries from enchant-gem profileset combos */
+  type?: 'enchant' | 'gem';
 }
 
 interface TopGearResult {
@@ -149,12 +151,26 @@ export default function TopGearResults({
 
     if (selectedResult) {
       for (const it of selectedResult.items) {
+        if (it.type) continue; // enchant/gem metadata, handled below
         if (!it.is_kept && it.slot === 'off_hand' && it.item_id === 0) {
           delete gearSet.off_hand;
           continue;
         }
         if (!it.is_kept && it.item_id > 0) {
           gearSet[it.slot] = { ...it };
+        }
+      }
+
+      // Apply gem metadata: set gem_id on items that have sockets but no gem
+      const gemMeta = selectedResult.items.find((it) => it.type === 'gem');
+      if (gemMeta && gemMeta.gem_id && equippedGear) {
+        for (const slot of ALL_SLOTS) {
+          const item = gearSet[slot];
+          const eqItem = equippedGear[slot];
+          const hasSockets = eqItem && (eqItem as unknown as { sockets?: number }).sockets;
+          if (item && !item.gem_id && hasSockets) {
+            gearSet[slot] = { ...item, gem_id: gemMeta.gem_id };
+          }
         }
       }
     }
@@ -458,7 +474,11 @@ function ResultRow({
 }) {
   const { t } = useLanguage();
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
-  const isEquipped = result.items.length === 0 || result.name.startsWith('Currently Equipped');
+
+  const changedItems = result.items.filter((it) => !it.is_kept && it.item_id > 0 && !it.type);
+  const enchantGemItems = result.items.filter((it) => it.type === 'enchant' || it.type === 'gem');
+
+  const isEquipped = (result.items.length === 0 || result.name.startsWith('Currently Equipped')) && enchantGemItems.length === 0;
   const hasTalentBuild = !!result.talent_build;
   const talentBadge = hasTalentBuild ? (
     <span className="inline-flex shrink-0 items-center gap-1 rounded bg-purple-500/10 px-1.5 py-px text-[11px] font-medium">
@@ -468,14 +488,13 @@ function ResultRow({
       <span className="text-purple-400/70">{result.talent_build}</span>
     </span>
   ) : null;
-
-  const changedItems = result.items.filter((it) => !it.is_kept && it.item_id > 0);
   const changedSlots = new Set(changedItems.map((it) => it.slot));
 
   const showBothRings = changedSlots.has('finger1') || changedSlots.has('finger2');
   const showBothTrinkets = changedSlots.has('trinket1') || changedSlots.has('trinket2');
 
   const displayItems = result.items.filter((it) => {
+    if (it.type) return false; // enchant/gem entries rendered separately
     if (!it.is_kept) return it.item_id > 0;
     if (showBothRings && (it.slot === 'finger1' || it.slot === 'finger2')) return true;
     if (showBothTrinkets && (it.slot === 'trinket1' || it.slot === 'trinket2')) return true;
@@ -501,7 +520,7 @@ function ResultRow({
           )}
 
           {(() => {
-            const hasChangedItems = changedItems.length > 0;
+            const hasChangedItems = changedItems.length > 0 || enchantGemItems.length > 0;
 
             if (isEquipped) {
               return (
@@ -527,6 +546,16 @@ function ResultRow({
                     enchant={it.enchant_id ? enchantInfoMap[it.enchant_id] : undefined}
                     gem={it.gem_id ? gemInfoMap[it.gem_id] : undefined}
                   />
+                ))}
+                {enchantGemItems.map((it, i) => (
+                  <span
+                    key={`eg-${i}`}
+                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[13px] font-medium ${
+                      it.type === 'gem' ? 'bg-sky-500/10 text-sky-300' : 'bg-emerald-500/10 text-emerald-300'
+                    }`}
+                  >
+                    {it.name || (it.type === 'gem' ? 'Gem' : 'Enchant')}
+                  </span>
                 ))}
                 {talentBadge}
               </div>
