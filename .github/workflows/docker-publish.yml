@@ -41,6 +41,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Set up QEMU
+        if: github.ref != 'refs/heads/dev'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -51,7 +52,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.standalone
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.ref == 'refs/heads/dev' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
