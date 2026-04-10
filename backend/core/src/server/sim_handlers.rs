@@ -202,6 +202,9 @@ pub(super) async fn create_top_gear_sim(
             &req.enchant_selections,
             &req.gem_options,
             &socketed_item_ids,
+            req.replace_gems,
+            req.diamond_always_use,
+            req.max_colors,
         ) {
             Ok(r) => r,
             Err(e) => {
@@ -352,6 +355,9 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
         &req.enchant_selections,
         &req.gem_options,
         &socketed_item_ids,
+        req.replace_gems,
+        req.diamond_always_use,
+        req.max_colors,
     ) {
         Ok((_, count, _)) => HttpResponse::Ok().json(json!({ "combo_count": count })),
         Err(e) => {

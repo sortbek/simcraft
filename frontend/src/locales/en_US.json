@@ -260,6 +260,10 @@
   "enchantGem.noSelectionsError": "Select at least one enchant or gem option to compare.",
   "enchantGem.comboCount": "{count} combinations will be simulated",
   "enchantGem.loading": "Loading enchant and gem options...",
+  "enchantGem.diamonds": "Diamonds",
+  "enchantGem.replaceGems": "Replace current gems",
+  "enchantGem.alwaysUse": "Always Use",
+  "enchantGem.onlyMaxColors": "Only Max Colors",
 
   "quickSim.lastSim": "Last Sim",
   "quickSim.pasteExport": "Paste your SimC addon export to see your character's sim history.",

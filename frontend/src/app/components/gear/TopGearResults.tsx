@@ -59,6 +59,17 @@ interface TopGearResultsProps {
   elapsedTime?: number;
 }
 
+function gemBadgeClass(name?: string): string {
+  if (!name) return 'bg-sky-500/10 text-sky-300';
+  const n = name.toLowerCase();
+  if (n.includes('garnet')) return 'bg-red-500/10 text-red-300';
+  if (n.includes('amethyst')) return 'bg-purple-500/10 text-purple-300';
+  if (n.includes('peridot')) return 'bg-green-500/10 text-green-300';
+  if (n.includes('lapis')) return 'bg-blue-500/10 text-blue-300';
+  if (n.includes('diamond') || n.includes('eversong')) return 'bg-amber-500/10 text-amber-300';
+  return 'bg-sky-500/10 text-sky-300';
+}
+
 // WoW, character sheet order: left column, right column, then weapons
 const GEAR_ORDER_LEFT = ['head', 'neck', 'shoulder', 'back', 'chest', 'wrist'];
 const GEAR_ORDER_RIGHT = [
@@ -161,16 +172,10 @@ export default function TopGearResults({
         }
       }
 
-      // Apply gem metadata: set gem_id on items that have sockets but no gem
-      const gemMeta = selectedResult.items.find((it) => it.type === 'gem');
-      if (gemMeta && gemMeta.gem_id && equippedGear) {
-        for (const slot of ALL_SLOTS) {
-          const item = gearSet[slot];
-          const eqItem = equippedGear[slot];
-          const hasSockets = eqItem && (eqItem as unknown as { sockets?: number }).sockets;
-          if (item && !item.gem_id && hasSockets) {
-            gearSet[slot] = { ...item, gem_id: gemMeta.gem_id };
-          }
+      // Apply per-slot gem metadata from gem combos
+      for (const it of selectedResult.items) {
+        if (it.type === 'gem' && it.gem_id && it.slot && gearSet[it.slot]) {
+          gearSet[it.slot] = { ...gearSet[it.slot], gem_id: it.gem_id };
         }
       }
     }
@@ -182,6 +187,7 @@ export default function TopGearResults({
     if (selectedResult && selectedResult.delta > 0) {
       for (const it of selectedResult.items) {
         if (!it.is_kept && it.item_id > 0) slots.add(it.slot);
+        if (it.type === 'gem' && it.slot) slots.add(it.slot);
       }
     }
     return slots;
@@ -192,6 +198,7 @@ export default function TopGearResults({
     if (selectedResult && selectedResult.delta < 0) {
       for (const it of selectedResult.items) {
         if (!it.is_kept && it.item_id > 0) slots.add(it.slot);
+        if (it.type === 'gem' && it.slot) slots.add(it.slot);
       }
     }
     return slots;
@@ -551,7 +558,9 @@ function ResultRow({
                   <span
                     key={`eg-${i}`}
                     className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[13px] font-medium ${
-                      it.type === 'gem' ? 'bg-sky-500/10 text-sky-300' : 'bg-emerald-500/10 text-emerald-300'
+                      it.type === 'enchant'
+                        ? 'bg-emerald-500/10 text-emerald-300'
+                        : gemBadgeClass(it.name)
                     }`}
                   >
                     {it.name || (it.type === 'gem' ? 'Gem' : 'Enchant')}

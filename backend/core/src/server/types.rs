@@ -118,6 +118,15 @@ pub struct TopGearRequest {
     /// Gem options: flat list of gem item IDs to sim across all socketed slots
     #[serde(default)]
     pub gem_options: Vec<u64>,
+    /// When true, replace ALL existing gems (not just empty sockets)
+    #[serde(default)]
+    pub replace_gems: bool,
+    /// When true, selected diamonds are always placed in a socket (one per combo)
+    #[serde(default)]
+    pub diamond_always_use: bool,
+    /// When true, maximize unique gem colors across sockets
+    #[serde(default)]
+    pub max_colors: bool,
     #[serde(flatten)]
     pub options: SimOptions,
 }

@@ -219,6 +219,12 @@ export default function EnchantGemPage() {
           onDeselectAllEnchants={onDeselectAllEnchants}
           onSelectAllGems={onSelectAllGems}
           onDeselectAllGems={onDeselectAllGems}
+          replaceGems={false}
+          onReplaceGemsChange={() => {}}
+          diamondAlwaysUse={false}
+          onDiamondAlwaysUseChange={() => {}}
+          maxColors={false}
+          onMaxColorsChange={() => {}}
         />
       )}
 

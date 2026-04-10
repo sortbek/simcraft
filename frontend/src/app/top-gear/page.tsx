@@ -63,6 +63,9 @@ export default function TopGearPage() {
   const [comboError, setComboError] = useState('');
   const [enchantSelections, setEnchantSelections] = useState<Record<string, Set<number>>>({});
   const [gemSelections, setGemSelections] = useState<Set<number>>(new Set());
+  const [replaceGems, setReplaceGems] = useState(false);
+  const [diamondAlwaysUse, setDiamondAlwaysUse] = useState(false);
+  const [maxColors, setMaxColors] = useState(false);
   const prevInputRef = useRef('');
   const prevUpgradeRef = useRef(false);
   const prevCatalystRef = useRef(false);
@@ -114,6 +117,9 @@ export default function TopGearPage() {
             setLocalItems([]);
             setEnchantSelections({});
             setGemSelections(new Set());
+            setReplaceGems(false);
+            setDiamondAlwaysUse(false);
+            setMaxColors(false);
           }
         } catch {
           setResolved(null);
@@ -174,11 +180,20 @@ export default function TopGearPage() {
   }, []);
 
   const onSelectAllGems = useCallback((_slot: string, ids: number[]) => {
-    setGemSelections(new Set(ids));
+    setGemSelections((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
   }, []);
 
-  const onDeselectAllGems = useCallback((_slot: string) => {
-    setGemSelections(new Set());
+  const onDeselectAllGems = useCallback((_slot: string, ids?: number[]) => {
+    setGemSelections((prev) => {
+      if (!ids || ids.length === 0) return new Set(); // global deselect
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
   }, []);
 
   const buildSubmitInput = useCallback((): string => {
@@ -250,6 +265,9 @@ export default function TopGearPage() {
             ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
             enchant_selections: enchantSelectionsArray,
             gem_options: gemOptionsArray,
+            replace_gems: replaceGems,
+            diamond_always_use: diamondAlwaysUse,
+            max_colors: maxColors,
           }),
           signal: controller.signal,
         });
@@ -284,6 +302,9 @@ export default function TopGearPage() {
     catalystCharges,
     enchantSelectionsArray,
     gemOptionsArray,
+    replaceGems,
+    diamondAlwaysUse,
+    maxColors,
     buildSelectedUidsJson,
     buildSubmitInput,
     t,
@@ -309,6 +330,9 @@ export default function TopGearPage() {
       ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
       enchant_selections: enchantSelectionsArray,
       gem_options: gemOptionsArray,
+      replace_gems: replaceGems,
+      ...(diamondAlwaysUse != null ? { diamond_always_use: diamondAlwaysUse } : {}),
+      max_colors: maxColors,
     }),
     [
       buildSubmitInput,
@@ -321,6 +345,9 @@ export default function TopGearPage() {
       catalystCharges,
       enchantSelectionsArray,
       gemOptionsArray,
+      replaceGems,
+      diamondAlwaysUse,
+      maxColors,
     ]
   );
 
@@ -398,6 +425,12 @@ export default function TopGearPage() {
             onDeselectAllEnchants={onDeselectAllEnchants}
             onSelectAllGems={onSelectAllGems}
             onDeselectAllGems={onDeselectAllGems}
+            replaceGems={replaceGems}
+            onReplaceGemsChange={setReplaceGems}
+            diamondAlwaysUse={diamondAlwaysUse}
+            onDiamondAlwaysUseChange={setDiamondAlwaysUse}
+            maxColors={maxColors}
+            onMaxColorsChange={setMaxColors}
           />
         </>
       )}

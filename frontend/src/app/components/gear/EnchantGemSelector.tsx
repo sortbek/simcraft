@@ -65,7 +65,13 @@ interface EnchantGemSelectorProps {
   onSelectAllEnchants: (slot: string, ids: number[]) => void;
   onDeselectAllEnchants: (slot: string) => void;
   onSelectAllGems: (slot: string, ids: number[]) => void;
-  onDeselectAllGems: (slot: string) => void;
+  onDeselectAllGems: (slot: string, ids?: number[]) => void;
+  replaceGems: boolean;
+  onReplaceGemsChange: (v: boolean) => void;
+  diamondAlwaysUse: boolean;
+  onDiamondAlwaysUseChange: (v: boolean) => void;
+  maxColors: boolean;
+  onMaxColorsChange: (v: boolean) => void;
 }
 
 const GEM_COLOR_CLASS: Record<string, string> = {
@@ -124,6 +130,12 @@ export default function EnchantGemSelector({
   onDeselectAllEnchants,
   onSelectAllGems,
   onDeselectAllGems,
+  replaceGems,
+  onReplaceGemsChange,
+  diamondAlwaysUse,
+  onDiamondAlwaysUseChange,
+  maxColors,
+  onMaxColorsChange,
 }: EnchantGemSelectorProps) {
   const { t } = useLanguage();
   const [enchantOptions, setEnchantOptions] = useState<Record<string, EnchantOption[]>>({});
@@ -196,10 +208,16 @@ export default function EnchantGemSelector({
     return result;
   }, [enchantSlots, enchantOptions]);
 
-  // Group gems by color: rank 2 crafted gems only, quality >= 3 (Flawless rare & epic)
+  // Separate diamonds (quality 4, crafted rank 2) from regular gems
+  const diamonds = useMemo(
+    () => gemOptions.filter((g) => g.craftingQuality === 2 && (g.quality ?? 0) === 4),
+    [gemOptions]
+  );
+
+  // Group regular gems by color: rank 2 crafted, quality 3 (Flawless rare)
   const gemGroups = useMemo(() => {
     const filtered = gemOptions.filter(
-      (g) => g.craftingQuality === 2 && (g.quality ?? 0) >= 3
+      (g) => g.craftingQuality === 2 && (g.quality ?? 0) === 3
     );
     const groups: Record<string, GemOption[]> = {};
     for (const g of filtered) {
@@ -207,11 +225,9 @@ export default function EnchantGemSelector({
       if (!groups[color]) groups[color] = [];
       groups[color].push(g);
     }
-    // Sort gems within each group
     for (const arr of Object.values(groups)) {
       arr.sort((a, b) => (a.itemName || a.displayName).localeCompare(b.itemName || b.displayName));
     }
-    // Order: specific colors first, then 'other'
     const colorOrder = ['amethyst', 'garnet', 'lapis', 'peridot', 'other'];
     return colorOrder
       .filter((c) => groups[c]?.length > 0)
@@ -227,82 +243,142 @@ export default function EnchantGemSelector({
     return null;
   }
 
+  const allSelected = allGemIds.length > 0 && allGemIds.every((id) => gemSelections.has(id));
+  const hasAnyGemSelected = gemSelections.size > 0;
+
   return (
     <div className="space-y-4">
-      {/* Gems section — grouped by color, selected gems apply to all sockets */}
-      {socketedSlots.length > 0 && gemGroups.length > 0 && (() => {
-        const allSelected = allGemIds.length > 0 && allGemIds.every((id) => gemSelections.has(id));
+      {/* Header with toggles */}
+      <div className="sticky top-14 z-30 -mx-8 flex items-center justify-between border-b border-outline-variant/20 bg-background/90 px-8 py-2 backdrop-blur-sm">
+        <p className="text-xs font-medium uppercase tracking-widest text-muted">
+          {t('enchantGem.selectGems')}
+        </p>
+        <div className="flex items-center gap-3">
+          {hasAnyGemSelected && (
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={replaceGems}
+                onChange={(e) => onReplaceGemsChange(e.target.checked)}
+                className="accent-gold w-3.5 h-3.5"
+              />
+              <span className="text-[11px] text-on-surface-variant/70">{t('enchantGem.replaceGems')}</span>
+            </label>
+          )}
+          <button
+            onClick={() =>
+              allSelected
+                ? onDeselectAllGems('')
+                : onSelectAllGems('', allGemIds)
+            }
+            className="text-[11px] text-gold/60 hover:text-gold transition-colors"
+          >
+            {allSelected
+              ? t('enchantGem.deselectAll')
+              : t('enchantGem.selectAll')}
+          </button>
+        </div>
+      </div>
 
-        return (
-          <>
-            <div className="sticky top-14 z-30 -mx-8 flex items-center justify-between border-b border-outline-variant/20 bg-background/90 px-8 py-2 backdrop-blur-sm">
-              <p className="text-xs font-medium uppercase tracking-widest text-muted">
-                {t('enchantGem.selectGems')}
-              </p>
-              <button
-                onClick={() =>
-                  allSelected
-                    ? onDeselectAllGems('')
-                    : onSelectAllGems('', allGemIds)
-                }
-                className="text-[11px] text-gold/60 hover:text-gold transition-colors"
-              >
-                {allSelected
-                  ? t('enchantGem.deselectAll')
-                  : t('enchantGem.selectAll')}
-              </button>
+      {/* Diamonds section */}
+      {diamonds.length > 0 && (
+        <div className="card space-y-1 p-3.5">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-headline text-[13px] font-semibold uppercase tracking-widest text-amber-400">
+              {t('enchantGem.diamonds')}
+            </p>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={diamondAlwaysUse}
+                  onChange={(e) => onDiamondAlwaysUseChange(e.target.checked)}
+                  className="accent-amber-400 w-3.5 h-3.5"
+                />
+                <span className="text-[11px] text-on-surface-variant/70">{t('enchantGem.alwaysUse')}</span>
+              </label>
+              {diamondAlwaysUse && (
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={maxColors}
+                    onChange={(e) => onMaxColorsChange(e.target.checked)}
+                    className="accent-amber-400 w-3.5 h-3.5"
+                  />
+                  <span className="text-[11px] text-on-surface-variant/70">{t('enchantGem.onlyMaxColors')}</span>
+                </label>
+              )}
             </div>
+          </div>
+          {diamonds.map((d) => {
+            const gemItemId = d.itemId!;
+            if (!gemItemId) return null;
+            const isSelected = gemSelections.has(gemItemId);
 
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {gemGroups.map(({ color, gems }) => {
-                const groupIds = gems.map((g) => g.itemId!).filter(Boolean);
-                const groupSelected = groupIds.length > 0 && groupIds.every((id) => gemSelections.has(id));
-                const colorLabel = color.charAt(0).toUpperCase() + color.slice(1);
+            return (
+              <GearItemRow
+                key={d.id}
+                icon={d.itemIcon || ''}
+                name={d.itemName || d.displayName}
+                nameColor={isSelected ? 'text-amber-400' : 'text-on-surface'}
+                details={gemDetails(d)}
+                selectable
+                checked={isSelected}
+                onToggle={() => onGemToggle('', gemItemId)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Colored gems by group */}
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {gemGroups.map(({ color, gems }) => {
+          const groupIds = gems.map((g) => g.itemId!).filter(Boolean);
+          const groupSelected = groupIds.length > 0 && groupIds.every((id) => gemSelections.has(id));
+          const colorLabel = color.charAt(0).toUpperCase() + color.slice(1);
+
+          return (
+            <div key={color} className="card space-y-1 p-3.5">
+              <div className="mb-2 flex items-center justify-between">
+                <p className={`font-headline text-[13px] font-semibold uppercase tracking-widest ${GEM_COLOR_CLASS[color] || 'text-muted'}`}>
+                  {colorLabel}
+                </p>
+                <button
+                  onClick={() =>
+                    groupSelected
+                      ? onDeselectAllGems('', groupIds)
+                      : onSelectAllGems('', groupIds)
+                  }
+                  className="text-[11px] text-gold/60 hover:text-gold transition-colors"
+                >
+                  {groupSelected
+                    ? t('enchantGem.deselectAll')
+                    : t('enchantGem.selectAll')}
+                </button>
+              </div>
+              {gems.map((g) => {
+                const gemItemId = g.itemId!;
+                if (!gemItemId) return null;
+                const isSelected = gemSelections.has(gemItemId);
 
                 return (
-                  <div key={color} className="card space-y-1 p-3.5">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className={`font-headline text-[13px] font-semibold uppercase tracking-widest ${GEM_COLOR_CLASS[color] || 'text-muted'}`}>
-                        {colorLabel}
-                      </p>
-                      <button
-                        onClick={() =>
-                          groupSelected
-                            ? onDeselectAllGems('')
-                            : onSelectAllGems('', groupIds)
-                        }
-                        className="text-[11px] text-gold/60 hover:text-gold transition-colors"
-                      >
-                        {groupSelected
-                          ? t('enchantGem.deselectAll')
-                          : t('enchantGem.selectAll')}
-                      </button>
-                    </div>
-                    {gems.map((g) => {
-                      const gemItemId = g.itemId!;
-                      if (!gemItemId) return null;
-                      const isSelected = gemSelections.has(gemItemId);
-
-                      return (
-                        <GearItemRow
-                          key={g.id}
-                          icon={g.itemIcon || ''}
-                          name={g.itemName || g.displayName}
-                          nameColor="text-on-surface"
-                          details={gemDetails(g)}
-                          selectable
-                          checked={isSelected}
-                          onToggle={() => onGemToggle('', gemItemId)}
-                        />
-                      );
-                    })}
-                  </div>
+                  <GearItemRow
+                    key={g.id}
+                    icon={g.itemIcon || ''}
+                    name={g.itemName || g.displayName}
+                    nameColor="text-on-surface"
+                    details={gemDetails(g)}
+                    selectable
+                    checked={isSelected}
+                    onToggle={() => onGemToggle('', gemItemId)}
+                  />
                 );
               })}
             </div>
-          </>
-        );
-      })()}
+          );
+        })}
+      </div>
     </div>
   );
 }
