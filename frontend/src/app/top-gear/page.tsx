@@ -90,6 +90,8 @@ export default function TopGearPage() {
   const prevUpgradeRef = useRef(false);
   const prevCatalystRef = useRef(false);
   const restoringRef = useRef(false);
+  const localItemsRef = useRef(localItems);
+  localItemsRef.current = localItems;
 
   // Restore saved state on mount (when returning from result page)
   useEffect(() => {
@@ -145,10 +147,17 @@ export default function TopGearPage() {
         prevCatalystRef.current = catalyst;
         setResolving(true);
         try {
+          // Include localItems in the resolve input so generated items (socket/upgrade copies) appear
+          let resolveInput = simcInput;
+          const currentLocalItems = localItemsRef.current;
+          if (currentLocalItems.length > 0) {
+            const extraLines = currentLocalItems.map((li) => `# ${li.slot}=${li.simc_string}`).join('\n');
+            resolveInput = resolveInput + '\n' + extraLines;
+          }
           const res = await fetch(`${API_URL}/api/gear/resolve`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ simc_input: simcInput, max_upgrade: maxUpgrade, catalyst }),
+            body: JSON.stringify({ simc_input: resolveInput, max_upgrade: maxUpgrade, catalyst }),
           });
           if (!res.ok) {
             setResolved(null);

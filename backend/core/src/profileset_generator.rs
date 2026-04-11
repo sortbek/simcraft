@@ -399,10 +399,27 @@ pub fn generate_top_gear_input_with_talents(
                 }
                 result
             } else {
-                // Same gem in all slots
-                gems.iter().map(|&gid| {
-                    slots.iter().map(|s| (s.clone(), gid)).collect()
-                }).collect()
+                // Cartesian product: each slot independently gets each gem,
+                // then deduplicate mirror combos (gems are slot-independent).
+                let mut result: Vec<HashMap<String, u64>> = vec![HashMap::new()];
+                for slot in slots {
+                    let mut next = Vec::new();
+                    for combo in &result {
+                        for &gid in gems {
+                            let mut c = combo.clone();
+                            c.insert(slot.clone(), gid);
+                            next.push(c);
+                        }
+                    }
+                    result = next;
+                }
+                let mut seen: HashSet<Vec<u64>> = HashSet::new();
+                result.retain(|combo| {
+                    let mut key: Vec<u64> = combo.values().copied().collect();
+                    key.sort();
+                    seen.insert(key)
+                });
+                result
             }
         };
 
