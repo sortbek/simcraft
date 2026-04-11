@@ -125,15 +125,25 @@ export default function ConfigFooter({
                       <input
                         type="range"
                         min={30}
-                        max={600}
+                        max={1800}
                         step={30}
-                        value={fightLength}
+                        value={Math.min(fightLength, 1800)}
                         onChange={(e) => setFightLength(Number(e.target.value))}
                         className="flex-1 accent-primary"
                       />
-                      <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 min-w-[4.5rem] text-center">
-                        <span className="font-mono text-primary text-sm font-bold tabular-nums">{fightLengthLabel}</span>
-                        <span className="text-[9px] text-on-surface-variant/50 ml-1">{t('config.sec')}</span>
+                      <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg min-w-[4.5rem] text-center">
+                        <input
+                          type="number"
+                          min={10}
+                          max={3600}
+                          value={fightLength}
+                          onChange={(e) => {
+                            const v = Math.max(10, Math.min(3600, Number(e.target.value) || 0));
+                            setFightLength(v);
+                          }}
+                          className="w-16 bg-transparent px-1 py-1.5 text-center font-mono text-primary text-sm font-bold tabular-nums focus:outline-none"
+                        />
+                        <span className="text-[9px] text-on-surface-variant/50 pr-2">{t('config.sec')}</span>
                       </div>
                     </div>
                   </div>

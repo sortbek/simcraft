@@ -116,15 +116,23 @@ export default function AdvancedOptions() {
                 <input
                   type="range"
                   min={30}
-                  max={600}
+                  max={1800}
                   step={30}
-                  value={fightLength}
+                  value={Math.min(fightLength, 1800)}
                   onChange={(e) => setFightLength(Number(e.target.value))}
                   className="flex-1 accent-gold"
                 />
-                <span className="w-16 text-right font-mono text-sm tabular-nums text-on-surface">
-                  {Math.floor(fightLength / 60)}:{String(fightLength % 60).padStart(2, '0')}
-                </span>
+                <input
+                  type="number"
+                  min={10}
+                  max={3600}
+                  value={fightLength}
+                  onChange={(e) => {
+                    const v = Math.max(10, Math.min(3600, Number(e.target.value) || 0));
+                    setFightLength(v);
+                  }}
+                  className="w-16 bg-transparent text-right font-mono text-sm tabular-nums text-on-surface focus:outline-none focus:ring-1 focus:ring-gold/30 rounded px-1 py-0.5"
+                />
               </div>
             </div>
             <div className="space-y-2">
