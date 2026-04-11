@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import SettingsPopover from '../sim-config/SettingsPopover';
 import SidebarRoutes from './SidebarRoutes';
+import SidebarDropFinder from './SidebarDropFinder';
 import LanguageSelector from './LanguageSelector';
 import { ScaleSelector } from './ContentScaler';
 import { useIsDesktop } from '../../lib/useIsDesktop';
@@ -29,12 +30,19 @@ export default function Sidebar() {
     },
     {
       href: '/drop-finder',
-      label: t('nav.upgrades'),
-      matchPaths: ['/drop-finder', '/upgrade-compare'],
-      children: [
-        { href: '/drop-finder', label: t('nav.dropFinder') },
-        { href: '/upgrade-compare', label: t('nav.crestUpgrades') },
-      ],
+      label: t('nav.dropFinder'),
+      matchPaths: ['/drop-finder'],
+      customChildren: true as const,
+    },
+    {
+      href: '/drop-finder-2',
+      label: 'DROP FINDER 2',
+      matchPaths: ['/drop-finder-2'],
+    },
+    {
+      href: '/upgrade-compare',
+      label: t('nav.crestUpgrades'),
+      matchPaths: ['/upgrade-compare'],
     },
     {
       href: '/advanced',
@@ -65,7 +73,8 @@ export default function Sidebar() {
           const isActive = item.matchPaths.some(
             (p) => pathname === p || pathname.startsWith(p + '/')
           );
-          const hasChildren = item.children && item.children.length > 0;
+          const hasCustomChildren = 'customChildren' in item && item.customChildren;
+          const hasChildren = 'children' in item && (item as { children?: unknown[] }).children?.length;
           const isExpanded = expandedGroup === item.label || isActive;
 
           return (
@@ -73,7 +82,7 @@ export default function Sidebar() {
               <Link
                 href={item.href}
                 onClick={() => {
-                  if (hasChildren) {
+                  if (hasCustomChildren || hasChildren) {
                     setExpandedGroup(isExpanded && !isActive ? null : item.label);
                   }
                 }}
@@ -86,9 +95,15 @@ export default function Sidebar() {
                 {item.label}
               </Link>
 
+              {hasCustomChildren && isExpanded && (
+                <div className="ml-6 border-l border-outline-variant/20 mt-1 space-y-0.5">
+                  <SidebarDropFinder />
+                </div>
+              )}
+
               {hasChildren && isExpanded && (
                 <div className="ml-6 border-l border-outline-variant/20 mt-1 space-y-0.5">
-                  {item.children!.map((child) => {
+                  {((item as { children?: { href: string; label: string }[] }).children ?? []).map((child) => {
                     const childActive =
                       pathname === child.href || pathname.startsWith(child.href + '/');
                     return (
