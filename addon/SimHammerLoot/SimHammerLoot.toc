@@ -1,0 +1,9 @@
+## Interface: 120000, 120001
+## Title: SimHammer Loot
+## Notes: Captures group loot roll items for SimHammer sim
+## Author: SimHammer
+## Version: 0.1.0
+## SavedVariables: SimHammerLootDB
+## OptionalDependencies: SimulationCraft
+
+SimHammerLoot.lua
