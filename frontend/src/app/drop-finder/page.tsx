@@ -1,18 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import { useSimContext } from '../components/sim-config/SimContext';
 import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
-import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
-import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup, DungeonCategory } from '../lib/types';
-import CategorySelector from '../components/loot/CategorySelector';
+import type { DifficultyDef, DifficultyGroup } from '../lib/types';
 import DropSlotList from '../components/loot/DropSlotList';
-import DungeonGrid from '../components/loot/DungeonGrid';
-import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { useLanguage } from '../lib/i18n';
+import {
+  useDropFinderData,
+  TRACK_SHORT,
+  TRACK_COLORS,
+  PVP_KEYS,
+  PROFESSION_KEYS,
+  type Category,
+} from '../lib/useDropFinderData';
 import {
   detectClass,
   detectSpec,
@@ -21,134 +26,7 @@ import {
   getTrackInfo,
   resolveUpgrade,
   type DropItem,
-  type Instance,
-  type UpgradeTracks,
 } from '../components/loot/types';
-
-type Category = 'raids' | string;
-
-const TRACK_SHORT: Record<string, string> = {
-  Adventurer: 'Adv',
-  Veteran: 'Vet',
-  Champion: 'Champ',
-  Hero: 'Hero',
-  Myth: 'Myth',
-};
-
-const TRACK_COLORS: Record<string, { text: string; bg: string; border: string }> = {
-  Adventurer: { text: 'text-green-400', bg: 'bg-green-400/10', border: 'border-green-400/30' },
-  Veteran: { text: 'text-blue-400', bg: 'bg-blue-400/10', border: 'border-blue-400/30' },
-  Champion: { text: 'text-purple-400', bg: 'bg-purple-400/10', border: 'border-purple-400/30' },
-  Hero: { text: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/30' },
-  Myth: { text: 'text-amber-300', bg: 'bg-amber-300/10', border: 'border-amber-300/30' },
-};
-
-// --- Data loading hook ---
-
-function useDropFinderData(simcInput: string, activeSpecs: Set<string>) {
-  const [instances, setInstances] = useState<Instance[]>([]);
-  const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
-  const [upgradeTracks, setUpgradeTracks] = useState<UpgradeTracks>({});
-  const [selectedId, setSelectedId] = useState('');
-  const [drops, setDrops] = useState<Record<string, DropItem[]> | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const className = useMemo(() => detectClass(simcInput), [simcInput]);
-  const specName = useMemo(() => detectSpec(simcInput), [simcInput]);
-  const specParam = useMemo(() => [...activeSpecs].sort().join(','), [activeSpecs]);
-
-  useEffect(() => {
-    fetch(`${API_URL}/api/season-config`)
-      .then((r) => r.json())
-      .then(setSeasonConfig)
-      .catch(() => {});
-    fetch(`${API_URL}/api/instances`)
-      .then((r) => r.json())
-      .then(setInstances)
-      .catch(() => {});
-    fetch(`${API_URL}/api/upgrade-tracks`)
-      .then((r) => r.json())
-      .then(setUpgradeTracks)
-      .catch(() => {});
-  }, []);
-
-  const { raids, dungeonCats } = useMemo(() => {
-    if (!seasonConfig)
-      return {
-        raids: [] as Instance[],
-        dungeonCats: [] as { cat: DungeonCategory; instances: Instance[] }[],
-      };
-
-    const poolMap = new Map<number, Set<number>>();
-    for (const cat of seasonConfig.dungeon_categories) {
-      const meta = instances.find((i) => i.id === cat.poolInstanceId);
-      if (meta) {
-        poolMap.set(cat.poolInstanceId, new Set(meta.encounters.map((e) => e.id)));
-      }
-    }
-
-    const raidList: Instance[] = [];
-    const dcList: { cat: DungeonCategory; instances: Instance[] }[] =
-      seasonConfig.dungeon_categories.map((cat) => ({ cat, instances: [] }));
-
-    for (const inst of instances) {
-      if (inst.type === 'raid' && inst.id > 0) {
-        raidList.push(inst);
-      } else if (inst.type === 'dungeon') {
-        let placed = false;
-        for (const dc of dcList) {
-          const pool = poolMap.get(dc.cat.poolInstanceId);
-          if (pool?.has(inst.id)) {
-            dc.instances.push(inst);
-            placed = true;
-          }
-        }
-        if (!placed && dcList.length > 0) {
-          dcList[dcList.length - 1].instances.push(inst);
-        }
-      }
-    }
-    raidList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    for (const dc of dcList) {
-      dc.instances.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return { raids: raidList, dungeonCats: dcList };
-  }, [instances, seasonConfig]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDrops(null);
-      return;
-    }
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (className) params.set('class_name', className);
-    if (specParam) params.set('spec', specParam);
-    const qs = params.toString();
-    const url = selectedId.startsWith('type:')
-      ? `${API_URL}/api/instances/type/${selectedId.slice(5)}/drops`
-      : `${API_URL}/api/instances/${selectedId}/drops`;
-    fetch(`${url}${qs ? `?${qs}` : ''}`)
-      .then((r) => r.json())
-      .then((data) => setDrops(data.detail ? null : data))
-      .catch(() => setDrops(null))
-      .finally(() => setLoading(false));
-  }, [selectedId, className, specParam]);
-
-  return {
-    instances,
-    seasonConfig,
-    upgradeTracks,
-    selectedId,
-    setSelectedId,
-    drops,
-    loading,
-    raids,
-    dungeonCats,
-    className,
-    specName,
-  };
-}
 
 // --- Spinner ---
 
@@ -168,6 +46,9 @@ function Spinner() {
 export default function DropFinderPage() {
   const { t } = useLanguage();
   const { simcInput } = useSimContext();
+  const searchParams = useSearchParams();
+  const source = searchParams.get('source') ?? '';
+  const instanceParam = searchParams.get('instance') ?? '';
 
   // Spec selection: main spec on by default, off-specs toggleable
   const detectedClass = useMemo(() => detectClass(simcInput), [simcInput]);
@@ -207,11 +88,39 @@ export default function DropFinderPage() {
     setSelectedId,
     drops,
     loading,
-    raids,
     dungeonCats,
     className,
     specName,
   } = useDropFinderData(simcInput, activeSpecs);
+
+  // Grouped source: pvp/professions resolve to a sub-category
+  const isGroupedSource = source === 'pvp' || source === 'professions';
+  const groupKeys = source === 'pvp' ? PVP_KEYS : source === 'professions' ? PROFESSION_KEYS : [];
+  const availableGroupCats = useMemo(
+    () => dungeonCats.filter((dc) => groupKeys.includes(dc.cat.key)),
+    [dungeonCats, groupKeys]
+  );
+  const [subCategory, setSubCategory] = useState('');
+
+  // Derive actual category from source + subCategory
+  const category: Category | '' = useMemo(() => {
+    if (!source) return '';
+    if (isGroupedSource) return subCategory;
+    return source;
+  }, [source, isGroupedSource, subCategory]);
+
+  // Auto-select first sub-category when source changes
+  const [prevSource, setPrevSource] = useState('');
+  if (source !== prevSource) {
+    setPrevSource(source);
+    if (source === 'pvp' || source === 'professions') {
+      const keys = source === 'pvp' ? PVP_KEYS : PROFESSION_KEYS;
+      const first = dungeonCats.find((dc) => keys.includes(dc.cat.key));
+      setSubCategory(first?.cat.key ?? keys[0]);
+    } else {
+      setSubCategory('');
+    }
+  }
 
   // Count equipped embellished items (bonus 8960 = embellishment limit category 512)
   const equippedEmbellishments = useMemo(() => {
@@ -234,7 +143,40 @@ export default function DropFinderPage() {
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
   const [upgradeLevel, setUpgradeLevel] = useState(0);
-  const [category, setCategory] = useState<Category | ''>('');
+
+  // Auto-select instance based on URL params
+  useEffect(() => {
+    if (!category) {
+      setSelectedId('');
+      return;
+    }
+    const dc = dungeonCats.find((d) => d.cat.key === category);
+
+    if (instanceParam) {
+      // Specific instance selected from sidebar
+      setSelectedId(instanceParam);
+    } else if (dc && dc.instances.length === 0) {
+      // Pool-only category (crafted, delves, prey, pvp, etc.)
+      setSelectedId(String(dc.cat.poolInstanceId));
+    } else if (category === 'raids') {
+      // All raids
+      setSelectedId('type:raid');
+    } else if (dc) {
+      // All dungeons in this category
+      setSelectedId(String(dc.cat.poolInstanceId));
+    } else {
+      setSelectedId('');
+    }
+
+    if (dc) {
+      setDungeonDiff(dc.cat.defaultDifficulty);
+      const allDiffs = dc.cat.difficultyGroups
+        ? dc.cat.difficultyGroups.flatMap((g) => g.difficulties)
+        : dc.cat.difficulties;
+      const defaultDiff = allDiffs.find((d) => d.key === dc.cat.defaultDifficulty);
+      setUpgradeLevel(defaultDiff?.level ?? 0);
+    }
+  }, [category, instanceParam, dungeonCats, setSelectedId]);
 
   useEffect(() => {
     setSelected(new Set());
@@ -244,7 +186,6 @@ export default function DropFinderPage() {
   const activeDungeonCat = dungeonCats.find((dc) => dc.cat.key === category);
   const isDungeon = !!activeDungeonCat;
   const isCrafted = activeDungeonCat?.cat.key === 'crafted';
-  const isPoolOnly = isDungeon && (activeDungeonCat?.instances.length ?? 0) === 0;
   const selectedInstance =
     selectedId && !selectedId.startsWith('type:')
       ? instances.find((i) => String(i.id) === selectedId)
