@@ -11,6 +11,7 @@ import {
 } from '../../lib/saved-characters';
 import WindowControls from './WindowTitlebar';
 import DesktopAppLink from './DesktopAppLink';
+import TopBarTalentPicker from './TopBarTalentPicker';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
 
@@ -140,6 +141,10 @@ export default function TopBar() {
             </svg>
           )}
         </button>
+
+        <span className="h-4 w-px bg-outline-variant/20" />
+        <TopBarTalentPicker />
+        <span className="h-4 w-px bg-outline-variant/20" />
 
         {/* Inline SimC preview — click to open full editor below */}
         <button

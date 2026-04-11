@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
-import TalentPicker from '../components/talents/TalentPicker';
 import GearOverview from '../components/gear/GearOverview';
 import type { GearItem } from '../components/gear/GearOverview';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -192,7 +191,6 @@ export default function QuickSimPage() {
         </div>
       )}
 
-      <TalentPicker defaultView="view" hideCompare />
       {equippedGear && (
         <GearOverview
           gear={equippedGear}
