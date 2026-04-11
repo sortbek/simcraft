@@ -450,6 +450,15 @@ export default function TopGearPage() {
 
   return (
     <div className="space-y-6 pb-20">
+
+            <div>
+        <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
+          Top Gear
+        </h1>
+        <p className="text-sm text-on-surface-variant max-w-2xl">
+          Find the optimal gear combination from your bags. Compare enchants, gems, and talent builds.
+        </p>
+      </div>
       <TalentPicker />
 
       {/* Top Gear toggles */}

@@ -70,6 +70,25 @@ const MANIFEST = {
 
   // Item curves for ilevel conversion — keep as-is
   "item-curves.json": null,
+
+  // Encounter items — curated drop data for Drop Finder
+  "encounter-items.json": {
+    fields: [
+      "id", "name", "icon", "quality", "itemClass", "itemSubClass",
+      "inventoryType", "itemLevel", "sources", "specs", "expansion",
+    ],
+  },
+
+  // Localized item names — strip to only equippable item IDs
+  "item-names.json": { custom: true, handler: "itemNames" },
+
+  // Consumable data files — keep as-is (small files)
+  "flasks.json": null,
+  "potions.json": null,
+  "foods.json": null,
+  "augments.json": null,
+  "temp-enchants.json": null,
+
 };
 
 // ---------------------------------------------------------------------------
@@ -236,6 +255,49 @@ async function compactInstances(inputPath, outputPath, inputDir, outputDir) {
   fs.writeFileSync(outputPath, JSON.stringify(data));
 }
 
+/**
+ * Compact item-names.json: strip to only item IDs present in equippable-items-full.json.
+ * The full file is ~64MB; after filtering it's a fraction of that.
+ */
+function compactItemNames(inputPath, outputPath, inputDir) {
+  const data = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+  const sparse = data.ItemSparse;
+  if (!sparse) {
+    fs.writeFileSync(outputPath, JSON.stringify(data));
+    return;
+  }
+
+  // Only keep names for current expansion items (encounter drops + equippable)
+  const itemsPath = path.join(inputDir, "equippable-items-full.json");
+  const encounterItemsPath = path.join(inputDir, "encounter-items.json");
+  const validIds = new Set();
+
+  if (fs.existsSync(itemsPath)) {
+    const items = JSON.parse(fs.readFileSync(itemsPath, "utf8"));
+    const currentExp = Math.max(...items.map(i => i.expansion || 0));
+    for (const item of items) {
+      if (item.id && (item.expansion || 0) === currentExp) validIds.add(String(item.id));
+    }
+  }
+  if (fs.existsSync(encounterItemsPath)) {
+    const items = JSON.parse(fs.readFileSync(encounterItemsPath, "utf8"));
+    const currentExp = Math.max(...items.map(i => i.expansion || 0));
+    for (const item of items) {
+      if (item.id && (item.expansion || 0) === currentExp) validIds.add(String(item.id));
+    }
+  }
+
+  const filtered = {};
+  for (const [id, locales] of Object.entries(sparse)) {
+    if (validIds.has(id)) {
+      filtered[id] = locales;
+    }
+  }
+
+  fs.writeFileSync(outputPath, JSON.stringify({ ItemSparse: filtered }));
+  console.log(`    (kept ${Object.keys(filtered).length}/${Object.keys(sparse).length} item names)`);
+}
+
 function pickFields(obj, fields) {
   const result = {};
   for (const f of fields) {
@@ -248,6 +310,8 @@ async function compactFile(inputPath, outputPath, config, inputDir, outputDir) {
   if (config && config.custom) {
     if (config.handler === "instances") {
       await compactInstances(inputPath, outputPath, inputDir, outputDir);
+    } else if (config.handler === "itemNames") {
+      compactItemNames(inputPath, outputPath, inputDir);
     } else {
       compactItems(inputPath, outputPath);
     }

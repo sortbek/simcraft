@@ -302,12 +302,18 @@ pub fn load(data_dir: &Path) {
         let _ = INSTANCES.set(data);
     }
 
-    // Build encounter -> items index
+    // Build encounter -> items index from encounter-items.json (curated drop data).
     // Each item gets a `_source_instance_id` field so get_instance_drops can filter
     // items that share encounter IDs across multiple instances (e.g. profession pools).
+    let encounter_items_path = data_dir.join("encounter-items.json");
     let mut drops: HashMap<i64, Vec<Value>> = HashMap::new();
-    if let Some(items_map) = ITEMS.get() {
-        for item in items_map.values() {
+    if encounter_items_path.exists() {
+        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
+            fs::File::open(&encounter_items_path).unwrap(),
+        ))
+        .unwrap_or_default();
+        println!("Loaded {} encounter items", data.len());
+        for item in &data {
             if let Some(sources) = item.get("sources").and_then(|s| s.as_array()) {
                 for src in sources {
                     if let Some(eid) = src.get("encounterId").and_then(|e| e.as_i64()) {

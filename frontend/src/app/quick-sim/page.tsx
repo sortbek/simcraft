@@ -141,6 +141,16 @@ export default function QuickSimPage() {
 
   return (
     <div className="space-y-6 pb-20">
+      <div>
+        <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
+          Quick Sim
+        </h1>
+        <p className="text-sm text-on-surface-variant max-w-2xl">
+          Run a quick simulation to check your DPS and stat weights with your current gear and talents.
+        </p>
+      </div>
+
+
       {/* Character summary card */}
       {characterInfo && (
         <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 p-6 flex items-center justify-between">

@@ -383,6 +383,15 @@ export default function DropFinderPage() {
 
   return (
     <div className="space-y-6 pb-20">
+           {/* Page header */}
+      <div>
+        <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
+          Drop Finder
+        </h1>
+        <p className="text-sm text-on-surface-variant max-w-2xl">
+          Find and simulate the best gear drops from across Azeroth. Refine your search by activity type and difficulty.
+        </p>
+      </div>
       <TalentPicker />
       <CategorySelector
           category={category}
