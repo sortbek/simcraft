@@ -114,11 +114,11 @@ export default function Sidebar() {
 
       {/* Bottom links + settings */}
       <div className="mt-auto shrink-0 border-t border-outline-variant/20">
-        <div className="px-4 py-3">
-          <LanguageSelector />
-        </div>
-        <div className="px-5 py-2 border-t border-outline-variant/20">
+        <div className="px-5 py-2">
           <ScaleSelector />
+        </div>
+        <div className="px-4 py-3 border-t border-outline-variant/20">
+          <LanguageSelector />
         </div>
         <div className="px-4 py-3 space-y-1 border-t border-outline-variant/20">
           <a

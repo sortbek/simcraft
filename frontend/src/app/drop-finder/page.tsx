@@ -234,10 +234,25 @@ export default function DropFinderPage() {
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
   const [upgradeLevel, setUpgradeLevel] = useState(0);
-  const [category, setCategory] = useState<Category | ''>('');
+  const [category, setCategory] = useState<Category | ''>('mplus');
 
+  // Auto-select M+ "All Dungeons" on initial load
   useEffect(() => {
-    setSelected(new Set());
+    if (category === 'mplus' && !selectedId && dungeonCats.length > 0) {
+      const mplus = dungeonCats.find((dc) => dc.cat.key === 'mplus');
+      if (mplus) {
+        setSelectedId(String(mplus.cat.poolInstanceId));
+        setDungeonDiff(mplus.cat.defaultDifficulty);
+      }
+    }
+  }, [category, selectedId, dungeonCats, setSelectedId]);
+
+  // Select all items whenever drops change
+  useEffect(() => {
+    if (!drops) { setSelected(new Set()); return; }
+    const all = new Set<number>();
+    for (const items of Object.values(drops)) for (const item of items) all.add(item.item_id);
+    setSelected(all);
   }, [drops]);
 
   const isRaid = category === 'raids';
@@ -373,12 +388,12 @@ export default function DropFinderPage() {
           category={category}
           onChange={(key) => {
             setCategory(key);
-            // Auto-select pool for categories with no sub-instances (crafted, delves, prey)
             const dc = dungeonCats.find((d) => d.cat.key === key);
-            if (dc && dc.instances.length === 0) {
+            if (key === 'raids') {
+              setSelectedId('type:raid');
+            } else if (dc) {
               setSelectedId(String(dc.cat.poolInstanceId));
               setDungeonDiff(dc.cat.defaultDifficulty);
-              // Set upgrade level to match the default difficulty's track level
               const allDiffs = dc.cat.difficultyGroups
                 ? dc.cat.difficultyGroups.flatMap((g) => g.difficulties)
                 : dc.cat.difficulties;
