@@ -39,6 +39,8 @@ export default function ConfigFooter({
     setTargetCount,
     fightLength,
     setFightLength,
+    targetError,
+    setTargetError,
     customApl,
     setCustomApl,
     simcHeader,
@@ -110,7 +112,7 @@ export default function ConfigFooter({
             {/* Tab: Simulation */}
             {activeTab === 'simulation' && (
               <div className="space-y-6 animate-fade-in">
-                <div className="grid grid-cols-3 gap-6">
+                <div className="grid grid-cols-4 gap-6">
                   <div className="space-y-2">
                     <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
                       {t('config.fightStyle')}
@@ -192,7 +194,38 @@ export default function ConfigFooter({
                   expertValues={expertValues}
                   expertSetters={expertSetters}
                   activeTabInfo={expertActiveTabInfo}
-                />
+                >
+                  <div className="space-y-2 border-t border-outline-variant/10 pt-3">
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                      {t('config.targetError')}
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0.01}
+                        max={1.0}
+                        step={0.01}
+                        value={targetError}
+                        onChange={(e) => setTargetError(Number(e.target.value))}
+                        className="flex-1 accent-primary"
+                      />
+                      <input
+                        type="number"
+                        min={0.01}
+                        max={5}
+                        step={0.01}
+                        value={targetError}
+                        onChange={(e) => {
+                          const v = Math.max(0.01, Math.min(5, Number(e.target.value) || 0.05));
+                          setTargetError(v);
+                        }}
+                        className="w-16 bg-transparent text-center font-mono text-primary text-sm font-bold tabular-nums focus:outline-none rounded px-1 py-1.5 bg-surface-container-lowest border border-outline-variant/20"
+                      />
+                      <span className="text-[9px] text-on-surface-variant/50">%</span>
+                    </div>
+                    <p className="text-[11px] text-on-surface-variant/40">Lower = more precise but slower. Default: 0.05%</p>
+                  </div>
+                </ExpertToggle>
               </div>
             )}
 

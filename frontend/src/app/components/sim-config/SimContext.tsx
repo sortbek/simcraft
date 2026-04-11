@@ -22,6 +22,8 @@ interface SimContextType {
   setTargetCount: (v: number) => void;
   fightLength: number;
   setFightLength: (v: number) => void;
+  targetError: number;
+  setTargetError: (v: number) => void;
   customApl: string;
   setCustomApl: (v: string) => void;
   // Expert Mode injection points
@@ -107,6 +109,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [selectedTalent, setSelectedTalent] = useState('');
   const [targetCount, setTargetCount] = useState(1);
   const [fightLength, setFightLength] = useState(300);
+  const [targetError, _setTargetError] = useState(0.1);
   const [customApl, setCustomApl] = useState('');
   const [simcHeader, setSimcHeader] = useState('');
   const [simcBasePlayer, setSimcBasePlayer] = useState('');
@@ -123,6 +126,11 @@ export function SimProvider({ children }: { children: ReactNode }) {
     try {
       _setSimcInput(readSessionString('simhammer_simc_input', ''));
       _setThreads(readStored('simhammer_threads', 0));
+      const storedError = localStorage.getItem('simhammer_target_error');
+      if (storedError != null) {
+        const n = parseFloat(storedError);
+        if (Number.isFinite(n) && n > 0) _setTargetError(n);
+      }
       _setRaidBuffs(readStoredJson('simhammer_raid_buffs', DEFAULT_RAID_BUFFS));
       _setConsumables(readStoredJson('simhammer_consumables', {}));
       _setExpansionOptions(readStoredJson('simhammer_expansion_options', DEFAULT_EXPANSION_OPTIONS));
@@ -187,6 +195,11 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const setTargetError = useCallback((v: number) => {
+    _setTargetError(v);
+    try { localStorage.setItem('simhammer_target_error', String(v)); } catch {}
+  }, []);
+
   const setMaxCombinations = useCallback((v: number | undefined) => {
     _setMaxCombinations(v);
     try {
@@ -216,6 +229,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setTargetCount,
         fightLength,
         setFightLength,
+        targetError,
+        setTargetError,
         customApl,
         setCustomApl,
         simcHeader,

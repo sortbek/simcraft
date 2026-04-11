@@ -57,6 +57,7 @@
   "config.fightStyle": "Стиль боя",
   "config.fightLength": "Длительность боя",
   "config.numberOfBosses": "Количество боссов",
+  "config.targetError": "Целевая погрешность",
   "config.boss": "босс",
   "config.bosses": "боссов",
   "config.sec": "сек",

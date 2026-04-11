@@ -19,6 +19,8 @@ export default function AdvancedOptions() {
     setTargetCount,
     fightLength,
     setFightLength,
+    targetError,
+    setTargetError,
     customApl,
     setCustomApl,
     simcHeader,
@@ -60,6 +62,7 @@ export default function AdvancedOptions() {
     fightStyle === 'Patchwerk' &&
     targetCount === 1 &&
     fightLength === 300 &&
+    targetError === 0.1 &&
     !customApl &&
     !hasExpertContent;
   const activeTabInfo = EXPERT_TABS.find((t) => t.key === activeTab)!;
@@ -105,7 +108,7 @@ export default function AdvancedOptions() {
       </button>
       {open && (
         <div className="animate-fade-in space-y-5 border-t border-outline-variant/10 px-5 pb-5">
-          <div className="grid grid-cols-3 gap-4 pt-4">
+          <div className="grid grid-cols-2 gap-4 pt-4">
             <div className="space-y-2">
               <label className="label-text">{t('config.fightStyle')}</label>
               <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
@@ -148,6 +151,23 @@ export default function AdvancedOptions() {
                 />
                 <span className="w-6 text-right font-mono text-sm tabular-nums text-on-surface">
                   {targetCount}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="label-text">{t('config.targetError')}</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0.01}
+                  max={0.5}
+                  step={0.01}
+                  value={targetError}
+                  onChange={(e) => setTargetError(Number(e.target.value))}
+                  className="flex-1 accent-gold"
+                />
+                <span className="w-12 text-right font-mono text-sm tabular-nums text-on-surface">
+                  {targetError}%
                 </span>
               </div>
             </div>

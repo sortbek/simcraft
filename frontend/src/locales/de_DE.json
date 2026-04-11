@@ -57,6 +57,7 @@
   "config.fightStyle": "Kampfstil",
   "config.fightLength": "Kampfdauer",
   "config.numberOfBosses": "Anzahl der Bosse",
+  "config.targetError": "Zielfehler",
   "config.boss": "Boss",
   "config.bosses": "Bosse",
   "config.sec": "Sek.",

@@ -40,6 +40,7 @@ export default function ExpertToggle({
   expertValues,
   expertSetters,
   activeTabInfo,
+  children,
 }: {
   hasContent: boolean;
   activeTab: ExpertTabKey;
@@ -47,6 +48,7 @@ export default function ExpertToggle({
   expertValues: Record<ExpertTabKey, string>;
   expertSetters: Record<ExpertTabKey, (v: string) => void>;
   activeTabInfo: (typeof EXPERT_TABS)[number];
+  children?: React.ReactNode;
 }) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(hasContent);
@@ -101,6 +103,7 @@ export default function ExpertToggle({
             className="input-field h-32 resize-y font-mono text-xs"
           />
           <p className="text-[13px] text-on-surface-variant/40">{t(activeTabInfo.descKey)}</p>
+          {children}
         </div>
       )}
     </div>

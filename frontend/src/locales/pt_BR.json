@@ -57,6 +57,7 @@
   "config.fightStyle": "Estilo de luta",
   "config.fightLength": "Duração da luta",
   "config.numberOfBosses": "Número de Chefes",
+  "config.targetError": "Erro alvo",
   "config.boss": "chefe",
   "config.bosses": "chefes",
   "config.sec": "seg",

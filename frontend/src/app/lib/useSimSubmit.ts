@@ -29,6 +29,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
     selectedTalent,
     targetCount,
     fightLength,
+    targetError,
     customApl,
     simcHeader,
     simcBasePlayer,
@@ -81,8 +82,8 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
 
       const sharedPayload = {
         ...pagePayload,
-        iterations: 10000,
-        target_error: 0.1,
+        iterations: 100000,
+        target_error: targetError,
         threads,
         ...(batchId ? { batch_id: batchId } : {}),
         ...(selectedTalent ? { talents: selectedTalent } : {}),
@@ -174,6 +175,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
     selectedTalent,
     targetCount,
     fightLength,
+    targetError,
     customApl,
     simcHeader,
     simcBasePlayer,

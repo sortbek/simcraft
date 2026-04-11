@@ -183,6 +183,7 @@ export default function DpsHeroCard({
             <MetaStat
               label={t('results.error')}
               value={`± ${Math.round(dpsError).toLocaleString()}${dpsErrorPct != null ? ` (${dpsErrorPct}%)` : ''}`}
+              note={targetError != null && targetError > 0 ? `target: ${targetError}%` : undefined}
             />
           )}
           {fightLength != null && (
@@ -199,7 +200,6 @@ export default function DpsHeroCard({
             <MetaStat
               label={t('results.iterations')}
               value={iterations.toLocaleString()}
-              note={targetError != null && targetError > 0 ? t('results.smartSim') : undefined}
               border
             />
           )}
@@ -237,15 +237,17 @@ function MetaStat({
 }
 
 function formatDuration(seconds: number): string {
-  const min = Math.floor(seconds / 60);
-  const sec = String(Math.round(seconds % 60)).padStart(2, '0');
+  const total = Math.round(seconds);
+  const min = Math.floor(total / 60);
+  const sec = String(total % 60).padStart(2, '0');
   return `${min}:${sec}`;
 }
 
 function formatElapsed(seconds: number): string {
   if (seconds >= 60) {
-    const min = Math.floor(seconds / 60);
-    const sec = String(Math.round(seconds % 60)).padStart(2, '0');
+    const total = Math.round(seconds);
+    const min = Math.floor(total / 60);
+    const sec = String(total % 60).padStart(2, '0');
     return `${min}:${sec}`;
   }
   return `${seconds.toFixed(1)}s`;
