@@ -221,25 +221,6 @@ export default function DropFinderPage() {
     return null;
   }, [activeDungeonCat]);
 
-  const dungeonInstances = useMemo(
-    () => activeDungeonCat?.instances ?? [],
-    [activeDungeonCat]
-  );
-  const activeInstances = isRaid ? raids : dungeonInstances;
-  const hasImages = activeInstances.some((i) => i.image_url);
-
-  const allKey = isRaid
-    ? 'type:raid'
-    : String(activeDungeonCat?.cat.poolInstanceId ?? 'type:dungeon');
-
-  const instanceOptions = useMemo(() => {
-    const list = isRaid ? raids : dungeonInstances;
-    return [
-      { key: allKey, label: isRaid ? t('loot.allRaids') : isCrafted ? t('loot.allCrafted') : t('loot.allDungeons') },
-      ...list.map((inst) => ({ key: String(inst.id), label: inst.name })),
-    ];
-  }, [isRaid, raids, dungeonInstances, allKey, t]);
-
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];
     return [
@@ -309,47 +290,36 @@ export default function DropFinderPage() {
 
   return (
     <div className="space-y-6 pb-20">
-      <TalentPicker />
-      <CategorySelector
-          category={category}
-          onChange={(key) => {
-            setCategory(key);
-            // Auto-select pool for categories with no sub-instances (crafted, delves, prey)
-            const dc = dungeonCats.find((d) => d.cat.key === key);
-            if (dc && dc.instances.length === 0) {
-              setSelectedId(String(dc.cat.poolInstanceId));
-              setDungeonDiff(dc.cat.defaultDifficulty);
-              // Set upgrade level to match the default difficulty's track level
-              const allDiffs = dc.cat.difficultyGroups
-                ? dc.cat.difficultyGroups.flatMap((g) => g.difficulties)
-                : dc.cat.difficulties;
-              const defaultDiff = allDiffs.find((d) => d.key === dc.cat.defaultDifficulty);
-              setUpgradeLevel(defaultDiff?.level ?? 0);
-            } else {
-              setSelectedId('');
-            }
-          }}
-          dungeonCats={dungeonCats}
-        />
+      <div>
+        <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
+          Drop Finder
+        </h1>
+        <p className="text-sm text-on-surface-variant max-w-2xl">
+          Find and simulate the best gear drops from across Azeroth. Refine your search by activity type and difficulty.
+        </p>
+      </div>
 
-      {category && !isPoolOnly && hasImages ? (
-        <DungeonGrid
-          value={selectedId}
-          onChange={setSelectedId}
-          instances={activeInstances}
-          allKey={allKey}
-          allLabel={isRaid ? t('loot.allRaids') : t('loot.allDungeons')}
-        />
-      ) : category && !isPoolOnly ? (
-        <div className="card p-5">
-          <label className="label-text">{isRaid ? t('dropFinder.selectRaid') : t('dropFinder.selectDungeon')}</label>
-          <ToggleButtonGroup
-            value={selectedId}
-            onChange={setSelectedId}
-            options={instanceOptions}
-          />
+      {/* Sub-category selector for grouped sources (PVP / Professions) */}
+      {isGroupedSource && availableGroupCats.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {availableGroupCats.map((dc) => {
+            const isActive = dc.cat.key === subCategory;
+            return (
+              <button
+                key={dc.cat.key}
+                onClick={() => setSubCategory(dc.cat.key)}
+                className={`rounded-lg border px-4 py-2.5 text-[14px] font-semibold transition-all ${
+                  isActive
+                    ? 'border-gold/50 bg-gold/[0.06] text-primary'
+                    : 'border-outline-variant/10 bg-surface-container-high text-on-surface hover:border-gold/20 hover:text-primary'
+                }`}
+              >
+                {dc.cat.label}
+              </button>
+            );
+          })}
         </div>
-      ) : null}
+      )}
 
       {(isRaid || isDungeon) && selectedId && activeDifficulties.length > 0 && (
         <div className="card space-y-4 p-5">
@@ -544,7 +514,7 @@ export default function DropFinderPage() {
         </>
       )}
 
-      {!selectedId && !loading && !category && (
+      {!source && (
         <p className="py-6 text-center text-sm text-muted">{t('dropFinder.selectCategory')}</p>
       )}
 
