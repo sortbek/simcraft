@@ -230,6 +230,15 @@ export default function UpgradeComparePage() {
 
   return (
     <div className="space-y-6 pb-20">
+      <div>
+        <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
+          Crest Upgrades
+        </h1>
+        <p className="text-sm text-on-surface-variant max-w-2xl">
+          Compare upgrade paths for your equipped gear using crests. Find the most impactful upgrades for your budget.
+        </p>
+      </div>
+
       <TalentPicker />
       {/* Explainer */}
       <div className="rounded-lg bg-surface-container-high/50 px-4 py-3">
