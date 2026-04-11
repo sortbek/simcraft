@@ -125,8 +125,8 @@ export default function TopGearResults({
   const maxDps = activeResults.length > 0 ? activeResults[0].dps : baseDps;
   const bestResult = activeResults.length > 0 ? activeResults[0] : null;
 
-  type GroupMode = 'rank' | 'encounter';
-  const [groupMode, setGroupMode] = useState<GroupMode>(hasEncounterData ? 'encounter' : 'rank');
+  type GroupMode = 'rank' | 'encounter' | 'slot';
+  const [groupMode, setGroupMode] = useState<GroupMode>(hasEncounterData ? 'slot' : 'rank');
   const [selectedResultName, setSelectedResultName] = useState<string | null>(null);
 
   const selectedResult = useMemo(() => {
@@ -137,12 +137,17 @@ export default function TopGearResults({
   }, [selectedResultName, activeResults, bestResult]);
 
   const groupedResults = useMemo(() => {
-    if (groupMode === 'rank' || !hasEncounterData) return null;
+    if (groupMode === 'rank') return null;
     const groups: Record<string, TopGearResult[]> = {};
     for (const result of activeResults) {
-      const encounter = result.items[0]?.encounter || 'Unknown';
-      if (!groups[encounter]) groups[encounter] = [];
-      groups[encounter].push(result);
+      let key: string;
+      if (groupMode === 'slot') {
+        key = result.items[0]?.slot || 'Unknown';
+      } else {
+        key = result.items[0]?.encounter || 'Unknown';
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(result);
     }
     // Sort groups by their best item's delta (descending)
     return Object.entries(groups).sort(([, a], [, b]) => {
@@ -150,7 +155,7 @@ export default function TopGearResults({
       const bestB = b[0]?.delta ?? 0;
       return bestB - bestA;
     });
-  }, [results, groupMode, hasEncounterData]);
+  }, [activeResults, groupMode]);
 
   const bestGearSet = useMemo(() => {
     if (!equippedGear) return {} as Record<string, GearItem>;
@@ -320,6 +325,7 @@ export default function TopGearResults({
                 {(
                   [
                     ['rank', t('gear.byRank')],
+                    ['slot', t('gear.bySlot')],
                     ['encounter', t('gear.byBoss')],
                   ] as [GroupMode, string][]
                 ).map(([mode, label]) => (
@@ -340,16 +346,17 @@ export default function TopGearResults({
           </div>
         </div>
 
-        {groupMode === 'encounter' && groupedResults ? (
+        {(groupMode === 'encounter' || groupMode === 'slot') && groupedResults ? (
           <div className="space-y-6">
-            {groupedResults.map(([encounter, group]) => {
+            {groupedResults.map(([groupKey, group]) => {
               const bestDelta = Math.max(...group.map((r) => r.delta));
               const avgDelta = group.length > 0 ? group.reduce((s, r) => s + Math.max(0, r.delta), 0) / group.length : 0;
+              const groupLabel = groupMode === 'slot' ? (SLOT_LABELS[groupKey] || groupKey) : groupKey;
               return (
-              <div key={encounter}>
+              <div key={groupKey}>
                 <div className="mb-3 flex items-center justify-between border-b border-outline-variant/20 pb-2">
                   <div className="flex items-center gap-3">
-                    <span className="font-headline text-[14px] font-bold text-on-surface">{encounter}</span>
+                    <span className="font-headline text-[14px] font-bold text-on-surface">{groupLabel}</span>
                     <span className="font-mono text-[12px] text-muted">{t('gear.itemsCount', { count: group.length })}</span>
                   </div>
                   <div className="flex items-center gap-4 text-[11px]">
