@@ -41,8 +41,16 @@ pub(super) async fn create_sim(
         return resp;
     }
 
+    // Build the full input with sim options inline for "View Raw Input"
+    let options_for_display = req.options.to_json_with_sim_type(&req.sim_type);
+    let display_input = if req.raw {
+        simc_input.clone()
+    } else {
+        simc_runner::build_simc_input_from_options(&simc_input, &options_for_display)
+    };
+
     let mut job = Job::new(
-        simc_input.clone(),
+        display_input,
         req.sim_type.clone(),
         req.options.iterations,
         req.options.fight_style.clone(),
@@ -60,6 +68,7 @@ pub(super) async fn create_sim(
     if req.raw {
         options["raw"] = serde_json::json!(true);
     }
+
     let job_id_clone = job_id.clone();
     let logs = log_buffer.get_ref().clone();
     let jid_logs = job_id.clone();
@@ -226,8 +235,10 @@ pub(super) async fn create_top_gear_sim(
         return resp;
     }
 
+    let options_json = req.options.to_json();
+    let display_input = simc_runner::build_simc_input_from_options(&generated_input, &options_json);
     let job = Job::new(
-        generated_input.clone(),
+        display_input,
         "top_gear".to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
@@ -401,8 +412,10 @@ pub(super) async fn create_droptimizer_sim(
         return resp;
     }
 
+    let options_json_drop = req.options.to_json();
+    let display_input_drop = simc_runner::build_simc_input_from_options(&generated_input, &options_json_drop);
     let job = Job::new(
-        generated_input.clone(),
+        display_input_drop,
         "droptimizer".to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
@@ -504,8 +517,10 @@ pub(super) async fn create_enchant_gem_sim(
         return resp;
     }
 
+    let options_json_eg = req.options.to_json();
+    let display_input_eg = simc_runner::build_simc_input_from_options(&generated_input, &options_json_eg);
     let job = Job::new(
-        generated_input.clone(),
+        display_input_eg,
         "enchant_gem".to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),

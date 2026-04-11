@@ -119,14 +119,6 @@ const OVERRIDES: &[&str] = &[
     "override.bleeding=1",
 ];
 
-const SIM_OPTIONS: &[&str] = &[
-    "report_details=1",
-    "single_actor_batch=1",
-    "optimize_expressions=1",
-    "temporary_enchant=",
-    "scale_only=strength,intellect,agility,crit,mastery,vers,haste,weapon_dps,weapon_offhand_dps",
-];
-
 const EXPANSION_OPTIONS: &[&str] = &[
     "midnight.crucible_of_erratic_energies_violence=1",
     "midnight.crucible_of_erratic_energies_sustenance=1",
@@ -163,6 +155,174 @@ const STAGES: &[Stage] = &[
 
 const STAGED_THRESHOLD: usize = 10;
 
+/// Build the full simc input from the options Value (convenience wrapper).
+pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> String {
+    let fight_style = options.get("fight_style").and_then(|v| v.as_str()).unwrap_or("Patchwerk");
+    let target_error = options.get("target_error").and_then(|v| v.as_f64()).unwrap_or(0.1);
+    let iterations = options.get("iterations").and_then(|v| v.as_u64()).unwrap_or(10000) as u32;
+    let desired_targets = options.get("desired_targets").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+    let max_time = options.get("max_time").and_then(|v| v.as_u64()).unwrap_or(300) as u32;
+    let calculate_scale_factors = options.get("sim_type").and_then(|v| v.as_str()) == Some("stat_weights");
+    let single_actor_batch = options.get("single_actor_batch").and_then(|v| v.as_bool()).unwrap_or(true);
+    let is_dungeon_route = simc_input.lines().any(|l| {
+        let t = l.trim();
+        t == "fight_style=DungeonRoute" || t == "fight_style=\"DungeonRoute\""
+    });
+
+    build_full_simc_input(
+        simc_input, options, fight_style, target_error, iterations,
+        desired_targets, max_time, calculate_scale_factors, single_actor_batch, is_dungeon_route,
+    )
+}
+
+/// Build the full simc input file with all options inline (matching Raidbots format).
+/// Injects consumables, expansion options after the base actor, and appends a
+/// `# Simulation Options` section at the end with overrides, sim config, etc.
+#[allow(clippy::too_many_arguments)]
+pub fn build_full_simc_input(
+    simc_input: &str,
+    options: &Value,
+    fight_style: &str,
+    target_error: f64,
+    iterations: u32,
+    desired_targets: u32,
+    max_time: u32,
+    calculate_scale_factors: bool,
+    single_actor_batch: bool,
+    is_dungeon_route: bool,
+) -> String {
+    let consumables = options.get("consumables").and_then(|v| v.as_object());
+    let expansion_opts = options.get("expansion_options").and_then(|v| v.as_object());
+    let raid_buffs = options.get("raid_buffs").and_then(|v| v.as_object());
+
+    // Extract character name for the name= line
+    let char_name: Option<String> = simc_input.lines().find_map(|l| {
+        let trimmed = l.trim();
+        if let Some(idx) = trimmed.find("=\"") {
+            let after = &trimmed[idx + 2..];
+            after.strip_suffix('"').map(|s| s.to_string())
+        } else {
+            None
+        }
+    });
+
+    // --- Base actor options (consumables + expansion) injected before combos ---
+    let mut base_actor_lines: Vec<String> = Vec::new();
+
+    // Actor name (matches Raidbots format)
+    if let Some(name) = &char_name {
+        base_actor_lines.push(format!("name={}", name));
+    }
+
+    // Consumables
+    base_actor_lines.push("\n# Consumables".to_string());
+    if let Some(cons) = consumables {
+        for (key, val) in cons {
+            if let Some(v) = val.as_str() {
+                if v.is_empty() {
+                    continue;
+                }
+                if key == "weapon_rune" {
+                    base_actor_lines.push(format!("temporary_enchant=main_hand:{}", v));
+                } else {
+                    base_actor_lines.push(format!("{}={}", key, v));
+                }
+            }
+        }
+    }
+
+    // Expansion options
+    base_actor_lines.push("\n# Expansion Options".to_string());
+    // Weapon rune: if not set via consumables, clear it
+    let has_weapon_rune = consumables
+        .map(|c| c.contains_key("weapon_rune"))
+        .unwrap_or(false);
+    if !has_weapon_rune {
+        base_actor_lines.push("temporary_enchant=".to_string());
+    }
+    for default_opt in EXPANSION_OPTIONS {
+        let parts: Vec<&str> = default_opt.splitn(2, '=').collect();
+        let key = parts[0];
+        let enabled = expansion_opts
+            .and_then(|e| e.get(key))
+            .and_then(|v| v.as_u64())
+            .map(|v| v != 0)
+            .unwrap_or(true);
+        base_actor_lines.push(format!("{}={}", key, if enabled { "1" } else { "0" }));
+    }
+
+    // Find insertion point for base actor options
+    let input_lines: Vec<&str> = simc_input.lines().collect();
+    let mut insert_idx = input_lines.len();
+    for (i, line) in input_lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed == "### Combo 2"
+            || trimmed == "# Actors"
+            || trimmed.starts_with("profileset.")
+            || trimmed.starts_with("copy=")
+        {
+            insert_idx = i;
+            break;
+        }
+    }
+
+    let mut result = input_lines[..insert_idx].join("\n");
+    result.push('\n');
+    result.push_str(&base_actor_lines.join("\n"));
+    result.push('\n');
+    if insert_idx < input_lines.len() {
+        result.push_str("\n# Actors\n");
+        result.push_str(&input_lines[insert_idx..].join("\n"));
+    } else {
+        // Quick sim (no combos) — still add # Actors marker for consistency
+        result.push_str("\n# Actors\n");
+    }
+
+    // --- Simulation Options section at the end ---
+    result.push_str("\n\n# Simulation Options\n");
+    result.push_str(&format!("iterations={}\n", iterations));
+    result.push_str(&format!("desired_targets={}\n", desired_targets));
+    if !is_dungeon_route {
+        result.push_str(&format!("max_time={}\n", max_time));
+    }
+    result.push_str(&format!(
+        "calculate_scale_factors={}\n",
+        if calculate_scale_factors { "1" } else { "0" }
+    ));
+
+    // Scale factors
+    result.push_str("scale_only=strength,intellect,agility,crit,mastery,vers,haste,weapon_dps,weapon_offhand_dps\n");
+
+    // Raid buff overrides (skip for dungeon routes)
+    if !is_dungeon_route {
+        for opt in OVERRIDES {
+            let key = opt
+                .strip_prefix("override.")
+                .and_then(|s| s.split('=').next())
+                .unwrap_or("");
+            let enabled = raid_buffs
+                .and_then(|b| b.get(key))
+                .and_then(|v| v.as_u64())
+                .map(|v| v != 0)
+                .unwrap_or(true);
+            result.push_str(&format!("override.{}={}\n", key, if enabled { "1" } else { "0" }));
+        }
+    }
+
+    // Sim options
+    result.push_str("report_details=1\n");
+    if single_actor_batch {
+        result.push_str("single_actor_batch=1\n");
+    }
+    result.push_str("optimize_expressions=1\n");
+    if !is_dungeon_route {
+        result.push_str(&format!("fight_style={}\n", fight_style));
+    }
+    result.push_str(&format!("target_error={}\n", target_error));
+
+    result
+}
+
 /// Run simc as a subprocess, streaming stderr for real-time profileset progress.
 /// `on_profileset_progress(current, total)` is called whenever simc reports
 /// completing a profileset (e.g. "3/7").
@@ -173,6 +333,7 @@ async fn run_simc_subprocess(
     raw: bool,
     job_id: &str,
     simc_input: &str,
+    options: &Value,
     fight_style: &str,
     target_error: f64,
     iterations: u32,
@@ -199,9 +360,6 @@ async fn run_simc_subprocess(
     let output_file = tmp_dir.path().join("output.json");
     let html_file = tmp_dir.path().join("report.html");
 
-    std::fs::write(&input_file, simc_input)
-        .map_err(|e| format!("Failed to write input file: {}", e))?;
-
     if !simc_path.exists() {
         return Err(format!("simc binary not found at: {}", simc_path.display()));
     }
@@ -215,59 +373,44 @@ async fn run_simc_subprocess(
         let _ = std::fs::remove_file(&zone_id);
     }
 
+    let is_dungeon_route = simc_input.lines().any(|l| {
+        let trimmed = l.trim();
+        trimmed == "fight_style=DungeonRoute" || trimmed == "fight_style=\"DungeonRoute\""
+    });
+
+    // Build the full input file with all options inline
+    let final_input = if raw {
+        simc_input.to_string()
+    } else {
+        build_full_simc_input(
+            simc_input,
+            options,
+            fight_style,
+            target_error,
+            iterations,
+            desired_targets,
+            max_time,
+            calculate_scale_factors,
+            single_actor_batch,
+            is_dungeon_route,
+        )
+    };
+    std::fs::write(&input_file, &final_input)
+        .map_err(|e| format!("Failed to write input file: {}", e))?;
+
     let mut cmd = Command::new(simc_path);
     #[cfg(windows)]
     {
         // CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS
         cmd.creation_flags(0x08000000 | 0x00004000);
     }
-    let is_dungeon_route = simc_input.lines().any(|l| {
-        let trimmed = l.trim();
-        trimmed == "fight_style=DungeonRoute" || trimmed == "fight_style=\"DungeonRoute\""
-    });
 
+    // Only pass output format and threads as CLI args — everything else is in the input file
     cmd.arg(input_file.to_str().unwrap_or(""))
-        .arg(format!("json2={}", output_file.display()));
+        .arg(format!("json2={}", output_file.display()))
+        .arg(format!("threads={}", threads));
     if generate_html {
         cmd.arg(format!("html={}", html_file.display()));
-    }
-
-    if raw {
-        // Raw mode: only set output format and threads, let the input control everything else
-        cmd.arg(format!("threads={}", threads));
-    } else {
-        cmd.arg(format!("iterations={}", iterations))
-            .arg(format!("target_error={}", target_error))
-            .arg(format!("threads={}", threads))
-            .arg(format!(
-                "calculate_scale_factors={}",
-                if calculate_scale_factors { "1" } else { "0" }
-            ));
-
-        // For dungeon routes, fight_style/max_time/overrides are defined in the input
-        // file itself — don't override them with CLI args.
-        if is_dungeon_route {
-            cmd.arg(format!("desired_targets={}", desired_targets));
-        } else {
-            cmd.arg(format!("fight_style={}", fight_style))
-                .arg(format!("desired_targets={}", desired_targets))
-                .arg(format!("max_time={}", max_time));
-            for opt in OVERRIDES {
-                cmd.arg(*opt);
-            }
-        }
-    }
-    for opt in SIM_OPTIONS {
-        if opt.starts_with("single_actor_batch=") {
-            if !raw && single_actor_batch {
-                cmd.arg(*opt);
-            }
-            continue;
-        }
-        cmd.arg(*opt);
-    }
-    for opt in EXPANSION_OPTIONS {
-        cmd.arg(*opt);
     }
 
     cmd.stdout(std::process::Stdio::piped());
@@ -542,6 +685,7 @@ pub async fn run_simc(
         raw,
         job_id,
         simc_input,
+        options,
         fight_style,
         target_error,
         iterations,
@@ -603,6 +747,7 @@ pub async fn run_simc_staged(
             false, // not raw
             job_id,
             simc_input,
+            options,
             fight_style,
             target_error,
             user_iterations,
@@ -664,6 +809,7 @@ pub async fn run_simc_staged(
             false, // not raw
             job_id,
             &current_input,
+            options,
             fight_style,
             stage.target_error,
             stage_iterations[stage_idx],

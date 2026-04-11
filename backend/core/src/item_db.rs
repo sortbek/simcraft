@@ -86,6 +86,11 @@ struct CatalystData {
 }
 
 static CATALYST: OnceCell<CatalystData> = OnceCell::new();
+static FLASKS: OnceCell<Vec<Value>> = OnceCell::new();
+static POTIONS: OnceCell<Vec<Value>> = OnceCell::new();
+static FOODS: OnceCell<Vec<Value>> = OnceCell::new();
+static AUGMENTS: OnceCell<Vec<Value>> = OnceCell::new();
+static TEMP_ENCHANTS: OnceCell<Vec<Value>> = OnceCell::new();
 
 // ---- Load ----
 
@@ -555,12 +560,51 @@ pub fn load(data_dir: &Path) {
         println!("Loaded {} localized item names", map.len());
         let _ = ITEM_NAMES.set(map);
     }
+
+    // Consumable data files
+    for (filename, cell) in [
+        ("flasks.json", &FLASKS),
+        ("potions.json", &POTIONS),
+        ("foods.json", &FOODS),
+        ("augments.json", &AUGMENTS),
+        ("temp-enchants.json", &TEMP_ENCHANTS),
+    ] {
+        let path = data_dir.join(filename);
+        if path.exists() {
+            let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
+                fs::File::open(&path).unwrap(),
+            ))
+            .unwrap_or_default();
+            println!("Loaded {} entries from {}", data.len(), filename);
+            let _ = cell.set(data);
+        }
+    }
 }
 
 // ---- Accessors ----
 
 pub fn items() -> &'static HashMap<u64, Value> {
     ITEMS.get().expect("Game data not loaded")
+}
+
+pub fn list_flasks() -> &'static [Value] {
+    FLASKS.get().map(|v| v.as_slice()).unwrap_or(&[])
+}
+
+pub fn list_potions() -> &'static [Value] {
+    POTIONS.get().map(|v| v.as_slice()).unwrap_or(&[])
+}
+
+pub fn list_foods() -> &'static [Value] {
+    FOODS.get().map(|v| v.as_slice()).unwrap_or(&[])
+}
+
+pub fn list_augments() -> &'static [Value] {
+    AUGMENTS.get().map(|v| v.as_slice()).unwrap_or(&[])
+}
+
+pub fn list_temp_enchants() -> &'static [Value] {
+    TEMP_ENCHANTS.get().map(|v| v.as_slice()).unwrap_or(&[])
 }
 
 pub fn item_names() -> Option<&'static HashMap<u64, HashMap<String, String>>> {

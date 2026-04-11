@@ -35,6 +35,9 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
     simcRaidActors,
     simcPostCombos,
     simcFooter,
+    raidBuffs,
+    consumables,
+    expansionOptions,
     scenarios,
     clearScenarios,
   } = useSimContext();
@@ -90,6 +93,18 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
         ...(simcRaidActors ? { simc_raid_actors: simcRaidActors } : {}),
         ...(simcPostCombos ? { simc_post_combos: simcPostCombos } : {}),
         ...(simcFooter ? { simc_footer: simcFooter } : {}),
+        // Raid buffs: only send overrides for disabled buffs
+        ...(Object.values(raidBuffs).some((v) => !v)
+          ? { raid_buffs: Object.fromEntries(Object.entries(raidBuffs).map(([k, v]) => [k, v ? 1 : 0])) }
+          : {}),
+        // Consumables: only send non-empty selections
+        ...(Object.values(consumables).some((v) => v)
+          ? { consumables: Object.fromEntries(Object.entries(consumables).filter(([, v]) => v)) }
+          : {}),
+        // Expansion options: only send overrides for disabled options
+        ...(Object.values(expansionOptions).some((v) => !v)
+          ? { expansion_options: Object.fromEntries(Object.entries(expansionOptions).map(([k, v]) => [k, v ? 1 : 0])) }
+          : {}),
       };
 
       const results = await Promise.allSettled(
@@ -165,6 +180,9 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
     simcRaidActors,
     simcPostCombos,
     simcFooter,
+    raidBuffs,
+    consumables,
+    expansionOptions,
     scenarios,
     clearScenarios,
     t,

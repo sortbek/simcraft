@@ -6,6 +6,7 @@ import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
+import RaidBuffsConsumables from './RaidBuffsConsumables';
 
 interface ConfigFooterProps {
   /** Page-specific toggles rendered in the drawer */
@@ -29,6 +30,7 @@ export default function ConfigFooter({
 }: ConfigFooterProps) {
   const { t } = useLanguage();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'simulation' | 'buffs'>('simulation');
   const [expertActiveTab, setExpertActiveTab] = useState<ExpertTabKey>('footer');
   const {
     fightStyle,
@@ -83,107 +85,113 @@ export default function ConfigFooter({
       {/* Expand-up drawer */}
       {drawerOpen && (
         <div className="border-t border-outline-variant/10 bg-[#0e0e0e]/95 backdrop-blur-xl animate-fade-in">
-          <div className="mx-auto max-w-screen-2xl px-8 py-6 space-y-6">
-            {/* Header with reset */}
-            <div className="flex items-center justify-between">
-              <span className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant">
-                {t('config.simulationOptions')}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setFightStyle('Patchwerk');
-                  setFightLength(300);
-                  setTargetCount(1);
-                  setCustomApl('');
-                  setSimcHeader('');
-                  setSimcBasePlayer('');
-                  setSimcRaidActors('');
-                  setSimcPostCombos('');
-                  setSimcFooter('');
-                }}
-                className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant/50 hover:text-error transition-colors"
-              >
-                {t('config.resetToDefaults')}
-              </button>
+          <div className="mx-auto max-w-screen-2xl px-8 py-5">
+            {/* Tab bar */}
+            <div className="flex items-center gap-1 mb-5">
+              {([
+                { key: 'simulation' as const, label: t('config.simulation') },
+                { key: 'buffs' as const, label: t('config.raidBuffs') + ' & ' + t('config.consumables') },
+              ]).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`rounded-lg px-4 py-2 text-[12px] font-bold uppercase tracking-wider transition-colors ${
+                    activeTab === tab.key
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-on-surface-variant/50 hover:text-on-surface-variant hover:bg-surface-container-high/50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-            {/* Row 1: Fight config */}
-            <div className="grid grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.fightStyle')}
-                </label>
-                <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.fightLength')}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={30}
-                    max={600}
-                    step={30}
-                    value={fightLength}
-                    onChange={(e) => setFightLength(Number(e.target.value))}
-                    className="flex-1 accent-primary"
-                  />
-                  <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 min-w-[4.5rem] text-center">
-                    <span className="font-mono text-primary text-sm font-bold tabular-nums">{fightLengthLabel}</span>
-                    <span className="text-[9px] text-on-surface-variant/50 ml-1">{t('config.sec')}</span>
+
+            {/* Tab: Simulation */}
+            {activeTab === 'simulation' && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                      {t('config.fightStyle')}
+                    </label>
+                    <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                      {t('config.fightLength')}
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={30}
+                        max={600}
+                        step={30}
+                        value={fightLength}
+                        onChange={(e) => setFightLength(Number(e.target.value))}
+                        className="flex-1 accent-primary"
+                      />
+                      <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 min-w-[4.5rem] text-center">
+                        <span className="font-mono text-primary text-sm font-bold tabular-nums">{fightLengthLabel}</span>
+                        <span className="text-[9px] text-on-surface-variant/50 ml-1">{t('config.sec')}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                      {t('config.numberOfBosses')}
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={1}
+                        max={10}
+                        value={targetCount}
+                        onChange={(e) => setTargetCount(Number(e.target.value))}
+                        className="flex-1 accent-primary"
+                      />
+                      <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 min-w-[4.5rem] text-center">
+                        <span className="font-mono text-primary text-sm font-bold tabular-nums">{targetCount}</span>
+                        <span className="text-[9px] text-on-surface-variant/50 ml-1">{targetCount === 1 ? t('config.boss') : t('config.bosses')}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.numberOfBosses')}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={10}
-                    value={targetCount}
-                    onChange={(e) => setTargetCount(Number(e.target.value))}
-                    className="flex-1 accent-primary"
+
+                {children && <div className="flex flex-wrap items-center gap-6">{children}</div>}
+
+                <ScenarioBuilder />
+
+                {/* Custom APL & Expert */}
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    {t('config.customAplSimcOptions')}
+                  </label>
+                  <textarea
+                    value={customApl}
+                    onChange={(e) => setCustomApl(e.target.value)}
+                    placeholder={t('config.customAplPlaceholder')}
+                    className="input-field h-20 resize-y font-mono text-xs"
                   />
-                  <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 min-w-[4.5rem] text-center">
-                    <span className="font-mono text-primary text-sm font-bold tabular-nums">{targetCount}</span>
-                    <span className="text-[9px] text-on-surface-variant/50 ml-1">{targetCount === 1 ? t('config.boss') : t('config.bosses')}</span>
-                  </div>
                 </div>
+
+                <ExpertToggle
+                  hasContent={hasExpertContent}
+                  activeTab={expertActiveTab}
+                  setActiveTab={setExpertActiveTab}
+                  expertValues={expertValues}
+                  expertSetters={expertSetters}
+                  activeTabInfo={expertActiveTabInfo}
+                />
               </div>
-            </div>
+            )}
 
-            {/* Row 2: Page-specific toggles */}
-            {children && <div className="flex flex-wrap items-center gap-6">{children}</div>}
-
-            {/* Row 3: Scenarios */}
-            <ScenarioBuilder />
-
-            {/* Row 4: Custom APL */}
-            <div className="space-y-2">
-              <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                {t('config.customAplSimcOptions')}
-              </label>
-              <textarea
-                value={customApl}
-                onChange={(e) => setCustomApl(e.target.value)}
-                placeholder={t('config.customAplPlaceholder')}
-                className="input-field h-20 resize-y font-mono text-xs"
-              />
-            </div>
-
-            {/* Row 5: Expert */}
-            <ExpertToggle
-              hasContent={hasExpertContent}
-              activeTab={expertActiveTab}
-              setActiveTab={setExpertActiveTab}
-              expertValues={expertValues}
-              expertSetters={expertSetters}
-              activeTabInfo={expertActiveTabInfo}
-            />
+            {/* Tab: Buffs & Consumables */}
+            {activeTab === 'buffs' && (
+              <div className="animate-fade-in">
+                <RaidBuffsConsumables />
+              </div>
+            )}
           </div>
         </div>
       )}

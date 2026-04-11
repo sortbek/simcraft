@@ -405,8 +405,10 @@ pub(super) async fn create_upgrade_compare_sim(
         return resp;
     }
 
+    let options_json_uc = req.options.to_json();
+    let display_input_uc = crate::simc_runner::build_simc_input_from_options(&generated_input, &options_json_uc);
     let job = Job::new(
-        generated_input.clone(),
+        display_input_uc,
         "top_gear".to_string(), // Reuse top_gear result format
         req.options.iterations,
         req.options.fight_style.clone(),

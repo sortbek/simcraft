@@ -127,6 +127,19 @@ pub(super) async fn list_gems(query: web::Query<GemListQuery>) -> HttpResponse {
         .json(gems)
 }
 
+pub(super) async fn list_consumables() -> HttpResponse {
+    let result = serde_json::json!({
+        "flasks": game_data::list_flasks(),
+        "potions": game_data::list_potions(),
+        "foods": game_data::list_foods(),
+        "augments": game_data::list_augments(),
+        "weapon_runes": game_data::list_temp_enchants(),
+    });
+    HttpResponse::Ok()
+        .insert_header(("Cache-Control", "public, max-age=3600"))
+        .json(result)
+}
+
 pub(super) async fn get_max_upgrade_ilevels(body: web::Json<Vec<Value>>) -> HttpResponse {
     let mut results: HashMap<String, u64> = HashMap::new();
     for item in body.iter().take(200) {

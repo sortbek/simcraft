@@ -6,6 +6,7 @@ import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
+import RaidBuffsConsumables from './RaidBuffsConsumables';
 
 export default function AdvancedOptions() {
   const { t } = useLanguage();
@@ -143,6 +144,8 @@ export default function AdvancedOptions() {
               </div>
             </div>
           </div>
+
+          <RaidBuffsConsumables />
 
           <ScenarioBuilder />
 

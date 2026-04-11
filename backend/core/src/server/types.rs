@@ -36,6 +36,19 @@ pub struct SimOptions {
     // Batch grouping
     #[serde(default)]
     pub batch_id: Option<String>,
+    /// Raid buff overrides. Keys are buff names (e.g. "bloodlust"), values are 0 or 1.
+    /// Empty = all buffs ON (default).
+    #[serde(default)]
+    pub raid_buffs: HashMap<String, u8>,
+    /// Consumable selections. Keys: "food", "flask", "potion", "augmentation", "weapon_rune".
+    /// Values: simc consumable string. Empty map = SimC defaults.
+    #[serde(default)]
+    pub consumables: HashMap<String, String>,
+    /// Expansion-specific option overrides. Keys are the full option name
+    /// (e.g. "midnight.crucible_of_erratic_energies_violence"), values are 0 or 1.
+    /// Empty = all expansion options ON (default).
+    #[serde(default)]
+    pub expansion_options: HashMap<String, u8>,
     // Expert Mode injection points
     #[serde(default)]
     pub simc_header: String,
@@ -57,7 +70,7 @@ impl SimOptions {
     }
 
     pub(super) fn to_json(&self) -> Value {
-        json!({
+        let mut v = json!({
             "fight_style": self.fight_style,
             "target_error": self.target_error,
             "iterations": self.iterations,
@@ -65,7 +78,17 @@ impl SimOptions {
             "max_time": self.max_time,
             "threads": self.threads,
             "single_actor_batch": !self.has_raid_actors(),
-        })
+        });
+        if !self.raid_buffs.is_empty() {
+            v["raid_buffs"] = json!(self.raid_buffs);
+        }
+        if !self.consumables.is_empty() {
+            v["consumables"] = json!(self.consumables);
+        }
+        if !self.expansion_options.is_empty() {
+            v["expansion_options"] = json!(self.expansion_options);
+        }
+        v
     }
 
     pub(super) fn to_json_with_sim_type(&self, sim_type: &str) -> Value {

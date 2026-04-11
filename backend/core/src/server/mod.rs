@@ -212,6 +212,10 @@ pub async fn start_with_storage_bind(
                 "/api/gems",
                 web::get().to(game_data_handlers::list_gems),
             )
+            .route(
+                "/api/consumables",
+                web::get().to(game_data_handlers::list_consumables),
+            )
             // Upgrade compare routes
             .route(
                 "/api/upgrade-compare/prepare",
