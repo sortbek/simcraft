@@ -18,9 +18,10 @@ export function validateChecksum(input: string): 'valid' | 'invalid' | null {
   if (!match) return null;
   const expected = parseInt(match[1], 16);
   // The checksum covers everything before the checksum line.
-  // The SimC addon may compute with \r\n or \n depending on OS.
   const idx = input.indexOf(match[0]);
-  const body = input.substring(0, idx);
+  let body = input.substring(0, idx);
+  // Normalize to \n first, then try both \n and \r\n
+  body = body.replace(/\r\n/g, '\n');
   if (adler32(body) === expected) return 'valid';
   if (adler32(body.replace(/\n/g, '\r\n')) === expected) return 'valid';
   return 'invalid';

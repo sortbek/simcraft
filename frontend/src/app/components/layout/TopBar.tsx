@@ -104,6 +104,8 @@ export default function TopBar() {
     try { localStorage.setItem('simhammer_clipboard_sync', String(v)); } catch {}
   }, []);
 
+  const lastImportedClipboard = useRef('');
+
   useEffect(() => {
     if (!isDesktop || !clipboardSync) return;
 
@@ -111,11 +113,9 @@ export default function TopBar() {
       try {
         const text = await window.electronAPI!.readClipboard();
         if (!text || !isValidSimcExport(text)) return;
-        // Don't re-import if it's the same as current input
-        const currentLines = simcInputRef.current.trim().split('\n').sort().join('\n');
-        const newLines = text.trim().split('\n').sort().join('\n');
-        if (currentLines === newLines) return;
-        // Extract character name for the notice
+        // Skip if we already imported this exact clipboard content
+        if (text === lastImportedClipboard.current) return;
+        lastImportedClipboard.current = text;
         const nameMatch = text.match(/^\w+="(.+)"$/m);
         const charName = nameMatch?.[1] ?? 'Unknown';
         setSimcInput(text);
