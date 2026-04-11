@@ -39,6 +39,7 @@ export default function TopBar() {
   const isDesktop = useIsDesktop();
   const { t } = useLanguage();
   const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
   const [showChars, setShowChars] = useState(false);
   const [characters, setCharacters] = useState<SavedCharacter[]>([]);
   const { simcInput, setSimcInput } = useSimContext();
@@ -94,8 +95,13 @@ export default function TopBar() {
         {/* Character info + saved chars dropdown */}
         <button
           onClick={() => {
-            if (characters.length > 0) setShowChars((v) => !v);
-            else setEditing(true);
+            if (characters.length > 0) {
+              setShowChars((v) => !v);
+              setEditing(false);
+            } else {
+              setEditing(true);
+              setEditValue(simcInput);
+            }
           }}
           className="group flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-surface-container-high"
         >
@@ -137,7 +143,13 @@ export default function TopBar() {
 
         {/* Inline SimC preview — click to open full editor below */}
         <button
-          onClick={() => setEditing((v) => !v)}
+          onClick={() => {
+            setEditing((v) => {
+              if (!v) setEditValue(simcInput);
+              return !v;
+            });
+            setShowChars(false);
+          }}
           className="flex h-8 items-center rounded-lg bg-surface-container-high/50 border border-outline-variant/10 px-3 transition-colors hover:bg-surface-container-highest"
         >
           <span className="max-w-48 truncate font-mono text-[11px] text-on-surface-variant/40">
@@ -150,7 +162,7 @@ export default function TopBar() {
         {/* Saved characters dropdown */}
         {showChars && characters.length > 0 && (
           <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-outline-variant/20 bg-surface-container-high shadow-2xl shadow-black/40">
-            <div className="space-y-0.5 p-2">
+            <div className="max-h-72 space-y-0.5 overflow-y-auto p-2">
               {characters.map((char) => {
                 const isActive =
                   characterInfo?.name === char.name &&
@@ -178,9 +190,11 @@ export default function TopBar() {
                     </button>
                     <button
                       onClick={() => deleteCharacter(char.id).then(refreshCharacters)}
-                      className="ml-2 shrink-0 text-sm text-on-surface-variant/30 hover:text-error transition-colors"
+                      className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant/30 hover:bg-red-400/10 hover:text-red-400 transition-colors"
                     >
-                      &times;
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M4 4l8 8M12 4l-8 8" />
+                      </svg>
                     </button>
                   </div>
                 );
@@ -198,17 +212,35 @@ export default function TopBar() {
       {/* Expanded SimC editor — drops below the top bar */}
       {editing && (
         <div className="desktop-no-drag absolute left-0 right-0 top-full z-50 border-b border-outline-variant/10 bg-[#0e0e0e]/95 px-6 py-4 shadow-2xl shadow-black/40 backdrop-blur-xl">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-3xl space-y-3">
             <textarea
               ref={textareaRef}
-              value={simcInput}
-              onChange={(e) => setSimcInput(e.target.value)}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') setEditing(false);
               }}
               placeholder={t('layout.pasteSimcExportFull')}
               className="h-48 w-full resize-y rounded-lg bg-surface-container px-4 py-3 font-mono text-[12px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
             />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setSimcInput(editValue);
+                  setEditing(false);
+                }}
+                disabled={!editValue.trim()}
+                className="rounded-lg bg-gold/10 px-4 py-2 text-[13px] font-bold text-gold transition-colors hover:bg-gold/20 disabled:opacity-40"
+              >
+                {t('common.apply')}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="rounded-lg px-4 py-2 text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
           </div>
         </div>
       )}

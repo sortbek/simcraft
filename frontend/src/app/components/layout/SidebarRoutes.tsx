@@ -100,6 +100,7 @@ export default function SidebarRoutes() {
 
       {open && (
         <div className="mt-1.5 space-y-1 px-1 pb-1">
+          <div className="max-h-48 space-y-0.5 overflow-y-auto">
           {savedRoutes.map((route) => {
             const isActive = simcFooter === route.mdt_string;
             return (
@@ -119,13 +120,16 @@ export default function SidebarRoutes() {
                 </button>
                 <button
                   onClick={() => deleteSavedRoute(route.id).then(refreshRoutes)}
-                  className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 hover:text-red-400 transition-colors"
+                  className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-on-surface-variant/30 hover:bg-red-400/10 hover:text-red-400 transition-colors"
                 >
-                  &times;
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M4 4l8 8M12 4l-8 8" />
+                  </svg>
                 </button>
               </div>
             );
           })}
+          </div>
 
           {showForm ? (
             <div className="space-y-1.5 rounded-lg bg-surface-container-high p-2">
