@@ -13,6 +13,7 @@ import WindowControls from './WindowTitlebar';
 import DesktopAppLink from './DesktopAppLink';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
+import { isValidSimcExport, validateChecksum } from '../../lib/simcDetect';
 
 function parseCharacterInfo(input: string) {
   if (!input) return null;
@@ -47,6 +48,7 @@ export default function TopBar() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const characterInfo = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
+  const checksumWarning = useMemo(() => simcInput.trim().length > 50 && validateChecksum(simcInput) === 'invalid', [simcInput]);
 
   const refreshCharacters = useCallback(() => {
     getCharacters().then(setCharacters);
@@ -88,6 +90,43 @@ export default function TopBar() {
     }
     wasEditing.current = editing;
   }, [editing]);
+
+  // Clipboard sync on focus (desktop only)
+  const [clipboardSync, setClipboardSync] = useState(() => {
+    try { return localStorage.getItem('simhammer_clipboard_sync') === 'true'; } catch { return false; }
+  });
+  const [clipboardNotice, setClipboardNotice] = useState('');
+  const simcInputRef = useRef(simcInput);
+  simcInputRef.current = simcInput;
+
+  const toggleClipboardSync = useCallback((v: boolean) => {
+    setClipboardSync(v);
+    try { localStorage.setItem('simhammer_clipboard_sync', String(v)); } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktop || !clipboardSync) return;
+
+    async function handleFocus() {
+      try {
+        const text = await window.electronAPI!.readClipboard();
+        if (!text || !isValidSimcExport(text)) return;
+        // Don't re-import if it's the same as current input
+        const currentLines = simcInputRef.current.trim().split('\n').sort().join('\n');
+        const newLines = text.trim().split('\n').sort().join('\n');
+        if (currentLines === newLines) return;
+        // Extract character name for the notice
+        const nameMatch = text.match(/^\w+="(.+)"$/m);
+        const charName = nameMatch?.[1] ?? 'Unknown';
+        setSimcInput(text);
+        setClipboardNotice(`Imported SimC data for ${charName}`);
+        setTimeout(() => setClipboardNotice(''), 4000);
+      } catch { /* clipboard read failed, ignore */ }
+    }
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [isDesktop, clipboardSync, setSimcInput]);
 
   return (
     <div ref={containerRef} className="desktop-drag sticky top-0 z-50 flex h-14 items-center justify-between bg-[#131313]/80 backdrop-blur-xl px-6 shadow-2xl shadow-black/40">
@@ -159,6 +198,17 @@ export default function TopBar() {
           </span>
         </button>
 
+        {/* Checksum warning */}
+        {checksumWarning && (
+          <span className="flex items-center gap-1 rounded bg-amber-400/10 px-2 py-1 text-[11px] font-medium text-amber-400" title={t('validation.checksumInvalid')}>
+            <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 2L1.5 13h13L8 2z" />
+              <path d="M8 6v3M8 11v.5" />
+            </svg>
+            {t('validation.checksumWarning')}
+          </span>
+        )}
+
         {/* Saved characters dropdown */}
         {showChars && characters.length > 0 && (
           <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-outline-variant/20 bg-surface-container-high shadow-2xl shadow-black/40">
@@ -205,9 +255,41 @@ export default function TopBar() {
       </div>
 
       <div className="desktop-no-drag flex items-center gap-3">
+        {isDesktop && (
+          <div className="group relative">
+            <button
+              onClick={() => toggleClipboardSync(!clipboardSync)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                clipboardSync
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-on-surface-variant/40 hover:bg-surface-container-high hover:text-on-surface-variant'
+              }`}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="5" y="1.5" width="6" height="3" rx="0.5" />
+                <path d="M3 3.5h1.5M11.5 3.5H13a1 1 0 011 1v9.5a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5a1 1 0 011-1h1.5" />
+              </svg>
+              {clipboardSync ? 'Auto-Import On' : 'Auto-Import Off'}
+            </button>
+            <div className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-outline-variant/20 bg-[#0e0e0e]/95 px-3 py-2.5 opacity-0 shadow-xl backdrop-blur-xl transition-opacity group-hover:opacity-100">
+              <p className="text-[11px] leading-relaxed text-on-surface-variant">
+                {clipboardSync
+                  ? 'Copy /simc in WoW, then switch to SimHammer and your gear imports automatically.'
+                  : 'Enable to auto-import your /simc data from clipboard when you focus SimHammer.'}
+              </p>
+            </div>
+          </div>
+        )}
         {!isDesktop && <DesktopAppLink />}
         <WindowControls />
       </div>
+
+      {/* Clipboard sync notification */}
+      {clipboardNotice && (
+        <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-lg border border-primary/20 bg-[#0e0e0e]/95 px-4 py-2 shadow-xl backdrop-blur-xl">
+          <p className="text-xs font-medium text-primary whitespace-nowrap">{clipboardNotice}</p>
+        </div>
+      )}
 
       {/* Expanded SimC editor — drops below the top bar */}
       {editing && (

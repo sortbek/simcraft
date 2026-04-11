@@ -25,4 +25,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("updater:download-progress", handler);
     return () => ipcRenderer.removeListener("updater:download-progress", handler);
   },
+
+  // Clipboard monitoring
+  startClipboardPolling: (intervalMs) => ipcRenderer.invoke("clipboard:start-polling", intervalMs),
+  stopClipboardPolling: () => ipcRenderer.invoke("clipboard:stop-polling"),
+  readClipboard: () => ipcRenderer.invoke("clipboard:read"),
+  onClipboardChange: (callback) => {
+    const handler = (_event, text) => callback(text);
+    ipcRenderer.on("clipboard:changed", handler);
+    return () => ipcRenderer.removeListener("clipboard:changed", handler);
+  },
 });

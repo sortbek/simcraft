@@ -16,7 +16,7 @@ function useResolvedGear(simcInput: string) {
   const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
-    if (simcInput.trim().length < 10) {
+    if (simcInput.trim().length < 50) {
       setSlots(null);
       return;
     }
@@ -54,7 +54,7 @@ function useResolvedGear(simcInput: string) {
 }
 
 export default function EnchantGemPage() {
-  const { simcInput } = useSimContext();
+  const { simcInput, hasInput } = useSimContext();
   const { t } = useLanguage();
   const { slots: equippedSlots, resolving } = useResolvedGear(simcInput);
 
@@ -171,10 +171,10 @@ export default function EnchantGemPage() {
   );
 
   const validate = useCallback(() => {
-    if (simcInput.trim().length < 10) return t('validation.simcTooShort');
+    if (!hasInput) return t('validation.simcTooShort');
     if (!hasSelections) return t('enchantGem.noSelectionsError');
     return null;
-  }, [simcInput, hasSelections, t]);
+  }, [hasInput, hasSelections, t]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
     endpoint: '/api/enchant-gem/sim',
@@ -196,13 +196,13 @@ export default function EnchantGemPage() {
         </div>
       )}
 
-      {!resolving && !equippedSlots && simcInput.trim().length >= 10 && (
+      {!resolving && !equippedSlots && hasInput && (
         <div className="card p-6">
           <p className="text-sm text-on-surface-variant/60">{t('enchantGem.noGearFound')}</p>
         </div>
       )}
 
-      {!resolving && !equippedSlots && simcInput.trim().length < 10 && (
+      {!resolving && !equippedSlots && !hasInput && (
         <div className="card p-6">
           <p className="text-sm text-on-surface-variant/60">{t('enchantGem.pasteExport')}</p>
         </div>
@@ -239,7 +239,7 @@ export default function EnchantGemPage() {
         onSubmit={submit}
         submitting={submitting}
         buttonLabel={buttonText}
-        disabled={simcInput.trim().length < 10 || !hasSelections}
+        disabled={!hasInput || !hasSelections}
       />
     </div>
   );

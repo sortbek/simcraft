@@ -1,7 +1,7 @@
 // Shared types matching backend API response shapes.
 // These are display-only — no behavior, no business logic.
 
-export type ItemOrigin = 'equipped' | 'bags' | 'vault';
+export type ItemOrigin = 'equipped' | 'bags' | 'vault' | 'loot';
 
 export interface ResolvedItem {
   uid: string;

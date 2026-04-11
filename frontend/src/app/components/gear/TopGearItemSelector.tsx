@@ -373,6 +373,7 @@ export default function TopGearItemSelector({
   function itemDetails(item: ResolvedItem): { text: string; color?: string }[] {
     const parts: { text: string; color?: string }[] = [];
     if (item.origin === 'vault') parts.push({ text: t('gear.greatVault'), color: 'text-amber-400/80' });
+    if (item.origin === 'loot') parts.push({ text: 'Group Loot', color: 'text-sky-400/80' });
     if (item.is_catalyst) parts.push({ text: t('gear.catalyst'), color: 'text-purple-400/80' });
     if (item.tag) parts.push({ text: item.tag });
     if (item.upgrade) parts.push({ text: localizedUpgrade(item.upgrade, t) });
@@ -393,17 +394,19 @@ export default function TopGearItemSelector({
     return parts;
   }
 
-  // Collect vault and catalyst UIDs for quick-select
-  const { vaultUids, catalystUids } = useMemo(() => {
+  // Collect vault, loot, and catalyst UIDs for quick-select
+  const { vaultUids, lootUids, catalystUids } = useMemo(() => {
     const vault: { uid: string; slot: string }[] = [];
+    const loot: { uid: string; slot: string }[] = [];
     const catalyst: { uid: string; slot: string }[] = [];
     for (const slotRes of Object.values(resolved.slots)) {
       for (const alt of slotRes.alternatives) {
         if (alt.origin === 'vault') vault.push({ uid: alt.uid, slot: alt.slot });
+        if (alt.origin === 'loot') loot.push({ uid: alt.uid, slot: alt.slot });
         if (alt.is_catalyst) catalyst.push({ uid: alt.uid, slot: alt.slot });
       }
     }
-    return { vaultUids: vault, catalystUids: catalyst };
+    return { vaultUids: vault, lootUids: loot, catalystUids: catalyst };
   }, [resolved]);
 
   if (visibleGroups.length === 0) {
@@ -447,6 +450,7 @@ export default function TopGearItemSelector({
 
   const hasSelection = Object.values(selectedUids).some((s) => s.size > 0);
   const allVaultSelected = vaultUids.length > 0 && vaultUids.every((c) => selectedUids[c.slot]?.has(c.uid));
+  const allLootSelected = lootUids.length > 0 && lootUids.every((c) => selectedUids[c.slot]?.has(c.uid));
   const allCatalystSelected = catalystUids.length > 0 && catalystUids.every((c) => selectedUids[c.slot]?.has(c.uid));
 
   const quickSelectBar = (
@@ -462,6 +466,19 @@ export default function TopGearItemSelector({
           }`}
         >
           {t('gear.vault')}
+        </button>
+      )}
+      {lootUids.length > 0 && (
+        <button
+          type="button"
+          onClick={() => toggleGroup(lootUids)}
+          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+            allLootSelected
+              ? 'bg-sky-400/15 text-sky-300'
+              : 'text-sky-400/60 hover:bg-sky-400/10 hover:text-sky-300'
+          }`}
+        >
+          Loot
         </button>
       )}
       {catalystUids.length > 0 && (
@@ -548,6 +565,7 @@ export default function TopGearItemSelector({
                 checked={isItemSelected(item, group)}
                 onToggle={() => toggleItem(item, group)}
                 vault={item.origin === 'vault'}
+                loot={item.origin === 'loot'}
                 catalyst={item.is_catalyst}
                 href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
                 wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}

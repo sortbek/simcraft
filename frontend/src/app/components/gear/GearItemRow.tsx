@@ -29,6 +29,8 @@ interface GearItemRowProps {
   equipped?: boolean;
   /** Vault item styling */
   vault?: boolean;
+  /** Loot roll item styling */
+  loot?: boolean;
   /** Catalyst item styling */
   catalyst?: boolean;
   /** Wowhead link URL */
@@ -54,6 +56,7 @@ export default function GearItemRow({
   onToggle,
   equipped,
   vault,
+  loot,
   catalyst,
   href,
   wowheadData,
@@ -102,9 +105,11 @@ export default function GearItemRow({
         className={`h-8 w-8 shrink-0 overflow-hidden rounded ${
           vault
             ? 'ring-2 ring-amber-400/70'
-            : catalyst
-              ? 'ring-2 ring-purple-400/70'
-              : 'ring-1 ring-white/5'
+            : loot
+              ? 'ring-2 ring-sky-400/70'
+              : catalyst
+                ? 'ring-2 ring-purple-400/70'
+                : 'ring-1 ring-white/5'
         }`}
       >
         <img
@@ -160,14 +165,18 @@ export default function GearItemRow({
           checked
             ? vault
               ? 'bg-amber-400/[0.12] ring-2 ring-amber-400/50'
-              : catalyst
-                ? 'bg-purple-400/[0.12] ring-2 ring-purple-400/50'
-                : 'bg-gold/[0.07]'
+              : loot
+                ? 'bg-sky-400/[0.12] ring-2 ring-sky-400/50'
+                : catalyst
+                  ? 'bg-purple-400/[0.12] ring-2 ring-purple-400/50'
+                  : 'bg-gold/[0.07]'
             : vault
               ? 'bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:bg-amber-400/[0.08] hover:ring-amber-400/50'
-              : catalyst
-                ? 'bg-purple-400/[0.04] ring-1 ring-purple-400/30 hover:bg-purple-400/[0.08] hover:ring-purple-400/50'
-                : 'hover:bg-white/[0.02]'
+              : loot
+                ? 'bg-sky-400/[0.04] ring-1 ring-sky-400/30 hover:bg-sky-400/[0.08] hover:ring-sky-400/50'
+                : catalyst
+                  ? 'bg-purple-400/[0.04] ring-1 ring-purple-400/30 hover:bg-purple-400/[0.08] hover:ring-purple-400/50'
+                  : 'hover:bg-white/[0.02]'
         }`}
       >
         {content}

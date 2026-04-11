@@ -291,6 +291,11 @@ export function GearSlotRow({
               Vault
             </span>
           )}
+          {item.origin === 'loot' && (
+            <span className="shrink-0 rounded bg-sky-400/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-sky-400">
+              Loot
+            </span>
+          )}
         </div>
         <p className="truncate text-[11px] text-muted">
           {SLOT_LABELS[slot] || slot}

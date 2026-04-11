@@ -79,6 +79,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
     let mut pending_name = String::new();
     let mut pending_ilevel: u64 = 0;
     let mut in_vault_section = false;
+    let mut in_loot_section = false;
     let mut pending_label = String::new();
 
     for raw_line in simc_input.lines() {
@@ -96,6 +97,20 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
             }
             if clean.eq_ignore_ascii_case("End of Weekly Reward Choices") {
                 in_vault_section = false;
+                pending_name.clear();
+                pending_ilevel = 0;
+                continue;
+            }
+
+            // Loot section boundaries
+            if clean.eq_ignore_ascii_case("Group Loot") {
+                in_loot_section = true;
+                pending_name.clear();
+                pending_ilevel = 0;
+                continue;
+            }
+            if clean.eq_ignore_ascii_case("End of Group Loot") {
+                in_loot_section = false;
                 pending_name.clear();
                 pending_ilevel = 0;
                 continue;
@@ -134,6 +149,8 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
 
                 let origin = if in_vault_section {
                     ItemOrigin::Vault
+                } else if in_loot_section {
+                    ItemOrigin::Loot
                 } else {
                     ItemOrigin::Bags
                 };

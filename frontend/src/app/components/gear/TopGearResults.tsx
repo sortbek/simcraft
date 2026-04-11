@@ -675,6 +675,10 @@ function ItemTag({
         <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-amber-400">
           V
         </span>
+      ) : item.origin === 'loot' ? (
+        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-sky-400">
+          L
+        </span>
       ) : null}
       {enchant?.name && (
         <span className="max-w-[70px] truncate text-[11px] text-emerald-400/70" title={localizedEnchantName(enchant, locale)}>

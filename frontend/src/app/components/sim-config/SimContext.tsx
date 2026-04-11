@@ -4,9 +4,12 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { FightScenario } from '../../lib/types';
 import { API_URL } from '../../lib/api';
 
+
 interface SimContextType {
   simcInput: string;
   setSimcInput: (v: string) => void;
+  /** Whether simcInput has enough content to be worth sending to the server. */
+  hasInput: boolean;
   fightStyle: string;
   setFightStyle: (v: string) => void;
   threads: number;
@@ -119,6 +122,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const hasInput = simcInput.trim().length >= 50;
+
   const setThreads = useCallback((v: number) => {
     _setThreads(v);
     try {
@@ -142,6 +147,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
       value={{
         simcInput,
         setSimcInput,
+        hasInput,
         fightStyle,
         setFightStyle,
         threads,

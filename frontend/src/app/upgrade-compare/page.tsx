@@ -97,7 +97,7 @@ function useUpgradeData(simcInput: string) {
 export default function UpgradeComparePage() {
   const { t, locale } = useLanguage();
   useItemNames();
-  const { simcInput, maxCombinations } = useSimContext();
+  const { simcInput, hasInput, maxCombinations } = useSimContext();
 
   const { data, loading } = useUpgradeData(simcInput);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -161,9 +161,10 @@ export default function UpgradeComparePage() {
   }, [simcInput, selectedSlots, maxCombinations]);
 
   const validate = useCallback(() => {
+    if (!hasInput) return t('validation.simcTooShort');
     if (selectedSlots.size === 0) return 'Select at least one upgradeable item.';
     return null;
-  }, [selectedSlots]);
+  }, [hasInput, selectedSlots, t]);
 
   const {
     submit: handleSubmit,
@@ -201,7 +202,7 @@ export default function UpgradeComparePage() {
       }));
   }, [candidates, currencies]);
 
-  const hasCharacter = simcInput.trim().length >= 10;
+  const hasCharacter = hasInput;
 
   const toggleGroup = (groupCandidates: PrepareCandidate[]) => {
     const slots = groupCandidates.map((c) => c.slot);

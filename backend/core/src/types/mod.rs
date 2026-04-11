@@ -11,6 +11,7 @@ pub enum ItemOrigin {
     Equipped,
     Bags,
     Vault,
+    Loot,
 }
 
 impl ItemOrigin {
@@ -19,6 +20,7 @@ impl ItemOrigin {
             ItemOrigin::Equipped => "equipped",
             ItemOrigin::Bags => "bags",
             ItemOrigin::Vault => "vault",
+            ItemOrigin::Loot => "loot",
         }
     }
 }

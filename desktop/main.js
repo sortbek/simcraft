@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, clipboard } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
@@ -151,6 +151,31 @@ ipcMain.handle("window:toggleMaximize", () => {
 ipcMain.handle("window:close", () => mainWindow?.close());
 ipcMain.handle("window:isMaximized", () => mainWindow?.isMaximized() ?? false);
 
+// Clipboard polling
+let clipboardInterval = null;
+let lastClipboardText = "";
+
+ipcMain.handle("clipboard:start-polling", (_event, intervalMs) => {
+  if (clipboardInterval) clearInterval(clipboardInterval);
+  lastClipboardText = clipboard.readText();
+  clipboardInterval = setInterval(() => {
+    const text = clipboard.readText();
+    if (text && text !== lastClipboardText) {
+      lastClipboardText = text;
+      mainWindow?.webContents.send("clipboard:changed", text);
+    }
+  }, intervalMs || 2000);
+});
+
+ipcMain.handle("clipboard:stop-polling", () => {
+  if (clipboardInterval) {
+    clearInterval(clipboardInterval);
+    clipboardInterval = null;
+  }
+});
+
+ipcMain.handle("clipboard:read", () => clipboard.readText());
+
 // Auto-updater
 function setupAutoUpdater() {
   try {
@@ -240,6 +265,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  if (clipboardInterval) {
+    clearInterval(clipboardInterval);
+    clipboardInterval = null;
+  }
   if (backend) {
     backend.kill();
     backend = null;

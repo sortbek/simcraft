@@ -103,7 +103,7 @@ function useEquippedGear(simcInput: string): Record<string, GearItem> | null {
 }
 
 export default function QuickSimPage() {
-  const { simcInput } = useSimContext();
+  const { simcInput, hasInput } = useSimContext();
   const { t } = useLanguage();
 
   const characterInfo = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
@@ -129,11 +129,9 @@ export default function QuickSimPage() {
   );
 
   const validate = useCallback(() => {
-    if (simcInput.trim().length < 10) {
-      return t('validation.simcTooShort');
-    }
+    if (!hasInput) return t('validation.simcTooShort');
     return null;
-  }, [simcInput, t]);
+  }, [hasInput, t]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
     endpoint: '/api/sim',
@@ -206,7 +204,7 @@ export default function QuickSimPage() {
         onSubmit={submit}
         submitting={submitting}
         buttonLabel={buttonLabel(t('button.runSimulation'))}
-        disabled={simcInput.trim().length < 10}
+        disabled={!hasInput}
       />
     </div>
   );

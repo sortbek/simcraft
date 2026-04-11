@@ -167,7 +167,7 @@ function Spinner() {
 
 export default function DropFinderPage() {
   const { t } = useLanguage();
-  const { simcInput } = useSimContext();
+  const { simcInput, hasInput } = useSimContext();
 
   // Spec selection: main spec on by default, off-specs toggleable
   const detectedClass = useMemo(() => detectClass(simcInput), [simcInput]);
@@ -229,7 +229,7 @@ export default function DropFinderPage() {
     return count;
   }, [simcInput]);
 
-  const hasCharacter = simcInput.trim().length >= 10;
+  const hasCharacter = hasInput;
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
