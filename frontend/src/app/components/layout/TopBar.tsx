@@ -301,6 +301,13 @@ export default function TopBar() {
               onChange={(e) => setEditValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') setEditing(false);
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (editValue.trim()) {
+                    setSimcInput(editValue);
+                    setEditing(false);
+                  }
+                }
               }}
               placeholder={t('layout.pasteSimcExportFull')}
               className="h-48 w-full resize-y rounded-lg bg-surface-container px-4 py-3 font-mono text-[12px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
