@@ -34,15 +34,14 @@ const MANIFEST = {
     fields: [
       "id", "displayName", "itemId", "itemName", "itemIcon",
       "spellIcon", "quality", "expansion", "slot", "inventoryType",
-      "tokenizedName", "gemColor", "equipRequirements",
-      "craftingQuality", "algariColor",
+      "equipRequirements", "craftingQuality", "algariColor", "stats",
     ],
   },
 
   // Bonuses — object keyed by bonus ID. Keep fields used for resolution.
   "bonuses.json": {
     fields: [
-      "id", "quality", "itemLevel", "tag", "socket", "upgrade",
+      "id", "quality", "itemLevel", "levelOffset", "tag", "socket", "upgrade",
     ],
   },
 
@@ -97,10 +96,13 @@ const MANIFEST = {
 // Implementation
 // ---------------------------------------------------------------------------
 
-// Fields needed for item lookups (get_item_info, armor filtering, etc.)
+// Fields needed for item lookups (get_item_info, armor filtering, catalyst, legacy items)
 const ITEM_BASE_FIELDS = [
   "id", "name", "icon", "quality", "itemLevel",
   "itemClass", "itemSubClass", "inventoryType",
+  "squishEra",        // legacy/timewalking ilevel conversion
+  "itemSetId",        // catalyst tier set detection
+  "allowableClasses", // catalyst class filtering
 ];
 
 // Additional fields needed for droppable items (droptimizer, spec filtering)
