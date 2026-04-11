@@ -17,11 +17,13 @@ export default function SettingsPopover() {
   const [open, setOpen] = useState(false);
   const [maxThreads, setMaxThreads] = useState(0);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [clipboardSync, setClipboardSync] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const desktop = !!window.electronAPI;
     setIsDesktop(desktop);
+    try { setClipboardSync(localStorage.getItem('simhammer_clipboard_sync') === 'true'); } catch {}
     if (!desktop) return;
 
     setMaxCombinations(readStoredMaxCombinations());
@@ -116,6 +118,36 @@ export default function SettingsPopover() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Clipboard Auto-Import */}
+              <div className="mt-4 border-t border-outline-variant/10 pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[15px] font-medium text-on-surface-variant">{t('settings.clipboardSync')}</span>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-on-surface-variant/40">
+                      {t('settings.clipboardSyncDesc')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = localStorage.getItem('simhammer_clipboard_sync') !== 'true';
+                      localStorage.setItem('simhammer_clipboard_sync', String(next));
+                      setClipboardSync(next);
+                      window.dispatchEvent(new Event('clipboard-sync-changed'));
+                    }}
+                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ml-3 ${
+                      clipboardSync ? 'bg-gold' : 'bg-surface-container-highest'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
+                        clipboardSync ? 'left-[18px] bg-black' : 'left-0.5 bg-on-surface-variant'
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 

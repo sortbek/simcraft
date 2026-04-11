@@ -49,6 +49,8 @@
   "settings.balanced": "Balanced",
   "settings.performance": "Performance",
   "settings.maximum": "Maximum",
+  "settings.clipboardSync": "Auto-Import from WoW",
+  "settings.clipboardSyncDesc": "Copy /simc in WoW, switch to SimHammer, and your gear imports automatically. Only checks clipboard when you focus the app.",
   "settings.maxGearCombos": "Max Gear Combos",
   "settings.threads": "threads",
 

@@ -91,7 +91,7 @@ export default function TopBar() {
     wasEditing.current = editing;
   }, [editing]);
 
-  // Clipboard sync on focus (desktop only)
+  // Clipboard sync on focus (desktop only, opt-in via Settings)
   const [clipboardSync, setClipboardSync] = useState(() => {
     try { return localStorage.getItem('simhammer_clipboard_sync') === 'true'; } catch { return false; }
   });
@@ -99,9 +99,21 @@ export default function TopBar() {
   const simcInputRef = useRef(simcInput);
   simcInputRef.current = simcInput;
 
-  const toggleClipboardSync = useCallback((v: boolean) => {
-    setClipboardSync(v);
-    try { localStorage.setItem('simhammer_clipboard_sync', String(v)); } catch {}
+  // Re-read setting when Settings popover toggles it (same-tab)
+  useEffect(() => {
+    function onStorage() {
+      try { setClipboardSync(localStorage.getItem('simhammer_clipboard_sync') === 'true'); } catch {}
+    }
+    window.addEventListener('storage', onStorage);
+    // Also poll on focus (storage event doesn't fire same-tab)
+    function onFocusCheck() {
+      try { setClipboardSync(localStorage.getItem('simhammer_clipboard_sync') === 'true'); } catch {}
+    }
+    window.addEventListener('focus', onFocusCheck);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', onFocusCheck);
+    };
   }, []);
 
   const lastImportedClipboard = useRef('');
@@ -255,31 +267,6 @@ export default function TopBar() {
       </div>
 
       <div className="desktop-no-drag flex items-center gap-3">
-        {isDesktop && (
-          <div className="group relative">
-            <button
-              onClick={() => toggleClipboardSync(!clipboardSync)}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                clipboardSync
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-on-surface-variant/40 hover:bg-surface-container-high hover:text-on-surface-variant'
-              }`}
-            >
-              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="5" y="1.5" width="6" height="3" rx="0.5" />
-                <path d="M3 3.5h1.5M11.5 3.5H13a1 1 0 011 1v9.5a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5a1 1 0 011-1h1.5" />
-              </svg>
-              {clipboardSync ? 'Auto-Import On' : 'Auto-Import Off'}
-            </button>
-            <div className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-outline-variant/20 bg-[#0e0e0e]/95 px-3 py-2.5 opacity-0 shadow-xl backdrop-blur-xl transition-opacity group-hover:opacity-100">
-              <p className="text-[11px] leading-relaxed text-on-surface-variant">
-                {clipboardSync
-                  ? 'Copy /simc in WoW, then switch to SimHammer and your gear imports automatically.'
-                  : 'Enable to auto-import your /simc data from clipboard when you focus SimHammer.'}
-              </p>
-            </div>
-          </div>
-        )}
         {!isDesktop && <DesktopAppLink />}
         <WindowControls />
       </div>
