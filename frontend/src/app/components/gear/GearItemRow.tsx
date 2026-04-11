@@ -101,8 +101,10 @@ export default function GearItemRow({
       ) : null}
 
       {/* Item icon */}
-      <div
-        className={`h-8 w-8 shrink-0 overflow-hidden rounded ${
+      <a
+        href={href}
+        data-wowhead={wowheadData}
+        className={`h-8 w-8 shrink-0 overflow-hidden rounded block ${
           vault
             ? 'ring-2 ring-amber-400/70'
             : loot
@@ -111,6 +113,9 @@ export default function GearItemRow({
                 ? 'ring-2 ring-purple-400/70'
                 : 'ring-1 ring-white/5'
         }`}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={href ? (e) => e.preventDefault() : undefined}
       >
         <img
           src={getIconUrl(icon)}
@@ -120,7 +125,7 @@ export default function GearItemRow({
           className="h-full w-full"
           loading="lazy"
         />
-      </div>
+      </a>
 
       {/* Name + details */}
       <div className="min-w-0 flex-1">

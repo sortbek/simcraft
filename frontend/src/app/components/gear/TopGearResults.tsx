@@ -640,7 +640,14 @@ function ItemTag({
       className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${kept ? 'opacity-40' : 'bg-white/[0.04]'
         }`}
     >
-      <div className="h-4 w-4 shrink-0 overflow-hidden rounded-sm">
+      <a
+        href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
+        data-wowhead={whData}
+        className="h-4 w-4 shrink-0 overflow-hidden rounded-sm block"
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.preventDefault()}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={getIconUrl(icon)}
@@ -650,7 +657,7 @@ function ItemTag({
           className="h-full w-full"
           loading="lazy"
         />
-      </div>
+      </a>
       <a
         href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
         data-wowhead={whData}

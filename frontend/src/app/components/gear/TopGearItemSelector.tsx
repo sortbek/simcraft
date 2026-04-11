@@ -624,7 +624,7 @@ function UpgradeButton({
           e.preventDefault();
           onUpgradeClick();
         }}
-        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+        className={`flex h-7 w-7 items-center justify-center rounded transition-colors ${
           isMenuOpen
             ? 'bg-gold/20 text-gold'
             : 'text-on-surface-variant/50 hover:bg-white/[0.05] hover:text-on-surface-variant'
@@ -632,7 +632,7 @@ function UpgradeButton({
         title={t('gear.addUpgradedCopy')}
       >
         <svg
-          className="h-3 w-3"
+          className="h-3.5 w-3.5"
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"

@@ -11,7 +11,8 @@ import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { useLanguage } from '../lib/i18n';
-import { localizedItemName, useItemNames } from '../lib/useItemInfo';
+import { localizedItemName, useItemNames, getWowheadUrl } from '../lib/useItemInfo';
+import { useWowheadTooltips } from '../lib/useWowheadTooltips';
 
 // ---- Types ----
 
@@ -119,6 +120,7 @@ export default function UpgradeComparePage() {
     [candidates]
   );
   const itemInfo = useItemInfo(infoQueries);
+  useWowheadTooltips([itemInfo]);
 
   // Debounced combo count
   const comboTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -347,6 +349,8 @@ export default function UpgradeComparePage() {
                           else next.add(c.slot);
                           setSelectedSlots(next);
                         }}
+                        href={c.item_id > 0 ? getWowheadUrl(c.item_id, locale) : undefined}
+                        wowheadData={c.item_id > 0 ? `bonus=${c.bonus_ids.join(':')}&ilvl=${c.ilevel}` : undefined}
                       />
                     );
                   })}

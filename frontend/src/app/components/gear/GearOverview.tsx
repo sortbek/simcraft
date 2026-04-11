@@ -249,7 +249,14 @@ export function GearSlotRow({
           }}
         />
       )}
-      <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md border border-outline-variant/20">
+      <a
+        href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
+        data-wowhead={whData}
+        className="h-7 w-7 shrink-0 overflow-hidden rounded-md border border-outline-variant/20 block"
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.preventDefault()}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={getIconUrl(icon)}
@@ -259,7 +266,7 @@ export function GearSlotRow({
           className="h-full w-full"
           loading="lazy"
         />
-      </div>
+      </a>
       <div className={`min-w-0 flex-1 ${rtl ? 'text-right' : ''}`}>
         <div className={`flex items-center gap-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
           <a
