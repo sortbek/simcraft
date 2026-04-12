@@ -203,7 +203,8 @@ pub(super) async fn catalyst_convert(
     let inv_type = match gear_resolver::slot_to_inv_type(&req.slot) {
         Some(t) => t,
         None => {
-            return HttpResponse::BadRequest().json(json!({"detail": "Slot not eligible for catalyst"}))
+            return HttpResponse::BadRequest()
+                .json(json!({"detail": "Slot not eligible for catalyst"}))
         }
     };
     let tier_info = match crate::item_db::catalyst_tier_item(class_id, inv_type) {

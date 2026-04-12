@@ -59,7 +59,7 @@ pub(super) async fn create_sim(
 
     let store_clone = store.get_ref().clone();
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(p) => p.to_path_buf(),
+        Ok(path) => path,
         Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
     };
     let mut options = req.options.to_json_with_sim_type(&req.sim_type);

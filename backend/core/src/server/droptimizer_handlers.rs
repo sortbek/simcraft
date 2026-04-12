@@ -66,7 +66,7 @@ pub(super) async fn create_droptimizer_sim(
     store.insert(job);
 
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(p) => p.to_path_buf(),
+        Ok(path) => path,
         Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
     };
 

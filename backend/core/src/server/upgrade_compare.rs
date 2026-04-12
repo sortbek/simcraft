@@ -406,7 +406,8 @@ pub(super) async fn create_upgrade_compare_sim(
     }
 
     let options_json_uc = req.options.to_json();
-    let display_input_uc = crate::simc_runner::build_simc_input_from_options(&generated_input, &options_json_uc);
+    let display_input_uc =
+        crate::simc_runner::build_simc_input_from_options(&generated_input, &options_json_uc);
     let job = Job::new(
         display_input_uc,
         "top_gear".to_string(), // Reuse top_gear result format
@@ -429,7 +430,7 @@ pub(super) async fn create_upgrade_compare_sim(
     store.insert(job);
 
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(p) => p.to_path_buf(),
+        Ok(path) => path,
         Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
     };
 

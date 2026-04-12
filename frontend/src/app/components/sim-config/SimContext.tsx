@@ -59,6 +59,12 @@ interface SimContextType {
 
 const SimContext = createContext<SimContextType | null>(null);
 
+function normalizeSimcBranch(value: string): string {
+  if (value.startsWith('weekly-')) return 'weekly';
+  if (value.startsWith('nightly-')) return 'nightly';
+  return value;
+}
+
 export function useSimContext() {
   const ctx = useContext(SimContext);
   if (!ctx) throw new Error('useSimContext must be used within SimProvider');
@@ -135,7 +141,11 @@ export function SimProvider({ children }: { children: ReactNode }) {
         const n = parseFloat(storedError);
         if (Number.isFinite(n) && n > 0) _setTargetError(n);
       }
-      _setSimcBranch(localStorage.getItem('simhammer_simc_branch') ?? '');
+      const storedBranch = normalizeSimcBranch(localStorage.getItem('simhammer_simc_branch') ?? '');
+      _setSimcBranch(storedBranch);
+      if (storedBranch) {
+        localStorage.setItem('simhammer_simc_branch', storedBranch);
+      }
       _setRaidBuffs(readStoredJson('simhammer_raid_buffs', DEFAULT_RAID_BUFFS));
       _setConsumables(readStoredJson('simhammer_consumables', {}));
       _setExpansionOptions(readStoredJson('simhammer_expansion_options', DEFAULT_EXPANSION_OPTIONS));
@@ -201,9 +211,10 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setSimcBranch = useCallback((v: string) => {
-    _setSimcBranch(v);
+    const normalized = normalizeSimcBranch(v);
+    _setSimcBranch(normalized);
     try {
-      localStorage.setItem('simhammer_simc_branch', v);
+      localStorage.setItem('simhammer_simc_branch', normalized);
     } catch {}
   }, []);
 
