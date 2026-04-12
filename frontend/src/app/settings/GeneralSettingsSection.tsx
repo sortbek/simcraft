@@ -14,23 +14,13 @@ const THREAD_PRESETS = [
 
 export default function GeneralSettingsSection() {
   const { t } = useLanguage();
-  const { threads, setThreads, maxCombinations, setMaxCombinations } = useSimContext();
+  const { threads, setThreads } = useSimContext();
   const [maxThreads, setMaxThreads] = useState(0);
   const [clipboardSync, setClipboardSync] = useState(false);
 
   useEffect(() => {
     try {
       setClipboardSync(localStorage.getItem('simhammer_clipboard_sync') === 'true');
-    } catch {}
-
-    try {
-      const stored = localStorage.getItem('simhammer_max_combinations');
-      if (stored) {
-        const parsed = parseInt(stored, 10);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          setMaxCombinations(parsed);
-        }
-      }
     } catch {}
 
     fetch(`${API_URL}/health`)
@@ -44,7 +34,7 @@ export default function GeneralSettingsSection() {
         }
       })
       .catch(() => {});
-  }, [setMaxCombinations, setThreads, threads]);
+  }, [setThreads, threads]);
 
   const selectedPresetIdx = useMemo(
     () =>
@@ -116,53 +106,26 @@ export default function GeneralSettingsSection() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="flex flex-col justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="mb-1 text-sm font-bold uppercase text-on-surface">
-                  {t('settings.clipboardSync')}
-                </h3>
-                <p className="text-xs italic leading-relaxed text-on-surface-variant">
-                  {t('settings.clipboardSyncDesc')}
-                </p>
-              </div>
-              <div className="mt-1">
-                <SettingsToggle
-                  checked={clipboardSync}
-                  onChange={(value) => {
-                    localStorage.setItem('simhammer_clipboard_sync', String(value));
-                    setClipboardSync(value);
-                    window.dispatchEvent(new Event('clipboard-sync-changed'));
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
+        <div className="flex flex-col justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
+          <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">
-                {t('settings.maxGearCombos')}
+              <h3 className="mb-1 text-sm font-bold uppercase text-on-surface">
+                {t('settings.clipboardSync')}
               </h3>
-              <p className="text-xs text-on-surface-variant">
-                The threshold for combinatorial optimization.
+              <p className="text-xs italic leading-relaxed text-on-surface-variant">
+                {t('settings.clipboardSyncDesc')}
               </p>
             </div>
-            <input
-              type="number"
-              min={10}
-              max={100000}
-              step={50}
-              value={maxCombinations ?? 500}
-              onChange={(event) => {
-                const value = parseInt(event.target.value, 10);
-                if (Number.isFinite(value) && value > 0) {
-                  setMaxCombinations(value);
-                }
-              }}
-              className="h-10 w-28 rounded-md border-none bg-surface-container-highest px-3 text-right font-bold text-primary focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
+            <div className="mt-1">
+              <SettingsToggle
+                checked={clipboardSync}
+                onChange={(value) => {
+                  localStorage.setItem('simhammer_clipboard_sync', String(value));
+                  setClipboardSync(value);
+                  window.dispatchEvent(new Event('clipboard-sync-changed'));
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

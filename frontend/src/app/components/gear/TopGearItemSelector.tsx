@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { API_URL } from '../../lib/api';
 import type { ItemOrigin, ResolveGearResponse, ResolvedItem } from '../../lib/types';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
-import { useSimContext } from '../sim-config/SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, localizedUpgrade, useItemNames } from '../../lib/useItemInfo';
 import TopGearGroupCard from './TopGearGroupCard';
@@ -76,11 +75,10 @@ export default function TopGearItemSelector({
   onResolvedChange,
   onItemAdded,
   comboCount,
+  comboError,
 }: TopGearItemSelectorProps) {
   const { t, locale } = useLanguage();
   useItemNames();
-  const { maxCombinations } = useSimContext();
-  const effectiveMaxCombinations = maxCombinations ?? 500;
   const [upgradeMenuFor, setUpgradeMenuFor] = useState<string | null>(null);
   const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOption[]>([]);
   const [loadingUpgrades, setLoadingUpgrades] = useState(false);
@@ -287,12 +285,11 @@ export default function TopGearItemSelector({
   }
 
   const comboLabel = `${comboCount.toLocaleString()} combo${comboCount !== 1 ? 's' : ''}`;
-  const comboColorClass =
-    comboCount > effectiveMaxCombinations
-      ? 'bg-red-500/10 text-red-400'
-      : comboCount > 0
-        ? 'bg-surface-container-high text-white'
-        : 'bg-surface-container-high text-muted';
+  const comboColorClass = comboError
+    ? 'bg-red-500/10 text-red-400'
+    : comboCount > 0
+      ? 'bg-surface-container-high text-white'
+      : 'bg-surface-container-high text-muted';
 
   return (
     <div className="space-y-4">

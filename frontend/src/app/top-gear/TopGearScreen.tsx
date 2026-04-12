@@ -84,7 +84,7 @@ function Toggle({
 }
 
 export default function TopGearScreen() {
-  const { simcInput, maxCombinations, talentBuilds } = useSimContext();
+  const { simcInput, talentBuilds } = useSimContext();
   const { t } = useLanguage();
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
@@ -293,7 +293,6 @@ export default function TopGearScreen() {
             items_by_slot: null,
             max_upgrade: maxUpgrade,
             copy_enchants: copyEnchants,
-            ...(maxCombinations != null ? { max_combinations: maxCombinations } : {}),
             ...(talentBuilds.length > 1
               ? {
                   talent_builds: talentBuilds.map((build) => ({
@@ -338,7 +337,7 @@ export default function TopGearScreen() {
     selectedItemsJson,
     maxUpgrade,
     copyEnchants,
-    maxCombinations,
+
     talentBuilds,
     catalyst,
     catalystCharges,
@@ -357,7 +356,6 @@ export default function TopGearScreen() {
       items_by_slot: null,
       max_upgrade: maxUpgrade,
       copy_enchants: copyEnchants,
-      ...(maxCombinations != null ? { max_combinations: maxCombinations } : {}),
       ...(talentBuilds.length > 1
         ? {
             talent_builds: talentBuilds.map((build) => ({
@@ -379,7 +377,7 @@ export default function TopGearScreen() {
       selectedItemsJson,
       maxUpgrade,
       copyEnchants,
-      maxCombinations,
+  
       talentBuilds,
       catalyst,
       catalystCharges,

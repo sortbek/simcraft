@@ -182,6 +182,33 @@ export default function Sidebar() {
             </Link>
           </div>
         )}
+        {!isDesktop && (
+          <div className="px-4 py-3 border-t border-outline-variant/20">
+            <Link
+              href="/admin"
+              className={`flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors ${
+                pathname === '/admin'
+                  ? 'text-primary'
+                  : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
+              }`}
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M8 1L8 3M8 13L8 15M3 8L1 8M15 8L13 8" />
+                <rect x="4" y="4" width="8" height="8" rx="1" />
+                <path d="M6 7h4M6 9h4" />
+              </svg>
+              <span className="text-[13px] font-medium">Admin</span>
+            </Link>
+          </div>
+        )}
       </div>
     </aside>
   );
