@@ -22,11 +22,14 @@ RUN cargo build --release -p simhammer-server
 
 # --- Stage 3: Final Runtime ---
 # Node.js is needed to run compact-data.js at startup.
-FROM node:20-alpine
+# Debian trixie provides glibc 2.40, required by SimC binaries (glibc >= 2.38).
+FROM debian:trixie-slim
 
-RUN apk add --no-cache \
-    ca-certificates curl jq bash libcurl libstdc++ gcompat coreutils \
-    && rm -rf /var/cache/apk/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl jq bash nodejs locales \
+    && rm -rf /var/lib/apt/lists/* \
+    && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
 
 WORKDIR /app
 

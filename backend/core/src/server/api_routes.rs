@@ -144,6 +144,7 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(game_data_handlers::get_talent_tree),
         )
         .route("/api/config", web::get().to(system_handlers::get_config))
+        .route("/api/branches", web::get().to(system_handlers::get_branches))
         .route("/health", web::get().to(system_handlers::health_check))
         .route("/api/routes", web::get().to(route_handlers::list_routes))
         .route("/api/routes", web::post().to(route_handlers::create_route))

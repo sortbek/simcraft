@@ -36,6 +36,7 @@ Download the installer from [Releases](https://github.com/sortbek/simcraft/relea
 
 ```bash
 docker run -p 8000:8000 \
+  -e SIMC_ENABLED_BRANCHES=weekly,nightly \
   -v simhammer-data:/app/resources/data \
   -v simhammer-data-full:/app/resources/data_full \
   -v simhammer-simc:/app/resources/simc \

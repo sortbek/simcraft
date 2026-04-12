@@ -2,6 +2,7 @@
  * Shared gear item row used across Top Gear, Upgrade Compare, and other pages.
  * Renders an item with icon, quality-colored name, detail parts, and optional checkbox.
  */
+/* eslint-disable @next/next/no-img-element */
 
 interface DetailPart {
   text: string;

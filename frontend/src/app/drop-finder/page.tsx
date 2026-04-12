@@ -313,7 +313,7 @@ export default function DropFinderPage() {
       { key: allKey, label: isRaid ? t('loot.allRaids') : isCrafted ? t('loot.allCrafted') : t('loot.allDungeons') },
       ...list.map((inst) => ({ key: String(inst.id), label: inst.name })),
     ];
-  }, [isRaid, raids, dungeonInstances, allKey, t]);
+  }, [isRaid, raids, dungeonInstances, allKey, isCrafted, t]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];

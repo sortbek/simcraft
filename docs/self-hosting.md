@@ -4,6 +4,7 @@
 
 ```bash
 docker run -p 8000:8000 \
+  -e SIMC_ENABLED_BRANCHES=weekly,nightly \
   -v simhammer-data:/app/resources/data \
   -v simhammer-data-full:/app/resources/data_full \
   -v simhammer-simc:/app/resources/simc \
@@ -13,8 +14,10 @@ docker run -p 8000:8000 \
 
 Visit **http://localhost:8000** — everything runs from a single container.
 
+Use `SIMC_ENABLED_BRANCHES=weekly` or `SIMC_ENABLED_BRANCHES=nightly` to install only one branch. If omitted, it defaults to `weekly`.
+
 On startup, the container automatically:
-1. Fetches the latest SimC binary from Docker Hub
+1. Fetches the latest SimC binaries from GitHub Releases
 2. Downloads game data from Raidbots
 3. Fetches instance images and season data from simhammer.com
 4. Compacts game data for production use
@@ -27,7 +30,7 @@ All fetched data is cached in volumes so subsequent starts are fast.
 |--------|----------|------------|
 | `simhammer-data` | Compacted game data + instance images | Re-downloaded on every start |
 | `simhammer-data-full` | Raw Raidbots downloads | Re-downloaded on every start |
-| `simhammer-simc` | SimC binary + digest cache | Re-downloaded on every start |
+| `simhammer-simc` | Cached SimC branch binaries | Re-downloaded on every start |
 | `simhammer-db` | SQLite job history | Lost on every restart |
 
 ### PostgreSQL
@@ -61,6 +64,7 @@ docker compose -f docker-compose.dev.yml up --build
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `SIMC_ENABLED_BRANCHES` | `weekly` | Comma-separated SimC branches to install and expose, e.g. `weekly,nightly` |
 | `SIMC_PATH` | `/usr/local/bin/simc` | Path to SimulationCraft binary |
 | `DATA_DIR` | `./resources/data` | Path to game data JSON files |
 | `DATABASE_URL` | `simhammer.db` | SQLite path or `postgres://` URL |

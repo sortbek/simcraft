@@ -188,6 +188,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
     consumables,
     expansionOptions,
     simcBranch,
+    specOverride,
     scenarios,
     clearScenarios,
     t,

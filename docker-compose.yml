@@ -6,8 +6,7 @@ services:
       context: backend
       dockerfile: server/Dockerfile
       args:
-        - SIMC_BRANCH=${SIMC_BRANCH:-weekly}
-        - SIMC_VERSION=${SIMC_VERSION:-}
+        - SIMC_ENABLED_BRANCHES=${SIMC_ENABLED_BRANCHES:-weekly}
     ports:
       - "8000:8000"
     volumes:
@@ -18,6 +17,8 @@ services:
       - PORT=8000
       - MAX_COMBINATIONS=2
       - MAX_SCENARIOS=0
+      - SIMC_ENABLED_BRANCHES=${SIMC_ENABLED_BRANCHES:-weekly}
+      - SIMC_CHECK_INTERVAL=${SIMC_CHECK_INTERVAL:-3600}
 
   frontend:
     build:

@@ -299,3 +299,51 @@ pub async fn start_with_storage_bind(
     println!("HTTP server started on port {}", port);
     port
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SimcBinaries;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn binary_name() -> &'static str {
+        if cfg!(windows) { "simc.exe" } else { "simc" }
+    }
+
+    fn install_fake_version(base: &std::path::Path, tag: &str) -> std::path::PathBuf {
+        let dir = base.join(tag);
+        fs::create_dir_all(&dir).unwrap();
+        let binary = dir.join(binary_name());
+        fs::write(&binary, b"fake-simc").unwrap();
+        binary
+    }
+
+    #[test]
+    fn resolves_exact_tags_and_branch_aliases() {
+        let temp = tempdir().unwrap();
+        let weekly = install_fake_version(temp.path(), "weekly-2026-04-12");
+        let nightly = install_fake_version(temp.path(), "nightly-2026-04-11");
+        fs::write(temp.path().join(".active"), "weekly-2026-04-12").unwrap();
+
+        let bins = SimcBinaries::from_dir(temp.path());
+
+        assert_eq!(bins.available_branches(), vec!["nightly", "weekly"]);
+        assert_eq!(bins.resolve("").unwrap(), weekly);
+        assert_eq!(bins.resolve("weekly").unwrap(), weekly);
+        assert_eq!(bins.resolve("weekly-2026-04-12").unwrap(), weekly);
+        assert_eq!(bins.resolve("nightly").unwrap(), nightly);
+        assert_eq!(bins.resolve("nightly-2026-04-11").unwrap(), nightly);
+    }
+
+    #[test]
+    fn resolve_refreshes_new_versions_from_source_dir() {
+        let temp = tempdir().unwrap();
+        install_fake_version(temp.path(), "weekly-2026-04-12");
+        fs::write(temp.path().join(".active"), "weekly-2026-04-12").unwrap();
+
+        let bins = SimcBinaries::from_dir(temp.path());
+        let nightly = install_fake_version(temp.path(), "nightly-2026-04-12");
+
+        assert_eq!(bins.resolve("nightly").unwrap(), nightly);
+    }
+}

@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-img-element */
+
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';

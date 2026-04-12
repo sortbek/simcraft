@@ -1,11 +1,11 @@
-#[cfg(feature = "desktop")]
 use actix_web::web;
 use actix_web::HttpResponse;
 use serde_json::json;
-#[cfg(feature = "desktop")]
 use std::sync::Arc;
 #[cfg(feature = "desktop")]
 use std::sync::Mutex;
+
+use super::SimcBinaries;
 
 use crate::storage;
 
@@ -54,6 +54,13 @@ pub(super) async fn health_check() -> HttpResponse {
         "status": "ok",
         "threads": threads,
         "mode": "desktop",
+    }))
+}
+
+pub(super) async fn get_branches(simc: web::Data<Arc<SimcBinaries>>) -> HttpResponse {
+    HttpResponse::Ok().json(json!({
+        "branches": simc.available_branches(),
+        "default": simc.default_branch,
     }))
 }
 

@@ -147,6 +147,7 @@ export default function EnchantGemSelector({
     () => ENCHANT_SLOT_ORDER.filter((s) => equippedSlots[s]),
     [equippedSlots]
   );
+  const hasEnchantableSlots = enchantableSlots.length > 0;
 
   // Slots that have sockets (gems apply to all socketed slots)
   const socketedSlots = useMemo(
@@ -156,10 +157,11 @@ export default function EnchantGemSelector({
         .map(([slot]) => slot),
     [equippedSlots]
   );
+  const hasSocketedSlots = socketedSlots.length > 0;
 
   // Fetch enchant options per slot
   useEffect(() => {
-    if (enchantableSlots.length === 0) return;
+    if (!hasEnchantableSlots) return;
     const fetches = enchantableSlots.map(async (slot) => {
       try {
         const res = await fetch(
@@ -179,16 +181,16 @@ export default function EnchantGemSelector({
       }
       setEnchantOptions(map);
     });
-  }, [enchantableSlots.join(',')]);
+  }, [enchantableSlots, hasEnchantableSlots]);
 
   // Fetch gem options
   useEffect(() => {
-    if (socketedSlots.length === 0) return;
+    if (!hasSocketedSlots) return;
     fetch(`${API_URL}/api/gems?expansion=11`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data: GemOption[]) => setGemOptions(data))
       .catch(() => setGemOptions([]));
-  }, [socketedSlots.length > 0]);
+  }, [hasSocketedSlots]);
 
   // Slots that have enchant options available
   const enchantSlots = useMemo(

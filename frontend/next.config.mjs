@@ -1,6 +1,9 @@
+import path from 'path';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: process.env.DESKTOP_BUILD ? "export" : "standalone",
+  outputFileTracingRoot: path.join(process.cwd(), '..'),
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
   },
@@ -9,8 +12,8 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "wow.zamimg.com",
-        pathname: "/images/wow/icons/**",
+        hostname: "render.worldofwarcraft.com",
+        pathname: "/icons/**",
       },
     ],
   },

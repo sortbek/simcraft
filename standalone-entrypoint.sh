@@ -8,8 +8,7 @@ SIMC_LINK="/usr/local/bin/simc"
 
 # SimC release configuration
 SIMC_REPO="sortbek/simc-builds"
-SIMC_BRANCH="${SIMC_BRANCH:-weekly}"       # "weekly" or "nightly" — which branch is active
-SIMC_VERSION="${SIMC_VERSION:-}"            # optional: pin to specific tag, e.g. "weekly-2026-04-12"
+SIMC_ENABLED_BRANCHES_RAW="${SIMC_ENABLED_BRANCHES:-weekly}"   # comma-separated, e.g. "weekly,nightly"
 
 mkdir -p "$DATA_FULL_DIR" "$SIMC_CACHE_DIR"
 
@@ -20,15 +19,6 @@ mkdir -p "$DATA_FULL_DIR" "$SIMC_CACHE_DIR"
 #   /app/resources/simc/.active          (contains "weekly" or "nightly")
 # ---------------------------------------------------------------------------
 
-# Resolve which branch a tag belongs to
-branch_for_tag() {
-    case "$1" in
-        weekly-*)  echo "weekly"  ;;
-        nightly-*) echo "nightly" ;;
-        *)         echo "unknown" ;;
-    esac
-}
-
 simc_bin_for_branch() {
     echo "$SIMC_CACHE_DIR/$1/simc"
 }
@@ -38,12 +28,11 @@ simc_version_for_branch() {
 }
 
 # ---------------------------------------------------------------------------
-# fetch_simc_branch: download simc for a given branch (or pinned tag)
-#   Usage: fetch_simc_branch <branch> [pinned_tag]
+# fetch_simc_branch: download the latest simc build for a branch
+#   Usage: fetch_simc_branch <branch>
 # ---------------------------------------------------------------------------
 fetch_simc_branch() {
     local BRANCH="$1"
-    local PINNED_TAG="$2"
     local BRANCH_DIR="$SIMC_CACHE_DIR/$BRANCH"
     local BIN="$BRANCH_DIR/simc"
     local VERSION_FILE="$BRANCH_DIR/.version"
@@ -53,31 +42,18 @@ fetch_simc_branch() {
     # Determine target architecture
     local ASSET="simc-linux-x64.tar.gz"
 
-    local TAG RELEASE_JSON
-
-    if [ -n "$PINNED_TAG" ]; then
-        TAG="$PINNED_TAG"
-        echo "    Using pinned version: $TAG"
-        RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/$SIMC_REPO/releases/tags/$TAG" 2>/dev/null) || {
-            echo "ERROR: Release tag '$TAG' not found." >&2
-            return 1
-        }
-    else
-        echo "    Looking for latest $BRANCH release..."
-        local RELEASES_JSON
-        RELEASES_JSON=$(curl -fsSL "https://api.github.com/repos/$SIMC_REPO/releases" 2>/dev/null) || {
-            echo "ERROR: Could not fetch releases from GitHub." >&2
-            return 1
-        }
-        RELEASE_JSON=$(echo "$RELEASES_JSON" | jq -r --arg prefix "$BRANCH-" \
-            '[.[] | select(.tag_name | startswith($prefix))][0] // empty')
-        if [ -z "$RELEASE_JSON" ] || [ "$RELEASE_JSON" = "null" ]; then
-            echo "ERROR: No $BRANCH release found." >&2
-            return 1
-        fi
-        TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
-        echo "    Found: $TAG"
+    local TAG
+    echo "    Looking for latest $BRANCH release..."
+    TAG=$(curl -fsSL "https://api.github.com/repos/$SIMC_REPO/tags?per_page=100" 2>/dev/null \
+        | jq -r --arg prefix "$BRANCH-" '[.[] | select(.name | startswith($prefix))][0].name') || {
+        echo "ERROR: Could not fetch tags from GitHub." >&2
+        return 1
+    }
+    if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+        echo "ERROR: No $BRANCH release found." >&2
+        return 1
     fi
+    echo "    Found: $TAG"
 
     # Check if we already have this version cached
     local CACHED_VERSION
@@ -88,7 +64,11 @@ fetch_simc_branch() {
     fi
 
     # Get the download URL
-    local DOWNLOAD_URL
+    local DOWNLOAD_URL RELEASE_JSON
+    RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/$SIMC_REPO/releases/tags/$TAG" 2>/dev/null) || {
+        echo "ERROR: Could not fetch release for tag $TAG." >&2
+        return 1
+    }
     DOWNLOAD_URL=$(echo "$RELEASE_JSON" | jq -r --arg asset "$ASSET" \
         '.assets[] | select(.name == $asset) | .browser_download_url')
     if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then
@@ -109,41 +89,105 @@ fetch_simc_branch() {
     echo "==> simc $TAG ($BRANCH) installed successfully."
 }
 
+valid_branch() {
+    case "$1" in
+        weekly|nightly) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+parse_enabled_branches() {
+    local RAW="${SIMC_ENABLED_BRANCHES_RAW//[[:space:]]/}"
+    local BRANCH EXISTS
+
+    if [ -z "$RAW" ]; then
+        RAW="weekly"
+    fi
+
+    IFS=',' read -r -a REQUESTED_BRANCHES <<< "$RAW"
+    ENABLED_BRANCHES=()
+
+    for BRANCH in "${REQUESTED_BRANCHES[@]}"; do
+        [ -z "$BRANCH" ] && continue
+        if ! valid_branch "$BRANCH"; then
+            echo "FATAL: Unknown SimC branch '$BRANCH'. Valid values are 'weekly' and 'nightly'." >&2
+            exit 1
+        fi
+
+        EXISTS=0
+        for EXISTING in "${ENABLED_BRANCHES[@]}"; do
+            if [ "$EXISTING" = "$BRANCH" ]; then
+                EXISTS=1
+                break
+            fi
+        done
+
+        if [ "$EXISTS" -eq 0 ]; then
+            ENABLED_BRANCHES+=("$BRANCH")
+        fi
+    done
+
+    if [ "${#ENABLED_BRANCHES[@]}" -eq 0 ]; then
+        ENABLED_BRANCHES=("weekly")
+    fi
+}
+
+is_enabled_branch() {
+    local TARGET="$1"
+    for BRANCH in "${ENABLED_BRANCHES[@]}"; do
+        if [ "$BRANCH" = "$TARGET" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+choose_active_branch() {
+    if is_enabled_branch "weekly"; then
+        ACTIVE_BRANCH="weekly"
+    else
+        ACTIVE_BRANCH="${ENABLED_BRANCHES[0]}"
+    fi
+}
+
+prune_disabled_branches() {
+    for KNOWN_BRANCH in weekly nightly; do
+        if ! is_enabled_branch "$KNOWN_BRANCH" && [ -d "$SIMC_CACHE_DIR/$KNOWN_BRANCH" ]; then
+            echo "==> Removing disabled $KNOWN_BRANCH branch from cache..."
+            rm -rf "$SIMC_CACHE_DIR/$KNOWN_BRANCH"
+        fi
+    done
+}
+
+ensure_simc_branch() {
+    local BRANCH="$1"
+    if ! fetch_simc_branch "$BRANCH"; then
+        local BIN
+        BIN=$(simc_bin_for_branch "$BRANCH")
+        if [ -x "$BIN" ]; then
+            echo "WARNING: Fetch failed, using cached $BRANCH binary." >&2
+        else
+            echo "FATAL: Fetch failed and no cached $BRANCH binary available." >&2
+            exit 1
+        fi
+    fi
+}
+
 # ---------------------------------------------------------------------------
-# Startup: fetch the active branch, and the other branch if it exists
+# Startup: fetch all enabled branches and expose only those branches
 # ---------------------------------------------------------------------------
 echo "==> Checking sortbek/simc-builds for SimC binaries..."
+parse_enabled_branches
+choose_active_branch
+prune_disabled_branches
+echo "==> Enabled SimC branches: ${ENABLED_BRANCHES[*]}"
 
-# Fetch the active branch (required)
-if [ -n "$SIMC_VERSION" ]; then
-    ACTIVE_BRANCH=$(branch_for_tag "$SIMC_VERSION")
-    if ! fetch_simc_branch "$ACTIVE_BRANCH" "$SIMC_VERSION"; then
-        BIN=$(simc_bin_for_branch "$ACTIVE_BRANCH")
-        if [ -x "$BIN" ]; then
-            echo "WARNING: Fetch failed, using cached $ACTIVE_BRANCH binary." >&2
-        else
-            echo "FATAL: Fetch failed and no cached binary available." >&2
-            exit 1
-        fi
-    fi
-else
-    ACTIVE_BRANCH="$SIMC_BRANCH"
-    if ! fetch_simc_branch "$ACTIVE_BRANCH"; then
-        BIN=$(simc_bin_for_branch "$ACTIVE_BRANCH")
-        if [ -x "$BIN" ]; then
-            echo "WARNING: Fetch failed, using cached $ACTIVE_BRANCH binary." >&2
-        else
-            echo "FATAL: Fetch failed and no cached binary available." >&2
-            exit 1
-        fi
-    fi
-fi
-
-# Also update the other branch if it was previously installed (non-blocking)
-for OTHER_BRANCH in weekly nightly; do
-    if [ "$OTHER_BRANCH" != "$ACTIVE_BRANCH" ] && [ -d "$SIMC_CACHE_DIR/$OTHER_BRANCH" ]; then
-        echo "==> Also updating $OTHER_BRANCH branch..."
-        fetch_simc_branch "$OTHER_BRANCH" || echo "    (non-critical, skipped)"
+# Fetch the default branch first, then the rest of the enabled branches
+ensure_simc_branch "$ACTIVE_BRANCH"
+for BRANCH in "${ENABLED_BRANCHES[@]}"; do
+    if [ "$BRANCH" != "$ACTIVE_BRANCH" ]; then
+        echo "==> Also fetching $BRANCH branch..."
+        ensure_simc_branch "$BRANCH"
     fi
 done
 
@@ -190,15 +234,14 @@ simc_update_loop() {
         sleep "$SIMC_CHECK_INTERVAL"
         echo "[simc-updater] Checking for updates..."
 
-        # Update all installed branches
-        for BRANCH_DIR in "$SIMC_CACHE_DIR"/*/; do
-            BRANCH=$(basename "$BRANCH_DIR")
-            case "$BRANCH" in weekly|nightly) ;; *) continue ;; esac
+        for BRANCH in "${ENABLED_BRANCHES[@]}"; do
             fetch_simc_branch "$BRANCH" || echo "[simc-updater] $BRANCH check failed."
         done
 
-        # Re-symlink the active branch (may have been updated)
-        CURRENT_ACTIVE=$(cat "$SIMC_CACHE_DIR/.active" 2>/dev/null || echo "$SIMC_BRANCH")
+        CURRENT_ACTIVE=$(cat "$SIMC_CACHE_DIR/.active" 2>/dev/null || echo "$ACTIVE_BRANCH")
+        if ! is_enabled_branch "$CURRENT_ACTIVE"; then
+            CURRENT_ACTIVE="$ACTIVE_BRANCH"
+        fi
         ln -sf "$(simc_bin_for_branch "$CURRENT_ACTIVE")" "$SIMC_LINK"
     done
 }

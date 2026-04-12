@@ -22,7 +22,7 @@ services:
       context: backend
       dockerfile: server/Dockerfile
       args:
-        - SIMC_VERSION=${SIMC_VERSION:-HEAD}
+        - SIMC_ENABLED_BRANCHES=${SIMC_ENABLED_BRANCHES:-weekly}
         - CARGO_FEATURES=postgres
     ports:
       - "8000:8000"

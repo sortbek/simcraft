@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useState } from 'react';
 import { API_URL } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';

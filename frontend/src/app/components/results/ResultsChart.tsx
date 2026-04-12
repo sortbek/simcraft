@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
@@ -134,13 +135,13 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
                 <div className="w-10 h-10 bg-surface-container-highest rounded border border-outline-variant flex items-center justify-center shrink-0 overflow-hidden">
                   {a.spell_id && icons.get(a.spell_id) ? (
                     <img
-                      src={`https://wow.zamimg.com/images/wow/icons/small/${icons.get(a.spell_id)}.jpg`}
+                      src={`https://render.worldofwarcraft.com/icons/56/${icons.get(a.spell_id)}.jpg`}
                       alt=""
                       className="w-full h-full object-cover"
                     />
                   ) : FALLBACK_ICONS[a.name] ? (
                     <img
-                      src={`https://wow.zamimg.com/images/wow/icons/small/${FALLBACK_ICONS[a.name]}.jpg`}
+                      src={`https://render.worldofwarcraft.com/icons/56/${FALLBACK_ICONS[a.name]}.jpg`}
                       alt=""
                       className="w-full h-full object-cover"
                     />
@@ -183,7 +184,7 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
                       <div className="w-8 h-8 bg-surface-container-highest rounded border border-outline-variant flex items-center justify-center shrink-0 overflow-hidden">
                         {child.spell_id && icons.get(child.spell_id) ? (
                           <img
-                            src={`https://wow.zamimg.com/images/wow/icons/small/${icons.get(child.spell_id)}.jpg`}
+                            src={`https://render.worldofwarcraft.com/icons/56/${icons.get(child.spell_id)}.jpg`}
                             alt=""
                             className="w-full h-full object-cover"
                           />

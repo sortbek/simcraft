@@ -31,39 +31,53 @@ FROM debian:bookworm-slim AS simc-fetcher
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl jq && rm -rf /var/lib/apt/lists/*
 
-ARG SIMC_BRANCH=weekly
-ARG SIMC_VERSION=
+ARG SIMC_ENABLED_BRANCHES=weekly
 RUN set -e; \
     REPO="sortbek/simc-builds"; \
     ASSET="simc-linux-x64.tar.gz"; \
-    if [ -n "$SIMC_VERSION" ]; then \
-        TAG="$SIMC_VERSION"; \
-        RELEASE=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/tags/$TAG"); \
-        BRANCH=$(echo "$TAG" | sed 's/-.*//' ); \
-    else \
-        BRANCH="$SIMC_BRANCH"; \
-        RELEASE=$(curl -fsSL "https://api.github.com/repos/$REPO/releases" \
-            | jq -r --arg prefix "${BRANCH}-" '[.[] | select(.tag_name | startswith($prefix))][0]'); \
-        TAG=$(echo "$RELEASE" | jq -r '.tag_name'); \
-    fi; \
-    URL=$(echo "$RELEASE" | jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .browser_download_url'); \
-    echo "Downloading simc $TAG ($BRANCH)..."; \
-    curl -fsSL -o /tmp/simc.tar.gz "$URL"; \
-    mkdir -p /out/$BRANCH && tar -xzf /tmp/simc.tar.gz -C /out/$BRANCH; \
-    chmod +x /out/$BRANCH/simc; \
-    echo "$TAG" > /out/$BRANCH/.version; \
-    echo "$BRANCH" > /out/.active
+    ENABLED=$(printf '%s' "${SIMC_ENABLED_BRANCHES:-weekly}" | tr -d '[:space:]'); \
+    [ -n "$ENABLED" ] || ENABLED="weekly"; \
+    ACTIVE=""; \
+    OLD_IFS=$IFS; \
+    IFS=,; set -- $ENABLED; IFS=$OLD_IFS; \
+    [ "$#" -gt 0 ] || set -- weekly; \
+    for BRANCH in "$@"; do \
+        case "$BRANCH" in \
+            weekly|nightly) ;; \
+            *) echo "Unknown SimC branch: $BRANCH" >&2; exit 1 ;; \
+        esac; \
+        if [ -f "/out/$BRANCH/.version" ]; then \
+            continue; \
+        fi; \
+        TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/tags?per_page=100" \
+            | jq -r --arg prefix "${BRANCH}-" '[.[] | select(.name | startswith($prefix))][0].name'); \
+        [ "$TAG" != "null" ] && [ -n "$TAG" ] || { echo "No tag found for branch $BRANCH" >&2; exit 1; }; \
+        URL=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/tags/$TAG" \
+            | jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .browser_download_url'); \
+        echo "Downloading simc $TAG ($BRANCH)..."; \
+        curl -fsSL -o /tmp/simc.tar.gz "$URL"; \
+        mkdir -p /out/$BRANCH && tar -xzf /tmp/simc.tar.gz -C /out/$BRANCH; \
+        chmod +x /out/$BRANCH/simc; \
+        echo "$TAG" > /out/$BRANCH/.version; \
+        if [ -z "$ACTIVE" ] || [ "$BRANCH" = "weekly" ]; then \
+            ACTIVE="$BRANCH"; \
+        fi; \
+    done; \
+    [ -n "$ACTIVE" ] || ACTIVE="weekly"; \
+    echo "$ACTIVE" > /out/.active
 
 # --- Runtime ---
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl locales && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl jq bash locales && rm -rf /var/lib/apt/lists/* \
     && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 ENV LANG=en_US.UTF-8
 
 COPY --from=builder /build/target/release/simhammer-server /usr/local/bin/simhammer-server
 COPY --from=simc-fetcher /out/ /app/resources/simc/
 COPY --from=fetcher /data/compact /app/resources/data
+COPY server/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 WORKDIR /app
 ENV DATA_DIR=/app/resources/data
@@ -72,4 +86,5 @@ ENV PORT=8000
 
 EXPOSE 8000
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["simhammer-server"]
