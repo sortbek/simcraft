@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import SettingsToggle from './SettingsToggle';
+import { checkForUpdates, type AvailableUpdate } from '../lib/simcUpdates';
 
 function formatVersionDate(tag: string): string {
   return tag.replace(/^(weekly|nightly)-/, '');
@@ -9,7 +10,7 @@ function formatVersionDate(tag: string): string {
 
 export default function SimcEngineSection() {
   const [versions, setVersions] = useState<SimcVersion[]>([]);
-  const [updates, setUpdates] = useState<SimcAvailableUpdate[]>([]);
+  const [updates, setUpdates] = useState<AvailableUpdate[]>([]);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -34,8 +35,8 @@ export default function SimcEngineSection() {
     setChecking(true);
     setError('');
     try {
-      const available = await window.electronAPI!.checkSimcUpdates();
-      setUpdates(available);
+      const result = await checkForUpdates();
+      setUpdates(result.updates);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to check for updates');
     } finally {
@@ -43,14 +44,14 @@ export default function SimcEngineSection() {
     }
   };
 
-  const handleInstall = async (update: SimcAvailableUpdate) => {
+  const handleInstall = async (update: AvailableUpdate) => {
     setInstalling(update.tag);
     setProgress(0);
     setError('');
     try {
       const result = await window.electronAPI!.installSimcVersion({
         tag: update.tag,
-        assetUrl: update.assetUrl,
+        assetUrl: update.asset_url,
       });
       if (!result.success) {
         throw new Error(result.error);
@@ -84,7 +85,7 @@ export default function SimcEngineSection() {
     return branches.map((branch) => ({
       branch,
       installed: versions.find((version) => version.type === branch),
-      available: updates.find((update) => update.type === branch && !update.installed),
+      available: updates.find((update) => update.branch === branch && !update.installed),
     }));
   }, [versions, updates]);
 

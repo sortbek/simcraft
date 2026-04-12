@@ -330,7 +330,7 @@ pub(super) fn validate_batch(
         Some(b) if !b.is_empty() => b,
         _ => return None,
     };
-    let max = *storage::MAX_SCENARIOS;
+    let max = storage::MAX_SCENARIOS.load(std::sync::atomic::Ordering::Relaxed);
     if max == 0 {
         return Some(actix_web::HttpResponse::BadRequest().json(json!({
             "detail": "Batch scenarios are disabled on this server."

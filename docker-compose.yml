@@ -19,6 +19,7 @@ services:
       - MAX_SCENARIOS=0
       - SIMC_ENABLED_BRANCHES=${SIMC_ENABLED_BRANCHES:-weekly}
       - SIMC_CHECK_INTERVAL=${SIMC_CHECK_INTERVAL:-3600}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 
   frontend:
     build:

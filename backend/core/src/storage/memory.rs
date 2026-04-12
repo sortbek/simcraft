@@ -26,13 +26,14 @@ impl JobStorage for MemoryStorage {
     fn insert(&self, job: Job) {
         let mut jobs = self.jobs.lock().unwrap();
         jobs.insert(job.id.clone(), job);
-        if jobs.len() > *super::MAX_JOBS {
+        let max_jobs = super::MAX_JOBS.load(std::sync::atomic::Ordering::Relaxed);
+        if jobs.len() > max_jobs {
             let mut entries: Vec<(String, String)> = jobs
                 .iter()
                 .map(|(id, j)| (id.clone(), j.created_at.clone()))
                 .collect();
             entries.sort_by(|a, b| a.1.cmp(&b.1));
-            let to_remove = jobs.len() - *super::MAX_JOBS;
+            let to_remove = jobs.len() - max_jobs;
             for (id, _) in entries.into_iter().take(to_remove) {
                 jobs.remove(&id);
             }

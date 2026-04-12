@@ -1,5 +1,7 @@
 use actix_web::web;
 
+#[cfg(not(feature = "desktop"))]
+use super::admin_handlers;
 use super::character_handlers;
 use super::droptimizer_handlers;
 use super::enchant_gem_handlers;
@@ -145,6 +147,8 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         )
         .route("/api/config", web::get().to(system_handlers::get_config))
         .route("/api/branches", web::get().to(system_handlers::get_branches))
+        .route("/api/simc/versions", web::get().to(system_handlers::get_simc_versions))
+        .route("/api/simc/updates", web::get().to(system_handlers::check_simc_updates))
         .route("/health", web::get().to(system_handlers::health_check))
         .route("/api/routes", web::get().to(route_handlers::list_routes))
         .route("/api/routes", web::post().to(route_handlers::create_route))
@@ -184,6 +188,27 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
 
     #[cfg(not(feature = "desktop"))]
     {
-        cfg.route("/api/sims", web::get().to(job_handlers::list_sims_filtered));
+        cfg.route("/api/sims", web::get().to(job_handlers::list_sims_filtered))
+            .route("/api/admin/login", web::post().to(admin_handlers::login))
+            .route(
+                "/api/admin/auth/check",
+                web::get().to(admin_handlers::check_auth),
+            )
+            .route(
+                "/api/admin/settings",
+                web::get().to(admin_handlers::get_settings),
+            )
+            .route(
+                "/api/admin/settings",
+                web::put().to(admin_handlers::update_settings),
+            )
+            .route(
+                "/api/admin/simc/install",
+                web::post().to(admin_handlers::install_simc_version),
+            )
+            .route(
+                "/api/admin/simc/{branch}",
+                web::delete().to(admin_handlers::remove_simc_version),
+            );
     }
 }

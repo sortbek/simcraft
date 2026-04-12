@@ -1,3 +1,5 @@
+#[cfg(not(feature = "desktop"))]
+mod admin_handlers;
 mod api_routes;
 mod character_handlers;
 mod droptimizer_handlers;
@@ -187,6 +189,10 @@ impl SimcBinaries {
         branches.sort_unstable();
         branches
     }
+
+    pub fn source_dir(&self) -> &Option<PathBuf> {
+        &self.source_dir
+    }
 }
 
 // ---------- Server startup ----------
@@ -239,6 +245,24 @@ pub async fn start_with_storage_bind(
     let char_store_data = web::Data::new(Arc::new(crate::character_store::CharacterStore::new(
         &db_url,
     )));
+    #[cfg(not(feature = "desktop"))]
+    let settings_store = Arc::new(crate::settings_store::SettingsStore::new(&db_url));
+    #[cfg(not(feature = "desktop"))]
+    {
+        // Apply persisted admin settings on startup
+        if let Some(val) = settings_store.get("max_combinations").and_then(|v| v.parse::<usize>().ok()) {
+            crate::storage::MAX_COMBINATIONS.store(val, std::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some(val) = settings_store.get("max_scenarios").and_then(|v| v.parse::<usize>().ok()) {
+            crate::storage::MAX_SCENARIOS.store(val, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    #[cfg(not(feature = "desktop"))]
+    let settings_data = web::Data::new(settings_store);
+    #[cfg(not(feature = "desktop"))]
+    let admin_secret = web::Data::new(admin_handlers::AdminSecret(
+        uuid::Uuid::new_v4().to_string(),
+    ));
     let frontend = frontend_dir.clone();
     let data = data_dir.clone();
 
@@ -259,6 +283,10 @@ pub async fn start_with_storage_bind(
             .app_data(route_store_data.clone())
             .app_data(char_store_data.clone())
             .configure(api_routes::configure);
+        #[cfg(not(feature = "desktop"))]
+        let app = app
+            .app_data(settings_data.clone())
+            .app_data(admin_secret.clone());
         #[cfg(feature = "desktop")]
         let app = app.app_data(stats_data.clone());
         let mut app = app;

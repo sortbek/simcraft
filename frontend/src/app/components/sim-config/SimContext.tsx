@@ -14,8 +14,6 @@ interface SimContextType {
   setFightStyle: (v: string) => void;
   threads: number;
   setThreads: (v: number) => void;
-  maxCombinations: number | undefined;
-  setMaxCombinations: (v: number | undefined) => void;
   selectedTalent: string;
   setSelectedTalent: (v: string) => void;
   targetCount: number;
@@ -114,7 +112,6 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [simcInput, _setSimcInput] = useState('');
   const [fightStyle, setFightStyle] = useState('Patchwerk');
   const [threads, _setThreads] = useState(0);
-  const [maxCombinations, _setMaxCombinations] = useState<number | undefined>(undefined);
   const [selectedTalent, setSelectedTalent] = useState('');
   const [targetCount, setTargetCount] = useState(1);
   const [fightLength, setFightLength] = useState(300);
@@ -151,17 +148,6 @@ export function SimProvider({ children }: { children: ReactNode }) {
       _setExpansionOptions(readStoredJson('simhammer_expansion_options', DEFAULT_EXPANSION_OPTIONS));
     } catch {}
 
-    // Fetch server-enforced max combinations (web/demo only)
-    if (!window.electronAPI) {
-      fetch(`${API_URL}/api/config`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.max_combinations != null) {
-            _setMaxCombinations(data.max_combinations);
-          }
-        })
-        .catch(() => {});
-    }
   }, []);
 
   const addScenario = useCallback(() => {
@@ -223,17 +209,6 @@ export function SimProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem('simhammer_target_error', String(v)); } catch {}
   }, []);
 
-  const setMaxCombinations = useCallback((v: number | undefined) => {
-    _setMaxCombinations(v);
-    try {
-      if (v == null) {
-        localStorage.removeItem('simhammer_max_combinations');
-      } else {
-        localStorage.setItem('simhammer_max_combinations', String(v));
-      }
-    } catch {}
-  }, []);
-
   return (
     <SimContext.Provider
       value={{
@@ -244,8 +219,6 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setFightStyle,
         threads,
         setThreads,
-        maxCombinations,
-        setMaxCombinations,
         selectedTalent,
         setSelectedTalent,
         targetCount,

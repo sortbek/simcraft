@@ -443,8 +443,8 @@ pub fn generate_top_gear_input_with_talents(
         non_gem_combos
     };
 
-    let limit = max_combos_override.unwrap_or(*MAX_COMBINATIONS);
-    if total_combo_count > limit {
+    let limit = max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
+    if limit > 0 && total_combo_count > limit {
         return Err(format!(
             "Too many combinations ({}). Maximum is {}. Please deselect some items.",
             total_combo_count, limit
