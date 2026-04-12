@@ -7,21 +7,12 @@ mod simc;
 mod top_gear;
 mod upgrade_compare;
 
-use once_cell::sync::Lazy;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
 type ProfilesetResult = Result<(String, usize, HashMap<String, Vec<Value>>), String>;
 
-/// Maximum gear combinations for Top Gear. Override with MAX_COMBINATIONS env var.
-pub static MAX_COMBINATIONS: Lazy<usize> = Lazy::new(|| {
-    if let Ok(val) = std::env::var("MAX_COMBINATIONS") {
-        if let Ok(n) = val.parse() {
-            return n;
-        }
-    }
-    500
-});
+use crate::storage::MAX_COMBINATIONS;
 
 pub fn generate_top_gear_input(
     base_profile: &str,

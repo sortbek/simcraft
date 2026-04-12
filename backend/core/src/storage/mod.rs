@@ -1,48 +1,33 @@
 pub mod memory;
 #[cfg(feature = "postgres")]
 pub mod postgres;
-#[cfg(feature = "web")]
 pub mod sqlite;
 
 use crate::models::{Job, JobStatus, JobSummary};
-use once_cell::sync::Lazy;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Maximum number of jobs to retain. Oldest jobs are deleted on insert.
-/// Override with MAX_JOBS env var. Defaults: desktop=50, web=200.
-pub static MAX_JOBS: Lazy<usize> = Lazy::new(|| {
-    if let Ok(val) = std::env::var("MAX_JOBS") {
-        if let Ok(n) = val.parse() {
-            return n;
-        }
-    }
-    if cfg!(feature = "desktop") {
-        50
-    } else {
-        200
-    }
-});
+pub static MAX_JOBS: AtomicUsize = AtomicUsize::new(200);
+pub static MAX_SCENARIOS: AtomicUsize = AtomicUsize::new(10);
+pub static MAX_COMBINATIONS: AtomicUsize = AtomicUsize::new(0);
 
-/// Maximum scenarios per batch. Set to 0 to disable batch submissions.
-/// Override with MAX_SCENARIOS env var. Default: 10.
-pub static MAX_SCENARIOS: Lazy<usize> = Lazy::new(|| {
-    if let Ok(val) = std::env::var("MAX_SCENARIOS") {
-        if let Ok(n) = val.parse() {
-            return n;
-        }
-    }
-    10
-});
-
-/// Maximum gear combinations for Top Gear / Upgrade Compare.
-/// Override with MAX_COMBINATIONS env var. Default: unlimited (0 = no limit).
-pub static MAX_COMBINATIONS: Lazy<usize> = Lazy::new(|| {
-    if let Ok(val) = std::env::var("MAX_COMBINATIONS") {
-        if let Ok(n) = val.parse() {
-            return n;
-        }
-    }
-    0
-});
+/// Initialize limits from environment variables. Call once at startup.
+pub fn init_limits() {
+    let max_jobs = std::env::var("MAX_JOBS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(if cfg!(feature = "desktop") { 50 } else { 200 });
+    let max_scenarios = std::env::var("MAX_SCENARIOS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let max_combos = std::env::var("MAX_COMBINATIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    MAX_JOBS.store(max_jobs, Ordering::Relaxed);
+    MAX_SCENARIOS.store(max_scenarios, Ordering::Relaxed);
+    MAX_COMBINATIONS.store(max_combos, Ordering::Relaxed);
+}
 
 /// Trait for job persistence — implemented by in-memory store (desktop) and SQLite (web).
 pub trait JobStorage: Send + Sync {

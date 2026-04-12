@@ -33,7 +33,7 @@ fn normalized_talent_builds(talent_builds: &[TalentBuild]) -> Vec<(String, Strin
 }
 
 fn capped_max_combinations(requested: Option<usize>) -> Option<usize> {
-    let server_max = *crate::storage::MAX_COMBINATIONS;
+    let server_max = crate::storage::MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed);
     match (requested, server_max) {
         (Some(client), max) if max > 0 => Some(client.min(max)),
         (None, max) if max > 0 => Some(max),
