@@ -16,6 +16,7 @@ const config: Config = {
           DEFAULT: '#131313',
           dim: '#131313',
           container: '#201f1f',
+          'container-lowest': '#0e0e0e',
           'container-low': '#1c1b1b',
           'container-high': '#2a2a2a',
           'container-highest': '#353534',

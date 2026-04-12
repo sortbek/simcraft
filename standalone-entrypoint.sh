@@ -4,142 +4,162 @@ set -e
 DATA_DIR="/app/resources/data"
 DATA_FULL_DIR="/app/resources/data_full"
 SIMC_CACHE_DIR="/app/resources/simc"   # persistent volume
-SIMC_BIN="$SIMC_CACHE_DIR/simc"
-SIMC_DIGEST_FILE="$SIMC_CACHE_DIR/.digest"
 SIMC_LINK="/usr/local/bin/simc"
 
-SIMC_IMAGE="simulationcraftorg/simc"
-SIMC_TAG="latest"
-REGISTRY="https://registry-1.docker.io"
-AUTH_URL="https://auth.docker.io"
+# SimC release configuration
+SIMC_REPO="sortbek/simc-builds"
+SIMC_BRANCH="${SIMC_BRANCH:-weekly}"       # "weekly" or "nightly" — which branch is active
+SIMC_VERSION="${SIMC_VERSION:-}"            # optional: pin to specific tag, e.g. "weekly-2026-04-12"
 
 mkdir -p "$DATA_FULL_DIR" "$SIMC_CACHE_DIR"
 
 # ---------------------------------------------------------------------------
-# fetch_simc: pull the simc binary from Docker Hub via the Registry HTTP API.
-# Requires only curl, jq, and tar — no Docker daemon.
-# Caches the layer digest in $SIMC_DIGEST_FILE; skips download if unchanged.
+# Per-branch directory structure:
+#   /app/resources/simc/weekly/simc      (.version contains tag)
+#   /app/resources/simc/nightly/simc     (.version contains tag)
+#   /app/resources/simc/.active          (contains "weekly" or "nightly")
 # ---------------------------------------------------------------------------
-fetch_simc() {
-    echo "==> Checking Docker Hub for latest simulationcraftorg/simc..."
 
-    # 1. Obtain a pull token for the image
-    TOKEN=$(curl -fsSL \
-        "$AUTH_URL/token?service=registry.docker.io&scope=repository:${SIMC_IMAGE}:pull" \
-        | jq -r '.token')
-
-    if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-        echo "ERROR: Could not obtain Docker Hub auth token." >&2
-        return 1
-    fi
-
-    # 2. Fetch the manifest (accept both manifest-list and single-platform v2)
-    MANIFEST_RAW=$(curl -fsSL \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json" \
-        "$REGISTRY/v2/${SIMC_IMAGE}/manifests/${SIMC_TAG}")
-
-    MEDIA_TYPE=$(echo "$MANIFEST_RAW" | jq -r '.mediaType // .schemaVersion // empty')
-
-    # 3. If it's a manifest list / OCI index, resolve to linux/amd64
-    if echo "$MEDIA_TYPE" | grep -qE "manifest.list|image.index"; then
-        ARCH=$(uname -m)
-        case "$ARCH" in
-            x86_64)  GOARCH="amd64"  ;;
-            aarch64) GOARCH="arm64"  ;;
-            *)        GOARCH="amd64"  ;;
-        esac
-
-        PLATFORM_DIGEST=$(echo "$MANIFEST_RAW" | jq -r \
-            --arg arch "$GOARCH" \
-            '.manifests[] | select(.platform.os=="linux" and .platform.architecture==$arch) | .digest' \
-            | head -1)
-
-        if [ -z "$PLATFORM_DIGEST" ]; then
-            echo "ERROR: Could not find linux/$GOARCH manifest in manifest list." >&2
-            return 1
-        fi
-
-        MANIFEST_RAW=$(curl -fsSL \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json" \
-            "$REGISTRY/v2/${SIMC_IMAGE}/manifests/${PLATFORM_DIGEST}")
-    fi
-
-    # 4. Read layers (reverse order — simc is in the last COPY layer, which is smallest)
-    LAYERS=$(echo "$MANIFEST_RAW" | jq -r '[.layers[].digest] | reverse | .[]')
-    if [ -z "$LAYERS" ]; then
-        echo "ERROR: No layers found in manifest." >&2
-        return 1
-    fi
-
-    # 5. Compute a cheap cache key: digest of the first layer that contains simc
-    #    We'll discover that layer below and store its digest.
-
-    TMPDIR=$(mktemp -d)
-    trap 'rm -rf "$TMPDIR"' RETURN
-
-    FOUND=false
-    for LAYER_DIGEST in $LAYERS; do
-        echo "    Checking layer ${LAYER_DIGEST:7:16}..."
-
-        LAYER_FILE="$TMPDIR/layer.tar.gz"
-        curl -fsSL \
-            -H "Authorization: Bearer $TOKEN" \
-            "$REGISTRY/v2/${SIMC_IMAGE}/blobs/${LAYER_DIGEST}" \
-            -o "$LAYER_FILE"
-
-        # Does this layer contain the simc binary?
-        if tar -tzf "$LAYER_FILE" 2>/dev/null | grep -q "app/SimulationCraft/simc$"; then
-
-            # Check if we already have this exact layer cached
-            CACHED_DIGEST=$(cat "$SIMC_DIGEST_FILE" 2>/dev/null || true)
-            if [ "$CACHED_DIGEST" = "$LAYER_DIGEST" ] && [ -x "$SIMC_BIN" ]; then
-                echo "==> simc is up to date (layer unchanged). Skipping download."
-                FOUND=true
-                break
-            fi
-
-            echo "==> Extracting simc binary from layer..."
-            # The path inside the tar is app/SimulationCraft/simc (no leading slash)
-            tar -xzf "$LAYER_FILE" -C "$TMPDIR" "app/SimulationCraft/simc" 2>/dev/null
-            mv "$TMPDIR/app/SimulationCraft/simc" "$SIMC_BIN"
-            chmod +x "$SIMC_BIN"
-            echo "$LAYER_DIGEST" > "$SIMC_DIGEST_FILE"
-            echo "==> simc updated successfully."
-            FOUND=true
-            break
-        fi
-    done
-
-    if [ "$FOUND" = "false" ]; then
-        echo "ERROR: simc binary not found in any image layer." >&2
-        return 1
-    fi
+# Resolve which branch a tag belongs to
+branch_for_tag() {
+    case "$1" in
+        weekly-*)  echo "weekly"  ;;
+        nightly-*) echo "nightly" ;;
+        *)         echo "unknown" ;;
+    esac
 }
 
-# Run the fetch (falls back gracefully if Docker Hub is unreachable and binary is cached)
-if ! fetch_simc; then
-    if [ -x "$SIMC_BIN" ]; then
-        echo "WARNING: Registry fetch failed, using cached simc binary." >&2
+simc_bin_for_branch() {
+    echo "$SIMC_CACHE_DIR/$1/simc"
+}
+
+simc_version_for_branch() {
+    cat "$SIMC_CACHE_DIR/$1/.version" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# fetch_simc_branch: download simc for a given branch (or pinned tag)
+#   Usage: fetch_simc_branch <branch> [pinned_tag]
+# ---------------------------------------------------------------------------
+fetch_simc_branch() {
+    local BRANCH="$1"
+    local PINNED_TAG="$2"
+    local BRANCH_DIR="$SIMC_CACHE_DIR/$BRANCH"
+    local BIN="$BRANCH_DIR/simc"
+    local VERSION_FILE="$BRANCH_DIR/.version"
+
+    mkdir -p "$BRANCH_DIR"
+
+    # Determine target architecture
+    local ASSET="simc-linux-x64.tar.gz"
+
+    local TAG RELEASE_JSON
+
+    if [ -n "$PINNED_TAG" ]; then
+        TAG="$PINNED_TAG"
+        echo "    Using pinned version: $TAG"
+        RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/$SIMC_REPO/releases/tags/$TAG" 2>/dev/null) || {
+            echo "ERROR: Release tag '$TAG' not found." >&2
+            return 1
+        }
     else
-        echo "FATAL: Registry fetch failed and no cached simc binary available." >&2
-        exit 1
+        echo "    Looking for latest $BRANCH release..."
+        local RELEASES_JSON
+        RELEASES_JSON=$(curl -fsSL "https://api.github.com/repos/$SIMC_REPO/releases" 2>/dev/null) || {
+            echo "ERROR: Could not fetch releases from GitHub." >&2
+            return 1
+        }
+        RELEASE_JSON=$(echo "$RELEASES_JSON" | jq -r --arg prefix "$BRANCH-" \
+            '[.[] | select(.tag_name | startswith($prefix))][0] // empty')
+        if [ -z "$RELEASE_JSON" ] || [ "$RELEASE_JSON" = "null" ]; then
+            echo "ERROR: No $BRANCH release found." >&2
+            return 1
+        fi
+        TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
+        echo "    Found: $TAG"
+    fi
+
+    # Check if we already have this version cached
+    local CACHED_VERSION
+    CACHED_VERSION=$(cat "$VERSION_FILE" 2>/dev/null || true)
+    if [ "$CACHED_VERSION" = "$TAG" ] && [ -x "$BIN" ]; then
+        echo "==> simc $TAG ($BRANCH) is already installed. Skipping."
+        return 0
+    fi
+
+    # Get the download URL
+    local DOWNLOAD_URL
+    DOWNLOAD_URL=$(echo "$RELEASE_JSON" | jq -r --arg asset "$ASSET" \
+        '.assets[] | select(.name == $asset) | .browser_download_url')
+    if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then
+        echo "ERROR: Asset '$ASSET' not found in release $TAG." >&2
+        return 1
+    fi
+
+    echo "==> Downloading $ASSET from $TAG..."
+    local TMPFILE
+    TMPFILE=$(mktemp)
+    curl -fsSL -o "$TMPFILE" "$DOWNLOAD_URL"
+
+    echo "==> Extracting simc binary to $BRANCH/..."
+    tar -xzf "$TMPFILE" -C "$BRANCH_DIR"
+    rm -f "$TMPFILE"
+    chmod +x "$BIN"
+    echo "$TAG" > "$VERSION_FILE"
+    echo "==> simc $TAG ($BRANCH) installed successfully."
+}
+
+# ---------------------------------------------------------------------------
+# Startup: fetch the active branch, and the other branch if it exists
+# ---------------------------------------------------------------------------
+echo "==> Checking sortbek/simc-builds for SimC binaries..."
+
+# Fetch the active branch (required)
+if [ -n "$SIMC_VERSION" ]; then
+    ACTIVE_BRANCH=$(branch_for_tag "$SIMC_VERSION")
+    if ! fetch_simc_branch "$ACTIVE_BRANCH" "$SIMC_VERSION"; then
+        BIN=$(simc_bin_for_branch "$ACTIVE_BRANCH")
+        if [ -x "$BIN" ]; then
+            echo "WARNING: Fetch failed, using cached $ACTIVE_BRANCH binary." >&2
+        else
+            echo "FATAL: Fetch failed and no cached binary available." >&2
+            exit 1
+        fi
+    fi
+else
+    ACTIVE_BRANCH="$SIMC_BRANCH"
+    if ! fetch_simc_branch "$ACTIVE_BRANCH"; then
+        BIN=$(simc_bin_for_branch "$ACTIVE_BRANCH")
+        if [ -x "$BIN" ]; then
+            echo "WARNING: Fetch failed, using cached $ACTIVE_BRANCH binary." >&2
+        else
+            echo "FATAL: Fetch failed and no cached binary available." >&2
+            exit 1
+        fi
     fi
 fi
 
-# Symlink into PATH so the Rust server can invoke it by name as well
-ln -sf "$SIMC_BIN" "$SIMC_LINK"
+# Also update the other branch if it was previously installed (non-blocking)
+for OTHER_BRANCH in weekly nightly; do
+    if [ "$OTHER_BRANCH" != "$ACTIVE_BRANCH" ] && [ -d "$SIMC_CACHE_DIR/$OTHER_BRANCH" ]; then
+        echo "==> Also updating $OTHER_BRANCH branch..."
+        fetch_simc_branch "$OTHER_BRANCH" || echo "    (non-critical, skipped)"
+    fi
+done
+
+# Write active branch marker and symlink
+echo "$ACTIVE_BRANCH" > "$SIMC_CACHE_DIR/.active"
+ACTIVE_BIN=$(simc_bin_for_branch "$ACTIVE_BRANCH")
+ln -sf "$ACTIVE_BIN" "$SIMC_LINK"
+echo "==> Active SimC: $(simc_version_for_branch "$ACTIVE_BRANCH") ($ACTIVE_BRANCH)"
 
 # ---------------------------------------------------------------------------
 # Fetch and compact Raidbots game data
 # ---------------------------------------------------------------------------
 echo "==> Fetching latest Raidbots game data..."
-# -f on metadata: we can't proceed without it
 curl -fsSL -o "$DATA_FULL_DIR/metadata.json" https://www.raidbots.com/static/data/live/metadata.json
 for f in $(jq -r '.files[]' "$DATA_FULL_DIR/metadata.json"); do
     echo "    Downloading $f..."
-    # No -f: individual files may 404 (e.g. season-specific data); warn and skip
     HTTP_CODE=$(curl -sSL -w "%{http_code}" -o "$DATA_FULL_DIR/$f" \
         "https://www.raidbots.com/static/data/live/$f")
     if [ "$HTTP_CODE" != "200" ]; then
@@ -157,8 +177,33 @@ curl -sL -o "$DATA_FULL_DIR/blizzard-instances.json" https://simhammer.com/api/b
 echo "==> Compacting game data..."
 node /app/compact-data.js "$DATA_FULL_DIR" "$DATA_DIR"
 
-export SIMC_PATH="$SIMC_BIN"
+export SIMC_DIR="$SIMC_CACHE_DIR"
 export DATA_DIR="$DATA_DIR"
+
+# ---------------------------------------------------------------------------
+# Background update checker
+# ---------------------------------------------------------------------------
+SIMC_CHECK_INTERVAL="${SIMC_CHECK_INTERVAL:-3600}"
+
+simc_update_loop() {
+    while true; do
+        sleep "$SIMC_CHECK_INTERVAL"
+        echo "[simc-updater] Checking for updates..."
+
+        # Update all installed branches
+        for BRANCH_DIR in "$SIMC_CACHE_DIR"/*/; do
+            BRANCH=$(basename "$BRANCH_DIR")
+            case "$BRANCH" in weekly|nightly) ;; *) continue ;; esac
+            fetch_simc_branch "$BRANCH" || echo "[simc-updater] $BRANCH check failed."
+        done
+
+        # Re-symlink the active branch (may have been updated)
+        CURRENT_ACTIVE=$(cat "$SIMC_CACHE_DIR/.active" 2>/dev/null || echo "$SIMC_BRANCH")
+        ln -sf "$(simc_bin_for_branch "$CURRENT_ACTIVE")" "$SIMC_LINK"
+    done
+}
+
+simc_update_loop &
 
 echo "==> Starting SimHammer Server..."
 exec "$@"

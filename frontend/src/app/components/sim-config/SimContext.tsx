@@ -44,6 +44,9 @@ interface SimContextType {
   setConsumables: (v: Record<string, string>) => void;
   expansionOptions: Record<string, boolean>;
   setExpansionOptions: (v: Record<string, boolean>) => void;
+  // SimC branch selection (desktop)
+  simcBranch: string;
+  setSimcBranch: (v: string) => void;
   // Multi-talent compare
   talentBuilds: { name: string; talentString: string }[];
   setTalentBuilds: (v: { name: string; talentString: string }[]) => void;
@@ -119,6 +122,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [raidBuffs, _setRaidBuffs] = useState<Record<string, boolean>>(DEFAULT_RAID_BUFFS);
   const [consumables, _setConsumables] = useState<Record<string, string>>({});
   const [expansionOptions, _setExpansionOptions] = useState<Record<string, boolean>>(DEFAULT_EXPANSION_OPTIONS);
+  const [simcBranch, _setSimcBranch] = useState('');
   const [talentBuilds, setTalentBuilds] = useState<{ name: string; talentString: string }[]>([]);
   const [scenarios, setScenarios] = useState<FightScenario[]>([]);
 
@@ -131,6 +135,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         const n = parseFloat(storedError);
         if (Number.isFinite(n) && n > 0) _setTargetError(n);
       }
+      _setSimcBranch(localStorage.getItem('simhammer_simc_branch') ?? '');
       _setRaidBuffs(readStoredJson('simhammer_raid_buffs', DEFAULT_RAID_BUFFS));
       _setConsumables(readStoredJson('simhammer_consumables', {}));
       _setExpansionOptions(readStoredJson('simhammer_expansion_options', DEFAULT_EXPANSION_OPTIONS));
@@ -195,6 +200,13 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const setSimcBranch = useCallback((v: string) => {
+    _setSimcBranch(v);
+    try {
+      localStorage.setItem('simhammer_simc_branch', v);
+    } catch {}
+  }, []);
+
   const setTargetError = useCallback((v: number) => {
     _setTargetError(v);
     try { localStorage.setItem('simhammer_target_error', String(v)); } catch {}
@@ -249,6 +261,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setConsumables,
         expansionOptions,
         setExpansionOptions,
+        simcBranch,
+        setSimcBranch,
         talentBuilds,
         setTalentBuilds,
         scenarios,

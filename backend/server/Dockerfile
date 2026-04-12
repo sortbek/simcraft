@@ -26,29 +26,33 @@ COPY scripts/compact-data.js /compact-data.js
 COPY core/season-config.json /data/full/season-config.json
 RUN node /compact-data.js /data/full /data/compact
 
-# --- Build SimulationCraft from source ---
-FROM debian:bookworm-slim AS simc-builder
+# --- Download SimC from GitHub Releases ---
+FROM debian:bookworm-slim AS simc-fetcher
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    libcurl4-openssl-dev \
-    libssl-dev \
-    git \
-    g++ \
-    make \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl jq && rm -rf /var/lib/apt/lists/*
 
-# Pin to a specific commit — Docker caches this layer until the hash changes.
-# Update SIMC_VERSION to rebuild with a newer SimC version.
-ARG SIMC_VERSION=HEAD
-RUN git clone --depth 1 https://github.com/simulationcraft/simc.git /tmp/simc \
-    && cd /tmp/simc \
-    && if [ "$SIMC_VERSION" != "HEAD" ]; then git fetch --depth 1 origin "$SIMC_VERSION" && git checkout FETCH_HEAD; fi \
-    && cd engine \
-    && make LTO=1 NO_DEBUG=1 SC_NO_NETWORKING=1 -j$(nproc) OPTS="-ffast-math -fomit-frame-pointer" \
-    && cp simc /usr/local/bin/simc \
-    && rm -rf /tmp/simc
+ARG SIMC_BRANCH=weekly
+ARG SIMC_VERSION=
+RUN set -e; \
+    REPO="sortbek/simc-builds"; \
+    ASSET="simc-linux-x64.tar.gz"; \
+    if [ -n "$SIMC_VERSION" ]; then \
+        TAG="$SIMC_VERSION"; \
+        RELEASE=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/tags/$TAG"); \
+        BRANCH=$(echo "$TAG" | sed 's/-.*//' ); \
+    else \
+        BRANCH="$SIMC_BRANCH"; \
+        RELEASE=$(curl -fsSL "https://api.github.com/repos/$REPO/releases" \
+            | jq -r --arg prefix "${BRANCH}-" '[.[] | select(.tag_name | startswith($prefix))][0]'); \
+        TAG=$(echo "$RELEASE" | jq -r '.tag_name'); \
+    fi; \
+    URL=$(echo "$RELEASE" | jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .browser_download_url'); \
+    echo "Downloading simc $TAG ($BRANCH)..."; \
+    curl -fsSL -o /tmp/simc.tar.gz "$URL"; \
+    mkdir -p /out/$BRANCH && tar -xzf /tmp/simc.tar.gz -C /out/$BRANCH; \
+    chmod +x /out/$BRANCH/simc; \
+    echo "$TAG" > /out/$BRANCH/.version; \
+    echo "$BRANCH" > /out/.active
 
 # --- Runtime ---
 FROM debian:bookworm-slim
@@ -58,12 +62,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 ENV LANG=en_US.UTF-8
 
 COPY --from=builder /build/target/release/simhammer-server /usr/local/bin/simhammer-server
-COPY --from=simc-builder /usr/local/bin/simc /usr/local/bin/simc
+COPY --from=simc-fetcher /out/ /app/resources/simc/
 COPY --from=fetcher /data/compact /app/resources/data
 
 WORKDIR /app
 ENV DATA_DIR=/app/resources/data
-ENV SIMC_PATH=/usr/local/bin/simc
+ENV SIMC_DIR=/app/resources/simc
 ENV PORT=8000
 
 EXPOSE 8000

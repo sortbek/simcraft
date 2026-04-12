@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use simhammer_core::game_data;
 use simhammer_core::server;
+use simhammer_core::server::SimcBinaries;
 use simhammer_core::storage::JobStorage;
 
 fn env_or(key: &str, default: &str) -> String {
@@ -14,8 +15,23 @@ async fn main() {
     let desktop_mode = std::env::args().any(|a| a == "--desktop");
 
     let data_dir = PathBuf::from(env_or("DATA_DIR", "./resources/data"));
-    let simc_path = PathBuf::from(env_or("SIMC_PATH", "/usr/local/bin/simc"));
     let frontend_dir = std::env::var("FRONTEND_DIR").ok().map(PathBuf::from);
+
+    // Build SimcBinaries: prefer SIMC_DIR (multi-branch), fall back to SIMC_PATH (single binary)
+    let simc_bins = if let Ok(simc_dir) = std::env::var("SIMC_DIR") {
+        let bins = SimcBinaries::from_dir(&PathBuf::from(&simc_dir));
+        println!(
+            "SimC binaries from {}: {:?} (default: {})",
+            simc_dir,
+            bins.available_branches(),
+            bins.default_branch
+        );
+        Arc::new(bins)
+    } else {
+        let simc_path = PathBuf::from(env_or("SIMC_PATH", "/usr/local/bin/simc"));
+        println!("SimC binary: {:?}", simc_path);
+        Arc::new(SimcBinaries::from_single_path(simc_path))
+    };
 
     let bind_host = if desktop_mode {
         env_or("BIND_HOST", "127.0.0.1")
@@ -62,7 +78,7 @@ async fn main() {
 
     server::start_with_storage_bind(
         storage,
-        simc_path,
+        simc_bins,
         &bind_host,
         port,
         frontend_dir,

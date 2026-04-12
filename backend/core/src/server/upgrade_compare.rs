@@ -1,11 +1,11 @@
 use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::helpers::*;
 use super::types::*;
+use super::SimcBinaries;
 use crate::addon_parser;
 use crate::game_data;
 use crate::gear_resolver;
@@ -367,7 +367,7 @@ pub(super) async fn get_upgrade_compare_combo_count(
 pub(super) async fn create_upgrade_compare_sim(
     req: web::Json<UpgradeCompareRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
-    simc_path: web::Data<PathBuf>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(
@@ -428,9 +428,14 @@ pub(super) async fn create_upgrade_compare_sim(
     job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(p) => p.to_path_buf(),
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+
     spawn_staged_sim(
         store.get_ref().clone(),
-        simc_path.get_ref().clone(),
+        simc,
         req.options.to_json(),
         job_id.clone(),
         generated_input,

@@ -13,7 +13,6 @@ interface SimcVersion {
 
 interface SimcVersionList {
   versions: SimcVersion[];
-  active: string | null;
 }
 
 interface SimcAvailableUpdate {
@@ -41,7 +40,6 @@ interface ElectronAPI {
   listSimcVersions: () => Promise<SimcVersionList>;
   checkSimcUpdates: () => Promise<SimcAvailableUpdate[]>;
   installSimcVersion: (release: { tag: string; assetUrl: string }) => Promise<{ success: boolean; error?: string }>;
-  setActiveSimcVersion: (tag: string) => Promise<{ success: boolean; error?: string }>;
   removeSimcVersion: (tag: string) => Promise<{ success: boolean; error?: string }>;
   onSimcDownloadProgress: (callback: (progress: number) => void) => () => void;
   onSimcStatusChanged: (callback: (status: SimcStatus) => void) => () => void;

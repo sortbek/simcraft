@@ -231,6 +231,17 @@ async function installVersion(baseDir, release, onProgress) {
       fs.chmodSync(binaryPath, 0o755);
     }
 
+    // Remove older versions of the same branch (keep only the one we just installed)
+    const branch = release.tag.startsWith("weekly-") ? "weekly-" : release.tag.startsWith("nightly-") ? "nightly-" : null;
+    if (branch) {
+      for (const v of listInstalledVersions(baseDir)) {
+        if (v.tag !== release.tag && v.tag.startsWith(branch)) {
+          console.log(`[simc] Removing old ${v.tag}`);
+          removeVersion(baseDir, v.tag);
+        }
+      }
+    }
+
     return binaryPath;
   } finally {
     try { fs.unlinkSync(tmpFile); } catch {}

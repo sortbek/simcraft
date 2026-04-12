@@ -39,6 +39,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
     raidBuffs,
     consumables,
     expansionOptions,
+    simcBranch,
     scenarios,
     clearScenarios,
   } = useSimContext();
@@ -106,6 +107,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
         ...(Object.values(expansionOptions).some((v) => !v)
           ? { expansion_options: Object.fromEntries(Object.entries(expansionOptions).map(([k, v]) => [k, v ? 1 : 0])) }
           : {}),
+        ...(simcBranch ? { simc_branch: simcBranch } : {}),
       };
 
       const results = await Promise.allSettled(
@@ -185,6 +187,7 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
     raidBuffs,
     consumables,
     expansionOptions,
+    simcBranch,
     scenarios,
     clearScenarios,
     t,

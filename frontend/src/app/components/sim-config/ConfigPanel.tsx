@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
@@ -53,7 +53,19 @@ export default function ConfigFooter({
     setSimcPostCombos,
     simcFooter,
     setSimcFooter,
+    simcBranch,
+    setSimcBranch,
   } = useSimContext();
+
+  // Fetch available SimC branches (desktop only)
+  const [availableBranches, setAvailableBranches] = useState<string[]>([]);
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.listSimcVersions().then((result) => {
+      const branches = [...new Set(result.versions.map((v) => v.type))];
+      setAvailableBranches(branches);
+    });
+  }, []);
 
   const expertValues: Record<ExpertTabKey, string> = useMemo(
     () => ({
@@ -168,6 +180,32 @@ export default function ConfigFooter({
                       </div>
                     </div>
                   </div>
+                  {availableBranches.length > 1 && (
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                        SimC Branch
+                      </label>
+                      <div className="flex gap-1.5">
+                        {availableBranches.map((branch) => {
+                          const isActive = simcBranch === branch || (!simcBranch && branch === 'weekly');
+                          return (
+                            <button
+                              key={branch}
+                              type="button"
+                              onClick={() => setSimcBranch(branch)}
+                              className={`flex-1 rounded-lg px-3 py-2 text-center text-xs font-bold uppercase transition-all ${
+                                isActive
+                                  ? 'bg-primary-container text-on-primary'
+                                  : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
+                              }`}
+                            >
+                              {branch}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {children && <div className="flex flex-wrap items-center gap-6">{children}</div>}

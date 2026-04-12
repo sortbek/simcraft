@@ -49,6 +49,9 @@ pub struct SimOptions {
     /// Empty = all expansion options ON (default).
     #[serde(default)]
     pub expansion_options: HashMap<String, u8>,
+    /// SimC branch to use for this sim ("weekly", "nightly", or "" for default).
+    #[serde(default)]
+    pub simc_branch: String,
     // Expert Mode injection points
     #[serde(default)]
     pub simc_header: String,
@@ -87,6 +90,9 @@ impl SimOptions {
         }
         if !self.expansion_options.is_empty() {
             v["expansion_options"] = json!(self.expansion_options);
+        }
+        if !self.simc_branch.is_empty() {
+            v["simc_branch"] = json!(self.simc_branch);
         }
         v
     }

@@ -1,11 +1,11 @@
 use actix_web::{web, HttpResponse};
 use serde_json::json;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::helpers::*;
 use super::types::*;
+use super::SimcBinaries;
 use crate::addon_parser;
 use crate::game_data;
 use crate::gear_resolver;
@@ -19,7 +19,7 @@ use crate::storage::JobStorage;
 pub(super) async fn create_sim(
     req: web::Json<SimRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
-    simc_path: web::Data<PathBuf>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let simc_input = if req.raw {
@@ -63,7 +63,10 @@ pub(super) async fn create_sim(
 
     // Spawn background task
     let store_clone = store.get_ref().clone();
-    let simc = simc_path.get_ref().clone();
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(p) => p.to_path_buf(),
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
     let mut options = req.options.to_json_with_sim_type(&req.sim_type);
     if req.raw {
         options["raw"] = serde_json::json!(true);
@@ -114,7 +117,7 @@ pub(super) async fn create_sim(
 pub(super) async fn create_top_gear_sim(
     req: web::Json<TopGearRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
-    simc_path: web::Data<PathBuf>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
@@ -259,9 +262,14 @@ pub(super) async fn create_top_gear_sim(
     job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(p) => p.to_path_buf(),
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+
     spawn_staged_sim(
         store.get_ref().clone(),
-        simc_path.get_ref().clone(),
+        simc,
         req.options.to_json(),
         job_id.clone(),
         generated_input,
@@ -386,7 +394,7 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
 pub(super) async fn create_droptimizer_sim(
     req: web::Json<DroptimizerRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
-    simc_path: web::Data<PathBuf>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let simc_input = apply_spec_override(
@@ -435,9 +443,14 @@ pub(super) async fn create_droptimizer_sim(
     job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(p) => p.to_path_buf(),
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+
     spawn_staged_sim(
         store.get_ref().clone(),
-        simc_path.get_ref().clone(),
+        simc,
         req.options.to_json(),
         job_id.clone(),
         generated_input,
@@ -457,7 +470,7 @@ pub(super) async fn create_droptimizer_sim(
 pub(super) async fn create_enchant_gem_sim(
     req: web::Json<EnchantGemSimRequest>,
     store: web::Data<Arc<dyn JobStorage>>,
-    simc_path: web::Data<PathBuf>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
     let simc_input = apply_spec_override(
@@ -540,9 +553,14 @@ pub(super) async fn create_enchant_gem_sim(
     job.batch_id = req.options.batch_id.clone();
     store.insert(job);
 
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(p) => p.to_path_buf(),
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+
     spawn_staged_sim(
         store.get_ref().clone(),
-        simc_path.get_ref().clone(),
+        simc,
         req.options.to_json(),
         job_id.clone(),
         generated_input,

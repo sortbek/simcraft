@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl jq git g++ make libcurl4-openssl-dev libssl-dev \
+    ca-certificates curl jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Fetch game data
@@ -12,13 +12,4 @@ RUN curl -sL -o metadata.json https://www.raidbots.com/static/data/live/metadata
          curl -sL -o "$f" "https://www.raidbots.com/static/data/live/$f"; \
        done
 
-# Build SimC
-ARG SIMC_VERSION=HEAD
-RUN git clone --depth 1 https://github.com/simulationcraft/simc.git /tmp/simc \
-    && cd /tmp/simc \
-    && if [ "$SIMC_VERSION" != "HEAD" ]; then git fetch --depth 1 origin "$SIMC_VERSION" && git checkout FETCH_HEAD; fi \
-    && cd engine \
-    && make LTO=1 NO_DEBUG=1 SC_NO_NETWORKING=1 -j$(nproc) OPTS="-ffast-math -fomit-frame-pointer" \
-    && mkdir -p /out/simc \
-    && cp simc /out/simc/simc \
-    && rm -rf /tmp/simc
+# simc is downloaded at runtime — no longer built here

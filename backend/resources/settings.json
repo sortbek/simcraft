@@ -1,4 +1,4 @@
 {
-  "simc_use_nightly": true,
+  "simc_use_nightly": false,
   "simc_auto_update": true
 }

@@ -4,9 +4,9 @@ const path = require("path");
 const http = require("http");
 const fs = require("fs");
 const {
-  ensureSimc, installVersion, listInstalledVersions, getActiveVersion,
-  setActiveVersion, getActiveBinaryPath, removeVersion, checkForUpdates,
-  getLatestWeeklyRelease, getLatestNightlyRelease, BINARY_NAME,
+  ensureSimc, installVersion, listInstalledVersions,
+  setActiveVersion, removeVersion, checkForUpdates,
+  getLatestWeeklyRelease, getLatestNightlyRelease,
 } = require("./scripts/download-simc");
 
 let mainWindow = null;
@@ -69,13 +69,13 @@ function getBackendBinary() {
   return path.join(process.resourcesPath, "backend", name);
 }
 
-function startBackend(simcPath) {
+function startBackend() {
   const binary = getBackendBinary();
 
   const env = {
     ...process.env,
     DATA_DIR: getResourcePath("data"),
-    SIMC_PATH: simcPath,
+    SIMC_DIR: getSimcDir(),
     RUST_BACKTRACE: "1",
     PORT: String(BACKEND_PORT),
     BIND_HOST: "127.0.0.1",
@@ -224,11 +224,7 @@ ipcMain.handle("clipboard:read", () => clipboard.readText());
 ipcMain.handle("simc:status", () => simcStatus);
 
 ipcMain.handle("simc:list-versions", () => {
-  const simcDir = getSimcDir();
-  return {
-    versions: listInstalledVersions(simcDir),
-    active: getActiveVersion(simcDir),
-  };
+  return { versions: listInstalledVersions(getSimcDir()) };
 });
 
 ipcMain.handle("simc:check-updates", () => checkForUpdates(getSimcDir()));
@@ -252,32 +248,8 @@ ipcMain.handle("simc:install-version", async (_event, release) => {
   }
 });
 
-ipcMain.handle("simc:set-active", async (_event, tag) => {
-  const simcDir = getSimcDir();
-  setActiveVersion(simcDir, tag);
-  const binaryPath = getActiveBinaryPath(simcDir);
-  if (!binaryPath) return { success: false, error: "Binary not found for " + tag };
-
-  // Restart backend with new simc path
-  if (backend) {
-    backend.kill();
-    backend = null;
-  }
-  startBackend(binaryPath);
-  try {
-    await waitForBackend();
-    simcStatus = { ready: true, downloading: false, progress: 1, error: null };
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
 ipcMain.handle("simc:remove-version", (_event, tag) => {
-  const simcDir = getSimcDir();
-  const active = getActiveVersion(simcDir);
-  if (tag === active) return { success: false, error: "Cannot remove the active version" };
-  removeVersion(simcDir, tag);
+  removeVersion(getSimcDir(), tag);
   return { success: true };
 });
 
@@ -360,15 +332,14 @@ app.whenReady().then(async () => {
 
   // Ensure at least one simc version is installed
   const simcDir = getSimcDir();
-  let simcPath;
   try {
     simcStatus = { ready: false, downloading: true, progress: 0, error: null };
-    simcPath = await ensureSimc(simcDir, (progress) => {
+    await ensureSimc(simcDir, (progress) => {
       simcStatus.progress = progress;
       mainWindow?.webContents.send("simc:download-progress", progress);
     });
     simcStatus = { ready: true, downloading: false, progress: 1, error: null };
-    console.log(`[simc] Ready at ${simcPath}`);
+    console.log("[simc] Ready");
   } catch (err) {
     console.error("[simc] Download failed:", err.message);
     simcStatus = { ready: false, downloading: false, progress: 0, error: err.message };
@@ -386,13 +357,12 @@ app.whenReady().then(async () => {
         const alreadyInstalled = installed.some((v) => v.tag === release.tag);
         if (!alreadyInstalled) {
           console.log(`[simc] Auto-updating to ${release.tag}...`);
-          simcStatus = { ready: !!simcPath, downloading: true, progress: 0, error: null };
-          const newPath = await installVersion(simcDir, release, (progress) => {
+          simcStatus = { ...simcStatus, downloading: true, progress: 0 };
+          await installVersion(simcDir, release, (progress) => {
             simcStatus.progress = progress;
             mainWindow?.webContents.send("simc:download-progress", progress);
           });
           setActiveVersion(simcDir, release.tag);
-          simcPath = newPath;
           simcStatus = { ready: true, downloading: false, progress: 1, error: null };
           console.log(`[simc] Auto-updated to ${release.tag}`);
         }
@@ -402,7 +372,7 @@ app.whenReady().then(async () => {
     }
   }
 
-  startBackend(simcPath || getActiveBinaryPath(simcDir) || path.join(simcDir, BINARY_NAME));
+  startBackend();
 
   try {
     await waitForBackend();

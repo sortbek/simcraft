@@ -7,16 +7,31 @@ import { useIsDesktop } from '../lib/useIsDesktop';
 import { API_URL } from '../lib/api';
 
 const THREAD_PRESETS = [
-  { labelKey: 'settings.balanced', pct: 0.3, desc: '30%' },
-  { labelKey: 'settings.performance', pct: 0.6, desc: '60%' },
-  { labelKey: 'settings.maximum', pct: 0.9, desc: '90%' },
+  { labelKey: 'settings.balanced', pct: 0.3 },
+  { labelKey: 'settings.performance', pct: 0.6 },
+  { labelKey: 'settings.maximum', pct: 0.9 },
 ] as const;
+
+// ── Toggle Switch ───────────────────────────────────────────────
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="relative inline-flex items-center cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only peer"
+      />
+      <div className="w-10 h-5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-container after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white" />
+    </label>
+  );
+}
 
 // ── SimC Version Management ─────────────────────────────────────
 
-function SimcVersionManager() {
+function SimcEngineSection() {
   const [versions, setVersions] = useState<SimcVersion[]>([]);
-  const [active, setActive] = useState<string | null>(null);
   const [updates, setUpdates] = useState<SimcAvailableUpdate[]>([]);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
@@ -28,7 +43,6 @@ function SimcVersionManager() {
   const loadVersions = useCallback(async () => {
     const result = await window.electronAPI!.listSimcVersions();
     setVersions(result.versions);
-    setActive(result.active);
   }, []);
 
   useEffect(() => {
@@ -63,23 +77,11 @@ function SimcVersionManager() {
       });
       if (!result.success) throw new Error(result.error);
       await loadVersions();
-      // Refresh updates list
       setUpdates((prev) => prev.map((u) => (u.tag === update.tag ? { ...u, installed: true } : u)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Install failed');
     } finally {
       setInstalling(null);
-    }
-  };
-
-  const handleSetActive = async (tag: string) => {
-    setError('');
-    try {
-      const result = await window.electronAPI!.setActiveSimcVersion(tag);
-      if (!result.success) throw new Error(result.error);
-      setActive(tag);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to switch version');
     }
   };
 
@@ -94,171 +96,117 @@ function SimcVersionManager() {
     }
   };
 
-  const formatTag = (tag: string) => {
-    const date = tag.replace(/^(weekly|nightly)-/, '');
-    return date;
-  };
+  const formatDate = (tag: string) => tag.replace(/^(weekly|nightly)-/, '');
 
-  const newUpdates = updates.filter((u) => !u.installed);
+  // Build per-branch rows: weekly and nightly
+  const branches = ['weekly', 'nightly'] as const;
+  const branchData = branches.map((branch) => {
+    const installed = versions.find((v) => v.type === branch);
+    const available = updates.find((u) => u.type === branch && !u.installed);
+    return { branch, installed, available };
+  });
 
   return (
     <div className="space-y-4">
-      {/* Installed versions */}
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-primary-fixed-dim">
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
+          </svg>
+          <h2 className="text-sm font-bold uppercase tracking-[0.2em]">SimC Engine</h2>
+        </div>
+        <button
+          onClick={handleCheckUpdates}
+          disabled={checking}
+          className="text-[10px] bg-surface-container-highest px-3 py-1.5 rounded text-primary hover:bg-surface-bright transition-colors disabled:opacity-50 font-bold uppercase tracking-wider"
+        >
+          {checking ? 'Checking...' : 'Check for Updates'}
+        </button>
+      </div>
+
+      <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 p-4 space-y-3">
+        {/* Column headers */}
+        <div className="flex items-center px-3 pb-2 border-b border-outline-variant/20">
+          <span className="w-12 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50 text-center shrink-0">Auto</span>
+          <span className="ml-4 flex-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">Branch / Version</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">Actions</span>
+        </div>
+
       <div className="space-y-2">
-        {versions.length === 0 ? (
-          <p className="text-sm text-on-surface-variant/60">No SimC versions installed.</p>
-        ) : (
-          versions.map((v) => {
-            const isActive = v.tag === active;
-            return (
-              <div
-                key={v.tag}
-                className={`flex items-center justify-between rounded-lg px-4 py-3 transition-colors ${
-                  isActive
-                    ? 'bg-primary-container/10 ring-1 ring-primary/30'
-                    : 'bg-surface-container-highest'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${
-                      v.type === 'weekly'
-                        ? 'bg-primary/15 text-primary'
-                        : 'bg-tertiary/15 text-tertiary'
-                    }`}
-                  >
-                    {v.type}
-                  </span>
-                  <span className="font-mono text-sm text-on-surface">{formatTag(v.tag)}</span>
-                  {isActive && (
-                    <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
-                      Active
+        {branchData.map(({ branch, installed, available }) => (
+          <div
+            key={branch}
+            className="flex items-center justify-between p-3 bg-surface-container rounded-lg border border-outline-variant/10"
+          >
+            {/* Auto-update toggle — w-12 to match header */}
+            <div className="w-12 flex justify-center shrink-0">
+              <Toggle
+                checked={branch === 'weekly' ? autoUpdate : useNightly}
+                onChange={(v) => {
+                  if (branch === 'weekly') {
+                    setAutoUpdate(v);
+                    window.electronAPI!.setSetting('simc_auto_update', v);
+                  } else {
+                    setUseNightly(v);
+                    window.electronAPI!.setSetting('simc_use_nightly', v);
+                  }
+                }}
+              />
+            </div>
+
+            {/* Branch info */}
+            <div className="flex-1 ml-4">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold capitalize">{branch}</p>
+                {branch === 'nightly' && (
+                  <svg className="h-3.5 w-3.5 text-error/70" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                  </svg>
+                )}
+              </div>
+              {installed ? (
+                <p className="text-[10px] text-on-surface-variant/70">
+                  Installed: {formatDate(installed.tag)}
+                  {available && (
+                    <span className="text-primary ml-2">
+                      Update available: {formatDate(available.tag)}
                     </span>
                   )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {!isActive && (
-                    <>
-                      <button
-                        onClick={() => handleSetActive(v.tag)}
-                        className="rounded px-3 py-1.5 text-xs font-medium text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
-                      >
-                        Use
-                      </button>
-                      <button
-                        onClick={() => handleRemove(v.tag)}
-                        className="rounded px-3 py-1.5 text-xs font-medium text-error/60 hover:bg-error-container/10 hover:text-error transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+                </p>
+              ) : (
+                <p className="text-[10px] text-on-surface-variant/50">
+                  {available ? `Available: ${formatDate(available.tag)}` : 'Not installed'}
+                </p>
+              )}
+            </div>
 
-      {/* Available updates */}
-      {newUpdates.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant/60">
-            Available
-          </h4>
-          {newUpdates.map((u) => (
-            <div
-              key={u.tag}
-              className="flex items-center justify-between rounded-lg bg-surface-container px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${
-                    u.type === 'weekly'
-                      ? 'bg-primary/15 text-primary'
-                      : 'bg-tertiary/15 text-tertiary'
-                  }`}
+            {/* Actions */}
+            <div className="flex gap-2">
+              {available && (
+                <button
+                  onClick={() => handleInstall(available)}
+                  disabled={installing === available.tag}
+                  className="text-[10px] font-bold uppercase py-1 px-3 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-all disabled:opacity-50"
                 >
-                  {u.type}
-                </span>
-                <span className="font-mono text-sm text-on-surface">{formatTag(u.tag)}</span>
-              </div>
-              <button
-                onClick={() => handleInstall(u)}
-                disabled={installing === u.tag}
-                className="rounded bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-              >
-                {installing === u.tag ? `${Math.round(progress * 100)}%` : 'Install'}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Auto-update + nightly toggles + check button */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                const next = !autoUpdate;
-                setAutoUpdate(next);
-                window.electronAPI!.setSetting('simc_auto_update', next);
-              }}
-              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-                autoUpdate ? 'bg-gold' : 'bg-surface-container-highest'
-              }`}
-            >
-              <div
-                className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-                  autoUpdate ? 'left-[18px] bg-black' : 'left-0.5 bg-on-surface-variant'
-                }`}
-              />
-            </button>
-            <span className="text-sm text-on-surface-variant">Auto-update releases</span>
-          </div>
-          <button
-            onClick={handleCheckUpdates}
-            disabled={checking}
-            className="rounded-lg bg-surface-container-highest px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
-          >
-            {checking ? 'Checking...' : 'Check for Updates'}
-          </button>
-        </div>
-
-        {autoUpdate && (
-          <div className="flex items-center gap-3 pl-12">
-            <button
-              type="button"
-              onClick={() => {
-                const next = !useNightly;
-                setUseNightly(next);
-                window.electronAPI!.setSetting('simc_use_nightly', next);
-              }}
-              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-                useNightly ? 'bg-gold' : 'bg-surface-container-highest'
-              }`}
-            >
-              <div
-                className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-                  useNightly ? 'left-[18px] bg-black' : 'left-0.5 bg-on-surface-variant'
-                }`}
-              />
-            </button>
-            <div>
-              <span className="text-sm text-on-surface-variant">Use nightly builds</span>
-              <p className="text-[11px] leading-relaxed text-on-surface-variant/40">
-                Downloads a new SimC version every day. Nightly builds may be unstable.
-              </p>
+                  {installing === available.tag ? `${Math.round(progress * 100)}%` : installed ? 'Update' : 'Install'}
+                </button>
+              )}
+              {installed && (
+                <button
+                  onClick={() => handleRemove(installed.tag)}
+                  className="text-[10px] font-bold uppercase py-1 px-3 text-error/60 hover:bg-error/10 hover:text-error rounded transition-all"
+                >
+                  Remove
+                </button>
+              )}
             </div>
           </div>
-        )}
+        ))}
       </div>
 
-      {error && (
-        <p className="text-sm text-error">{error}</p>
-      )}
+      {error && <p className="text-xs text-error pt-1">{error}</p>}
+      </div>
     </div>
   );
 }
@@ -305,43 +253,55 @@ export default function SettingsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 pb-20">
-      <h1 className="font-headline text-2xl font-black text-on-surface">{t('common.settings')}</h1>
+    <div className="mx-auto max-w-4xl space-y-8 pb-20">
+      {/* Header */}
+      <header className="mb-10">
+        <h1 className="font-headline text-3xl font-extrabold text-primary tracking-tight uppercase">
+          {t('common.settings')}
+        </h1>
+        <p className="text-on-surface-variant">Configure the simulation engine and preferences.</p>
+      </header>
 
       {/* SimC Engine — desktop only */}
       {isDesktop && (
         <section className="space-y-4">
-          <div>
-            <h2 className="font-headline text-lg font-bold text-on-surface">SimC Engine</h2>
-            <p className="mt-1 text-sm text-on-surface-variant/60">
-              Manage SimulationCraft versions used for running simulations.
-            </p>
-          </div>
-          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-5">
-            <SimcVersionManager />
-          </div>
+          <SimcEngineSection />
         </section>
       )}
 
       {/* General Settings — desktop only */}
       {isDesktop && (
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-headline text-lg font-bold text-on-surface">General</h2>
+        <section className="space-y-4 pt-4">
+          <div className="flex items-center gap-2 text-primary-fixed-dim">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
+            </svg>
+            <h2 className="text-sm font-bold uppercase tracking-[0.2em]">General</h2>
           </div>
-          <div className="space-y-6 rounded-xl border border-outline-variant/20 bg-surface-container-low p-5">
+
+          <div className="grid grid-cols-1 gap-4">
             {/* CPU Threads */}
             {maxThreads > 0 && (
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[15px] font-medium text-on-surface-variant">
-                    {t('settings.cpuThreads')}
-                  </span>
-                  <span className="rounded bg-surface-container-highest px-2 py-0.5 font-mono text-xs tabular-nums text-on-surface">
-                    {threads}/{maxThreads}
-                  </span>
+              <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 p-5">
+                <div className="flex justify-between items-end mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider">
+                      {t('settings.cpuThreads')}
+                    </h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Allocated processing power for simulation threads.
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl font-black text-primary font-headline">
+                      {threads}/{maxThreads}
+                    </span>
+                    <p className="text-[10px] text-on-surface-variant font-bold uppercase">
+                      Threads Active
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="grid grid-cols-3 gap-3 bg-surface-container-lowest p-1.5 rounded-lg">
                   {THREAD_PRESETS.map((preset, idx) => {
                     const threadCount = Math.max(1, Math.round(maxThreads * preset.pct));
                     const isActive = selectedPresetIdx === idx;
@@ -349,14 +309,20 @@ export default function SettingsPage() {
                       <button
                         key={preset.labelKey}
                         onClick={() => setThreads(threadCount)}
-                        className={`flex-1 rounded-lg px-2 py-2 text-center transition-all ${
+                        className={`flex flex-col items-center justify-center py-3 rounded-md transition-all ${
                           isActive
-                            ? 'bg-white text-black'
-                            : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
+                            ? 'bg-primary-container text-on-primary ring-1 ring-primary/30 shadow-lg shadow-primary/10'
+                            : 'hover:bg-surface-bright'
                         }`}
                       >
-                        <span className="block text-[14px] font-medium">{t(preset.labelKey)}</span>
-                        <span className="mt-0.5 block text-[12px] text-on-surface-variant/40">
+                        <span
+                          className={`text-xs font-bold ${
+                            isActive ? 'uppercase tracking-tight font-extrabold' : 'text-on-surface'
+                          }`}
+                        >
+                          {t(preset.labelKey)}
+                        </span>
+                        <span className={`text-[10px] ${isActive ? 'opacity-80' : 'text-on-surface-variant'}`}>
                           {threadCount} {t('settings.threads')}
                         </span>
                       </button>
@@ -366,44 +332,42 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Clipboard Auto-Import */}
-            <div className="border-t border-outline-variant/10 pt-5">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <span className="text-[15px] font-medium text-on-surface-variant">
-                    {t('settings.clipboardSync')}
-                  </span>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-on-surface-variant/40">
-                    {t('settings.clipboardSyncDesc')}
+            {/* Auto-Import and Gear Combos row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* WoW Import */}
+              <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 p-5 flex flex-col justify-between">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-on-surface uppercase mb-1">
+                      {t('settings.clipboardSync')}
+                    </h3>
+                    <p className="text-xs leading-relaxed text-on-surface-variant italic">
+                      {t('settings.clipboardSyncDesc')}
+                    </p>
+                  </div>
+                  <div className="mt-1">
+                    <Toggle
+                      checked={clipboardSync}
+                      onChange={(v) => {
+                        localStorage.setItem('simhammer_clipboard_sync', String(v));
+                        setClipboardSync(v);
+                        window.dispatchEvent(new Event('clipboard-sync-changed'));
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Max Gear Combos */}
+              <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 p-5 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider">
+                    {t('settings.maxGearCombos')}
+                  </h3>
+                  <p className="text-xs text-on-surface-variant">
+                    The threshold for combinatorial optimization.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = localStorage.getItem('simhammer_clipboard_sync') !== 'true';
-                    localStorage.setItem('simhammer_clipboard_sync', String(next));
-                    setClipboardSync(next);
-                    window.dispatchEvent(new Event('clipboard-sync-changed'));
-                  }}
-                  className={`relative ml-3 h-5 w-9 shrink-0 rounded-full transition-colors ${
-                    clipboardSync ? 'bg-gold' : 'bg-surface-container-highest'
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-                      clipboardSync ? 'left-[18px] bg-black' : 'left-0.5 bg-on-surface-variant'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Max Combinations */}
-            <div className="border-t border-outline-variant/10 pt-5">
-              <div className="flex items-center justify-between">
-                <span className="text-[15px] font-medium text-on-surface-variant">
-                  {t('settings.maxGearCombos')}
-                </span>
                 <input
                   type="number"
                   min={10}
@@ -414,7 +378,7 @@ export default function SettingsPage() {
                     const n = parseInt(e.target.value, 10);
                     if (Number.isFinite(n) && n > 0) setMaxCombinations(n);
                   }}
-                  className="w-20 rounded bg-surface-container-highest px-2 py-1 text-center font-mono text-xs tabular-nums text-on-surface [appearance:textfield] focus:outline-none focus:ring-1 focus:ring-gold/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  className="w-28 bg-surface-container-highest border-none text-primary font-bold text-right rounded-md focus:ring-1 focus:ring-primary h-10 px-3 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </div>
             </div>
@@ -422,7 +386,6 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* Non-desktop: nothing to show yet */}
       {!isDesktop && (
         <p className="text-sm text-on-surface-variant/60">
           Settings are only available in the desktop app.

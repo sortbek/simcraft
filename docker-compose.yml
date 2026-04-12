@@ -6,7 +6,8 @@ services:
       context: backend
       dockerfile: server/Dockerfile
       args:
-        - SIMC_VERSION=${SIMC_VERSION:-HEAD}
+        - SIMC_BRANCH=${SIMC_BRANCH:-weekly}
+        - SIMC_VERSION=${SIMC_VERSION:-}
     ports:
       - "8000:8000"
     volumes:
@@ -31,12 +32,9 @@ services:
     build:
       context: desktop
       dockerfile: Dockerfile.resources
-      args:
-        - SIMC_VERSION=${SIMC_VERSION:-HEAD}
     volumes:
       - ./backend/resources/data:/mount/data
-      - ./backend/resources/simc:/mount/simc
-    entrypoint: ["sh", "-c", "cp -r /out/data/* /mount/data/ && cp -r /out/simc/* /mount/simc/ && echo 'Resources ready.'"]
+    entrypoint: ["sh", "-c", "cp -r /out/data/* /mount/data/ && echo 'Resources ready.'"]
 
 
 volumes:

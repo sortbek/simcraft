@@ -41,7 +41,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   listSimcVersions: () => ipcRenderer.invoke("simc:list-versions"),
   checkSimcUpdates: () => ipcRenderer.invoke("simc:check-updates"),
   installSimcVersion: (release) => ipcRenderer.invoke("simc:install-version", release),
-  setActiveSimcVersion: (tag) => ipcRenderer.invoke("simc:set-active", tag),
   removeSimcVersion: (tag) => ipcRenderer.invoke("simc:remove-version", tag),
   onSimcDownloadProgress: (callback) => {
     const handler = (_event, progress) => callback(progress);
