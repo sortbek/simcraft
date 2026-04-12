@@ -20,6 +20,10 @@ type Translations = Record<string, string>;
 
 const STORAGE_KEY = 'simhammer_language';
 
+// Module-level cache so translations survive across re-renders and navigations
+const translationCache = new Map<Locale, Translations>();
+translationCache.set('en_US', en_US);
+
 // Lazy-load non-English locales
 const localeLoaders: Record<Locale, () => Promise<{ default: Translations }>> = {
   en_US: () => Promise.resolve({ default: en_US }),
@@ -31,6 +35,13 @@ const localeLoaders: Record<Locale, () => Promise<{ default: Translations }>> = 
   ru_RU: () => import('../../../locales/ru_RU.json'),
 };
 
+function getStoredLocale(): Locale {
+  if (typeof window === 'undefined') return 'en_US';
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored && LOCALES.some((l) => l.value === stored)) return stored as Locale;
+  return 'en_US';
+}
+
 interface LanguageContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
@@ -40,30 +51,28 @@ interface LanguageContextValue {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>('en_US');
-  const [translations, setTranslations] = useState<Translations>(en_US);
+  const [locale, setLocaleState] = useState<Locale>(getStoredLocale);
+  const [translations, setTranslations] = useState<Translations>(
+    () => translationCache.get(getStoredLocale()) ?? en_US
+  );
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
     localStorage.setItem(STORAGE_KEY, newLocale);
   }, []);
 
-  // Read stored locale after mount (avoids hydration mismatch)
+  // Load translations when locale changes (only fetches if not cached)
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && LOCALES.some((l) => l.value === stored) && stored !== 'en_US') {
-      setLocaleState(stored as Locale);
-    }
-  }, []);
-
-  // Load translations when locale changes
-  useEffect(() => {
-    if (locale === 'en_US') {
-      setTranslations(en_US);
+    const cached = translationCache.get(locale);
+    if (cached) {
+      setTranslations(cached);
       return;
     }
     localeLoaders[locale]()
-      .then((mod) => setTranslations(mod.default))
+      .then((mod) => {
+        translationCache.set(locale, mod.default);
+        setTranslations(mod.default);
+      })
       .catch(() => setTranslations(en_US));
   }, [locale]);
 

@@ -27,7 +27,9 @@
     "productName": "SimHammer",
     "files": [
       "main.js",
-      "preload.js"
+      "preload.js",
+      "src/main/**/*",
+      "scripts/**/*.js"
     ],
     "extraResources": [
       {

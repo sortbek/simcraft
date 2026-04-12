@@ -1,8 +1,10 @@
+import type { ItemOrigin } from './types';
+
 const STORAGE_KEY = 'simhammer_topgear_state';
 
 export interface TopGearSavedState {
   selectedUids: Record<string, string[]>;
-  localItems: { slot: string; simc_string: string; origin: string }[];
+  localItems: { slot: string; simc_string: string; origin: ItemOrigin }[];
   enchantSelections: Record<string, number[]>;
   gemSelections: number[];
   maxUpgrade: boolean;
