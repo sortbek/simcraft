@@ -48,12 +48,5 @@ if (fs.existsSync(dataSrc)) {
   console.error("WARNING: backend/resources/data/ not found — backend will fail at startup");
 }
 
-// Copy simc binary
-const simcSrc = path.join(backendDir, "resources", "simc");
-const simcDest = path.join(resourcesDir, "simc");
-if (fs.existsSync(simcSrc)) {
-  copyDir(simcSrc, simcDest);
-  console.log("Copied simc to desktop/resources/simc/");
-} else {
-  console.error("WARNING: backend/resources/simc/ not found — simulations will not work");
-}
+// simc is downloaded at runtime from GitHub Releases (sortbek/simc-builds)
+// — no longer bundled with the app

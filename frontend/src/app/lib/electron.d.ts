@@ -1,3 +1,28 @@
+interface SimcStatus {
+  ready: boolean;
+  downloading: boolean;
+  progress: number;
+  error: string | null;
+}
+
+interface SimcVersion {
+  tag: string;
+  type: string;
+  binaryPath: string;
+}
+
+interface SimcVersionList {
+  versions: SimcVersion[];
+  active: string | null;
+}
+
+interface SimcAvailableUpdate {
+  tag: string;
+  type: string;
+  assetUrl: string;
+  installed: boolean;
+}
+
 interface ElectronAPI {
   minimize: () => Promise<void>;
   toggleMaximize: () => Promise<void>;
@@ -12,6 +37,16 @@ interface ElectronAPI {
   stopClipboardPolling: () => Promise<void>;
   readClipboard: () => Promise<string>;
   onClipboardChange: (callback: (text: string) => void) => () => void;
+  getSimcStatus: () => Promise<SimcStatus>;
+  listSimcVersions: () => Promise<SimcVersionList>;
+  checkSimcUpdates: () => Promise<SimcAvailableUpdate[]>;
+  installSimcVersion: (release: { tag: string; assetUrl: string }) => Promise<{ success: boolean; error?: string }>;
+  setActiveSimcVersion: (tag: string) => Promise<{ success: boolean; error?: string }>;
+  removeSimcVersion: (tag: string) => Promise<{ success: boolean; error?: string }>;
+  onSimcDownloadProgress: (callback: (progress: number) => void) => () => void;
+  onSimcStatusChanged: (callback: (status: SimcStatus) => void) => () => void;
+  getSetting: <T>(key: string, defaultValue: T) => Promise<T>;
+  setSetting: <T>(key: string, value: T) => Promise<void>;
 }
 
 interface Window {

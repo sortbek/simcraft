@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
+import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
@@ -234,6 +235,7 @@ export default function EnchantGemPage() {
         </div>
       )}
 
+      <SimcDownloadBanner />
       <ErrorAlert message={error} />
       <ConfigFooter
         onSubmit={submit}

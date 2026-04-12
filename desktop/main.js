@@ -2,12 +2,57 @@ const { app, BrowserWindow, ipcMain, shell, clipboard } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
+const fs = require("fs");
+const {
+  ensureSimc, installVersion, listInstalledVersions, getActiveVersion,
+  setActiveVersion, getActiveBinaryPath, removeVersion, checkForUpdates,
+  getLatestWeeklyRelease, getLatestNightlyRelease, BINARY_NAME,
+} = require("./scripts/download-simc");
 
 let mainWindow = null;
 let backend = null;
 
 const isDev = !app.isPackaged;
 const BACKEND_PORT = 17384;
+
+// SimC lives in userData so it persists across app updates
+function getSimcDir() {
+  if (isDev) {
+    return path.join(__dirname, "..", "backend", "resources", "simc");
+  }
+  return path.join(app.getPath("userData"), "simc");
+}
+
+let simcStatus = { ready: false, downloading: false, progress: 0, error: null };
+
+// ── App preferences (stored in userData/settings.json) ──────────
+
+function getSettingsPath() {
+  if (isDev) return path.join(__dirname, "..", "backend", "resources", "settings.json");
+  return path.join(app.getPath("userData"), "settings.json");
+}
+
+function loadSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(getSettingsPath(), "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveSettings(settings) {
+  fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2));
+}
+
+function getSetting(key, defaultValue) {
+  return loadSettings()[key] ?? defaultValue;
+}
+
+function setSetting(key, value) {
+  const settings = loadSettings();
+  settings[key] = value;
+  saveSettings(settings);
+}
 
 function getResourcePath(type, ...segments) {
   if (isDev) {
@@ -24,14 +69,13 @@ function getBackendBinary() {
   return path.join(process.resourcesPath, "backend", name);
 }
 
-function startBackend() {
+function startBackend(simcPath) {
   const binary = getBackendBinary();
-  const simcName = process.platform === "win32" ? "simc.exe" : "simc";
 
   const env = {
     ...process.env,
     DATA_DIR: getResourcePath("data"),
-    SIMC_PATH: getResourcePath("simc", simcName),
+    SIMC_PATH: simcPath,
     RUST_BACKTRACE: "1",
     PORT: String(BACKEND_PORT),
     BIND_HOST: "127.0.0.1",
@@ -176,6 +220,73 @@ ipcMain.handle("clipboard:stop-polling", () => {
 
 ipcMain.handle("clipboard:read", () => clipboard.readText());
 
+// SimC version management
+ipcMain.handle("simc:status", () => simcStatus);
+
+ipcMain.handle("simc:list-versions", () => {
+  const simcDir = getSimcDir();
+  return {
+    versions: listInstalledVersions(simcDir),
+    active: getActiveVersion(simcDir),
+  };
+});
+
+ipcMain.handle("simc:check-updates", () => checkForUpdates(getSimcDir()));
+
+ipcMain.handle("simc:install-version", async (_event, release) => {
+  const simcDir = getSimcDir();
+  simcStatus = { ready: simcStatus.ready, downloading: true, progress: 0, error: null };
+  mainWindow?.webContents.send("simc:status-changed", simcStatus);
+  try {
+    await installVersion(simcDir, release, (progress) => {
+      simcStatus.progress = progress;
+      mainWindow?.webContents.send("simc:download-progress", progress);
+    });
+    simcStatus = { ...simcStatus, downloading: false, progress: 1 };
+    mainWindow?.webContents.send("simc:status-changed", simcStatus);
+    return { success: true };
+  } catch (err) {
+    simcStatus = { ...simcStatus, downloading: false, error: err.message };
+    mainWindow?.webContents.send("simc:status-changed", simcStatus);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle("simc:set-active", async (_event, tag) => {
+  const simcDir = getSimcDir();
+  setActiveVersion(simcDir, tag);
+  const binaryPath = getActiveBinaryPath(simcDir);
+  if (!binaryPath) return { success: false, error: "Binary not found for " + tag };
+
+  // Restart backend with new simc path
+  if (backend) {
+    backend.kill();
+    backend = null;
+  }
+  startBackend(binaryPath);
+  try {
+    await waitForBackend();
+    simcStatus = { ready: true, downloading: false, progress: 1, error: null };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle("simc:remove-version", (_event, tag) => {
+  const simcDir = getSimcDir();
+  const active = getActiveVersion(simcDir);
+  if (tag === active) return { success: false, error: "Cannot remove the active version" };
+  removeVersion(simcDir, tag);
+  return { success: true };
+});
+
+// App settings
+ipcMain.handle("settings:get", (_event, key, defaultValue) => getSetting(key, defaultValue));
+ipcMain.handle("settings:set", (_event, key, value) => {
+  setSetting(key, value);
+});
+
 // Auto-updater
 function setupAutoUpdater() {
   try {
@@ -246,7 +357,52 @@ async function clearCacheIfVersionChanged() {
 
 app.whenReady().then(async () => {
   await clearCacheIfVersionChanged();
-  startBackend();
+
+  // Ensure at least one simc version is installed
+  const simcDir = getSimcDir();
+  let simcPath;
+  try {
+    simcStatus = { ready: false, downloading: true, progress: 0, error: null };
+    simcPath = await ensureSimc(simcDir, (progress) => {
+      simcStatus.progress = progress;
+      mainWindow?.webContents.send("simc:download-progress", progress);
+    });
+    simcStatus = { ready: true, downloading: false, progress: 1, error: null };
+    console.log(`[simc] Ready at ${simcPath}`);
+  } catch (err) {
+    console.error("[simc] Download failed:", err.message);
+    simcStatus = { ready: false, downloading: false, progress: 0, error: err.message };
+  }
+
+  // Auto-update: download and activate latest release if enabled
+  const autoUpdate = getSetting("simc_auto_update", true);
+  const useNightly = getSetting("simc_use_nightly", false);
+  if (autoUpdate) {
+    try {
+      const fetcher = useNightly ? getLatestNightlyRelease : getLatestWeeklyRelease;
+      const release = await fetcher();
+      if (release) {
+        const installed = listInstalledVersions(simcDir);
+        const alreadyInstalled = installed.some((v) => v.tag === release.tag);
+        if (!alreadyInstalled) {
+          console.log(`[simc] Auto-updating to ${release.tag}...`);
+          simcStatus = { ready: !!simcPath, downloading: true, progress: 0, error: null };
+          const newPath = await installVersion(simcDir, release, (progress) => {
+            simcStatus.progress = progress;
+            mainWindow?.webContents.send("simc:download-progress", progress);
+          });
+          setActiveVersion(simcDir, release.tag);
+          simcPath = newPath;
+          simcStatus = { ready: true, downloading: false, progress: 1, error: null };
+          console.log(`[simc] Auto-updated to ${release.tag}`);
+        }
+      }
+    } catch (err) {
+      console.warn("[simc] Auto-update check failed:", err.message);
+    }
+  }
+
+  startBackend(simcPath || getActiveBinaryPath(simcDir) || path.join(simcDir, BINARY_NAME));
 
   try {
     await waitForBackend();

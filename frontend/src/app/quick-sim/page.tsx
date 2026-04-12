@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
+import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
@@ -209,6 +210,7 @@ export default function QuickSimPage() {
         />
       )}
 
+      <SimcDownloadBanner />
       <ErrorAlert message={error} />
       <ConfigFooter
         onSubmit={submit}

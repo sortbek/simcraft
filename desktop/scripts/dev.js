@@ -3,6 +3,10 @@ const path = require("path");
 const fs = require("fs");
 const http = require("http");
 const https = require("https");
+const {
+  ensureSimc, getLatestWeeklyRelease, listInstalledVersions,
+  installVersion, setActiveVersion,
+} = require("./download-simc");
 
 const ROOT = path.join(__dirname, "..", "..");
 const BACKEND_DIR = path.join(ROOT, "backend");
@@ -122,16 +126,33 @@ async function fetchGameData(dataDir) {
 async function ensureResources() {
   const dataDir = path.join(BACKEND_DIR, "resources", "data");
   const simcDir = path.join(BACKEND_DIR, "resources", "simc");
-  const simcBinary = path.join(simcDir, process.platform === "win32" ? "simc.exe" : "simc");
   const metadataFile = path.join(dataDir, "metadata.json");
 
-  // Build simc binary if missing
-  if (!fs.existsSync(simcBinary)) {
-    console.log("[dev] SimC binary missing — building from source...");
-    execSync("node scripts/build-simc.js", {
-      cwd: path.join(__dirname, ".."),
-      stdio: "inherit",
+  // Ensure simc is installed, then auto-update to latest weekly
+  console.log("[dev] Checking SimC binary...");
+  try {
+    await ensureSimc(simcDir, (progress) => {
+      process.stdout.write(`\r[dev] Downloading SimC... ${Math.round(progress * 100)}%`);
     });
+
+    // Auto-update to latest weekly
+    const release = await getLatestWeeklyRelease();
+    if (release) {
+      const installed = listInstalledVersions(simcDir);
+      if (!installed.some((v) => v.tag === release.tag)) {
+        console.log(`\n[dev] Updating SimC to ${release.tag}...`);
+        await installVersion(simcDir, release, (progress) => {
+          process.stdout.write(`\r[dev] Downloading SimC ${release.tag}... ${Math.round(progress * 100)}%`);
+        });
+        setActiveVersion(simcDir, release.tag);
+        console.log(`\n[dev] SimC updated to ${release.tag}`);
+      } else {
+        console.log(`\n[dev] SimC ${release.tag} already installed`);
+      }
+    }
+  } catch (err) {
+    console.error(`\n[dev] SimC setup failed: ${err.message}`);
+    console.error("[dev] Simulations will not work until SimC is available.");
   }
 
   // Fetch game data if missing

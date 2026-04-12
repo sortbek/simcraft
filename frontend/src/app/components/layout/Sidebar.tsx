@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import SettingsPopover from '../sim-config/SettingsPopover';
 import SidebarRoutes from './SidebarRoutes';
 import LanguageSelector from './LanguageSelector';
 import { ScaleSelector } from './ContentScaler';
@@ -159,7 +158,28 @@ export default function Sidebar() {
         </div>
         {isDesktop && (
           <div className="px-4 py-3 border-t border-outline-variant/20">
-            <SettingsPopover />
+            <Link
+              href="/settings"
+              className={`flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors ${
+                pathname === '/settings'
+                  ? 'text-primary'
+                  : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
+              }`}
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="8" cy="8" r="2" />
+                <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
+              </svg>
+              <span className="text-[13px] font-medium">{t('common.settings')}</span>
+            </Link>
           </div>
         )}
       </div>

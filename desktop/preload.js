@@ -35,4 +35,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("clipboard:changed", handler);
     return () => ipcRenderer.removeListener("clipboard:changed", handler);
   },
+
+  // SimC version management
+  getSimcStatus: () => ipcRenderer.invoke("simc:status"),
+  listSimcVersions: () => ipcRenderer.invoke("simc:list-versions"),
+  checkSimcUpdates: () => ipcRenderer.invoke("simc:check-updates"),
+  installSimcVersion: (release) => ipcRenderer.invoke("simc:install-version", release),
+  setActiveSimcVersion: (tag) => ipcRenderer.invoke("simc:set-active", tag),
+  removeSimcVersion: (tag) => ipcRenderer.invoke("simc:remove-version", tag),
+  onSimcDownloadProgress: (callback) => {
+    const handler = (_event, progress) => callback(progress);
+    ipcRenderer.on("simc:download-progress", handler);
+    return () => ipcRenderer.removeListener("simc:download-progress", handler);
+  },
+  onSimcStatusChanged: (callback) => {
+    const handler = (_event, status) => callback(status);
+    ipcRenderer.on("simc:status-changed", handler);
+    return () => ipcRenderer.removeListener("simc:status-changed", handler);
+  },
+
+  // App settings
+  getSetting: (key, defaultValue) => ipcRenderer.invoke("settings:get", key, defaultValue),
+  setSetting: (key, value) => ipcRenderer.invoke("settings:set", key, value),
 });

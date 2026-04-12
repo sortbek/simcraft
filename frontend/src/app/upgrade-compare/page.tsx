@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
+import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import GearItemRow from '../components/gear/GearItemRow';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from '../lib/api';
@@ -369,6 +370,7 @@ export default function UpgradeComparePage() {
         )}
       </div>
 
+      <SimcDownloadBanner />
       <ErrorAlert message={error} />
 
       <ConfigFooter

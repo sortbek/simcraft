@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
+import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
 import EnchantGemSelector from '../components/gear/EnchantGemSelector';
@@ -531,6 +532,7 @@ export default function TopGearPage() {
         </>
       )}
 
+      <SimcDownloadBanner />
       <ErrorAlert message={error} />
 
       <ConfigFooter

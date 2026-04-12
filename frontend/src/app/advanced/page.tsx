@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
+import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { API_URL } from '../lib/api';
 import { useLanguage } from '../lib/i18n';
 
@@ -62,6 +63,7 @@ export default function AdvancedPage() {
         />
       </div>
 
+      <SimcDownloadBanner />
       <ErrorAlert message={error} />
 
       <div className="flex justify-end">

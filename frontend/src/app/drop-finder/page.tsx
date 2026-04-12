@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
+import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 import { API_URL } from '../lib/api';
@@ -623,6 +624,7 @@ export default function DropFinderPage() {
             equippedEmbellishments={equippedEmbellishments}
           />
 
+          <SimcDownloadBanner />
           <ErrorAlert message={error} />
         </>
       )}

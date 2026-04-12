@@ -13,8 +13,7 @@
     "build": "npm run build:frontend && npm run build:backend && electron-builder",
     "publish": "node scripts/publish.js",
     "build:frontend": "npm run --prefix ../frontend build:desktop && node scripts/copy-frontend.js",
-    "build:backend": "node scripts/build-backend.js",
-    "build:simc": "node scripts/build-simc.js"
+    "build:backend": "node scripts/build-backend.js"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
@@ -34,10 +33,6 @@
       {
         "from": "resources/data",
         "to": "data"
-      },
-      {
-        "from": "resources/simc",
-        "to": "simc"
       },
       {
         "from": "resources/frontend",
