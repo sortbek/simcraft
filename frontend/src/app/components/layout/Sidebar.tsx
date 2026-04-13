@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import SidebarRoutes from './SidebarRoutes';
 import LanguageSelector from './LanguageSelector';
@@ -13,8 +13,6 @@ import type { SeasonConfigResponse } from '../../lib/types';
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const fullUrl = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const isDesktop = useIsDesktop();
   const { t } = useLanguage();
@@ -29,10 +27,10 @@ export default function Sidebar() {
 
   const dropFinderChildren = useMemo(() => {
     const entries: { href: string; label: string; sort: number }[] = [
-      { href: '/drop-finder?source=raids', label: t('loot.raids'), sort: 2 },
+      { href: '/drop-finder/raids', label: t('loot.raids'), sort: 2 },
     ];
     for (const cat of seasonConfig?.dungeon_categories ?? []) {
-      entries.push({ href: `/drop-finder?source=${cat.key}`, label: cat.label, sort: cat.sortOrder ?? 99 });
+      entries.push({ href: `/drop-finder/${cat.key}`, label: cat.label, sort: cat.sortOrder ?? 99 });
     }
     entries.sort((a, b) => a.sort - b.sort);
     return entries;
@@ -50,7 +48,7 @@ export default function Sidebar() {
       matchPaths: ['/top-gear'],
     },
     {
-      href: dropFinderChildren[0]?.href ?? '/drop-finder?source=mplus',
+      href: dropFinderChildren[0]?.href ?? '/drop-finder/mplus',
       label: t('nav.dropFinder'),
       matchPaths: ['/drop-finder'],
       children: dropFinderChildren,
@@ -113,9 +111,7 @@ export default function Sidebar() {
               {hasChildren && isExpanded && (
                 <div className="ml-6 border-l border-outline-variant/20 mt-1 space-y-0.5">
                   {item.children!.map((child) => {
-                    const childActive = child.href.includes('?')
-                      ? fullUrl === child.href
-                      : pathname === child.href || pathname.startsWith(child.href + '/');
+                    const childActive = pathname === child.href || pathname.startsWith(child.href + '/');
                     return (
                       <Link
                         key={child.href}
