@@ -16,6 +16,21 @@ pub static MAX_JOBS: AtomicUsize = AtomicUsize::new(200);
 pub static MAX_SCENARIOS: AtomicUsize = AtomicUsize::new(10);
 pub static MAX_COMBINATIONS: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DatabaseBackend {
+    Sqlite,
+    Postgres,
+}
+
+impl DatabaseBackend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sqlite => "sqlite",
+            Self::Postgres => "postgres",
+        }
+    }
+}
+
 /// Initialize limits from environment variables. Call once at startup.
 pub fn init_limits() {
     let max_jobs = std::env::var("MAX_JOBS")
@@ -35,6 +50,72 @@ pub fn init_limits() {
     MAX_COMBINATIONS.store(max_combos, Ordering::Relaxed);
 }
 
+fn is_sqlite_url(url: &str) -> bool {
+    url.starts_with("sqlite:") || !url.contains("://")
+}
+
+fn is_postgres_url(url: &str) -> bool {
+    url.starts_with("postgres://") || url.starts_with("postgresql://")
+}
+
+fn resolve_backend(url: &str, configured: Option<&str>) -> Result<DatabaseBackend, String> {
+    if let Some(raw_backend) = configured {
+        let backend = match raw_backend.trim().to_ascii_lowercase().as_str() {
+            "sqlite" => DatabaseBackend::Sqlite,
+            "postgres" | "postgresql" => {
+                if !cfg!(feature = "postgres") {
+                    return Err(
+                        "DB_BACKEND=postgres requires a build with the `postgres` feature enabled"
+                            .to_string(),
+                    );
+                }
+                DatabaseBackend::Postgres
+            }
+            other => {
+                return Err(format!(
+                    "Unsupported DB_BACKEND value '{other}'. Expected 'sqlite' or 'postgres'."
+                ));
+            }
+        };
+
+        return match backend {
+            DatabaseBackend::Sqlite if is_sqlite_url(url) => Ok(DatabaseBackend::Sqlite),
+            DatabaseBackend::Sqlite => Err(
+                "DB_BACKEND=sqlite requires a SQLite DATABASE_URL or plain SQLite file path"
+                    .to_string(),
+            ),
+            DatabaseBackend::Postgres if is_postgres_url(url) => Ok(DatabaseBackend::Postgres),
+            DatabaseBackend::Postgres => Err(
+                "DB_BACKEND=postgres requires a postgres:// or postgresql:// DATABASE_URL"
+                    .to_string(),
+            ),
+        };
+    }
+
+    if is_sqlite_url(url) {
+        return Ok(DatabaseBackend::Sqlite);
+    }
+
+    if is_postgres_url(url) {
+        if !cfg!(feature = "postgres") {
+            return Err(
+                "PostgreSQL DATABASE_URL provided, but this build does not enable the `postgres` feature"
+                    .to_string(),
+            );
+        }
+        return Ok(DatabaseBackend::Postgres);
+    }
+
+    Err(format!(
+        "Unsupported DATABASE_URL scheme for '{url}'. Set DB_BACKEND explicitly if needed."
+    ))
+}
+
+pub fn configured_backend(url: &str) -> Result<DatabaseBackend, String> {
+    let configured = std::env::var("DB_BACKEND").ok();
+    resolve_backend(url, configured.as_deref())
+}
+
 pub struct Database {
     pub pool: AnyPool,
 }
@@ -43,8 +124,15 @@ impl Database {
     pub async fn connect(url: &str) -> Result<Self, sqlx::Error> {
         sqlx::any::install_default_drivers();
 
-        // For SQLite: ensure the file is created if it doesn't exist
-        let connect_url = if url.starts_with("sqlite:") && !url.contains("mode=") {
+        let backend = configured_backend(url).map_err(|message| {
+            sqlx::Error::Configuration(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                message,
+            )))
+        })?;
+        let is_sqlite = matches!(backend, DatabaseBackend::Sqlite);
+
+        let connect_url = if is_sqlite && !url.contains("mode=") {
             if url.contains('?') {
                 format!("{}&mode=rwc", url)
             } else {
@@ -54,13 +142,79 @@ impl Database {
             url.to_string()
         };
 
-        let pool = AnyPoolOptions::new()
-            .max_connections(5)
-            .connect(&connect_url)
-            .await?;
+        // SQLite: single writer, busy timeout to handle brief lock contention
+        // PostgreSQL: standard pool with multiple connections
+        let pool = if is_sqlite {
+            AnyPoolOptions::new()
+                .max_connections(1)
+                .connect(&connect_url)
+                .await?
+        } else {
+            AnyPoolOptions::new()
+                .max_connections(5)
+                .connect(&connect_url)
+                .await?
+        };
+
+        // Enable WAL mode for SQLite — allows concurrent reads while writing
+        if is_sqlite {
+            if let Err(e) = sqlx::query("PRAGMA journal_mode=WAL")
+                .execute(&pool)
+                .await
+            {
+                eprintln!("Failed to enable SQLite WAL mode: {}", e);
+            }
+            if let Err(e) = sqlx::query("PRAGMA busy_timeout=5000")
+                .execute(&pool)
+                .await
+            {
+                eprintln!("Failed to set SQLite busy_timeout: {}", e);
+            }
+        }
 
         sqlx::migrate!("../migrations").run(&pool).await?;
 
         Ok(Self { pool })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_backend, DatabaseBackend};
+
+    #[test]
+    fn infers_sqlite_from_plain_path() {
+        assert_eq!(
+            resolve_backend("simhammer.db", None).unwrap(),
+            DatabaseBackend::Sqlite
+        );
+    }
+
+    #[test]
+    fn enforces_sqlite_runtime_selection() {
+        let err = resolve_backend("postgresql://db.example.com/simhammer", Some("sqlite"))
+            .unwrap_err();
+        assert!(err.contains("DB_BACKEND=sqlite"));
+    }
+
+    #[test]
+    fn rejects_unknown_runtime_backend() {
+        let err = resolve_backend("simhammer.db", Some("mysql")).unwrap_err();
+        assert!(err.contains("Unsupported DB_BACKEND"));
+    }
+
+    #[test]
+    fn handles_postgres_runtime_selection() {
+        let result = resolve_backend(
+            "postgresql://db.example.com:5432/simhammer",
+            Some("postgres"),
+        );
+        if cfg!(feature = "postgres") {
+            assert_eq!(result.unwrap(), DatabaseBackend::Postgres);
+        } else {
+            let err = result.unwrap_err();
+            assert!(err.contains("DB_BACKEND=postgres"));
+            assert!(err.contains("postgres"));
+        }
     }
 }

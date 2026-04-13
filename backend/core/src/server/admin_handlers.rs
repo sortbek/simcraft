@@ -100,7 +100,14 @@ pub(super) async fn get_settings(
         return resp;
     }
 
-    let stored = settings.get_all().await.unwrap_or_default();
+    let stored = match settings.get_all().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to read admin settings: {}", e);
+            return HttpResponse::InternalServerError()
+                .json(json!({"detail": "Failed to read settings from database"}));
+        }
+    };
 
     HttpResponse::Ok().json(json!({
         "settings": {
@@ -137,12 +144,20 @@ pub(super) async fn update_settings(
     let mut updated = Vec::new();
 
     if let Some(val) = body.max_combinations {
-        let _ = settings.set("max_combinations", &val.to_string()).await;
+        if let Err(e) = settings.set("max_combinations", &val.to_string()).await {
+            eprintln!("Failed to persist max_combinations: {}", e);
+            return HttpResponse::InternalServerError()
+                .json(json!({"detail": "Failed to save max_combinations"}));
+        }
         db::MAX_COMBINATIONS.store(val, Ordering::Relaxed);
         updated.push("max_combinations");
     }
     if let Some(val) = body.max_scenarios {
-        let _ = settings.set("max_scenarios", &val.to_string()).await;
+        if let Err(e) = settings.set("max_scenarios", &val.to_string()).await {
+            eprintln!("Failed to persist max_scenarios: {}", e);
+            return HttpResponse::InternalServerError()
+                .json(json!({"detail": "Failed to save max_scenarios"}));
+        }
         db::MAX_SCENARIOS.store(val, Ordering::Relaxed);
         updated.push("max_scenarios");
     }

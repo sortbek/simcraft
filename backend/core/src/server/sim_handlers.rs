@@ -74,8 +74,12 @@ pub(super) async fn create_sim(
     let jid_logs = job_id.clone();
 
     tokio::spawn(async move {
-        let _ = repo_clone.update_status(&job_id_clone, JobStatus::Running).await;
-        let _ = repo_clone.update_progress(&job_id_clone, 20, "Simulating", "").await;
+        if let Err(e) = repo_clone.update_status(&job_id_clone, JobStatus::Running).await {
+            eprintln!("[{}] Failed to set Running status: {}", job_id_clone, e);
+        }
+        if let Err(e) = repo_clone.update_progress(&job_id_clone, 20, "Simulating", "").await {
+            eprintln!("[{}] Failed to update progress: {}", job_id_clone, e);
+        }
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
         match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options, move |line| {
@@ -88,8 +92,12 @@ pub(super) async fn create_sim(
                 inject_realm(&mut parsed, &simc_input);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
-                let _ = repo_clone.set_result(&job_id_clone, &result_str, raw_str.as_deref()).await;
-                let _ = repo_clone.set_report_files(&job_id_clone, output.html_report.as_deref(), output.text_output.as_deref()).await;
+                if let Err(e) = repo_clone.set_result(&job_id_clone, &result_str, raw_str.as_deref()).await {
+                    eprintln!("[{}] Failed to set result: {}", job_id_clone, e);
+                }
+                if let Err(e) = repo_clone.set_report_files(&job_id_clone, output.html_report.as_deref(), output.text_output.as_deref()).await {
+                    eprintln!("[{}] Failed to set report files: {}", job_id_clone, e);
+                }
             }
             Err(e) => {
                 let is_cancelled = repo_clone
@@ -100,7 +108,9 @@ pub(super) async fn create_sim(
                     .map(|j| j.status == JobStatus::Cancelled)
                     .unwrap_or(false);
                 if !is_cancelled {
-                    let _ = repo_clone.set_error(&job_id_clone, &e).await;
+                    if let Err(db_err) = repo_clone.set_error(&job_id_clone, &e).await {
+                        eprintln!("[{}] Failed to set error: {}", job_id_clone, db_err);
+                    }
                 }
             }
         }

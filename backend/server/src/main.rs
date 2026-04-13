@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use simhammer_core::db;
 use simhammer_core::game_data;
 use simhammer_core::server;
 use simhammer_core::server::SimcBinaries;
@@ -9,9 +10,23 @@ fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
+/// Return a display-safe version of a database URL (credentials removed).
+fn redact_database_url(url: &str) -> String {
+    if url.starts_with("sqlite:") || !url.contains("://") {
+        return url.to_string();
+    }
+    // postgres://user:pass@host:5432/db -> postgres://***@host:5432/db
+    if let Some(at_pos) = url.find('@') {
+        if let Some(scheme_end) = url.find("://") {
+            return format!("{}://***{}", &url[..scheme_end], &url[at_pos..]);
+        }
+    }
+    url.to_string()
+}
+
 #[tokio::main]
 async fn main() {
-    simhammer_core::db::init_limits();
+    db::init_limits();
     let desktop_mode = std::env::args().any(|a| a == "--desktop");
 
     let data_dir = PathBuf::from(env_or("DATA_DIR", "./resources/data"));
@@ -57,6 +72,8 @@ async fn main() {
     } else {
         format!("sqlite://{}", db_url)
     };
+    let database_backend = db::configured_backend(&database_url)
+        .unwrap_or_else(|e| panic!("Invalid database configuration: {}", e));
 
     if desktop_mode {
         println!(
@@ -66,7 +83,8 @@ async fn main() {
     } else {
         println!("Starting SimHammer server on {}:{}", bind_host, port);
     }
-    println!("Database: {}", database_url);
+    println!("Database backend: {}", database_backend.as_str());
+    println!("Database: {}", redact_database_url(&database_url));
 
     server::start_server(
         &database_url,
@@ -80,4 +98,34 @@ async fn main() {
 
     // Keep the server running
     tokio::signal::ctrl_c().await.ok();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_database_url;
+
+    #[test]
+    fn leaves_sqlite_urls_unchanged() {
+        assert_eq!(
+            redact_database_url("sqlite://simhammer.db"),
+            "sqlite://simhammer.db"
+        );
+        assert_eq!(redact_database_url("simhammer.db"), "simhammer.db");
+    }
+
+    #[test]
+    fn redacts_network_database_credentials() {
+        assert_eq!(
+            redact_database_url("postgresql://user:secret@db.example.com:5432/simhammer"),
+            "postgresql://***@db.example.com:5432/simhammer"
+        );
+    }
+
+    #[test]
+    fn leaves_network_urls_without_credentials_unchanged() {
+        assert_eq!(
+            redact_database_url("postgresql://db.example.com:5432/simhammer"),
+            "postgresql://db.example.com:5432/simhammer"
+        );
+    }
 }

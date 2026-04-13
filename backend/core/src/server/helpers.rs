@@ -254,7 +254,26 @@ pub(super) fn inject_realm(parsed: &mut Value, simc_input: &str) {
     }
 }
 
+enum JobUpdate {
+    Progress { pct: u8, stage: String, detail: String },
+    StageComplete { summary: String },
+}
+
+fn enqueue_job_update(
+    tx: &tokio::sync::mpsc::UnboundedSender<JobUpdate>,
+    update: JobUpdate,
+    job_id: &str,
+) {
+    if tx.send(update).is_err() {
+        eprintln!("[{}] Failed to enqueue job update: writer task is closed", job_id);
+    }
+}
+
 /// Spawn a staged (top-gear / droptimizer) simulation in a background task.
+/// Progress and stage writes are serialized through an mpsc channel to prevent
+/// racing. An unbounded channel keeps these callbacks lossless because staged
+/// sim runs emit a finite burst of updates and we always await the writer drain
+/// before persisting terminal state.
 pub(super) fn spawn_staged_sim(
     repo: JobRepo,
     simc: PathBuf,
@@ -265,42 +284,83 @@ pub(super) fn spawn_staged_sim(
     log_buffer: Arc<LogBuffer>,
 ) {
     tokio::spawn(async move {
-        let _ = repo.update_status(&job_id, JobStatus::Running).await;
-        let repo_progress = repo.clone();
-        let repo_stages = repo.clone();
-        let jid_progress = job_id.clone();
-        let jid_stages = job_id.clone();
+        if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
+            eprintln!("[{}] Failed to set Running status: {}", job_id, e);
+        }
+
+        // Channel for ordered progress/stage writes
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<JobUpdate>();
+        let writer_repo = repo.clone();
+        let writer_jid = job_id.clone();
+        let writer_handle = tokio::spawn(async move {
+            while let Some(update) = rx.recv().await {
+                match update {
+                    JobUpdate::Progress { pct, stage, detail } => {
+                        if let Err(e) = writer_repo
+                            .update_progress(&writer_jid, pct, &stage, &detail)
+                            .await
+                        {
+                            eprintln!("[{}] Failed to update progress: {}", writer_jid, e);
+                        }
+                    }
+                    JobUpdate::StageComplete { summary } => {
+                        if let Err(e) =
+                            writer_repo.complete_stage(&writer_jid, &summary).await
+                        {
+                            eprintln!("[{}] Failed to complete stage: {}", writer_jid, e);
+                        }
+                    }
+                }
+            }
+        });
+
+        let tx_progress = tx.clone();
+        let tx_stages = tx.clone();
+        let progress_log_jid = job_id.clone();
+        let stages_log_jid = job_id.clone();
         let logs = log_buffer.clone();
         let jid_logs = job_id.clone();
-        match simc_runner::run_simc_staged(
+
+        let result = simc_runner::run_simc_staged(
             &simc,
             &job_id,
             &simc_input,
             &options,
             combo_count,
             move |pct, stage, detail| {
-                let repo = repo_progress.clone();
-                let jid = jid_progress.clone();
-                let stage = stage.to_string();
-                let detail = detail.to_string();
-                tokio::spawn(async move {
-                    repo.update_progress(&jid, pct, &stage, &detail).await.ok();
-                });
+                enqueue_job_update(
+                    &tx_progress,
+                    JobUpdate::Progress {
+                        pct,
+                        stage: stage.to_string(),
+                        detail: detail.to_string(),
+                    },
+                    &progress_log_jid,
+                );
             },
             move |summary| {
-                let repo = repo_stages.clone();
-                let jid = jid_stages.clone();
-                let summary = summary.to_string();
-                tokio::spawn(async move {
-                    repo.complete_stage(&jid, &summary).await.ok();
-                });
+                enqueue_job_update(
+                    &tx_stages,
+                    JobUpdate::StageComplete {
+                        summary: summary.to_string(),
+                    },
+                    &stages_log_jid,
+                );
             },
             move |line| {
                 logs.push_line(&jid_logs, line.to_string());
             },
         )
-        .await
-        {
+        .await;
+
+        // Close channel and wait for all queued writes to finish
+        drop(tx);
+        if let Err(e) = writer_handle.await {
+            eprintln!("[{}] Job update writer task failed: {}", job_id, e);
+        }
+
+        // Terminal writes — after all progress is flushed
+        match result {
             Ok(output) => {
                 let job_snap = repo.get(&job_id).await.ok().flatten();
                 let meta: Option<HashMap<String, Vec<Value>>> = job_snap
@@ -314,8 +374,12 @@ pub(super) fn spawn_staged_sim(
                 inject_realm(&mut parsed, &simc_input);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
-                let _ = repo.set_result(&job_id, &result_str, raw_str.as_deref()).await;
-                let _ = repo.set_report_files(&job_id, output.html_report.as_deref(), output.text_output.as_deref()).await;
+                if let Err(e) = repo.set_result(&job_id, &result_str, raw_str.as_deref()).await {
+                    eprintln!("[{}] Failed to set result: {}", job_id, e);
+                }
+                if let Err(e) = repo.set_report_files(&job_id, output.html_report.as_deref(), output.text_output.as_deref()).await {
+                    eprintln!("[{}] Failed to set report files: {}", job_id, e);
+                }
             }
             Err(e) => {
                 let is_cancelled = repo
@@ -326,7 +390,9 @@ pub(super) fn spawn_staged_sim(
                     .map(|j| j.status == JobStatus::Cancelled)
                     .unwrap_or(false);
                 if !is_cancelled {
-                    let _ = repo.set_error(&job_id, &e).await;
+                    if let Err(db_err) = repo.set_error(&job_id, &e).await {
+                        eprintln!("[{}] Failed to set error: {}", job_id, db_err);
+                    }
                 }
             }
         }
