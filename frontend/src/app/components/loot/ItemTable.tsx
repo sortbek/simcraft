@@ -119,10 +119,6 @@ export default function ItemTable({
   );
   const filteredTotal = groupedItems.reduce((n, [, items]) => n + items.length, 0);
   const allSelected = filteredTotal > 0 && groupedItems.every(([, items]) => items.every((item) => selected.has(item.item_id)));
-  const hasSearchFilter = filterText.trim().length > 0;
-  const selectLabel = hasSearchFilter ? 'Select Visible' : 'Select All';
-  const clearLabel = hasSearchFilter ? 'Clear Visible' : 'Clear All';
-
   return (
     <div className="rounded-xl border border-outline-variant/5 bg-surface-container overflow-hidden shadow-2xl">
       {/* Header */}
@@ -141,30 +137,6 @@ export default function ItemTable({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {hasMultipleDungeons && (
-            <div className="flex rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-0.5">
-              <button
-                onClick={() => setGroupBy('slot')}
-                className={`rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all ${
-                  groupBy === 'slot'
-                    ? 'bg-secondary-container text-primary shadow-sm'
-                    : 'text-on-surface-variant/60 hover:text-on-surface-variant'
-                }`}
-              >
-                By Slot
-              </button>
-              <button
-                onClick={() => setGroupBy('dungeon')}
-                className={`rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all ${
-                  groupBy === 'dungeon'
-                    ? 'bg-secondary-container text-primary shadow-sm'
-                    : 'text-on-surface-variant/60 hover:text-on-surface-variant'
-                }`}
-              >
-                By Dungeon
-              </button>
-            </div>
-          )}
           <div className="relative">
             <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/55" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <circle cx="6.5" cy="6.5" r="4.5" />
@@ -175,21 +147,45 @@ export default function ItemTable({
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
               placeholder="Filter items..."
-              className="h-9 w-48 rounded-lg border border-transparent bg-surface-container-high py-2 pl-10 pr-4 text-sm text-on-surface placeholder-on-surface-variant/45 outline-none transition-all duration-150 hover:bg-surface-container-highest focus:border-gold/40 focus:bg-surface-container-highest focus:ring-2 focus:ring-gold/15"
+              className="h-10 w-64 rounded-lg border border-transparent bg-surface-container-high py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/45 outline-none transition-all duration-150 hover:bg-surface-container-highest focus:border-gold/40 focus:bg-surface-container-highest focus:ring-2 focus:ring-gold/15"
             />
+            {filterText && (
+              <button
+                type="button"
+                onClick={() => setFilterText('')}
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant/55 transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+                aria-label="Clear search"
+              >
+                <svg viewBox="0 0 12 12" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <path d="M3 3l6 6M9 3L3 9" />
+                </svg>
+              </button>
+            )}
           </div>
-          <button
-            onClick={() =>
-              allSelected ? onClearItems(visibleItemIds) : onSelectItems(visibleItemIds)
-            }
-            className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all duration-150 ${
-              allSelected
-                ? 'border-gold/40 bg-gold/[0.08] text-gold'
-                : 'border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
-            }`}
-          >
-            {allSelected ? clearLabel : selectLabel}
-          </button>
+          {hasMultipleDungeons && (
+            <div className="flex h-10 items-center rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-0">
+              <button
+                onClick={() => setGroupBy('slot')}
+                className={`flex h-10 items-center rounded-md px-3 text-sm font-medium transition-all duration-150 ${
+                  groupBy === 'slot'
+                    ? 'bg-secondary-container text-primary shadow-sm'
+                    : 'text-on-surface-variant/60 hover:text-on-surface-variant'
+                }`}
+              >
+                By Slot
+              </button>
+              <button
+                onClick={() => setGroupBy('dungeon')}
+                className={`flex h-10 items-center rounded-md px-3 text-sm font-medium transition-all duration-150 ${
+                  groupBy === 'dungeon'
+                    ? 'bg-secondary-container text-primary shadow-sm'
+                    : 'text-on-surface-variant/60 hover:text-on-surface-variant'
+                }`}
+              >
+                By Dungeon
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
