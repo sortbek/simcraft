@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
@@ -8,7 +9,6 @@ import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup, DungeonCategory } from '../lib/types';
-import CategorySelector from '../components/loot/CategorySelector';
 import ItemTable from '../components/loot/ItemTable';
 import DungeonDrawer from '../components/loot/DungeonDrawer';
 import DifficultySelect from '../components/loot/DifficultySelect';
@@ -28,7 +28,6 @@ import {
   type UpgradeTracks,
 } from '../components/loot/types';
 
-type Category = 'raids' | string;
 
 const SLOT_ORDER = [
   'Main Hand', 'Off Hand', 'Head', 'Neck', 'Shoulder', 'Back',
@@ -176,6 +175,8 @@ function Spinner() {
 export default function DropFinderPage() {
   const { t } = useLanguage();
   const { simcInput, hasInput } = useSimContext();
+  const searchParams = useSearchParams();
+  const category = searchParams.get('source') || 'mplus';
 
   // Spec selection: main spec on by default, off-specs toggleable
   const detectedClass = useMemo(() => detectClass(simcInput), [simcInput]);
@@ -239,9 +240,9 @@ export default function DropFinderPage() {
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
   const [upgradeLevel, setUpgradeLevel] = useState(0);
-  const [category, setCategory] = useState<Category | ''>('mplus');
-  // Dungeon pool: set of instance IDs that are "checked" (multi-select)
+  // Instance pool: set of instance IDs that are "checked" (multi-select)
   const [dungeonPool, setDungeonPool] = useState<Set<string>>(new Set());
+  const [raidPool, setRaidPool] = useState<Set<string>>(new Set());
   const [excludedSlots, setExcludedSlots] = useState<Set<string>>(new Set());
   const [slotFilterOpen, setSlotFilterOpen] = useState(false);
   const previousExcludedSlotsRef = useRef<Set<string>>(new Set());
@@ -266,6 +267,7 @@ export default function DropFinderPage() {
   useEffect(() => {
     if (category === 'raids') {
       setSelectedId('type:raid');
+      setRaidPool(new Set(raids.map((i) => String(i.id))));
     } else if (activeDungeonCat) {
       setSelectedId(String(activeDungeonCat.cat.poolInstanceId));
       setDungeonDiff(activeDungeonCat.cat.defaultDifficulty);
@@ -279,7 +281,7 @@ export default function DropFinderPage() {
     } else {
       setSelectedId('');
     }
-  }, [category, activeDungeonCat, dungeonInstances, setSelectedId]);
+  }, [category, activeDungeonCat, dungeonInstances, raids, setSelectedId]);
 
   // Select all items whenever drops change
   useEffect(() => {
@@ -289,13 +291,15 @@ export default function DropFinderPage() {
     setSelected(all);
   }, [drops]);
 
-  // Prune selection when dungeon pool filter changes
+  // Prune selection when instance pool filter changes
   useEffect(() => {
-    if (!drops || isRaid || isPoolOnly) return;
+    if (!drops || isPoolOnly) return;
+    const pool = isRaid ? raidPool : dungeonPool;
+    const instanceList = isRaid ? raids : dungeonInstances;
     const selectedNames = new Set(
-      dungeonInstances.filter((i) => dungeonPool.has(String(i.id))).map((i) => i.name)
+      instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
     );
-    if (selectedNames.size === dungeonInstances.length) return; // all selected = no pruning needed
+    if (selectedNames.size === instanceList.length) return;
     const available = new Set<number>();
     for (const items of Object.values(drops)) {
       for (const item of items) {
@@ -311,7 +315,7 @@ export default function DropFinderPage() {
       }
       return pruned.size === prev.size ? prev : pruned;
     });
-  }, [drops, dungeonPool, dungeonInstances, isRaid, isPoolOnly]);
+  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly]);
 
   const currentTrackInfo = useMemo(() => {
     if (!drops) return null;
@@ -359,23 +363,25 @@ export default function DropFinderPage() {
     return { ilvl, max, tc, track: selectedDiffDef.track, level: selectedDiffDef.level };
   }, [selectedDiffDef, upgradeTracks]);
 
-  // Filter drops by dungeon pool
+  // Filter drops by instance pool (dungeons or raids)
   const filteredDrops = useMemo(() => {
     if (!drops) return null;
-    if (isRaid || isPoolOnly) return drops;
-    if (dungeonPool.size === 0) return {};
-    // Get names of selected dungeons
+    if (isPoolOnly) return drops;
+
+    const pool = isRaid ? raidPool : dungeonPool;
+    const instanceList = isRaid ? raids : dungeonInstances;
+    if (pool.size === 0) return {};
     const selectedNames = new Set(
-      dungeonInstances.filter((i) => dungeonPool.has(String(i.id))).map((i) => i.name)
+      instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
     );
-    if (selectedNames.size === dungeonInstances.length) return drops; // all selected = no filter
+    if (selectedNames.size === instanceList.length) return drops; // all selected = no filter
     const filtered: Record<string, DropItem[]> = {};
     for (const [slot, items] of Object.entries(drops)) {
       const kept = items.filter((item) => !item.instance_name || selectedNames.has(item.instance_name));
       if (kept.length > 0) filtered[slot] = kept;
     }
     return filtered;
-  }, [drops, dungeonPool, dungeonInstances, isRaid, isPoolOnly]);
+  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];
@@ -589,109 +595,70 @@ export default function DropFinderPage() {
 
       <TalentPicker />
 
-      {/* Category pills */}
-      <div className="card p-5">
-        <label className="label-text">{t('dropFinder.source')}</label>
-        <CategorySelector
-          category={category}
-          onChange={setCategory}
-          dungeonCats={dungeonCats}
-        />
-      </div>
-
-      {/* Dungeon pool drawer */}
-      {isDungeon && !isPoolOnly && dungeonInstances.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
+      {/* Configuration card: dungeon pool + difficulty + upgrade level */}
+      {(isRaid || isDungeon) && (
+        <div className="card p-5 space-y-4">
+          {/* Instance pool drawer */}
+          {isDungeon && !isPoolOnly && dungeonInstances.length > 0 && (
             <div>
-              <h2 className="text-base font-bold text-on-surface">{t('dropFinder.dungeonPool') ?? 'Dungeon pool'}</h2>
-              <p className="text-xs text-on-surface-variant mt-0.5">
-                {t('dropFinder.dungeonPoolDesc') ?? 'All season dungeons start selected. Narrow the pool only when you want to exclude sources.'}
-              </p>
-            </div>
-            <span className="text-xs text-on-surface-variant">
-              {dungeonInstances.filter((i) => dungeonPool.has(String(i.id))).length} {t('dropFinder.selected') ?? 'selected'}
-            </span>
-          </div>
-          <DungeonDrawer
-            instances={dungeonInstances}
-            allKey={allKey}
-            allLabel={t('loot.allDungeons')}
-            selectedIds={dungeonPool}
-            onChange={setDungeonPool}
-          />
-        </div>
-      )}
-
-      {/* Raid instance selection (single-select for raids) */}
-
-      {/* Difficulty + upgrade level */}
-      {(isRaid || isDungeon) && activeDifficulties.length > 0 && (
-        <div className="card p-5">
-          <div className={`grid gap-4 ${currentTrackInfo && drops ? 'grid-cols-1 sm:grid-cols-2' : ''}`}>
-            <div>
-              <label className="label-text">{t('dropFinder.difficulty')}</label>
-              <DifficultySelect
-                value={isRaid ? difficulty : dungeonDiff}
-                onChange={(key, level) => {
-                  if (isRaid) {
-                    setDifficulty(key);
-                    setUpgradeLevel(0);
-                  } else {
-                    setDungeonDiff(key);
-                    setUpgradeLevel(level);
-                  }
-                }}
-                difficulties={activeDifficulties}
-                difficultyGroups={activeDifficultyGroups}
-                upgradeTracks={upgradeTracks}
-                isCrafted={isCrafted}
+              <label className="label-text">{t('dropFinder.dungeonPool') ?? 'Dungeon pool'}</label>
+              <DungeonDrawer
+                instances={dungeonInstances}
+                allKey={allKey}
+                allLabel={t('loot.allDungeons')}
+                selectedIds={dungeonPool}
+                onChange={setDungeonPool}
               />
             </div>
+          )}
+          {isRaid && raids.length > 0 && (
+            <div>
+              <label className="label-text">{t('dropFinder.selectRaid')}</label>
+              <DungeonDrawer
+                instances={raids}
+                allKey="type:raid"
+                allLabel={t('loot.allRaids')}
+                selectedIds={raidPool}
+                onChange={setRaidPool}
+              />
+            </div>
+          )}
 
-            {currentTrackInfo && drops && (
+          {/* Difficulty + upgrade level */}
+          {activeDifficulties.length > 0 && (
+            <div className={`grid gap-4 ${currentTrackInfo && drops ? 'grid-cols-1 sm:grid-cols-2' : ''}`}>
               <div>
-                <label className="label-text">{t('dropFinder.upgradeLevel')}</label>
-                <UpgradeSelect
-                  value={upgradeLevel}
-                  onChange={setUpgradeLevel}
-                  options={upgradeLevelOptions}
+                <label className="label-text">{t('dropFinder.difficulty')}</label>
+                <DifficultySelect
+                  value={isRaid ? difficulty : dungeonDiff}
+                  onChange={(key, level) => {
+                    if (isRaid) {
+                      setDifficulty(key);
+                      setUpgradeLevel(0);
+                    } else {
+                      setDungeonDiff(key);
+                      setUpgradeLevel(level);
+                    }
+                  }}
+                  difficulties={activeDifficulties}
+                  difficultyGroups={activeDifficultyGroups}
+                  upgradeTracks={upgradeTracks}
+                  isCrafted={isCrafted}
                 />
               </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Raid instance selection (single-select for raids) */}
-      {isRaid && raids.length > 0 && (
-        <div className="card p-5">
-          <label className="label-text">{t('dropFinder.selectRaid')}</label>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setSelectedId('type:raid')}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-all duration-150 ${
-                selectedId === 'type:raid'
-                  ? 'border-gold/40 bg-gold/[0.08] text-gold'
-                  : 'border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
-              }`}
-            >
-              {t('loot.allRaids')}
-            </button>
-            {raids.map((inst) => (
-              <button
-                key={inst.id}
-                onClick={() => setSelectedId(String(inst.id))}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-all duration-150 ${
-                  selectedId === String(inst.id)
-                    ? 'border-gold/40 bg-gold/[0.08] text-gold'
-                    : 'border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
-                }`}
-              >
-                {inst.name}
-              </button>
-            ))}
-          </div>
+              {currentTrackInfo && drops && (
+                <div>
+                  <label className="label-text">{t('dropFinder.upgradeLevel')}</label>
+                  <UpgradeSelect
+                    value={upgradeLevel}
+                    onChange={setUpgradeLevel}
+                    options={upgradeLevelOptions}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -850,9 +817,6 @@ export default function DropFinderPage() {
         </>
       )}
 
-      {!selectedId && !loading && !category && (
-        <p className="py-6 text-center text-sm text-muted">{t('dropFinder.selectCategory')}</p>
-      )}
 
       <ConfigFooter
         onSubmit={handleSubmit}

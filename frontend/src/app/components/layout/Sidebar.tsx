@@ -1,19 +1,42 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import SidebarRoutes from './SidebarRoutes';
 import LanguageSelector from './LanguageSelector';
 import { ScaleSelector } from './ContentScaler';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
+import { API_URL } from '../../lib/api';
+import type { SeasonConfigResponse } from '../../lib/types';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const fullUrl = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const isDesktop = useIsDesktop();
   const { t } = useLanguage();
+
+  const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
+  useEffect(() => {
+    fetch(`${API_URL}/api/season-config`)
+      .then((r) => r.json())
+      .then(setSeasonConfig)
+      .catch(() => {});
+  }, []);
+
+  const dropFinderChildren = useMemo(() => {
+    const entries: { href: string; label: string; sort: number }[] = [
+      { href: '/drop-finder?source=raids', label: t('loot.raids'), sort: 2 },
+    ];
+    for (const cat of seasonConfig?.dungeon_categories ?? []) {
+      entries.push({ href: `/drop-finder?source=${cat.key}`, label: cat.label, sort: cat.sortOrder ?? 99 });
+    }
+    entries.sort((a, b) => a.sort - b.sort);
+    return entries;
+  }, [seasonConfig, t]);
 
   const navItems = [
     {
@@ -27,13 +50,15 @@ export default function Sidebar() {
       matchPaths: ['/top-gear'],
     },
     {
-      href: '/drop-finder',
-      label: t('nav.upgrades'),
-      matchPaths: ['/drop-finder', '/upgrade-compare'],
-      children: [
-        { href: '/drop-finder', label: t('nav.dropFinder') },
-        { href: '/upgrade-compare', label: t('nav.crestUpgrades') },
-      ],
+      href: dropFinderChildren[0]?.href ?? '/drop-finder?source=mplus',
+      label: t('nav.dropFinder'),
+      matchPaths: ['/drop-finder'],
+      children: dropFinderChildren,
+    },
+    {
+      href: '/upgrade-compare',
+      label: t('nav.crestUpgrades'),
+      matchPaths: ['/upgrade-compare'],
     },
     {
       href: '/advanced',
@@ -88,8 +113,9 @@ export default function Sidebar() {
               {hasChildren && isExpanded && (
                 <div className="ml-6 border-l border-outline-variant/20 mt-1 space-y-0.5">
                   {item.children!.map((child) => {
-                    const childActive =
-                      pathname === child.href || pathname.startsWith(child.href + '/');
+                    const childActive = child.href.includes('?')
+                      ? fullUrl === child.href
+                      : pathname === child.href || pathname.startsWith(child.href + '/');
                     return (
                       <Link
                         key={child.href}

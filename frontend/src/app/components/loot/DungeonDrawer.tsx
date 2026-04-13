@@ -62,12 +62,12 @@ export default function DungeonDrawer({
 
   return (
     <details
-      className="card overflow-hidden"
+      className="overflow-hidden"
       open={open}
       onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
-        <div className="flex items-center justify-between gap-3 flex-1 rounded-xl border border-outline-variant/15 bg-surface-container-high px-4 py-3">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center justify-between gap-3 flex-1 rounded-xl border border-outline-variant/15 bg-surface-container-high px-3 py-2.5">
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-bold text-on-surface">{summaryLabel}</span>
             <span className="text-xs text-on-surface-variant">{summaryDetail}</span>
@@ -78,7 +78,7 @@ export default function DungeonDrawer({
         </div>
       </summary>
 
-      <div className="border-t border-outline-variant/10 px-4 pb-4">
+      <div className="pt-3">
         <div className="flex gap-3 pt-3 pb-2">
           <button
             type="button"

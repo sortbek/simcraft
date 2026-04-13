@@ -82,6 +82,7 @@ export interface DifficultyGroup {
 export interface DungeonCategory {
   key: string;
   label: string;
+  sortOrder?: number;
   poolInstanceId: number;
   defaultDifficulty: string;
   difficulties: DifficultyDef[];
