@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
@@ -9,8 +9,10 @@ import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup, DungeonCategory } from '../lib/types';
 import CategorySelector from '../components/loot/CategorySelector';
-import DropSlotList from '../components/loot/DropSlotList';
+import ItemTable from '../components/loot/ItemTable';
 import DungeonDrawer from '../components/loot/DungeonDrawer';
+import DifficultySelect from '../components/loot/DifficultySelect';
+import UpgradeSelect from '../components/loot/UpgradeSelect';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { useLanguage } from '../lib/i18n';
@@ -27,6 +29,11 @@ import {
 } from '../components/loot/types';
 
 type Category = 'raids' | string;
+
+const SLOT_ORDER = [
+  'Main Hand', 'Off Hand', 'Head', 'Neck', 'Shoulder', 'Back',
+  'Chest', 'Wrist', 'Hands', 'Waist', 'Legs', 'Feet', 'Finger', 'Trinket',
+];
 
 const TRACK_SHORT: Record<string, string> = {
   Adventurer: 'Adv',
@@ -235,6 +242,10 @@ export default function DropFinderPage() {
   const [category, setCategory] = useState<Category | ''>('mplus');
   // Dungeon pool: set of instance IDs that are "checked" (multi-select)
   const [dungeonPool, setDungeonPool] = useState<Set<string>>(new Set());
+  const [excludedSlots, setExcludedSlots] = useState<Set<string>>(new Set());
+  const [slotFilterOpen, setSlotFilterOpen] = useState(false);
+  const previousExcludedSlotsRef = useRef<Set<string>>(new Set());
+  const slotFilterRef = useRef<HTMLDetailsElement | null>(null);
 
   const isRaid = category === 'raids';
   const activeDungeonCat = dungeonCats.find((dc) => dc.cat.key === category);
@@ -351,7 +362,8 @@ export default function DropFinderPage() {
   // Filter drops by dungeon pool
   const filteredDrops = useMemo(() => {
     if (!drops) return null;
-    if (isRaid || dungeonPool.size === 0 || isPoolOnly) return drops;
+    if (isRaid || isPoolOnly) return drops;
+    if (dungeonPool.size === 0) return {};
     // Get names of selected dungeons
     const selectedNames = new Set(
       dungeonInstances.filter((i) => dungeonPool.has(String(i.id))).map((i) => i.name)
@@ -377,11 +389,63 @@ export default function DropFinderPage() {
     ];
   }, [currentTrackInfo, t]);
 
-  function selectAll() {
-    if (!filteredDrops) return;
-    const all = new Set<number>();
-    for (const items of Object.values(filteredDrops)) for (const item of items) all.add(item.item_id);
-    setSelected(all);
+  const availableSlots = useMemo(() => {
+    if (!filteredDrops) return [];
+    return Object.keys(filteredDrops).sort((a, b) => {
+      const ai = SLOT_ORDER.indexOf(a);
+      const bi = SLOT_ORDER.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  }, [filteredDrops]);
+
+  const visibleDrops = useMemo(() => {
+    if (!filteredDrops) return null;
+    if (excludedSlots.size === 0) return filteredDrops;
+
+    const filtered: Record<string, DropItem[]> = {};
+    for (const [slot, items] of Object.entries(filteredDrops)) {
+      if (!excludedSlots.has(slot)) filtered[slot] = items;
+    }
+    return filtered;
+  }, [filteredDrops, excludedSlots]);
+
+  const slotFilterSummary = useMemo(() => {
+    if (availableSlots.length === 0 || excludedSlots.size === 0) return 'All slots';
+    const visibleCount = availableSlots.filter((slot) => !excludedSlots.has(slot)).length;
+    if (visibleCount <= 0) return 'No slots';
+    if (visibleCount === 1) {
+      return availableSlots.find((slot) => !excludedSlots.has(slot)) ?? '1 slot';
+    }
+    return `${visibleCount} slots`;
+  }, [availableSlots, excludedSlots]);
+
+  function selectItems(itemIds: number[]) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const itemId of itemIds) next.add(itemId);
+      return next;
+    });
+  }
+
+  function clearItems(itemIds: number[]) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const itemId of itemIds) next.delete(itemId);
+      return next;
+    });
+  }
+
+  function toggleSlot(slot: string) {
+    setExcludedSlots((prev) => {
+      const next = new Set(prev);
+      if (next.has(slot)) next.delete(slot);
+      else next.add(slot);
+      return next;
+    });
+  }
+
+  function resetExcludedSlots() {
+    setExcludedSlots(new Set());
   }
 
   const headerLabel =
@@ -408,11 +472,70 @@ export default function DropFinderPage() {
     return `${checked} dungeons`;
   }, [isRaid, dungeonInstances, dungeonPool, t]);
 
+  useEffect(() => {
+    if (!filteredDrops) return;
+    if (excludedSlots.size === 0) return;
+
+    const available = new Set<number>();
+    for (const [slot, items] of Object.entries(filteredDrops)) {
+      if (excludedSlots.has(slot)) continue;
+      for (const item of items) available.add(item.item_id);
+    }
+
+    setSelected((prev) => {
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (available.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filteredDrops, excludedSlots]);
+
+  useEffect(() => {
+    if (!filteredDrops) return;
+
+    const previousExcluded = previousExcludedSlotsRef.current;
+    const reenabledSlots = [...previousExcluded].filter((slot) => !excludedSlots.has(slot));
+    previousExcludedSlotsRef.current = new Set(excludedSlots);
+
+    if (reenabledSlots.length === 0) return;
+
+    setSelected((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+
+      for (const slot of reenabledSlots) {
+        for (const item of filteredDrops[slot] ?? []) {
+          if (!next.has(item.item_id)) {
+            next.add(item.item_id);
+            changed = true;
+          }
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [filteredDrops, excludedSlots]);
+
+  useEffect(() => {
+    if (!slotFilterOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (slotFilterRef.current?.contains(target)) return;
+      setSlotFilterOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [slotFilterOpen]);
+
   // Sim submission
   const buildPayload = useCallback(() => {
-    if (!filteredDrops || selected.size === 0) return null;
+    if (!visibleDrops || selected.size === 0) return null;
     const dropItems: DropItem[] = [];
-    for (const items of Object.values(filteredDrops)) {
+    for (const items of Object.values(visibleDrops)) {
       for (const item of items) {
         if (selected.has(item.item_id)) {
           const resolved = resolveUpgrade(
@@ -432,12 +555,12 @@ export default function DropFinderPage() {
       }
     }
     return { simc_input: simcInput, drop_items: dropItems };
-  }, [filteredDrops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
+  }, [visibleDrops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
 
   const validate = useCallback(() => {
-    if (!filteredDrops || selected.size === 0) return t('validation.selectItems');
+    if (!visibleDrops || selected.size === 0) return t('validation.selectItems');
     return null;
-  }, [filteredDrops, selected, t]);
+  }, [visibleDrops, selected, t]);
 
   const {
     submit: handleSubmit,
@@ -505,95 +628,38 @@ export default function DropFinderPage() {
       {/* Difficulty + upgrade level */}
       {(isRaid || isDungeon) && activeDifficulties.length > 0 && (
         <div className="card p-5">
-            <div className="grid grid-cols-[1.2fr_0.8fr] gap-3">
-              {/* Difficulty select */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-                  {t('dropFinder.difficultyPreset') ?? 'Difficulty preset'}
-                </span>
-                <select
-                  value={currentDiff}
-                  onChange={(e) => {
-                    const key = e.target.value;
-                    const diff = activeDifficulties.find((d) => d.key === key);
-                    if (isRaid) {
-                      setDifficulty(key);
-                      setUpgradeLevel(0);
-                    } else {
-                      setDungeonDiff(key);
-                      setUpgradeLevel(diff?.level ?? 0);
-                    }
-                  }}
-                  className="h-[46px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-high px-3.5 text-sm font-medium text-on-surface outline-none focus:border-gold/40"
-                >
-                  {activeDifficultyGroups ? (
-                    activeDifficultyGroups.map((group) => (
-                      <optgroup key={group.label} label={group.label}>
-                        {group.difficulties.map((d) => {
-                          const trackLevels = d.track ? upgradeTracks[d.track] : null;
-                          const ilvl = trackLevels?.find((t) => t.level === d.level)?.ilvl ?? d.fixedIlvl;
-                          return (
-                            <option key={d.key} value={d.key}>
-                              {d.label}{ilvl ? ` — ilvl ${ilvl}` : ''}{d.track ? ` (${TRACK_SHORT[d.track] ?? d.track})` : ''}
-                            </option>
-                          );
-                        })}
-                      </optgroup>
-                    ))
-                  ) : (
-                    activeDifficulties.map((d) => {
-                      const trackLevels = d.track ? upgradeTracks[d.track] : null;
-                      const ilvl = trackLevels?.find((t) => t.level === d.level)?.ilvl ?? d.fixedIlvl;
-                      return (
-                        <option key={d.key} value={d.key}>
-                          {d.label}{ilvl ? ` — ilvl ${ilvl}` : ''}{d.track && !isCrafted ? ` (${TRACK_SHORT[d.track] ?? d.track})` : ''}
-                        </option>
-                      );
-                    })
-                  )}
-                </select>
+          <div className={`grid gap-4 ${currentTrackInfo && drops ? 'grid-cols-1 sm:grid-cols-2' : ''}`}>
+            <div>
+              <label className="label-text">{t('dropFinder.difficulty')}</label>
+              <DifficultySelect
+                value={isRaid ? difficulty : dungeonDiff}
+                onChange={(key, level) => {
+                  if (isRaid) {
+                    setDifficulty(key);
+                    setUpgradeLevel(0);
+                  } else {
+                    setDungeonDiff(key);
+                    setUpgradeLevel(level);
+                  }
+                }}
+                difficulties={activeDifficulties}
+                difficultyGroups={activeDifficultyGroups}
+                upgradeTracks={upgradeTracks}
+                isCrafted={isCrafted}
+              />
+            </div>
+
+            {currentTrackInfo && drops && (
+              <div>
+                <label className="label-text">{t('dropFinder.upgradeLevel')}</label>
+                <UpgradeSelect
+                  value={upgradeLevel}
+                  onChange={setUpgradeLevel}
+                  options={upgradeLevelOptions}
+                />
               </div>
-
-              {/* Upgrade level */}
-              {currentTrackInfo && drops ? (
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-                    {t('dropFinder.upgradeLevel')}
-                  </span>
-                  <select
-                    value={upgradeLevel}
-                    onChange={(e) => setUpgradeLevel(Number(e.target.value))}
-                    className="h-[46px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-high px-3.5 text-sm font-medium text-on-surface outline-none focus:border-gold/40"
-                  >
-                    {upgradeLevelOptions.map((opt) => (
-                      <option key={opt.key} value={opt.key}>
-                        {opt.label}{'sublabel' in opt && opt.sublabel ? ` — ilvl ${opt.sublabel}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div />
-              )}
-            </div>
-
-            {/* Mini pills */}
-            <div className="flex flex-wrap gap-2 mt-2.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-outline-variant/15 bg-surface-container-high px-2.5 py-1.5 text-xs text-on-surface-variant">
-                <strong className="font-bold text-on-surface">{t('dropFinder.source')}</strong>
-                {categoryLabel}
-              </span>
-              {selectedDiffInfo?.track && (
-                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs ${selectedDiffInfo.tc?.border ?? 'border-outline-variant/15'} ${selectedDiffInfo.tc?.bg ?? 'bg-surface-container-high'}`}>
-                  <strong className={`font-bold ${selectedDiffInfo.tc?.text ?? 'text-on-surface'}`}>
-                    {t('dropFinder.upgradeLabel') ?? 'Upgrade'}
-                  </strong>
-                  <span className={selectedDiffInfo.tc?.text ?? 'text-on-surface-variant'}>
-                    {TRACK_SHORT[selectedDiffInfo.track] ?? selectedDiffInfo.track} {selectedDiffInfo.level}/{selectedDiffInfo.max}
-                  </span>
-                </span>
-              )}
-            </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -630,55 +696,136 @@ export default function DropFinderPage() {
       )}
 
       {/* Spec filter */}
-      {className ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs text-on-surface-variant">
-            {t('dropFinder.showingLoot', { class: className.replace('_', ' ') })}
+      <div className="flex flex-wrap items-center gap-2">
+        {className ? (
+          <>
+            <p className="text-xs text-on-surface-variant">
+              {t('dropFinder.showingLoot', { class: className.replace('_', ' ') })}
+            </p>
+            {allSpecs.length > 1 && (
+              <>
+                <span className="h-3.5 w-px bg-outline-variant/20" />
+                <div className="flex flex-wrap gap-1">
+                  {allSpecs.map((spec) => {
+                    const isActive = activeSpecs.has(spec);
+                    const isMain = spec === detectedSpec;
+                    return (
+                      <button
+                        key={spec}
+                        onClick={() => toggleSpec(spec)}
+                        className={`rounded-md px-2 py-0.5 text-[13px] font-medium transition-all duration-150 ${
+                          isActive
+                            ? 'bg-gold/[0.08] text-gold'
+                            : 'bg-surface-container-high text-on-surface-variant/40 hover:bg-surface-container-highest hover:text-on-surface-variant'
+                        }`}
+                      >
+                        {formatSpecName(spec)}
+                        {isMain && <span className="ml-1 text-[11px] opacity-50">{t('dropFinder.mainSpec')}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-muted">
+            {t('dropFinder.pasteExport')}
           </p>
-          {allSpecs.length > 1 && (
-            <>
-              <span className="h-3.5 w-px bg-outline-variant/20" />
-              <div className="flex flex-wrap gap-1">
-                {allSpecs.map((spec) => {
-                  const isActive = activeSpecs.has(spec);
-                  const isMain = spec === detectedSpec;
-                  return (
+        )}
+
+        {availableSlots.length > 1 && (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="h-3.5 w-px bg-outline-variant/20" />
+            <details
+              ref={slotFilterRef}
+              className="relative"
+              open={slotFilterOpen}
+              onToggle={(e) => setSlotFilterOpen((e.target as HTMLDetailsElement).open)}
+            >
+              <summary className={`flex cursor-pointer list-none items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all duration-150 [&::-webkit-details-marker]:hidden ${
+                slotFilterOpen || excludedSlots.size > 0
+                  ? 'border-gold/40 bg-gold/[0.08] text-gold'
+                  : 'border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
+              }`}>
+                <span className="font-semibold">Slots</span>
+                <span className={slotFilterOpen || excludedSlots.size > 0 ? 'text-gold/90' : ''}>{slotFilterSummary}</span>
+                {excludedSlots.size > 0 && (
+                  <span className="rounded-full border border-gold/20 bg-black/10 px-1.5 py-0.5 text-[10px] font-bold text-gold">
+                    {excludedSlots.size} hidden
+                  </span>
+                )}
+                <svg
+                  className={`h-3 w-3 transition-transform ${slotFilterOpen ? 'rotate-180' : ''}`}
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2.5 4.5L6 8l3.5-3.5" />
+                </svg>
+              </summary>
+              <div className="absolute right-0 top-full z-20 mt-2 w-[min(28rem,calc(100vw-2rem))] rounded-2xl border border-outline-variant/15 bg-surface-container p-3 shadow-2xl">
+                <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">
+                      Slot Filter
+                    </p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      Disable slots you want to leave out of the current sim.
+                    </p>
+                  </div>
+                  {excludedSlots.size > 0 && (
                     <button
-                      key={spec}
-                      onClick={() => toggleSpec(spec)}
-                      className={`rounded-md px-2 py-0.5 text-[13px] font-medium transition-all duration-150 ${
-                        isActive
-                          ? 'bg-gold/[0.08] text-gold'
-                          : 'bg-surface-container-high text-on-surface-variant/40 hover:bg-surface-container-highest hover:text-on-surface-variant'
-                      }`}
+                      type="button"
+                      onClick={resetExcludedSlots}
+                      className="rounded-lg border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:border-outline-variant/35 hover:text-on-surface"
                     >
-                      {formatSpecName(spec)}
-                      {isMain && <span className="ml-1 text-[11px] opacity-50">{t('dropFinder.mainSpec')}</span>}
+                      Reset
                     </button>
-                  );
-                })}
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {availableSlots.map((slot) => {
+                    const isEnabled = !excludedSlots.has(slot);
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => toggleSlot(slot)}
+                        aria-pressed={isEnabled}
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                          isEnabled
+                            ? 'border-gold/20 bg-gold/[0.08] text-on-surface hover:border-gold/35 hover:bg-gold/[0.12]'
+                            : 'border-outline-variant/10 bg-surface-container-high text-on-surface-variant/45 hover:border-outline-variant/25 hover:text-on-surface-variant/70'
+                        }`}
+                      >
+                        <span className={isEnabled ? '' : 'line-through'}>{slot}</span>
+                        <span className={`h-2.5 w-2.5 rounded-full ${isEnabled ? 'bg-gold' : 'bg-outline-variant/30'}`} />
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <p className="text-xs text-muted">
-          {t('dropFinder.pasteExport')}
-        </p>
-      )}
+            </details>
+          </div>
+        )}
+      </div>
 
       {loading && <Spinner />}
 
-      {!loading && selectedId && !filteredDrops && (
+      {!loading && selectedId && !visibleDrops && (
         <p className="py-6 text-center text-sm text-muted">
           {t('dropFinder.noDrops')}
         </p>
       )}
 
-      {!loading && filteredDrops && (
+      {!loading && visibleDrops && (
         <>
-          <DropSlotList
-            drops={filteredDrops}
+          <ItemTable
+            drops={visibleDrops}
             selected={selected}
             onToggle={(id) =>
               setSelected((prev) => {
@@ -688,8 +835,8 @@ export default function DropFinderPage() {
                 return next;
               })
             }
-            onSelectAll={selectAll}
-            onClear={() => setSelected(new Set())}
+            onSelectItems={selectItems}
+            onClearItems={clearItems}
             difficulty={difficulty}
             dungeonDiff={dungeonDiff}
             upgradeLevel={upgradeLevel}
