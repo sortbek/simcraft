@@ -291,6 +291,7 @@
   "topGear.revivalCatalystTooltip": "Ajoute les versions set de raid de ton équipement à la comparaison. Ne considère que les pièces qui seraient une amélioration.",
   "topGear.chargesTooltip": "Combien de pièces du catalyseur peuvent être portées en même temps dans un même ensemble d'équipement.",
 
+  "dropFinder.source": "Source",
   "dropFinder.selectRaid": "Sélectionner un raid",
   "dropFinder.selectDungeon": "Sélectionner un donjon",
   "dropFinder.difficulty": "Difficulté",

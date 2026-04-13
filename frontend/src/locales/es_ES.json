@@ -291,6 +291,7 @@
   "topGear.revivalCatalystTooltip": "Añade versiones de conjunto de banda de tu equipo de raid a la comparación. Solo considera piezas que serían una mejora.",
   "topGear.chargesTooltip": "Cuántas piezas de catalizador se pueden llevar al mismo tiempo en un mismo conjunto de equipo.",
 
+  "dropFinder.source": "Fuente",
   "dropFinder.selectRaid": "Seleccionar banda",
   "dropFinder.selectDungeon": "Seleccionar mazmorra",
   "dropFinder.difficulty": "Dificultad",

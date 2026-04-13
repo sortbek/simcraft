@@ -291,6 +291,7 @@
   "topGear.revivalCatalystTooltip": "Добавляет версии сет-бонусов рейдовой экипировки в сравнение. Учитывает только предметы, которые будут улучшением.",
   "topGear.chargesTooltip": "Сколько предметов катализатора можно носить одновременно в одном наборе экипировки.",
 
+  "dropFinder.source": "Источник",
   "dropFinder.selectRaid": "Выбрать рейд",
   "dropFinder.selectDungeon": "Выбрать подземелье",
   "dropFinder.difficulty": "Сложность",

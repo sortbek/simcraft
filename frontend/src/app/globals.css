@@ -5,6 +5,9 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-on-surface-variant antialiased leading-relaxed;
   }

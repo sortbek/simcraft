@@ -54,6 +54,8 @@ pub struct DifficultyGroup {
 pub struct DungeonCategory {
     pub key: String,
     pub label: String,
+    #[serde(default)]
+    pub sort_order: u32,
     pub pool_instance_id: i64,
     #[serde(default)]
     pub default_difficulty: String,

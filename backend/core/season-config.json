@@ -30,6 +30,7 @@
     {
       "key": "mplus",
       "label": "Mythic+",
+      "sortOrder": 1,
       "poolInstanceId": -1,
       "defaultDifficulty": "mythic+10",
       "difficulties": [
@@ -128,6 +129,7 @@
     },
     {
       "key": "normal-dungeons",
+      "sortOrder": 3,
       "label": "Dungeons",
       "poolInstanceId": -32,
       "defaultDifficulty": "heroic",
@@ -159,7 +161,8 @@
     },
     {
       "key": "crafted",
-      "label": "Crafted",
+      "label": "Epic Profession",
+      "sortOrder": 7,
       "poolInstanceId": -88,
       "defaultDifficulty": "crafted-champion",
       "difficulties": [
@@ -188,6 +191,7 @@
     },
     {
       "key": "delves",
+      "sortOrder": 4,
       "label": "Delves",
       "poolInstanceId": -92,
       "defaultDifficulty": "delve-bountiful-8",
@@ -232,6 +236,7 @@
     },
     {
       "key": "prey",
+      "sortOrder": 5,
       "label": "Prey",
       "poolInstanceId": -93,
       "defaultDifficulty": "prey-nightmare",
@@ -256,6 +261,7 @@
     },
     {
       "key": "pvp-conquest",
+      "sortOrder": 9,
       "label": "PVP Conquest",
       "poolInstanceId": -85,
       "defaultDifficulty": "pvp-conquest",
@@ -265,6 +271,7 @@
     },
     {
       "key": "pvp-honor",
+      "sortOrder": 10,
       "label": "PVP Honor",
       "poolInstanceId": -84,
       "defaultDifficulty": "pvp-honor",
@@ -274,6 +281,7 @@
     },
     {
       "key": "pvp-bloody-tokens",
+      "sortOrder": 11,
       "label": "PVP Bloody Tokens",
       "poolInstanceId": -86,
       "defaultDifficulty": "pvp-bloody-tokens",
@@ -283,6 +291,7 @@
     },
     {
       "key": "pvp-profession",
+      "sortOrder": 12,
       "label": "PVP Profession",
       "poolInstanceId": -90,
       "defaultDifficulty": "pvp-prof-gladiator",
@@ -294,6 +303,7 @@
     },
     {
       "key": "rare-profession",
+      "sortOrder": 8,
       "label": "Rare Profession",
       "poolInstanceId": -89,
       "defaultDifficulty": "rare-prof-veteran",
@@ -305,6 +315,7 @@
     },
     {
       "key": "catalyst",
+      "sortOrder": 6,
       "label": "Catalyst",
       "poolInstanceId": -87,
       "defaultDifficulty": "catalyst-champion-1",
