@@ -291,6 +291,7 @@
   "topGear.revivalCatalystTooltip": "Aggiunge versioni set di raid del tuo equipaggiamento al confronto. Considera solo i pezzi che sarebbero un miglioramento.",
   "topGear.chargesTooltip": "Quanti pezzi del catalizzatore possono essere indossati contemporaneamente in un singolo set di equipaggiamento.",
 
+  "dropFinder.source": "Fonte",
   "dropFinder.selectRaid": "Seleziona Raid",
   "dropFinder.selectDungeon": "Seleziona Dungeon",
   "dropFinder.difficulty": "Difficoltà",

@@ -159,7 +159,7 @@
     },
     {
       "key": "crafted",
-      "label": "Crafted",
+      "label": "Epic Profession",
       "poolInstanceId": -88,
       "defaultDifficulty": "crafted-champion",
       "difficulties": [

@@ -291,6 +291,7 @@
   "topGear.revivalCatalystTooltip": "Fügt Tier-Set-Versionen deiner Raidausrüstung zum Vergleich hinzu. Berücksichtigt nur Teile, die eine Verbesserung wären.",
   "topGear.chargesTooltip": "Wie viele Katalysatorteile gleichzeitig in einem einzelnen Ausrüstungsset getragen werden können.",
 
+  "dropFinder.source": "Quelle",
   "dropFinder.selectRaid": "Schlachtzug auswählen",
   "dropFinder.selectDungeon": "Dungeon auswählen",
   "dropFinder.difficulty": "Schwierigkeit",
