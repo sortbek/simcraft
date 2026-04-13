@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Script from 'next/script';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
@@ -35,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <LanguageProvider>
           <ScaleProvider>
             <SimProvider>
-              <Sidebar />
+              <Suspense><Sidebar /></Suspense>
               <div className="pl-64">
                 <TopBar />
                 <ContentScaler>

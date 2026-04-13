@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
@@ -173,6 +173,14 @@ function Spinner() {
 // --- Page ---
 
 export default function DropFinderPage() {
+  return (
+    <Suspense>
+      <DropFinderContent />
+    </Suspense>
+  );
+}
+
+function DropFinderContent() {
   const { t } = useLanguage();
   const { simcInput, hasInput } = useSimContext();
   const searchParams = useSearchParams();

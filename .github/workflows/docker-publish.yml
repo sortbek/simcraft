@@ -77,6 +77,8 @@ jobs:
     needs: build-and-push
     if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    env:
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
     steps:
       - name: Deploy demo.simhammer.com
         uses: appleboy/ssh-action@v1
@@ -84,6 +86,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: ADMIN_PASSWORD
           script: |
             docker pull ghcr.io/sortbek/simcraft:latest
 
@@ -94,6 +97,7 @@ jobs:
               -p 8000:8000 \
               -e MAX_COMBINATIONS=2 \
               -e MAX_SCENARIOS=0 \
+              -e ADMIN_PASSWORD=$ADMIN_PASSWORD \
               -v simhammer-data:/app/resources/data \
               -v simhammer-data-full:/app/resources/data_full \
               -v simhammer-simc:/app/resources/simc \
@@ -106,6 +110,8 @@ jobs:
     needs: build-and-push
     if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
+    env:
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
     steps:
       - name: Deploy dev.simhammer.com
         uses: appleboy/ssh-action@v1
@@ -113,6 +119,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: ADMIN_PASSWORD
           script: |
             docker pull ghcr.io/sortbek/simcraft:dev
 
@@ -121,6 +128,7 @@ jobs:
 
             docker run -d --name simhammer-dev --restart unless-stopped \
               -p 8001:8000 \
+              -e ADMIN_PASSWORD=$ADMIN_PASSWORD \
               -v simhammer-dev-data:/app/resources/data \
               -v simhammer-dev-data-full:/app/resources/data_full \
               -v simhammer-dev-simc:/app/resources/simc \

@@ -1,6 +1,8 @@
 .env
 .env.local
 *.db
+*.db-shm
+*.db-wal
 
 node_modules/
 .next/
