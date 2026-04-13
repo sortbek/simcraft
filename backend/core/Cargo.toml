@@ -7,7 +7,7 @@ edition = "2021"
 default = []
 desktop = ["dep:sysinfo"]
 web = []
-postgres = ["dep:tokio-postgres"]
+postgres = ["sqlx/postgres"]
 
 [dependencies]
 actix-web = "4"
@@ -31,10 +31,6 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 version = "0.33"
 optional = true
 
-[dependencies.rusqlite]
-version = "0.31"
-features = ["bundled"]
-
-[dependencies.tokio-postgres]
-version = "0.7"
-optional = true
+[dependencies.sqlx]
+version = "0.8"
+features = ["runtime-tokio", "any", "sqlite"]

@@ -5,16 +5,16 @@ use std::sync::Arc;
 use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
+use crate::db::JobRepo;
 use crate::game_data;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
 use crate::result_parser;
 use crate::simc_runner;
-use crate::storage::JobStorage;
 
 pub(super) async fn create_sim(
     req: web::Json<SimRequest>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
@@ -33,7 +33,7 @@ pub(super) async fn create_sim(
         input
     };
 
-    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+    if let Some(resp) = validate_batch(&req.options.batch_id, repo.get_ref()).await {
         return resp;
     }
 
@@ -55,9 +55,11 @@ pub(super) async fn create_sim(
     job.batch_id = req.options.batch_id.clone();
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();
-    store.insert(job);
+    if let Err(e) = repo.insert(&job).await {
+        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+    }
 
-    let store_clone = store.get_ref().clone();
+    let repo_clone = repo.get_ref().clone();
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
         Ok(path) => path,
         Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
@@ -72,8 +74,8 @@ pub(super) async fn create_sim(
     let jid_logs = job_id.clone();
 
     tokio::spawn(async move {
-        store_clone.update_status(&job_id_clone, JobStatus::Running);
-        store_clone.update_progress(&job_id_clone, 20, "Simulating", "");
+        let _ = repo_clone.update_status(&job_id_clone, JobStatus::Running).await;
+        let _ = repo_clone.update_progress(&job_id_clone, 20, "Simulating", "").await;
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
         match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options, move |line| {
@@ -86,16 +88,19 @@ pub(super) async fn create_sim(
                 inject_realm(&mut parsed, &simc_input);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
-                store_clone.set_result(&job_id_clone, result_str, raw_str);
-                store_clone.set_report_files(&job_id_clone, output.html_report, output.text_output);
+                let _ = repo_clone.set_result(&job_id_clone, &result_str, raw_str.as_deref()).await;
+                let _ = repo_clone.set_report_files(&job_id_clone, output.html_report.as_deref(), output.text_output.as_deref()).await;
             }
             Err(e) => {
-                let is_cancelled = store_clone
+                let is_cancelled = repo_clone
                     .get(&job_id_clone)
+                    .await
+                    .ok()
+                    .flatten()
                     .map(|j| j.status == JobStatus::Cancelled)
                     .unwrap_or(false);
                 if !is_cancelled {
-                    store_clone.set_error(&job_id_clone, e);
+                    let _ = repo_clone.set_error(&job_id_clone, &e).await;
                 }
             }
         }

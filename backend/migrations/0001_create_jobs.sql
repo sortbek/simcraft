@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'pending',
+    sim_type TEXT NOT NULL,
+    simc_input TEXT NOT NULL,
+    result_json TEXT,
+    combo_metadata_json TEXT,
+    error_message TEXT,
+    progress_pct INTEGER NOT NULL DEFAULT 0,
+    progress_stage TEXT,
+    progress_detail TEXT,
+    stages_completed TEXT NOT NULL DEFAULT '[]',
+    iterations INTEGER NOT NULL,
+    fight_style TEXT NOT NULL,
+    target_error DOUBLE PRECISION NOT NULL,
+    created_at TEXT NOT NULL,
+    html_report TEXT,
+    text_output TEXT,
+    raw_json TEXT,
+    batch_id TEXT
+);

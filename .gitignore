@@ -12,6 +12,7 @@ Thumbs.db
 *.tsbuildinfo
 
 .claude/
+docs/superpowers/
 .simc-version
 
 # Build output and bundled resources

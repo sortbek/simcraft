@@ -4,7 +4,6 @@ use std::sync::Arc;
 use simhammer_core::game_data;
 use simhammer_core::server;
 use simhammer_core::server::SimcBinaries;
-use simhammer_core::storage::JobStorage;
 
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
@@ -12,7 +11,7 @@ fn env_or(key: &str, default: &str) -> String {
 
 #[tokio::main]
 async fn main() {
-    simhammer_core::storage::init_limits();
+    simhammer_core::db::init_limits();
     let desktop_mode = std::env::args().any(|a| a == "--desktop");
 
     let data_dir = PathBuf::from(env_or("DATA_DIR", "./resources/data"));
@@ -51,36 +50,26 @@ async fn main() {
     println!("Loading game data from {:?}", data_dir);
     game_data::load(&data_dir);
 
+    // Database URL: auto-prefix sqlite:// if no scheme is present
     let db_url = env_or("DATABASE_URL", "simhammer.db");
+    let database_url = if db_url.contains("://") {
+        db_url.clone()
+    } else {
+        format!("sqlite://{}", db_url)
+    };
 
-    let storage: Arc<dyn JobStorage> = if desktop_mode {
+    if desktop_mode {
         println!(
             "Starting SimHammer in desktop mode on {}:{}",
             bind_host, port
         );
-        println!("Using SQLite storage: {}", db_url);
-        Arc::new(simhammer_core::storage::sqlite::SqliteStorage::new(&db_url))
     } else {
         println!("Starting SimHammer server on {}:{}", bind_host, port);
+    }
+    println!("Database: {}", database_url);
 
-        #[cfg(feature = "postgres")]
-        if db_url.starts_with("postgres://") || db_url.starts_with("postgresql://") {
-            println!("Using PostgreSQL storage");
-            Arc::new(simhammer_core::storage::postgres::PostgresStorage::new(&db_url).await)
-        } else {
-            println!("Using SQLite storage: {}", db_url);
-            Arc::new(simhammer_core::storage::sqlite::SqliteStorage::new(&db_url))
-        }
-
-        #[cfg(not(feature = "postgres"))]
-        {
-            println!("Using SQLite storage: {}", db_url);
-            Arc::new(simhammer_core::storage::sqlite::SqliteStorage::new(&db_url))
-        }
-    };
-
-    server::start_with_storage_bind(
-        storage,
+    server::start_server(
+        &database_url,
         simc_bins,
         &bind_host,
         port,

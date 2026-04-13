@@ -1,40 +1,47 @@
 use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
-use std::sync::Arc;
 
 use super::types::*;
+use crate::db::JobRepo;
 use crate::log_buffer::LogBuffer;
 use crate::models::JobStatus;
 use crate::simc_runner;
-use crate::storage::JobStorage;
+use std::sync::Arc;
 
 #[cfg(feature = "desktop")]
-pub(super) async fn list_sims(store: web::Data<Arc<dyn JobStorage>>) -> HttpResponse {
-    let summaries = store.list_recent(20, None, None);
-    HttpResponse::Ok().json(summaries)
+pub(super) async fn list_sims(repo: web::Data<JobRepo>) -> HttpResponse {
+    match repo.list_recent(20, None, None).await {
+        Ok(summaries) => HttpResponse::Ok().json(summaries),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
 }
 
 #[cfg(not(feature = "desktop"))]
 pub(super) async fn list_sims_filtered(
     query: web::Query<ListSimsQuery>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     if query.player.is_empty() || query.realm.is_empty() {
         return HttpResponse::BadRequest().json(json!({"detail": "player and realm are required"}));
     }
-    let summaries = store.list_recent(20, Some(&query.player), Some(&query.realm));
-    HttpResponse::Ok().json(summaries)
+    match repo.list_recent(20, Some(&query.player), Some(&query.realm)).await {
+        Ok(summaries) => HttpResponse::Ok().json(summaries),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
 }
 
 pub(super) async fn get_sim_status(
     path: web::Path<String>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match store.get(&job_id) {
-        Some(j) => j,
-        None => {
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
             return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
         }
     };
 
@@ -86,19 +93,20 @@ pub(super) async fn get_sim_logs(
 
 pub(super) async fn cancel_sim(
     path: web::Path<String>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match store.get(&job_id) {
-        Some(j) => j,
-        None => return HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+        }
     };
 
     match job.status {
         JobStatus::Pending | JobStatus::Running => {
-            // Mark as cancelled first so the error handler doesn't overwrite
-            store.update_status(&job_id, JobStatus::Cancelled);
-            // Kill the simc process if running
+            let _ = repo.update_status(&job_id, JobStatus::Cancelled).await;
             simc_runner::kill_job(&job_id);
             HttpResponse::Ok().json(json!({"status": "cancelled"}))
         }
@@ -108,13 +116,16 @@ pub(super) async fn cancel_sim(
 
 pub(super) async fn get_sim_input(
     path: web::Path<String>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match store.get(&job_id) {
-        Some(j) => j,
-        None => {
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
             return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
         }
     };
 
@@ -125,13 +136,16 @@ pub(super) async fn get_sim_input(
 
 pub(super) async fn get_sim_raw(
     path: web::Path<String>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match store.get(&job_id) {
-        Some(j) => j,
-        None => {
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
             return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
         }
     };
 
@@ -142,7 +156,6 @@ pub(super) async fn get_sim_raw(
                 .json(json!({"detail": "Failed to parse stored raw JSON"})),
         },
         None => {
-            // Fallback to parsed result if raw not available
             match &job.result_json {
                 Some(result) => match serde_json::from_str::<Value>(result) {
                     Ok(val) => HttpResponse::Ok().json(val),
@@ -159,13 +172,16 @@ pub(super) async fn get_sim_raw(
 
 pub(super) async fn get_sim_html(
     path: web::Path<String>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match store.get(&job_id) {
-        Some(j) => j,
-        None => {
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
             return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
         }
     };
 
@@ -180,13 +196,16 @@ pub(super) async fn get_sim_html(
 
 pub(super) async fn get_sim_text_output(
     path: web::Path<String>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match store.get(&job_id) {
-        Some(j) => j,
-        None => {
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
             return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
         }
     };
 
@@ -201,13 +220,16 @@ pub(super) async fn get_sim_text_output(
 
 pub(super) async fn get_sim_csv(
     path: web::Path<String>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match store.get(&job_id) {
-        Some(j) => j,
-        None => {
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
             return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
         }
     };
 
@@ -227,7 +249,6 @@ pub(super) async fn get_sim_csv(
     let mut csv = String::from("actor,dps,dps_error\n");
 
     if result.get("type").and_then(|t| t.as_str()) == Some("top_gear") {
-        // Top Gear / Droptimizer: base + profileset results
         if let Some(base_dps) = result.get("base_dps").and_then(|v| v.as_f64()) {
             let name = result
                 .get("player_name")
@@ -243,7 +264,6 @@ pub(super) async fn get_sim_csv(
             }
         }
     } else {
-        // Quick Sim
         let name = result
             .get("player_name")
             .and_then(|n| n.as_str())

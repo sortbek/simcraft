@@ -4,11 +4,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::types::SimOptions;
+use crate::db::{self, JobRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::JobStatus;
 use crate::result_parser;
 use crate::simc_runner;
-use crate::storage::{self, JobStorage};
 use crate::types::ResolveGearResponse;
 
 /// Sanitize user-provided custom SimC input by stripping dangerous directives.
@@ -256,7 +256,7 @@ pub(super) fn inject_realm(parsed: &mut Value, simc_input: &str) {
 
 /// Spawn a staged (top-gear / droptimizer) simulation in a background task.
 pub(super) fn spawn_staged_sim(
-    store: Arc<dyn JobStorage>,
+    repo: JobRepo,
     simc: PathBuf,
     options: Value,
     job_id: String,
@@ -265,9 +265,9 @@ pub(super) fn spawn_staged_sim(
     log_buffer: Arc<LogBuffer>,
 ) {
     tokio::spawn(async move {
-        store.update_status(&job_id, JobStatus::Running);
-        let store_progress = store.clone();
-        let store_stages = store.clone();
+        let _ = repo.update_status(&job_id, JobStatus::Running).await;
+        let repo_progress = repo.clone();
+        let repo_stages = repo.clone();
         let jid_progress = job_id.clone();
         let jid_stages = job_id.clone();
         let logs = log_buffer.clone();
@@ -279,10 +279,21 @@ pub(super) fn spawn_staged_sim(
             &options,
             combo_count,
             move |pct, stage, detail| {
-                store_progress.update_progress(&jid_progress, pct, stage, detail);
+                let repo = repo_progress.clone();
+                let jid = jid_progress.clone();
+                let stage = stage.to_string();
+                let detail = detail.to_string();
+                tokio::spawn(async move {
+                    repo.update_progress(&jid, pct, &stage, &detail).await.ok();
+                });
             },
             move |summary| {
-                store_stages.complete_stage(&jid_stages, summary);
+                let repo = repo_stages.clone();
+                let jid = jid_stages.clone();
+                let summary = summary.to_string();
+                tokio::spawn(async move {
+                    repo.complete_stage(&jid, &summary).await.ok();
+                });
             },
             move |line| {
                 logs.push_line(&jid_logs, line.to_string());
@@ -291,7 +302,7 @@ pub(super) fn spawn_staged_sim(
         .await
         {
             Ok(output) => {
-                let job_snap = store.get(&job_id);
+                let job_snap = repo.get(&job_id).await.ok().flatten();
                 let meta: Option<HashMap<String, Vec<Value>>> = job_snap
                     .as_ref()
                     .and_then(|j| j.combo_metadata_json.as_ref())
@@ -303,17 +314,19 @@ pub(super) fn spawn_staged_sim(
                 inject_realm(&mut parsed, &simc_input);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
-                store.set_result(&job_id, result_str, raw_str);
-                store.set_report_files(&job_id, output.html_report, output.text_output);
+                let _ = repo.set_result(&job_id, &result_str, raw_str.as_deref()).await;
+                let _ = repo.set_report_files(&job_id, output.html_report.as_deref(), output.text_output.as_deref()).await;
             }
             Err(e) => {
-                // Don't overwrite cancelled status with a generic error
-                let is_cancelled = store
+                let is_cancelled = repo
                     .get(&job_id)
+                    .await
+                    .ok()
+                    .flatten()
                     .map(|j| j.status == JobStatus::Cancelled)
                     .unwrap_or(false);
                 if !is_cancelled {
-                    store.set_error(&job_id, e);
+                    let _ = repo.set_error(&job_id, &e).await;
                 }
             }
         }
@@ -322,21 +335,21 @@ pub(super) fn spawn_staged_sim(
 }
 
 /// Validate batch_id against MAX_SCENARIOS. Returns an error response if rejected.
-pub(super) fn validate_batch(
+pub(super) async fn validate_batch(
     batch_id: &Option<String>,
-    store: &dyn JobStorage,
+    repo: &JobRepo,
 ) -> Option<actix_web::HttpResponse> {
     let bid = match batch_id {
         Some(b) if !b.is_empty() => b,
         _ => return None,
     };
-    let max = storage::MAX_SCENARIOS.load(std::sync::atomic::Ordering::Relaxed);
+    let max = db::MAX_SCENARIOS.load(std::sync::atomic::Ordering::Relaxed);
     if max == 0 {
         return Some(actix_web::HttpResponse::BadRequest().json(json!({
             "detail": "Batch scenarios are disabled on this server."
         })));
     }
-    if store.count_batch(bid) >= max {
+    if repo.count_batch(bid).await.unwrap_or(0) >= max {
         return Some(actix_web::HttpResponse::BadRequest().json(json!({
             "detail": format!("Batch limit reached ({max} scenarios max).")
         })));

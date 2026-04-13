@@ -6,6 +6,7 @@ WORKDIR /build
 COPY Cargo.toml ./
 COPY core/ core/
 COPY server/ server/
+COPY migrations/ migrations/
 
 ARG CARGO_FEATURES=
 RUN cargo build --release -p simhammer-server ${CARGO_FEATURES:+--features $CARGO_FEATURES}

@@ -6,15 +6,15 @@ use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
+use crate::db::JobRepo;
 use crate::log_buffer::LogBuffer;
 use crate::models::Job;
 use crate::profileset_generator;
 use crate::simc_runner;
-use crate::storage::JobStorage;
 
 pub(super) async fn create_droptimizer_sim(
     req: web::Json<DroptimizerRequest>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
@@ -37,7 +37,7 @@ pub(super) async fn create_droptimizer_sim(
 
     let generated_input = inject_expert_fields(&generated_input, &req.options);
 
-    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+    if let Some(resp) = validate_batch(&req.options.batch_id, repo.get_ref()).await {
         return resp;
     }
 
@@ -63,7 +63,9 @@ pub(super) async fn create_droptimizer_sim(
     let mut job = job;
     job.combo_metadata_json = Some(meta_json);
     job.batch_id = req.options.batch_id.clone();
-    store.insert(job);
+    if let Err(e) = repo.insert(&job).await {
+        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+    }
 
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
         Ok(path) => path,
@@ -71,7 +73,7 @@ pub(super) async fn create_droptimizer_sim(
     };
 
     spawn_staged_sim(
-        store.get_ref().clone(),
+        repo.get_ref().clone(),
         simc,
         req.options.to_json(),
         job_id.clone(),

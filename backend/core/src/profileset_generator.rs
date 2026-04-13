@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 type ProfilesetResult = Result<(String, usize, HashMap<String, Vec<Value>>), String>;
 
-use crate::storage::MAX_COMBINATIONS;
+use crate::db::MAX_COMBINATIONS;
 
 pub fn generate_top_gear_input(
     base_profile: &str,

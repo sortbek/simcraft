@@ -23,8 +23,8 @@ use std::sync::Arc;
 #[cfg(feature = "desktop")]
 use std::sync::Mutex;
 
+use crate::db::{CharacterRepo, Database, JobRepo, RouteRepo, SettingsRepo};
 use crate::log_buffer::LogBuffer;
-use crate::storage::JobStorage;
 use types::FrontendDir;
 
 /// Holds all available simc binaries keyed by branch name ("weekly", "nightly").
@@ -197,68 +197,54 @@ impl SimcBinaries {
 
 // ---------- Server startup ----------
 
-/// Start the HTTP server with in-memory storage (desktop default).
+/// Start the HTTP server for desktop mode with SQLite.
 pub async fn start(resource_dir: &Path, frontend_dir: Option<PathBuf>) -> u16 {
+    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "simhammer.db".to_string());
+    let database_url = if db_url.contains("://") {
+        db_url
+    } else {
+        format!("sqlite://{}", db_url)
+    };
     let simc_bins = Arc::new(SimcBinaries::from_dir(&resource_dir.join("simc")));
     let data_dir = Some(resource_dir.join("data"));
-    let storage: Arc<dyn JobStorage> = Arc::new(crate::storage::memory::MemoryStorage::new());
-    start_with_storage(storage, simc_bins, 17384, frontend_dir, data_dir).await
+    start_server(&database_url, simc_bins, "127.0.0.1", 17384, frontend_dir, data_dir).await
 }
 
-/// Start the actix-web HTTP server with a given storage backend.
+/// Start the actix-web HTTP server.
 /// Returns the port number.
-pub async fn start_with_storage(
-    storage: Arc<dyn JobStorage>,
-    simc_bins: Arc<SimcBinaries>,
-    port: u16,
-    frontend_dir: Option<PathBuf>,
-    data_dir: Option<PathBuf>,
-) -> u16 {
-    start_with_storage_bind(
-        storage,
-        simc_bins,
-        "127.0.0.1",
-        port,
-        frontend_dir,
-        data_dir,
-    )
-    .await
-}
-
-/// Start the actix-web HTTP server with a given storage backend and bind address.
-/// Returns the port number.
-pub async fn start_with_storage_bind(
-    storage: Arc<dyn JobStorage>,
+pub async fn start_server(
+    database_url: &str,
     simc_bins: Arc<SimcBinaries>,
     bind_host: &str,
     port: u16,
     frontend_dir: Option<PathBuf>,
     data_dir: Option<PathBuf>,
 ) -> u16 {
-    let store_data = web::Data::new(storage);
+    let db = Database::connect(database_url)
+        .await
+        .expect("Failed to connect to database");
+
+    let job_repo = web::Data::new(JobRepo::new(db.pool.clone()));
+    let route_repo = web::Data::new(RouteRepo::new(db.pool.clone()));
+    let char_repo = web::Data::new(CharacterRepo::new(db.pool.clone()));
+    let settings_repo = web::Data::new(SettingsRepo::new(db.pool.clone()));
+
+    // Apply persisted admin settings on startup
+    if let Ok(Some(val)) = settings_repo.get("max_combinations").await {
+        if let Ok(v) = val.parse::<usize>() {
+            crate::db::MAX_COMBINATIONS.store(v, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    if let Ok(Some(val)) = settings_repo.get("max_scenarios").await {
+        if let Ok(v) = val.parse::<usize>() {
+            crate::db::MAX_SCENARIOS.store(v, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
     let simc_data = web::Data::new(simc_bins);
     let log_data = web::Data::new(Arc::new(LogBuffer::new()));
     #[cfg(feature = "desktop")]
     let stats_data = web::Data::new(Arc::new(Mutex::new(system_handlers::SystemStats::new())));
-    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "simhammer.db".to_string());
-    let route_store_data = web::Data::new(Arc::new(crate::route_store::RouteStore::new(&db_url)));
-    let char_store_data = web::Data::new(Arc::new(crate::character_store::CharacterStore::new(
-        &db_url,
-    )));
-    #[cfg(not(feature = "desktop"))]
-    let settings_store = Arc::new(crate::settings_store::SettingsStore::new(&db_url));
-    #[cfg(not(feature = "desktop"))]
-    {
-        // Apply persisted admin settings on startup
-        if let Some(val) = settings_store.get("max_combinations").and_then(|v| v.parse::<usize>().ok()) {
-            crate::storage::MAX_COMBINATIONS.store(val, std::sync::atomic::Ordering::Relaxed);
-        }
-        if let Some(val) = settings_store.get("max_scenarios").and_then(|v| v.parse::<usize>().ok()) {
-            crate::storage::MAX_SCENARIOS.store(val, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
-    #[cfg(not(feature = "desktop"))]
-    let settings_data = web::Data::new(settings_store);
     #[cfg(not(feature = "desktop"))]
     let admin_secret = web::Data::new(admin_handlers::AdminSecret(
         uuid::Uuid::new_v4().to_string(),
@@ -277,16 +263,15 @@ pub async fn start_with_storage_bind(
 
         let app = App::new()
             .wrap(cors)
-            .app_data(store_data.clone())
+            .app_data(job_repo.clone())
             .app_data(simc_data.clone())
             .app_data(log_data.clone())
-            .app_data(route_store_data.clone())
-            .app_data(char_store_data.clone())
+            .app_data(route_repo.clone())
+            .app_data(char_repo.clone())
+            .app_data(settings_repo.clone())
             .configure(api_routes::configure);
         #[cfg(not(feature = "desktop"))]
-        let app = app
-            .app_data(settings_data.clone())
-            .app_data(admin_secret.clone());
+        let app = app.app_data(admin_secret.clone());
         #[cfg(feature = "desktop")]
         let app = app.app_data(stats_data.clone());
         let mut app = app;

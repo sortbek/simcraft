@@ -7,15 +7,15 @@ use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
+use crate::db::JobRepo;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::models::Job;
 use crate::profileset_generator;
 use crate::simc_runner;
-use crate::storage::JobStorage;
 
 fn capped_max_combinations(requested: Option<usize>) -> Option<usize> {
-    let server_max = crate::storage::MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed);
+    let server_max = crate::db::MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed);
     match (requested, server_max) {
         (Some(client), max) if max > 0 => Some(client.min(max)),
         (None, max) if max > 0 => Some(max),
@@ -46,7 +46,7 @@ fn socketed_item_ids(resolved: &crate::types::ResolveGearResponse) -> HashSet<u6
 
 pub(super) async fn create_enchant_gem_sim(
     req: web::Json<EnchantGemSimRequest>,
-    store: web::Data<Arc<dyn JobStorage>>,
+    repo: web::Data<JobRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
@@ -83,7 +83,7 @@ pub(super) async fn create_enchant_gem_sim(
 
     let generated_input = inject_expert_fields(&generated_input, &req.options);
 
-    if let Some(resp) = validate_batch(&req.options.batch_id, store.get_ref().as_ref()) {
+    if let Some(resp) = validate_batch(&req.options.batch_id, repo.get_ref()).await {
         return resp;
     }
 
@@ -109,7 +109,9 @@ pub(super) async fn create_enchant_gem_sim(
     let mut job = job;
     job.combo_metadata_json = Some(meta_json);
     job.batch_id = req.options.batch_id.clone();
-    store.insert(job);
+    if let Err(e) = repo.insert(&job).await {
+        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+    }
 
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
         Ok(path) => path,
@@ -117,7 +119,7 @@ pub(super) async fn create_enchant_gem_sim(
     };
 
     spawn_staged_sim(
-        store.get_ref().clone(),
+        repo.get_ref().clone(),
         simc,
         req.options.to_json(),
         job_id.clone(),

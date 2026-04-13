@@ -1,0 +1,41 @@
+name: simhammer-pg-test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: simhammer
+      POSTGRES_PASSWORD: simhammer
+      POSTGRES_DB: simhammer
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simhammer"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: backend
+      dockerfile: server/Dockerfile
+      args:
+        - SIMC_ENABLED_BRANCHES=${SIMC_ENABLED_BRANCHES:-weekly}
+        - CARGO_FEATURES=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - DATA_DIR=/app/resources/data
+      - DATABASE_URL=postgresql://simhammer:simhammer@postgres:5432/simhammer
+      - PORT=8000
+      - MAX_COMBINATIONS=2
+      - MAX_SCENARIOS=10
+      - ADMIN_PASSWORD=test123
+
+volumes:
+  pg-data:

@@ -1,6 +1,4 @@
-pub mod character_store;
-pub mod route_store;
-pub mod settings_store;
+pub mod db;
 pub mod addon_parser;
 pub mod game_data;
 pub mod gear_resolver;
@@ -11,6 +9,5 @@ pub mod profileset_generator;
 pub mod result_parser;
 pub mod server;
 pub mod simc_runner;
-pub mod storage;
 pub mod talent_normalize;
 pub mod types;

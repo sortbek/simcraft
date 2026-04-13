@@ -1,33 +1,37 @@
 use actix_web::{web, HttpResponse};
 use serde_json::json;
-use std::sync::Arc;
 
-use crate::route_store::{CreateRouteRequest, RouteStore};
+use crate::db::{RouteRepo, route_repo::CreateRouteRequest};
 
-pub(super) async fn list_routes(store: web::Data<Arc<RouteStore>>) -> HttpResponse {
-    HttpResponse::Ok().json(store.list())
+pub(super) async fn list_routes(repo: web::Data<RouteRepo>) -> HttpResponse {
+    match repo.list().await {
+        Ok(routes) => HttpResponse::Ok().json(routes),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
 }
 
 pub(super) async fn create_route(
     req: web::Json<CreateRouteRequest>,
-    store: web::Data<Arc<RouteStore>>,
+    repo: web::Data<RouteRepo>,
 ) -> HttpResponse {
     if req.name.trim().is_empty() || req.mdt_string.trim().is_empty() {
         return HttpResponse::BadRequest()
             .json(json!({"detail": "name and mdt_string are required"}));
     }
-    let route = store.insert(req.name.trim(), req.mdt_string.trim());
-    HttpResponse::Ok().json(route)
+    match repo.insert(req.name.trim(), req.mdt_string.trim()).await {
+        Ok(route) => HttpResponse::Ok().json(route),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
 }
 
 pub(super) async fn delete_route(
     path: web::Path<String>,
-    store: web::Data<Arc<RouteStore>>,
+    repo: web::Data<RouteRepo>,
 ) -> HttpResponse {
     let id = path.into_inner();
-    if store.delete(&id) {
-        HttpResponse::Ok().json(json!({"status": "ok"}))
-    } else {
-        HttpResponse::NotFound().json(json!({"detail": "Route not found"}))
+    match repo.delete(&id).await {
+        Ok(true) => HttpResponse::Ok().json(json!({"status": "ok"})),
+        Ok(false) => HttpResponse::NotFound().json(json!({"detail": "Route not found"})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
 }

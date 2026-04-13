@@ -12,8 +12,8 @@ use tar::Archive;
 use zip::ZipArchive;
 
 use super::SimcBinaries;
-use crate::settings_store::SettingsStore;
-use crate::storage;
+use crate::db;
+use crate::db::SettingsRepo;
 
 pub(super) struct AdminSecret(pub String);
 
@@ -94,22 +94,22 @@ pub(super) async fn check_auth(
 pub(super) async fn get_settings(
     req: HttpRequest,
     secret: web::Data<AdminSecret>,
-    settings: web::Data<Arc<SettingsStore>>,
+    settings: web::Data<SettingsRepo>,
 ) -> HttpResponse {
     if let Err(resp) = validate_token(&req, &secret) {
         return resp;
     }
 
-    let stored = settings.get_all();
+    let stored = settings.get_all().await.unwrap_or_default();
 
     HttpResponse::Ok().json(json!({
         "settings": {
             "max_combinations": stored.get("max_combinations")
                 .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(storage::MAX_COMBINATIONS.load(Ordering::Relaxed)),
+                .unwrap_or(db::MAX_COMBINATIONS.load(Ordering::Relaxed)),
             "max_scenarios": stored.get("max_scenarios")
                 .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(storage::MAX_SCENARIOS.load(Ordering::Relaxed)),
+                .unwrap_or(db::MAX_SCENARIOS.load(Ordering::Relaxed)),
         },
         "env": {
             "simc_enabled_branches": std::env::var("SIMC_ENABLED_BRANCHES").unwrap_or_else(|_| "weekly".into()),
@@ -127,7 +127,7 @@ pub(super) struct UpdateSettingsRequest {
 pub(super) async fn update_settings(
     req: HttpRequest,
     secret: web::Data<AdminSecret>,
-    settings: web::Data<Arc<SettingsStore>>,
+    settings: web::Data<SettingsRepo>,
     body: web::Json<UpdateSettingsRequest>,
 ) -> HttpResponse {
     if let Err(resp) = validate_token(&req, &secret) {
@@ -137,13 +137,13 @@ pub(super) async fn update_settings(
     let mut updated = Vec::new();
 
     if let Some(val) = body.max_combinations {
-        settings.set("max_combinations", &val.to_string());
-        storage::MAX_COMBINATIONS.store(val, Ordering::Relaxed);
+        let _ = settings.set("max_combinations", &val.to_string()).await;
+        db::MAX_COMBINATIONS.store(val, Ordering::Relaxed);
         updated.push("max_combinations");
     }
     if let Some(val) = body.max_scenarios {
-        settings.set("max_scenarios", &val.to_string());
-        storage::MAX_SCENARIOS.store(val, Ordering::Relaxed);
+        let _ = settings.set("max_scenarios", &val.to_string()).await;
+        db::MAX_SCENARIOS.store(val, Ordering::Relaxed);
         updated.push("max_scenarios");
     }
 

@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use super::SimcBinaries;
 
-use crate::storage;
+use crate::db;
 
 #[cfg(feature = "desktop")]
 pub(super) struct SystemStats {
@@ -37,9 +37,9 @@ impl SystemStats {
 }
 
 pub(super) async fn get_config() -> HttpResponse {
-    let max_combos = storage::MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed);
+    let max_combos = db::MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed);
     let mut config = json!({
-        "max_scenarios": storage::MAX_SCENARIOS.load(std::sync::atomic::Ordering::Relaxed),
+        "max_scenarios": db::MAX_SCENARIOS.load(std::sync::atomic::Ordering::Relaxed),
     });
     if max_combos > 0 {
         config["max_combinations"] = json!(max_combos);
