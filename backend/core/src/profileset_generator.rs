@@ -98,7 +98,8 @@ pub fn generate_enchant_gem_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        generate_droptimizer_input, generate_enchant_gem_input, generate_upgrade_compare_input,
+        generate_droptimizer_input, generate_enchant_gem_input,
+        generate_top_gear_input_with_talents, generate_upgrade_compare_input,
     };
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
@@ -183,5 +184,57 @@ main_hand=,id=200\n";
         );
 
         assert!(matches!(result, Err(message) if message.contains("No upgradeable equipped items")));
+    }
+
+    #[test]
+    fn top_gear_limits_diamonds_to_one_per_combo() {
+        ensure_game_data_loaded();
+
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+head=,id=100,gem_id=213453\n\
+neck=,id=101,gem_id=213453\n\
+finger1=,id=102,gem_id=213453\n";
+
+        let socketed_item_ids = HashSet::from([100_u64, 101_u64, 102_u64]);
+        let diamond_id = 213738_u64;
+        let colored_gem_id = 213453_u64;
+
+        let (input, combo_count, metadata) = generate_top_gear_input_with_talents(
+            base_profile,
+            &HashMap::new(),
+            &HashMap::new(),
+            Some(20),
+            &[],
+            None,
+            &HashMap::new(),
+            &[diamond_id, colored_gem_id],
+            &socketed_item_ids,
+            true,
+            false,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(combo_count, 2);
+        for block in input.split("### ").skip(1) {
+            let diamond_uses = block.matches(&format!("gem_id={diamond_id}")).count();
+            assert!(
+                diamond_uses <= 1,
+                "combo contained {diamond_uses} diamonds:\n{block}"
+            );
+        }
+
+        for (combo_name, items) in metadata {
+            let diamond_uses = items
+                .iter()
+                .filter(|item| item.get("gem_id").and_then(|v| v.as_u64()) == Some(diamond_id))
+                .count();
+            assert!(
+                diamond_uses <= 1,
+                "{combo_name} metadata contained {diamond_uses} diamonds"
+            );
+        }
     }
 }

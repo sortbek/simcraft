@@ -24,6 +24,29 @@ struct EnchantGemAxis {
     options: Vec<u64>,
 }
 
+fn dedupe_gem_assignments(
+    combos: Vec<HashMap<String, u64>>,
+    max_diamonds: usize,
+) -> Vec<HashMap<String, u64>> {
+    let mut seen: HashSet<Vec<u64>> = HashSet::new();
+    let mut result = Vec::new();
+
+    for combo in combos {
+        let diamond_count = combo.values().filter(|&&gid| is_diamond(gid)).count();
+        if diamond_count > max_diamonds {
+            continue;
+        }
+
+        let mut key: Vec<u64> = combo.values().copied().collect();
+        key.sort();
+        if seen.insert(key) {
+            result.push(combo);
+        }
+    }
+
+    result
+}
+
 /// Generate a simc input string with full-set profilesets for Top Gear.
 ///
 /// Returns (simc_input_string, combination_count, combo_metadata).
@@ -276,15 +299,10 @@ pub fn generate_top_gear_input_with_talents(
             }
         }
 
-        // If diamond always-use: separate diamonds from colored gems.
-        // Try the diamond in EACH socketed slot position (like Raidbots).
-        let diamond_ids: Vec<u64> = if diamond_always_use {
-            let ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();
-            gems.retain(|g| !is_diamond(*g));
-            ids
-        } else {
-            Vec::new()
-        };
+        // Diamonds are unique-equipped: at most one per gear set.
+        // When diamond_always_use is enabled, require exactly one if any are selected.
+        let diamond_ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();
+        gems.retain(|g| !is_diamond(*g));
 
         // Helper: generate colored gem combos for a set of non-diamond slots
         let gen_color_combos =
@@ -347,20 +365,14 @@ pub fn generate_top_gear_input_with_talents(
                         }
                         result = next;
                     }
-                    let mut seen: HashSet<Vec<u64>> = HashSet::new();
-                    result.retain(|combo| {
-                        let mut key: Vec<u64> = combo.values().copied().collect();
-                        key.sort();
-                        seen.insert(key)
-                    });
-                    result
+                    dedupe_gem_assignments(result, 0)
                 }
             };
 
         if gems.is_empty() && diamond_ids.is_empty() {
             Vec::new()
-        } else if !diamond_ids.is_empty() {
-            // Diamond always-use: try diamond in EACH socketed slot position
+        } else if !diamond_ids.is_empty() && diamond_always_use {
+            // Diamond always-use: try exactly one diamond in each socketed slot position.
             let mut result: Vec<HashMap<String, u64>> = Vec::new();
             for (d_idx, d_slot) in gem_slots.iter().enumerate() {
                 let remaining: Vec<String> = gem_slots
@@ -378,15 +390,33 @@ pub fn generate_top_gear_input_with_talents(
                     }
                 }
             }
-            // Deduplicate: since diamond stats are slot-independent, two combos with
-            // the same set of gem_ids (regardless of slot) produce identical DPS.
-            let mut seen: HashSet<Vec<u64>> = HashSet::new();
-            result.retain(|combo| {
-                let mut key: Vec<u64> = combo.values().copied().collect();
-                key.sort();
-                seen.insert(key)
-            });
-            result
+            dedupe_gem_assignments(result, 1)
+        } else if !diamond_ids.is_empty() {
+            // Diamond optional: allow either no diamond or exactly one diamond, never more.
+            let mut result = if gems.is_empty() {
+                Vec::new()
+            } else {
+                gen_color_combos(&gem_slots, &gems, max_colors)
+            };
+
+            for (d_idx, d_slot) in gem_slots.iter().enumerate() {
+                let remaining: Vec<String> = gem_slots
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != d_idx)
+                    .map(|(_, s)| s.clone())
+                    .collect();
+                let color_combos = gen_color_combos(&remaining, &gems, max_colors);
+                for &did in &diamond_ids {
+                    for base in &color_combos {
+                        let mut combo = base.clone();
+                        combo.insert(d_slot.clone(), did);
+                        result.push(combo);
+                    }
+                }
+            }
+
+            dedupe_gem_assignments(result, 1)
         } else {
             gen_color_combos(&gem_slots, &gems, max_colors)
         }
