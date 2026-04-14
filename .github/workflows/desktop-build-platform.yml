@@ -25,9 +25,6 @@ on:
       APPLE_TEAM_ID:
         required: false
 
-env:
-  SIMC_VERSION: HEAD
-
 jobs:
   build:
     runs-on: ${{ inputs.os }}
@@ -55,55 +52,46 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('backend/**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      # -- SimC --
+      # -- SimC (pre-built from sortbek/simc-builds) --
       - name: Resolve SimC version
         id: simc-version
         shell: bash
         run: |
-          if [ "$SIMC_VERSION" = "HEAD" ]; then
-            HASH=$(git ls-remote https://github.com/simulationcraft/simc.git HEAD | cut -f1)
-          else
-            HASH="$SIMC_VERSION"
-          fi
-          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          TAG=$(curl -fsSL "https://api.github.com/repos/sortbek/simc-builds/tags?per_page=100" \
+            | python3 -c "import sys,json; tags=json.load(sys.stdin); print(next(t['name'] for t in tags if t['name'].startswith('weekly-')))")
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Cache SimC binary
         id: simc-cache
         uses: actions/cache@v4
         with:
           path: backend/resources/simc
-          key: ${{ runner.os }}-simc-${{ steps.simc-version.outputs.hash }}
+          key: ${{ runner.os }}-simc-${{ steps.simc-version.outputs.tag }}
 
-      - name: Clone SimC
-        if: steps.simc-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: git clone --depth 1 https://github.com/simulationcraft/simc.git "${{ runner.temp }}/simc"
-
-      - name: Build SimC (Windows)
-        if: steps.simc-cache.outputs.cache-hit != 'true' && inputs.platform == 'windows'
-        shell: cmd
-        run: |
-          cd "${{ runner.temp }}\simc"
-          cmake -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_GUI=OFF -DBUILD_TESTING=OFF -DCMAKE_CXX_FLAGS_RELEASE="/O2 /Ob3 /GL /fp:fast /DNDEBUG" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="/LTCG"
-          cmake --build build --config Release --target simc
-
-      - name: Build SimC (Unix)
-        if: steps.simc-cache.outputs.cache-hit != 'true' && inputs.platform != 'windows'
-        shell: bash
-        run: |
-          cd "${{ runner.temp }}/simc/engine"
-          make LTO=1 NO_DEBUG=1 SC_NO_NETWORKING=1 -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) OPTS="-ffast-math -fomit-frame-pointer"
-
-      - name: Install SimC binary
+      - name: Download SimC
         if: steps.simc-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          mkdir -p backend/resources/simc
+          TAG="${{ steps.simc-version.outputs.tag }}"
+          REPO="sortbek/simc-builds"
           if [ "${{ inputs.platform }}" = "windows" ]; then
-            cp "${{ runner.temp }}/simc/build/Release/simc.exe" backend/resources/simc/simc.exe
+            ASSET="simc-windows-x64.zip"
+          elif [ "${{ inputs.platform }}" = "macos" ]; then
+            ASSET="simc-macos-arm64.tar.gz"
           else
-            cp "${{ runner.temp }}/simc/engine/simc" backend/resources/simc/simc
+            ASSET="simc-linux-x64.tar.gz"
           fi
+          URL=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/tags/$TAG" \
+            | python3 -c "import sys,json; r=json.load(sys.stdin); print(next(a['browser_download_url'] for a in r['assets'] if a['name']=='$ASSET'))")
+          mkdir -p backend/resources/simc
+          echo "Downloading $ASSET from $TAG..."
+          curl -fsSL -o "${{ runner.temp }}/$ASSET" "$URL"
+          if [[ "$ASSET" == *.zip ]]; then
+            unzip -o "${{ runner.temp }}/$ASSET" -d backend/resources/simc
+          else
+            tar -xzf "${{ runner.temp }}/$ASSET" -C backend/resources/simc
+          fi
+          chmod +x backend/resources/simc/simc* 2>/dev/null || true
 
       # -- Game Data --
       - name: Fetch game data
