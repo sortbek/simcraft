@@ -35,6 +35,65 @@ pub struct SimcBinaries {
 }
 
 impl SimcBinaries {
+    fn resolve_cached_or_live(&self, key: &str) -> Option<PathBuf> {
+        self.bins
+            .get(key)
+            .or_else(|| {
+                if let Some((prefix, _)) = key.split_once('-') {
+                    self.bins.get(prefix)
+                } else {
+                    None
+                }
+            })
+            .filter(|p| p.exists())
+            .cloned()
+            .or_else(|| self.resolve_from_source_dir(key))
+    }
+
+    fn read_runtime_default_key(&self) -> String {
+        self.source_dir
+            .as_ref()
+            .and_then(|dir| {
+                std::fs::read_to_string(dir.join(".active"))
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            })
+            .unwrap_or_else(|| self.default_branch.clone())
+    }
+
+    fn fallback_default_binary(&self) -> Option<PathBuf> {
+        self.resolve_cached_or_live("weekly")
+            .or_else(|| self.resolve_cached_or_live("nightly"))
+            .or_else(|| {
+                let dir = self.source_dir.as_ref()?;
+                let binary_name = if cfg!(windows) { "simc.exe" } else { "simc" };
+                let mut newest: Option<(String, PathBuf)> = None;
+
+                let entries = std::fs::read_dir(dir).ok()?;
+                for entry in entries.flatten() {
+                    let file_type = entry.file_type().ok()?;
+                    if !file_type.is_dir() {
+                        continue;
+                    }
+
+                    let tag = entry.file_name().to_string_lossy().to_string();
+                    let bin = entry.path().join(binary_name);
+                    if !bin.exists() {
+                        continue;
+                    }
+
+                    match &newest {
+                        Some((current_tag, _)) if tag <= *current_tag => {}
+                        _ => newest = Some((tag, bin)),
+                    }
+                }
+
+                newest.map(|(_, bin)| bin)
+            })
+            .or_else(|| self.bins.values().find(|p| p.exists()).cloned())
+    }
+
     fn resolve_from_source_dir(&self, branch: &str) -> Option<PathBuf> {
         let dir = self.source_dir.as_ref()?;
         let binary_name = if cfg!(windows) { "simc.exe" } else { "simc" };
@@ -88,33 +147,20 @@ impl SimcBinaries {
     /// Empty string uses the default branch.
     /// Falls back to live filesystem scan if the cached path is stale.
     pub fn resolve(&self, branch: &str) -> Result<PathBuf, String> {
-        let key = if branch.is_empty() {
-            // Re-read .active from disk in case it changed at runtime
-            self.source_dir
-                .as_ref()
-                .and_then(|dir| {
-                    std::fs::read_to_string(dir.join(".active"))
-                        .ok()
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
+        if branch.is_empty() {
+            let key = self.read_runtime_default_key();
+            return self
+                .resolve_cached_or_live(&key)
+                .or_else(|| {
+                    key.split_once('-')
+                        .and_then(|(prefix, _)| self.resolve_cached_or_live(prefix))
                 })
-                .unwrap_or_else(|| self.default_branch.clone())
-        } else {
-            branch.to_string()
-        };
-        self.bins
-            .get(&key)
-            .or_else(|| {
-                if let Some((prefix, _)) = key.split_once('-') {
-                    self.bins.get(prefix)
-                } else {
-                    None
-                }
-            })
-            .filter(|p| p.exists())
-            .cloned()
-            .or_else(|| self.resolve_from_source_dir(&key))
-            .ok_or_else(|| format!("SimC branch '{}' not available", key))
+                .or_else(|| self.fallback_default_binary())
+                .ok_or_else(|| format!("SimC branch '{}' not available", key));
+        }
+
+        self.resolve_cached_or_live(branch)
+            .ok_or_else(|| format!("SimC branch '{}' not available", branch))
     }
 
     /// Build from a SIMC_DIR: scans for installed version directories and exposes
@@ -369,5 +415,16 @@ mod tests {
         let nightly = install_fake_version(temp.path(), "nightly-2026-04-12");
 
         assert_eq!(bins.resolve("nightly").unwrap(), nightly);
+    }
+
+    #[test]
+    fn resolve_default_falls_back_when_active_tag_was_removed() {
+        let temp = tempdir().unwrap();
+        let weekly = install_fake_version(temp.path(), "weekly-2026-04-14");
+        fs::write(temp.path().join(".active"), "nightly-2026-04-14").unwrap();
+
+        let bins = SimcBinaries::from_dir(temp.path());
+
+        assert_eq!(bins.resolve("").unwrap(), weekly);
     }
 }

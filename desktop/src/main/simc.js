@@ -3,6 +3,7 @@ const {
   ensureSimc,
   getLatestNightlyRelease,
   getLatestWeeklyRelease,
+  getActiveBinaryPath,
   installVersion,
   listInstalledVersions,
   removeVersion,
@@ -45,6 +46,9 @@ function createSimcController(ipcMain, config, settingsStore, getMainWindow) {
         await installVersion(simcDir, release, (progress) => {
           emitDownloadProgress(progress);
         });
+        if (!getActiveBinaryPath(simcDir)) {
+          setActiveVersion(simcDir, release.tag);
+        }
         setStatus({ ...simcStatus, downloading: false, progress: 1 });
         return { success: true };
       } catch (err) {

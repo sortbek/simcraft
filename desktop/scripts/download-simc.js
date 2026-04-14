@@ -190,13 +190,19 @@ function getActiveBinaryPath(baseDir) {
 }
 
 function removeVersion(baseDir, tag) {
+  const wasActive = getActiveVersion(baseDir) === tag;
   const dir = path.join(baseDir, tag);
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
-  // If we just deleted the active version, clear the .active file
-  if (getActiveVersion(baseDir) === tag) {
-    try { fs.unlinkSync(path.join(baseDir, ".active")); } catch {}
+  // If we just deleted the active version, promote the newest remaining install.
+  if (wasActive) {
+    const remaining = listInstalledVersions(baseDir);
+    if (remaining.length > 0) {
+      setActiveVersion(baseDir, remaining[0].tag);
+    } else {
+      try { fs.unlinkSync(path.join(baseDir, ".active")); } catch {}
+    }
   }
 }
 
