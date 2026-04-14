@@ -86,14 +86,24 @@ impl SimcBinaries {
 
     /// Resolve a simc binary path for the given branch.
     /// Empty string uses the default branch.
+    /// Falls back to live filesystem scan if the cached path is stale.
     pub fn resolve(&self, branch: &str) -> Result<PathBuf, String> {
         let key = if branch.is_empty() {
-            &self.default_branch
+            // Re-read .active from disk in case it changed at runtime
+            self.source_dir
+                .as_ref()
+                .and_then(|dir| {
+                    std::fs::read_to_string(dir.join(".active"))
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                })
+                .unwrap_or_else(|| self.default_branch.clone())
         } else {
-            branch
+            branch.to_string()
         };
         self.bins
-            .get(key)
+            .get(&key)
             .or_else(|| {
                 if let Some((prefix, _)) = key.split_once('-') {
                     self.bins.get(prefix)
@@ -101,8 +111,9 @@ impl SimcBinaries {
                     None
                 }
             })
+            .filter(|p| p.exists())
             .cloned()
-            .or_else(|| self.resolve_from_source_dir(key))
+            .or_else(|| self.resolve_from_source_dir(&key))
             .ok_or_else(|| format!("SimC branch '{}' not available", key))
     }
 
