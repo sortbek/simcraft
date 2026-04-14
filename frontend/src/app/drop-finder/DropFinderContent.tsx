@@ -12,6 +12,7 @@ import ItemTable from '../components/loot/ItemTable';
 import DungeonDrawer from '../components/loot/DungeonDrawer';
 import DifficultySelect from '../components/loot/DifficultySelect';
 import UpgradeSelect from '../components/loot/UpgradeSelect';
+import CategorySelector from '../components/loot/CategorySelector';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { useLanguage } from '../lib/i18n';
@@ -171,9 +172,10 @@ function Spinner() {
 
 // --- Content ---
 
-export default function DropFinderContent({ category }: { category: string }) {
+export default function DropFinderContent() {
   const { t } = useLanguage();
   const { simcInput, hasInput } = useSimContext();
+  const [category, setCategory] = useState('mplus');
 
   // Spec selection: main spec on by default, off-specs toggleable
   const detectedClass = useMemo(() => detectClass(simcInput), [simcInput]);
@@ -455,13 +457,6 @@ export default function DropFinderContent({ category }: { category: string }) {
     selectedInstance?.name ||
     (selectedId.startsWith('type:') ? (isRaid ? t('loot.allRaids') : t('loot.allDungeons')) : '');
 
-  // Category label for dynamic title
-  const categoryLabel = useMemo(() => {
-    if (isRaid) return t('loot.raids');
-    if (activeDungeonCat) return activeDungeonCat.cat.label;
-    return '';
-  }, [isRaid, activeDungeonCat, t]);
-
   // Dungeon pool summary for context
   const dungeonPoolLabel = useMemo(() => {
     if (isRaid) return isRaid ? t('loot.allRaids') : '';
@@ -583,7 +578,7 @@ export default function DropFinderContent({ category }: { category: string }) {
       {/* Page header */}
       <div>
         <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
-          Drop Finder{categoryLabel ? ` — ${categoryLabel}` : ''}
+          Drop Finder
         </h1>
         <p className="text-sm text-on-surface-variant max-w-2xl">
           Find and simulate the best gear drops from across Azeroth. Refine your search by activity type and difficulty.
@@ -591,6 +586,12 @@ export default function DropFinderContent({ category }: { category: string }) {
       </div>
 
       <TalentPicker />
+
+      <CategorySelector
+        category={category}
+        onChange={setCategory}
+        dungeonCats={dungeonCats}
+      />
 
       {/* Configuration card: dungeon pool + difficulty + upgrade level */}
       {(isRaid || isDungeon) && (

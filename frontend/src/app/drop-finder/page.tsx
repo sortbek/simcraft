@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import DropFinderContent from './DropFinderContent';
 
-export default function DropFinderIndex() {
-  redirect('/drop-finder/mplus');
+export default function DropFinderPage() {
+  return <DropFinderContent />;
 }

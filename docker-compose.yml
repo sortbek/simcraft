@@ -39,5 +39,19 @@ services:
     entrypoint: ["sh", "-c", "cp -r /out/data/* /mount/data/ && echo 'Resources ready.'"]
 
 
+  standalone:
+    profiles: ["standalone"]
+    build:
+      context: .
+      dockerfile: Dockerfile.standalone
+    ports:
+      - "8000:8000"
+    volumes:
+      - simhammer-db:/app/db
+    environment:
+      - MAX_COMBINATIONS=2
+      - MAX_SCENARIOS=0
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+
 volumes:
   simhammer-db:

@@ -2,39 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
 import SidebarRoutes from './SidebarRoutes';
 import LanguageSelector from './LanguageSelector';
 import { ScaleSelector } from './ContentScaler';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
-import { API_URL } from '../../lib/api';
-import type { SeasonConfigResponse } from '../../lib/types';
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const isDesktop = useIsDesktop();
   const { t } = useLanguage();
-
-  const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
-  useEffect(() => {
-    fetch(`${API_URL}/api/season-config`)
-      .then((r) => r.json())
-      .then(setSeasonConfig)
-      .catch(() => {});
-  }, []);
-
-  const dropFinderChildren = useMemo(() => {
-    const entries: { href: string; label: string; sort: number }[] = [
-      { href: '/drop-finder/raids', label: t('loot.raids'), sort: 2 },
-    ];
-    for (const cat of seasonConfig?.dungeon_categories ?? []) {
-      entries.push({ href: `/drop-finder/${cat.key}`, label: cat.label, sort: cat.sortOrder ?? 99 });
-    }
-    entries.sort((a, b) => a.sort - b.sort);
-    return entries;
-  }, [seasonConfig, t]);
 
   const navItems = [
     {
@@ -48,10 +25,9 @@ export default function Sidebar() {
       matchPaths: ['/top-gear'],
     },
     {
-      href: dropFinderChildren[0]?.href ?? '/drop-finder/mplus',
+      href: '/drop-finder',
       label: t('nav.dropFinder'),
       matchPaths: ['/drop-finder'],
-      children: dropFinderChildren,
     },
     {
       href: '/upgrade-compare',
@@ -87,48 +63,19 @@ export default function Sidebar() {
           const isActive = item.matchPaths.some(
             (p) => pathname === p || pathname.startsWith(p + '/')
           );
-          const hasChildren = item.children && item.children.length > 0;
-          const isExpanded = expandedGroup === item.label || isActive;
 
           return (
-            <div key={item.href}>
-              <Link
-                href={item.href}
-                onClick={() => {
-                  if (hasChildren) {
-                    setExpandedGroup(isExpanded && !isActive ? null : item.label);
-                  }
-                }}
-                className={`flex items-center gap-3 px-6 py-3 font-headline font-bold text-xs uppercase transition-all ${
-                  isActive
-                    ? 'bg-primary-container/10 text-primary border-r-4 border-primary'
-                    : 'text-on-surface-variant hover:bg-surface hover:text-white'
-                }`}
-              >
-                {item.label}
-              </Link>
-
-              {hasChildren && isExpanded && (
-                <div className="ml-6 border-l border-outline-variant/20 mt-1 space-y-0.5">
-                  {item.children!.map((child) => {
-                    const childActive = pathname === child.href || pathname.startsWith(child.href + '/');
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        className={`flex items-center gap-3 pl-4 pr-6 py-2 font-headline font-bold text-[10px] uppercase transition-all ${
-                          childActive
-                            ? 'text-primary'
-                            : 'text-on-surface-variant/60 hover:text-primary'
-                        }`}
-                      >
-                        {child.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 px-6 py-3 font-headline font-bold text-xs uppercase transition-all ${
+                isActive
+                  ? 'bg-primary-container/10 text-primary border-r-4 border-primary'
+                  : 'text-on-surface-variant hover:bg-surface hover:text-white'
+              }`}
+            >
+              {item.label}
+            </Link>
           );
         })}
       </nav>
