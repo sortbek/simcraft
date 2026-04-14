@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import SettingsToggle from './SettingsToggle';
-import { checkForUpdates, type AvailableUpdate } from '../lib/simcUpdates';
+
+interface DesktopAvailableUpdate {
+  tag: string;
+  type: string;
+  assetUrl: string;
+  installed: boolean;
+}
 
 function formatVersionDate(tag: string): string {
   return tag.replace(/^(weekly|nightly)-/, '');
@@ -10,7 +16,7 @@ function formatVersionDate(tag: string): string {
 
 export default function SimcEngineSection() {
   const [versions, setVersions] = useState<SimcVersion[]>([]);
-  const [updates, setUpdates] = useState<AvailableUpdate[]>([]);
+  const [updates, setUpdates] = useState<DesktopAvailableUpdate[]>([]);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -35,8 +41,11 @@ export default function SimcEngineSection() {
     setChecking(true);
     setError('');
     try {
-      const result = await checkForUpdates();
-      setUpdates(result.updates);
+      const result = await window.electronAPI!.checkSimcUpdates();
+      setUpdates(result);
+      if (result.length === 0) {
+        setError('No SimC releases were found for this platform.');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to check for updates');
     } finally {
@@ -44,14 +53,14 @@ export default function SimcEngineSection() {
     }
   };
 
-  const handleInstall = async (update: AvailableUpdate) => {
+  const handleInstall = async (update: DesktopAvailableUpdate) => {
     setInstalling(update.tag);
     setProgress(0);
     setError('');
     try {
       const result = await window.electronAPI!.installSimcVersion({
         tag: update.tag,
-        assetUrl: update.asset_url,
+        assetUrl: update.assetUrl,
       });
       if (!result.success) {
         throw new Error(result.error);
@@ -85,7 +94,7 @@ export default function SimcEngineSection() {
     return branches.map((branch) => ({
       branch,
       installed: versions.find((version) => version.type === branch),
-      available: updates.find((update) => update.branch === branch && !update.installed),
+      available: updates.find((update) => update.type === branch && !update.installed),
     }));
   }, [versions, updates]);
 

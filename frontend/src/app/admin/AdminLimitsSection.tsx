@@ -93,10 +93,12 @@ export default function AdminLimitsSection() {
       if (!data.success) throw new Error(data.detail || 'Remove failed');
       try { setSimc(await fetchInstalledVersions()); } catch {}
       setUpdates([]);
+      // Auto-check for updates so the install button appears
+      handleCheckUpdates();
     } catch (err) {
       setCheckError(err instanceof Error ? err.message : 'Remove failed');
     }
-  }, []);
+  }, [handleCheckUpdates]);
 
   const save = useCallback(async (partial: Partial<Settings>) => {
     setSaving(true);
@@ -225,7 +227,7 @@ export default function AdminLimitsSection() {
                         Remove
                       </button>
                     )}
-                    {!available && !tag && isEnabled && (
+                    {!available && !tag && isEnabled && installing === branch && (
                       <span className="rounded bg-tertiary/10 px-3 py-1 text-[10px] font-bold uppercase text-tertiary">
                         Downloading
                       </span>

@@ -70,7 +70,7 @@ pub(super) async fn get_simc_versions(simc: web::Data<Arc<SimcBinaries>>) -> Htt
     let mut versions = serde_json::Map::new();
 
     for branch in &branches {
-        let tag = installed_tag_for_branch(&simc, branch).unwrap_or_default();
+        let tag = installed_tag_for_branch(&simc, branch);
         versions.insert(branch.to_string(), json!({ "tag": tag }));
     }
 
@@ -120,6 +120,10 @@ fn configured_simc_branches(simc: &SimcBinaries) -> Vec<String> {
 /// Tries .version file first, falls back to extracting the tag from the directory name.
 fn installed_tag_for_branch(simc: &SimcBinaries, branch: &str) -> Option<String> {
     let bin_path = simc.resolve(branch).ok()?;
+    // Verify the binary actually exists on disk (it may have been removed at runtime)
+    if !bin_path.exists() {
+        return None;
+    }
     let parent = bin_path.parent()?;
 
     // Try .version file (Docker layout: weekly/.version)

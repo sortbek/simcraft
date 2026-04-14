@@ -7,9 +7,14 @@ export function useSpellIcons(spellIds: number[]) {
   const depKey = useMemo(() => spellIds.join(','), [spellIds]);
 
   useEffect(() => {
-    const missing = spellIds.filter((id) => id > 0 && !iconCache.has(id));
+    const ids = depKey ? depKey.split(',').map(Number) : [];
+    const missing = ids.filter((id) => id > 0 && !iconCache.has(id));
     if (missing.length === 0) {
-      setIcons(new Map(iconCache));
+      setIcons((prev) => {
+        // Only update if there are new entries the component doesn't have yet
+        const needsUpdate = ids.some((id) => id > 0 && iconCache.has(id) && !prev.has(id));
+        return needsUpdate || prev.size === 0 ? new Map(iconCache) : prev;
+      });
       return;
     }
 
@@ -38,7 +43,9 @@ export function useSpellIcons(spellIds: number[]) {
     return () => {
       cancelled = true;
     };
-  }, [depKey, spellIds]);
+    // depKey is a stable string derived from spellIds
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depKey]);
 
   return icons;
 }

@@ -115,6 +115,7 @@ async function checkForUpdates(baseDir) {
   const installedTags = new Set(installed.map((v) => v.tag));
 
   const results = [];
+  const errors = [];
   for (const fetcher of [getLatestWeeklyRelease, getLatestNightlyRelease]) {
     try {
       const release = await fetcher();
@@ -124,7 +125,13 @@ async function checkForUpdates(baseDir) {
           installed: installedTags.has(release.tag),
         });
       }
-    } catch {}
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (results.length === 0 && errors.length > 0) {
+    throw new Error(errors.join("; "));
   }
   return results;
 }
