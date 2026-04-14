@@ -47,6 +47,7 @@ pub struct JobSummary {
     pub player_name: Option<String>,
     pub player_class: Option<String>,
     pub realm: Option<String>,
+    pub region: Option<String>,
     pub dps: Option<f64>,
     pub batch_id: Option<String>,
 }
@@ -56,6 +57,7 @@ pub struct ResultSummary {
     pub player_class: Option<String>,
     pub dps: Option<f64>,
     pub realm: Option<String>,
+    pub region: Option<String>,
 }
 
 pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) -> ResultSummary {
@@ -64,6 +66,7 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
         player_class: None,
         dps: None,
         realm: None,
+        region: None,
     };
 
     // Extract DPS, player name, class from parsed result
@@ -81,11 +84,20 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
         }
     }
 
-    // Extract realm from simc input (server=quelthalas)
+    // Extract realm and region from simc input
     for line in simc_input.lines() {
         let trimmed = line.trim();
-        if let Some(val) = trimmed.strip_prefix("server=") {
-            summary.realm = Some(val.to_string());
+        if summary.realm.is_none() {
+            if let Some(val) = trimmed.strip_prefix("server=") {
+                summary.realm = Some(val.to_string());
+            }
+        }
+        if summary.region.is_none() {
+            if let Some(val) = trimmed.strip_prefix("region=") {
+                summary.region = Some(val.to_string());
+            }
+        }
+        if summary.realm.is_some() && summary.region.is_some() {
             break;
         }
     }

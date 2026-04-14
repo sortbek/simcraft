@@ -16,6 +16,7 @@ interface DpsHeroCardProps {
   playerName: string;
   playerClass: string;
   playerRealm?: string;
+  playerRegion?: string;
   dps: number;
   dpsError?: number;
   dpsErrorPct?: number;
@@ -33,6 +34,7 @@ export default function DpsHeroCard({
   playerName,
   playerClass,
   playerRealm,
+  playerRegion,
   dps,
   dpsError,
   dpsErrorPct,
@@ -55,9 +57,9 @@ export default function DpsHeroCard({
     (iterations != null && iterations > 0) ||
     elapsedTime != null;
 
-  const faction = useFaction(playerRealm, playerName);
-  const insetUrl = getCharacterMediaUrl(playerRealm, playerName, 'inset');
-  const renderUrl = getCharacterMediaUrl(playerRealm, playerName, 'render');
+  const faction = useFaction(playerRealm, playerName, playerRegion);
+  const insetUrl = getCharacterMediaUrl(playerRealm, playerName, 'inset', playerRegion);
+  const renderUrl = getCharacterMediaUrl(playerRealm, playerName, 'render', playerRegion);
 
   return (
     <section className="relative overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-low shadow-2xl">

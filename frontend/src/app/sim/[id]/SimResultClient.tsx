@@ -208,6 +208,7 @@ export default function SimResultClient() {
             playerName={r.player_name as string}
             playerClass={r.player_class as string}
             playerRealm={r.realm as string | undefined}
+            playerRegion={r.region as string | undefined}
             baseDps={r.base_dps as number}
             results={
               r.results as Array<{
@@ -270,6 +271,7 @@ export default function SimResultClient() {
             playerName={r.player_name as string}
             playerClass={r.player_class as string}
             playerRealm={r.realm as string | undefined}
+            playerRegion={r.region as string | undefined}
             dps={r.dps as number}
             dpsError={r.dps_error as number}
             dpsErrorPct={r.dps_error_pct as number | undefined}
@@ -286,7 +288,7 @@ export default function SimResultClient() {
                 gear={r.equipped_gear as Record<string, GearItem>}
                 characterRenderUrl={
                   r.realm && r.player_name
-                    ? `https://simhammer.com/api/blizzard/character/${encodeURIComponent((r.realm as string).toLowerCase())}/${encodeURIComponent((r.player_name as string).toLowerCase())}/media/render`
+                    ? `https://simhammer.com/api/blizzard/character/${(r.region as string) || 'eu'}/${encodeURIComponent((r.realm as string).toLowerCase())}/${encodeURIComponent((r.player_name as string).toLowerCase())}/media/render`
                     : null
                 }
               />

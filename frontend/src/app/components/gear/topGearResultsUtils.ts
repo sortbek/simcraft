@@ -223,12 +223,12 @@ export function collectGemIds(
   return collectIds(results, equippedGear, (item) => item.gem_id);
 }
 
-export function getCharacterRenderUrl(playerRealm?: string, playerName?: string): string | null {
+export function getCharacterRenderUrl(playerRealm?: string, playerName?: string, playerRegion = 'eu'): string | null {
   if (!playerRealm || !playerName) {
     return null;
   }
 
-  return `https://simhammer.com/api/blizzard/character/${encodeURIComponent(
+  return `https://simhammer.com/api/blizzard/character/${playerRegion}/${encodeURIComponent(
     playerRealm.toLowerCase(),
   )}/${encodeURIComponent(playerName.toLowerCase())}/media/render`;
 }

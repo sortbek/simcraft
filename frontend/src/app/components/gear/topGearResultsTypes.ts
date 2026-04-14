@@ -28,6 +28,7 @@ export interface TopGearResultsProps {
   playerName: string;
   playerClass: string;
   playerRealm?: string;
+  playerRegion?: string;
   baseDps: number;
   results: TopGearResult[];
   equippedGear?: Record<string, ResultItem>;

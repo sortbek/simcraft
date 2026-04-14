@@ -10,7 +10,7 @@ export const FACTION_BGS: Record<string, string> = {
   horde: '/api/data/static/faction-bg-horde.jpg',
 };
 
-export function useFaction(realm?: string, name?: string): string | null {
+export function useFaction(realm?: string, name?: string, region = 'eu'): string | null {
   const [faction, setFaction] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export function useFaction(realm?: string, name?: string): string | null {
     (async () => {
       try {
         const res = await fetch(
-          `https://simhammer.com/api/blizzard/character/${encodeURIComponent(
+          `https://simhammer.com/api/blizzard/character/${region}/${encodeURIComponent(
             realm.toLowerCase(),
           )}/${encodeURIComponent(name.toLowerCase())}/profile`,
         );
@@ -41,7 +41,7 @@ export function useFaction(realm?: string, name?: string): string | null {
     return () => {
       cancelled = true;
     };
-  }, [realm, name]);
+  }, [realm, name, region]);
 
   return faction;
 }
@@ -50,12 +50,13 @@ export function getCharacterMediaUrl(
   realm: string | undefined,
   name: string | undefined,
   type: 'inset' | 'render',
+  region = 'eu',
 ): string | null {
   if (!realm || !name) {
     return null;
   }
 
-  return `https://simhammer.com/api/blizzard/character/${encodeURIComponent(
+  return `https://simhammer.com/api/blizzard/character/${region}/${encodeURIComponent(
     realm.toLowerCase(),
   )}/${encodeURIComponent(name.toLowerCase())}/media/${type}`;
 }

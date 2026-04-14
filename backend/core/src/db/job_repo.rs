@@ -152,6 +152,7 @@ impl JobRepo {
                     player_name: s.player_name,
                     player_class: s.player_class,
                     realm: s.realm,
+                    region: s.region,
                     dps: s.dps,
                     batch_id: r.get("batch_id"),
                 }

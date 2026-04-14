@@ -23,6 +23,7 @@ export default function TopGearResults({
   playerName,
   playerClass,
   playerRealm,
+  playerRegion,
   baseDps,
   results,
   equippedGear,
@@ -76,7 +77,7 @@ export default function TopGearResults({
   useWowheadTooltips([itemInfoMap]);
 
   const hasGearOverview = equippedGear && Object.keys(equippedGear).length > 0;
-  const characterRenderUrl = getCharacterRenderUrl(playerRealm, playerName);
+  const characterRenderUrl = getCharacterRenderUrl(playerRealm, playerName, playerRegion);
 
   return (
     <div className="space-y-6">
@@ -84,6 +85,7 @@ export default function TopGearResults({
         playerName={playerName}
         playerClass={playerClass}
         playerRealm={playerRealm}
+        playerRegion={playerRegion}
         dps={selectedResult && selectedResult.delta > 0 ? selectedResult.dps : baseDps}
         dpsError={dpsError}
         dpsErrorPct={dpsErrorPct}
