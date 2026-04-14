@@ -1953,7 +1953,7 @@ checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 
 [[package]]
 name = "simhammer-core"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -1977,7 +1977,7 @@ dependencies = [
 
 [[package]]
 name = "simhammer-server"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "simhammer-core",
  "tokio",
