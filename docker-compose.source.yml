@@ -1,0 +1,6 @@
+services:
+  backend:
+    build:
+      args:
+        - SIMC_SOURCE=build
+        - SIMC_GIT_REF=${SIMC_GIT_REF:-HEAD}

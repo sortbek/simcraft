@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "web": "docker compose up --build",
+    "web:source": "docker compose -f docker-compose.yml -f docker-compose.source.yml up --build",
     "backend:dev": "cd backend && cargo watch -w core/src -w server/src -w core/Cargo.toml -w server/Cargo.toml -w Cargo.toml -x 'run -p simhammer-server'",
     "desktop:dev": "npm run kill && cd desktop && npm run dev",
-    "desktop:dev:source": "npm run kill && cd desktop && SIMC_BUILD_FROM_SOURCE=1 npm run dev",
+    "desktop:dev:source": "npm run kill && cd desktop && node scripts/dev.js --build-simc",
     "desktop:build": "cd desktop && npm run build",
     "desktop:publish": "cd desktop && npm run publish",
     "kill": "node scripts/kill-ports.js"

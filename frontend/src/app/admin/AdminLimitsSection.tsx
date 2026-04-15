@@ -10,8 +10,8 @@ import {
 } from '../lib/simcUpdates';
 import SettingsToggle from '../settings/SettingsToggle';
 
-function formatVersionDate(tag: string): string {
-  return tag.replace(/^(weekly|nightly)-/, '');
+function formatVersionTag(tag: string): string {
+  return tag.replace(/^(weekly|nightly|source)-/, '');
 }
 
 interface Settings {
@@ -123,6 +123,8 @@ export default function AdminLimitsSection() {
     return <div className="text-sm text-on-surface-variant/60">Loading settings...</div>;
   }
 
+  const isSource = simc?.default_branch === 'source' || simc?.branches.includes('source');
+  const sourceTag = simc?.versions?.source?.tag;
   const allBranches = ['weekly', 'nightly'] as const;
 
   return (
@@ -138,7 +140,7 @@ export default function AdminLimitsSection() {
           </div>
           <button
             onClick={handleCheckUpdates}
-            disabled={checking}
+            disabled={checking || !!isSource}
             className="rounded bg-surface-container-highest px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-surface-bright disabled:opacity-50"
           >
             {checking ? 'Checking...' : 'Check for Updates'}
@@ -146,7 +148,21 @@ export default function AdminLimitsSection() {
         </div>
 
         <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
-          {/* Column headers — same as desktop */}
+          {isSource && sourceTag && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <div className="flex items-center gap-2">
+                <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
+                </svg>
+                <p className="text-sm font-semibold text-primary">Built from Source</p>
+              </div>
+              <p className="mt-0.5 text-[10px] text-on-surface-variant/70">
+                {formatVersionTag(sourceTag)}
+              </p>
+            </div>
+          )}
+
+          {/* Column headers */}
           <div className="flex items-center border-b border-outline-variant/20 px-3 pb-2">
             <span className="w-12 shrink-0 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
               Active
@@ -159,8 +175,8 @@ export default function AdminLimitsSection() {
             </span>
           </div>
 
-          {/* Per-branch rows — same card structure as desktop */}
-          <div className="space-y-2">
+          {/* Per-branch rows */}
+          <div className={`space-y-2${isSource ? ' pointer-events-none opacity-40' : ''}`}>
             {allBranches.map((branch) => {
               const isEnabled = enabledBranches.includes(branch);
               const info = simc?.versions[branch];
@@ -195,10 +211,10 @@ export default function AdminLimitsSection() {
                     </div>
                     {tag ? (
                       <p className="text-[10px] text-on-surface-variant/70">
-                        Installed: {formatVersionDate(tag)}
+                        Installed: {formatVersionTag(tag)}
                         {available && (
                           <span className="ml-2 text-primary">
-                            Update available: {formatVersionDate(available.tag)}
+                            Update available: {formatVersionTag(available.tag)}
                           </span>
                         )}
                       </p>
@@ -243,12 +259,20 @@ export default function AdminLimitsSection() {
             })}
           </div>
 
+          {isSource && (
+            <p className="text-[10px] text-on-surface-variant/50">
+              Weekly and Nightly branches are disabled while a source build is active.
+            </p>
+          )}
+
           {checkError && <p className="pt-1 text-xs text-error">{checkError}</p>}
 
-          <p className="pt-1 text-[10px] italic text-on-surface-variant/40">
-            Branch toggles are controlled by the SIMC_ENABLED_BRANCHES environment variable.
-            Updates are downloaded automatically every {env?.simc_check_interval ?? '3600'}s.
-          </p>
+          {!isSource && (
+            <p className="pt-1 text-[10px] italic text-on-surface-variant/40">
+              Branch toggles are controlled by the SIMC_ENABLED_BRANCHES environment variable.
+              Updates are downloaded automatically every {env?.simc_check_interval ?? '3600'}s.
+            </p>
+          )}
         </div>
       </div>
 

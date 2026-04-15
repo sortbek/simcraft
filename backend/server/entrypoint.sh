@@ -107,16 +107,23 @@ update_loop() {
 # Startup
 # ---------------------------------------------------------------------------
 parse_branches
-SIMC_ASSET_NAME="$(detect_simc_asset)"
-echo "[simc-updater] Enabled branches: ${ENABLED_BRANCHES[*]}, check interval: ${SIMC_CHECK_INTERVAL}s"
-echo "[simc-updater] Using SimC asset: ${SIMC_ASSET_NAME}"
 
-# Initial check
-for BRANCH in "${ENABLED_BRANCHES[@]}"; do
-    fetch_branch "$BRANCH" || true
-done
+# Skip updater if a source build is active
+ACTIVE_BRANCH=$(cat "$SIMC_DIR/.active" 2>/dev/null || true)
+if echo "$ACTIVE_BRANCH" | grep -q "^source-"; then
+    echo "[simc-updater] Source build detected ($ACTIVE_BRANCH) — skipping remote updates."
+else
+    SIMC_ASSET_NAME="$(detect_simc_asset)"
+    echo "[simc-updater] Enabled branches: ${ENABLED_BRANCHES[*]}, check interval: ${SIMC_CHECK_INTERVAL}s"
+    echo "[simc-updater] Using SimC asset: ${SIMC_ASSET_NAME}"
 
-# Start background loop
-update_loop &
+    # Initial check
+    for BRANCH in "${ENABLED_BRANCHES[@]}"; do
+        fetch_branch "$BRANCH" || true
+    done
+
+    # Start background loop
+    update_loop &
+fi
 
 exec "$@"

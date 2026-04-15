@@ -12,6 +12,13 @@ const ROOT = path.join(__dirname, "..", "..");
 const BACKEND_DIR = path.join(ROOT, "backend");
 const FRONTEND_DIR = path.join(ROOT, "frontend");
 
+const args = process.argv.slice(2);
+const BUILD_SIMC = args.includes("--build-simc") || !!process.env.SIMC_BUILD_FROM_SOURCE;
+const SIMC_REF = (() => {
+  const idx = args.indexOf("--simc-ref");
+  return (idx !== -1 && args[idx + 1]) ? args[idx + 1] : (process.env.SIMC_GIT_REF || "HEAD");
+})();
+
 const ext = process.platform === "win32" ? ".exe" : "";
 const serverBinary = path.join(BACKEND_DIR, "target", "debug", `simhammer-server${ext}`);
 
@@ -129,12 +136,11 @@ async function ensureResources() {
   const metadataFile = path.join(dataDir, "metadata.json");
 
   // Ensure simc is installed — either build from source or download pre-built
-  if (process.env.SIMC_BUILD_FROM_SOURCE) {
+  if (BUILD_SIMC) {
     const { buildSimc } = require("./build-simc");
-    const gitRef = process.env.SIMC_GIT_REF || "HEAD";
-    console.log(`[dev] Building SimC from source (${gitRef})...`);
+    console.log(`[dev] Building SimC from source (${SIMC_REF})...`);
     try {
-      await buildSimc(simcDir, gitRef, (msg) => {
+      await buildSimc(simcDir, SIMC_REF, (msg) => {
         console.log(`[dev] SimC build: ${msg}`);
       });
       console.log("[dev] SimC built from source.");
