@@ -264,7 +264,15 @@ pub async fn start(resource_dir: &Path, frontend_dir: Option<PathBuf>) -> u16 {
     };
     let simc_bins = Arc::new(SimcBinaries::from_dir(&resource_dir.join("simc")));
     let data_dir = Some(resource_dir.join("data"));
-    start_server(&database_url, simc_bins, "127.0.0.1", 17384, frontend_dir, data_dir).await
+    start_server(
+        &database_url,
+        simc_bins,
+        "127.0.0.1",
+        17384,
+        frontend_dir,
+        data_dir,
+    )
+    .await
 }
 
 /// Start the actix-web HTTP server.
@@ -277,14 +285,41 @@ pub async fn start_server(
     frontend_dir: Option<PathBuf>,
     data_dir: Option<PathBuf>,
 ) -> u16 {
-    let db = Database::connect(database_url)
+    #[cfg(feature = "desktop")]
+    let (job_repo, route_repo, char_repo, settings_repo) = match Database::connect(database_url)
         .await
-        .expect("Failed to connect to database");
-
-    let job_repo = web::Data::new(JobRepo::new(db.pool.clone()));
-    let route_repo = web::Data::new(RouteRepo::new(db.pool.clone()));
-    let char_repo = web::Data::new(CharacterRepo::new(db.pool.clone()));
-    let settings_repo = web::Data::new(SettingsRepo::new(db.pool.clone()));
+    {
+        Ok(db) => (
+            web::Data::new(JobRepo::new(db.pool.clone())),
+            web::Data::new(RouteRepo::new(db.pool.clone())),
+            web::Data::new(CharacterRepo::new(db.pool.clone())),
+            web::Data::new(SettingsRepo::new(db.pool.clone())),
+        ),
+        Err(err) => {
+            eprintln!(
+                "Failed to connect to database ({}). Continuing with in-memory storage; data will not persist across restarts.",
+                err
+            );
+            (
+                web::Data::new(JobRepo::new_memory()),
+                web::Data::new(RouteRepo::new_memory()),
+                web::Data::new(CharacterRepo::new_memory()),
+                web::Data::new(SettingsRepo::new_memory()),
+            )
+        }
+    };
+    #[cfg(not(feature = "desktop"))]
+    let (job_repo, route_repo, char_repo, settings_repo) = {
+        let db = Database::connect(database_url)
+            .await
+            .expect("Failed to connect to database");
+        (
+            web::Data::new(JobRepo::new(db.pool.clone())),
+            web::Data::new(RouteRepo::new(db.pool.clone())),
+            web::Data::new(CharacterRepo::new(db.pool.clone())),
+            web::Data::new(SettingsRepo::new(db.pool.clone())),
+        )
+    };
 
     // Apply persisted admin settings on startup
     if let Ok(Some(val)) = settings_repo.get("max_combinations").await {
@@ -377,7 +412,11 @@ mod tests {
     use tempfile::tempdir;
 
     fn binary_name() -> &'static str {
-        if cfg!(windows) { "simc.exe" } else { "simc" }
+        if cfg!(windows) {
+            "simc.exe"
+        } else {
+            "simc"
+        }
     }
 
     fn install_fake_version(base: &std::path::Path, tag: &str) -> std::path::PathBuf {
