@@ -24,7 +24,10 @@ pub(super) async fn list_sims_filtered(
     if query.player.is_empty() || query.realm.is_empty() {
         return HttpResponse::BadRequest().json(json!({"detail": "player and realm are required"}));
     }
-    match repo.list_recent(20, Some(&query.player), Some(&query.realm)).await {
+    match repo
+        .list_recent(20, Some(&query.player), Some(&query.realm))
+        .await
+    {
         Ok(summaries) => HttpResponse::Ok().json(summaries),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
@@ -91,10 +94,7 @@ pub(super) async fn get_sim_logs(
     }))
 }
 
-pub(super) async fn cancel_sim(
-    path: web::Path<String>,
-    repo: web::Data<JobRepo>,
-) -> HttpResponse {
+pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {
     let job_id = path.into_inner();
     let job = match repo.get(&job_id).await {
         Ok(Some(j)) => j,
@@ -134,10 +134,7 @@ pub(super) async fn get_sim_input(
         .body(job.simc_input)
 }
 
-pub(super) async fn get_sim_raw(
-    path: web::Path<String>,
-    repo: web::Data<JobRepo>,
-) -> HttpResponse {
+pub(super) async fn get_sim_raw(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {
     let job_id = path.into_inner();
     let job = match repo.get(&job_id).await {
         Ok(Some(j)) => j,
@@ -155,18 +152,14 @@ pub(super) async fn get_sim_raw(
             Err(_) => HttpResponse::InternalServerError()
                 .json(json!({"detail": "Failed to parse stored raw JSON"})),
         },
-        None => {
-            match &job.result_json {
-                Some(result) => match serde_json::from_str::<Value>(result) {
-                    Ok(val) => HttpResponse::Ok().json(val),
-                    Err(_) => HttpResponse::InternalServerError()
-                        .json(json!({"detail": "Failed to parse stored result"})),
-                },
-                None => {
-                    HttpResponse::NotFound().json(json!({"detail": "No results available yet"}))
-                }
-            }
-        }
+        None => match &job.result_json {
+            Some(result) => match serde_json::from_str::<Value>(result) {
+                Ok(val) => HttpResponse::Ok().json(val),
+                Err(_) => HttpResponse::InternalServerError()
+                    .json(json!({"detail": "Failed to parse stored result"})),
+            },
+            None => HttpResponse::NotFound().json(json!({"detail": "No results available yet"})),
+        },
     }
 }
 
@@ -218,10 +211,7 @@ pub(super) async fn get_sim_text_output(
     }
 }
 
-pub(super) async fn get_sim_csv(
-    path: web::Path<String>,
-    repo: web::Data<JobRepo>,
-) -> HttpResponse {
+pub(super) async fn get_sim_csv(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {
     let job_id = path.into_inner();
     let job = match repo.get(&job_id).await {
         Ok(Some(j)) => j,

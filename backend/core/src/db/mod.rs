@@ -158,16 +158,10 @@ impl Database {
 
         // Enable WAL mode for SQLite — allows concurrent reads while writing
         if is_sqlite {
-            if let Err(e) = sqlx::query("PRAGMA journal_mode=WAL")
-                .execute(&pool)
-                .await
-            {
+            if let Err(e) = sqlx::query("PRAGMA journal_mode=WAL").execute(&pool).await {
                 eprintln!("Failed to enable SQLite WAL mode: {}", e);
             }
-            if let Err(e) = sqlx::query("PRAGMA busy_timeout=5000")
-                .execute(&pool)
-                .await
-            {
+            if let Err(e) = sqlx::query("PRAGMA busy_timeout=5000").execute(&pool).await {
                 eprintln!("Failed to set SQLite busy_timeout: {}", e);
             }
         }
@@ -192,8 +186,8 @@ mod tests {
 
     #[test]
     fn enforces_sqlite_runtime_selection() {
-        let err = resolve_backend("postgresql://db.example.com/simhammer", Some("sqlite"))
-            .unwrap_err();
+        let err =
+            resolve_backend("postgresql://db.example.com/simhammer", Some("sqlite")).unwrap_err();
         assert!(err.contains("DB_BACKEND=sqlite"));
     }
 

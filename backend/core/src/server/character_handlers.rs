@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse};
 use serde_json::json;
 
-use crate::db::{CharacterRepo, character_repo::UpsertCharacterRequest};
+use crate::db::{character_repo::UpsertCharacterRequest, CharacterRepo};
 
 pub(super) async fn list_characters(repo: web::Data<CharacterRepo>) -> HttpResponse {
     match repo.list().await {
@@ -55,9 +55,7 @@ pub(super) async fn delete_talent_build(
     let id = path.into_inner();
     match repo.delete_talent_build(&id).await {
         Ok(true) => HttpResponse::Ok().json(json!({"status": "ok"})),
-        Ok(false) => {
-            HttpResponse::NotFound().json(json!({"detail": "Talent build not found"}))
-        }
+        Ok(false) => HttpResponse::NotFound().json(json!({"detail": "Talent build not found"})),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
 }

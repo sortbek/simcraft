@@ -110,8 +110,8 @@ mod tests {
 
     fn ensure_game_data_loaded() {
         LOAD_GAME_DATA.call_once(|| {
-            let data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../resources/data-compacted");
+            let data_dir =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/data-compacted");
             crate::item_db::load(&data_dir);
         });
     }
@@ -183,7 +183,9 @@ main_hand=,id=200\n";
             Some(10),
         );
 
-        assert!(matches!(result, Err(message) if message.contains("No upgradeable equipped items")));
+        assert!(
+            matches!(result, Err(message) if message.contains("No upgradeable equipped items"))
+        );
     }
 
     #[test]

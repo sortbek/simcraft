@@ -156,14 +156,9 @@ fn platform_asset_name() -> &'static str {
 
 const SIMC_REPO: &str = "sortbek/simc-builds";
 
-pub(super) async fn check_simc_updates(
-    simc: web::Data<Arc<SimcBinaries>>,
-) -> HttpResponse {
+pub(super) async fn check_simc_updates(simc: web::Data<Arc<SimcBinaries>>) -> HttpResponse {
     let simc = simc.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        check_updates_blocking(&simc)
-    })
-    .await;
+    let result = tokio::task::spawn_blocking(move || check_updates_blocking(&simc)).await;
 
     match result {
         Ok(Ok(updates)) => HttpResponse::Ok().json(updates),
@@ -172,13 +167,14 @@ pub(super) async fn check_simc_updates(
     }
 }
 
-fn check_updates_blocking(
-    simc: &SimcBinaries,
-) -> Result<serde_json::Value, String> {
+fn check_updates_blocking(simc: &SimcBinaries) -> Result<serde_json::Value, String> {
     let asset_name = platform_asset_name();
 
     // Fetch tags from GitHub
-    let tags_url = format!("https://api.github.com/repos/{}/tags?per_page=100", SIMC_REPO);
+    let tags_url = format!(
+        "https://api.github.com/repos/{}/tags?per_page=100",
+        SIMC_REPO
+    );
     let tags_resp: Vec<serde_json::Value> = ureq::get(&tags_url)
         .call()
         .map_err(|e| format!("Failed to fetch tags: {}", e))?
@@ -193,7 +189,11 @@ fn check_updates_blocking(
         let prefix = format!("{}-", branch);
         let latest_tag = match tags_resp.iter().find_map(|t| {
             let name = t["name"].as_str()?;
-            if name.starts_with(&prefix) { Some(name.to_string()) } else { None }
+            if name.starts_with(&prefix) {
+                Some(name.to_string())
+            } else {
+                None
+            }
         }) {
             Some(t) => t,
             None => continue,

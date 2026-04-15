@@ -88,7 +88,11 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
     let (enchant_name, enchant_item_id) = if item.enchant_id > 0 {
         item_db::get_enchant_info(item.enchant_id)
             .map(|e| {
-                let name = e.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let name = e
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let item_id = e.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
                 (name, item_id)
             })

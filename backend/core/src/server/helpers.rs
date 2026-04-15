@@ -258,8 +258,14 @@ pub(super) fn inject_realm(parsed: &mut Value, simc_input: &str) {
 }
 
 enum JobUpdate {
-    Progress { pct: u8, stage: String, detail: String },
-    StageComplete { summary: String },
+    Progress {
+        pct: u8,
+        stage: String,
+        detail: String,
+    },
+    StageComplete {
+        summary: String,
+    },
 }
 
 fn enqueue_job_update(
@@ -268,7 +274,10 @@ fn enqueue_job_update(
     job_id: &str,
 ) {
     if tx.send(update).is_err() {
-        eprintln!("[{}] Failed to enqueue job update: writer task is closed", job_id);
+        eprintln!(
+            "[{}] Failed to enqueue job update: writer task is closed",
+            job_id
+        );
     }
 }
 
@@ -307,9 +316,7 @@ pub(super) fn spawn_staged_sim(
                         }
                     }
                     JobUpdate::StageComplete { summary } => {
-                        if let Err(e) =
-                            writer_repo.complete_stage(&writer_jid, &summary).await
-                        {
+                        if let Err(e) = writer_repo.complete_stage(&writer_jid, &summary).await {
                             eprintln!("[{}] Failed to complete stage: {}", writer_jid, e);
                         }
                     }
@@ -377,10 +384,20 @@ pub(super) fn spawn_staged_sim(
                 inject_realm(&mut parsed, &simc_input);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
-                if let Err(e) = repo.set_result(&job_id, &result_str, raw_str.as_deref()).await {
+                if let Err(e) = repo
+                    .set_result(&job_id, &result_str, raw_str.as_deref())
+                    .await
+                {
                     eprintln!("[{}] Failed to set result: {}", job_id, e);
                 }
-                if let Err(e) = repo.set_report_files(&job_id, output.html_report.as_deref(), output.text_output.as_deref()).await {
+                if let Err(e) = repo
+                    .set_report_files(
+                        &job_id,
+                        output.html_report.as_deref(),
+                        output.text_output.as_deref(),
+                    )
+                    .await
+                {
                     eprintln!("[{}] Failed to set report files: {}", job_id, e);
                 }
             }

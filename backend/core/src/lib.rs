@@ -1,5 +1,5 @@
-pub mod db;
 pub mod addon_parser;
+pub mod db;
 pub mod game_data;
 pub mod gear_resolver;
 pub mod item_db;

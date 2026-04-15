@@ -7,12 +7,12 @@ use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
+use crate::db::JobRepo;
 use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::models::Job;
 use crate::profileset_generator;
-use crate::db::JobRepo;
 
 /// Shared prep: parse SimC input, extract upgrade budget, build upgrade options per slot.
 struct PreparedUpgradeCompare {

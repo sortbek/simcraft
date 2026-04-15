@@ -10,11 +10,11 @@ use crate::types::class_data;
 
 pub use crate::item_db::{
     apply_copy_enchants, catalyst_currency_id, catalyst_tier_item, get_currency_info,
-    get_enchant_info, get_gem_info, get_inventory_type, get_item_armor_subclass, get_item_info, get_item_limit_categories,
-    get_upgrade_cost_between, get_upgrade_options, get_upgrade_tracks, is_catalyst_tier_item, list_enchants_for_slot,
-    list_augments, list_flasks, list_foods, list_gems, list_potions, list_temp_enchants,
-    load, talent_tree, upgrade_bonus_ids_to_max, upgrade_items_by_slot, upgrade_simc_input,
-    CatalystTierItem,
+    get_enchant_info, get_gem_info, get_inventory_type, get_item_armor_subclass, get_item_info,
+    get_item_limit_categories, get_upgrade_cost_between, get_upgrade_options, get_upgrade_tracks,
+    is_catalyst_tier_item, list_augments, list_enchants_for_slot, list_flasks, list_foods,
+    list_gems, list_potions, list_temp_enchants, load, talent_tree, upgrade_bonus_ids_to_max,
+    upgrade_items_by_slot, upgrade_simc_input, CatalystTierItem,
 };
 pub use crate::types::class_data::{quality_name, QUALITY_NAMES};
 
@@ -98,7 +98,10 @@ pub fn get_instance_drops(
             for item in items_list {
                 // For meta-instances, only include items sourced from this specific instance
                 if is_meta {
-                    let source_iid = item.get("_source_instance_id").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let source_iid = item
+                        .get("_source_instance_id")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
                     if source_iid != instance_id {
                         continue;
                     }
@@ -232,8 +235,13 @@ pub fn get_instance_drops(
                                             "track": track, "level": level, "max_level": tm,
                                         }),
                                     );
-                                } else if let Some(fixed_ilvl) = entry.get("fixedIlvl").and_then(|v| v.as_u64()) {
-                                    let fixed_quality = entry.get("fixedQuality").and_then(|v| v.as_u64()).unwrap_or(3);
+                                } else if let Some(fixed_ilvl) =
+                                    entry.get("fixedIlvl").and_then(|v| v.as_u64())
+                                {
+                                    let fixed_quality = entry
+                                        .get("fixedQuality")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(3);
                                     dungeon_info.insert(
                                         diff_key.clone(),
                                         serde_json::json!({

@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse};
 use serde_json::json;
 
-use crate::db::{RouteRepo, route_repo::CreateRouteRequest};
+use crate::db::{route_repo::CreateRouteRequest, RouteRepo};
 
 pub(super) async fn list_routes(repo: web::Data<RouteRepo>) -> HttpResponse {
     match repo.list().await {

@@ -23,7 +23,8 @@ pub fn generate_upgrade_compare_input(
         return Err("No upgradeable equipped items were selected.".to_string());
     }
 
-    let limit = max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
+    let limit =
+        max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
 
     // DFS: explore upgrade choices per slot within budget
     struct Combo {

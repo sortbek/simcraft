@@ -319,7 +319,9 @@ pub fn load(data_dir: &Path) {
                     if let Some(eid) = src.get("encounterId").and_then(|e| e.as_i64()) {
                         let mut entry = item.clone();
                         if let Some(iid) = src.get("instanceId").and_then(|v| v.as_i64()) {
-                            entry.as_object_mut().map(|o| o.insert("_source_instance_id".to_string(), serde_json::json!(iid)));
+                            entry.as_object_mut().map(|o| {
+                                o.insert("_source_instance_id".to_string(), serde_json::json!(iid))
+                            });
                         }
                         drops.entry(eid).or_default().push(entry);
                     }
@@ -370,10 +372,7 @@ pub fn load(data_dir: &Path) {
         let mut lookup: HashMap<u64, (u64, u64)> = HashMap::new();
         if let Some(bonuses) = BONUSES.get() {
             for (bid, bonus) in bonuses {
-                if let Some(cat_id) = bonus
-                    .get("item_limit_category")
-                    .and_then(|c| c.as_u64())
-                {
+                if let Some(cat_id) = bonus.get("item_limit_category").and_then(|c| c.as_u64()) {
                     if let Some(&qty) = cats.get(&cat_id) {
                         lookup.insert(*bid, (cat_id, qty));
                     }
@@ -577,10 +576,9 @@ pub fn load(data_dir: &Path) {
     ] {
         let path = data_dir.join(filename);
         if path.exists() {
-            let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-                fs::File::open(&path).unwrap(),
-            ))
-            .unwrap_or_default();
+            let data: Vec<Value> =
+                serde_json::from_reader(std::io::BufReader::new(fs::File::open(&path).unwrap()))
+                    .unwrap_or_default();
             println!("Loaded {} entries from {}", data.len(), filename);
             let _ = cell.set(data);
         }
@@ -942,17 +940,17 @@ pub fn get_gem_info(gem_item_id: u64) -> Option<Value> {
 /// Returns 0 for main_hand (weapon enchants have invTypeMask=0).
 fn slot_to_inv_type_mask(slot: &str) -> u64 {
     match slot {
-        "head" => 2,           // 1 << 1 (invType 1)
-        "neck" => 4,           // 1 << 2 (invType 2)
-        "shoulder" => 8,       // 1 << 3 (invType 3)
-        "chest" => 1048608,    // (1 << 5) | (1 << 20) (invType 5 + Robe 20)
-        "waist" => 64,         // 1 << 6 (invType 6)
-        "legs" => 128,         // 1 << 7 (invType 7)
-        "feet" => 256,         // 1 << 8 (invType 8)
-        "wrist" => 512,        // 1 << 9 (invType 9)
-        "hands" => 1024,       // 1 << 10 (invType 10)
+        "head" => 2,                   // 1 << 1 (invType 1)
+        "neck" => 4,                   // 1 << 2 (invType 2)
+        "shoulder" => 8,               // 1 << 3 (invType 3)
+        "chest" => 1048608,            // (1 << 5) | (1 << 20) (invType 5 + Robe 20)
+        "waist" => 64,                 // 1 << 6 (invType 6)
+        "legs" => 128,                 // 1 << 7 (invType 7)
+        "feet" => 256,                 // 1 << 8 (invType 8)
+        "wrist" => 512,                // 1 << 9 (invType 9)
+        "hands" => 1024,               // 1 << 10 (invType 10)
         "finger1" | "finger2" => 2048, // 1 << 11 (invType 11)
-        "back" => 65536,       // 1 << 16 (invType 16)
+        "back" => 65536,               // 1 << 16 (invType 16)
         _ => 0,
     }
 }
@@ -979,7 +977,10 @@ pub fn list_enchants_for_slot(expansion: u64, slot: &str) -> Vec<Value> {
                 Some(r) => r,
                 None => return false,
             };
-            let inv_mask = reqs.get("invTypeMask").and_then(|v| v.as_u64()).unwrap_or(0);
+            let inv_mask = reqs
+                .get("invTypeMask")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             let item_class = reqs.get("itemClass").and_then(|v| v.as_u64()).unwrap_or(0);
 
             if is_weapon {

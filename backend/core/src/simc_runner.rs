@@ -157,21 +157,48 @@ const STAGED_THRESHOLD: usize = 10;
 
 /// Build the full simc input from the options Value (convenience wrapper).
 pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> String {
-    let fight_style = options.get("fight_style").and_then(|v| v.as_str()).unwrap_or("Patchwerk");
-    let target_error = options.get("target_error").and_then(|v| v.as_f64()).unwrap_or(0.1);
-    let iterations = options.get("iterations").and_then(|v| v.as_u64()).unwrap_or(10000) as u32;
-    let desired_targets = options.get("desired_targets").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
-    let max_time = options.get("max_time").and_then(|v| v.as_u64()).unwrap_or(300) as u32;
-    let calculate_scale_factors = options.get("sim_type").and_then(|v| v.as_str()) == Some("stat_weights");
-    let single_actor_batch = options.get("single_actor_batch").and_then(|v| v.as_bool()).unwrap_or(true);
+    let fight_style = options
+        .get("fight_style")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Patchwerk");
+    let target_error = options
+        .get("target_error")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.1);
+    let iterations = options
+        .get("iterations")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10000) as u32;
+    let desired_targets = options
+        .get("desired_targets")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as u32;
+    let max_time = options
+        .get("max_time")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(300) as u32;
+    let calculate_scale_factors =
+        options.get("sim_type").and_then(|v| v.as_str()) == Some("stat_weights");
+    let single_actor_batch = options
+        .get("single_actor_batch")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     let is_dungeon_route = simc_input.lines().any(|l| {
         let t = l.trim();
         t == "fight_style=DungeonRoute" || t == "fight_style=\"DungeonRoute\""
     });
 
     build_full_simc_input(
-        simc_input, options, fight_style, target_error, iterations,
-        desired_targets, max_time, calculate_scale_factors, single_actor_batch, is_dungeon_route,
+        simc_input,
+        options,
+        fight_style,
+        target_error,
+        iterations,
+        desired_targets,
+        max_time,
+        calculate_scale_factors,
+        single_actor_batch,
+        is_dungeon_route,
     )
 }
 
@@ -305,7 +332,11 @@ pub fn build_full_simc_input(
                 .and_then(|v| v.as_u64())
                 .map(|v| v != 0)
                 .unwrap_or(true);
-            result.push_str(&format!("override.{}={}\n", key, if enabled { "1" } else { "0" }));
+            result.push_str(&format!(
+                "override.{}={}\n",
+                key,
+                if enabled { "1" } else { "0" }
+            ));
         }
     }
 

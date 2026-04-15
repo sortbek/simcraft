@@ -92,7 +92,8 @@ pub(super) fn generate_enchant_gem_input(
     let valid_combos: Vec<Vec<usize>> = all_combos.into_iter().filter(|c| *c != baseline).collect();
 
     let combo_count = valid_combos.len();
-    let limit = max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
+    let limit =
+        max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
     if limit > 0 && combo_count > limit {
         return Err(format!(
             "Too many combinations ({}). Maximum is {}. Please deselect some options.",

@@ -44,7 +44,9 @@ fn validate_token(req: &HttpRequest, secret: &AdminSecret) -> Result<(), HttpRes
         &DecodingKey::from_secret(secret.0.as_bytes()),
         &Validation::default(),
     )
-    .map_err(|_| HttpResponse::Unauthorized().json(json!({"detail": "Invalid or expired token"})))?;
+    .map_err(|_| {
+        HttpResponse::Unauthorized().json(json!({"detail": "Invalid or expired token"}))
+    })?;
 
     Ok(())
 }
@@ -53,14 +55,13 @@ pub(super) async fn login(
     body: web::Json<LoginRequest>,
     secret: web::Data<AdminSecret>,
 ) -> HttpResponse {
-    let admin_pw = match std::env::var("ADMIN_PASSWORD") {
-        Ok(pw) if !pw.is_empty() => pw,
-        _ => {
-            return HttpResponse::Forbidden().json(json!({
+    let admin_pw =
+        match std::env::var("ADMIN_PASSWORD") {
+            Ok(pw) if !pw.is_empty() => pw,
+            _ => return HttpResponse::Forbidden().json(json!({
                 "detail": "Admin panel is not configured. Set ADMIN_PASSWORD environment variable."
-            }))
-        }
-    };
+            })),
+        };
 
     if body.password != admin_pw {
         return HttpResponse::Unauthorized().json(json!({"detail": "Invalid password"}));
@@ -81,10 +82,7 @@ pub(super) async fn login(
     HttpResponse::Ok().json(json!({"token": token}))
 }
 
-pub(super) async fn check_auth(
-    req: HttpRequest,
-    secret: web::Data<AdminSecret>,
-) -> HttpResponse {
+pub(super) async fn check_auth(req: HttpRequest, secret: web::Data<AdminSecret>) -> HttpResponse {
     match validate_token(&req, &secret) {
         Ok(_) => HttpResponse::Ok().json(json!({"valid": true})),
         Err(resp) => resp,
@@ -185,7 +183,9 @@ pub(super) async fn install_simc_version(
 
     let simc_dir = match simc.source_dir() {
         Some(dir) => dir.clone(),
-        None => return HttpResponse::BadRequest().json(json!({"detail": "SIMC_DIR not configured"})),
+        None => {
+            return HttpResponse::BadRequest().json(json!({"detail": "SIMC_DIR not configured"}))
+        }
     };
 
     // Determine branch from tag (e.g., "weekly-2026-04-12" -> "weekly")
@@ -199,10 +199,8 @@ pub(super) async fn install_simc_version(
     let asset_url = body.asset_url.clone();
 
     // Run download in a blocking task to avoid tying up the async runtime
-    let result = tokio::task::spawn_blocking(move || {
-        download_simc(&branch_dir, &tag, &asset_url)
-    })
-    .await;
+    let result =
+        tokio::task::spawn_blocking(move || download_simc(&branch_dir, &tag, &asset_url)).await;
 
     match result {
         Ok(Ok(())) => HttpResponse::Ok().json(json!({
@@ -238,7 +236,9 @@ pub(super) async fn remove_simc_version(
 
     let simc_dir = match simc.source_dir() {
         Some(dir) => dir.clone(),
-        None => return HttpResponse::BadRequest().json(json!({"detail": "SIMC_DIR not configured"})),
+        None => {
+            return HttpResponse::BadRequest().json(json!({"detail": "SIMC_DIR not configured"}))
+        }
     };
 
     // Find the actual directory (could be "weekly/" or "weekly-2026-04-12/")
@@ -266,10 +266,11 @@ fn download_simc(branch_dir: &PathBuf, tag: &str, asset_url: &str) -> Result<(),
         std::fs::remove_dir_all(branch_dir)
             .map_err(|e| format!("Failed to clear existing installation: {}", e))?;
     }
-    std::fs::create_dir_all(branch_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
+    std::fs::create_dir_all(branch_dir)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    let tmp = tempfile::NamedTempFile::new()
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let tmp =
+        tempfile::NamedTempFile::new().map_err(|e| format!("Failed to create temp file: {}", e))?;
     let tmp_path = tmp.path().to_path_buf();
 
     download_to_file(&tmp_path, asset_url)?;
@@ -303,7 +304,9 @@ fn download_to_file(path: &Path, asset_url: &str) -> Result<(), String> {
     let mut writer = BufWriter::new(file);
 
     io::copy(&mut reader, &mut writer).map_err(|e| format!("Failed to write archive: {}", e))?;
-    writer.flush().map_err(|e| format!("Failed to flush archive: {}", e))?;
+    writer
+        .flush()
+        .map_err(|e| format!("Failed to flush archive: {}", e))?;
     Ok(())
 }
 
@@ -385,14 +388,18 @@ mod tests {
         {
             let file = std::fs::File::create(&archive_path).unwrap();
             let mut zip = zip::ZipWriter::new(file);
-            zip.start_file("simc.exe", SimpleFileOptions::default()).unwrap();
+            zip.start_file("simc.exe", SimpleFileOptions::default())
+                .unwrap();
             zip.write_all(b"fake-windows-binary").unwrap();
             zip.finish().unwrap();
         }
 
         extract_zip(&archive_path, &out_dir).unwrap();
 
-        assert_eq!(fs::read(out_dir.join("simc.exe")).unwrap(), b"fake-windows-binary");
+        assert_eq!(
+            fs::read(out_dir.join("simc.exe")).unwrap(),
+            b"fake-windows-binary"
+        );
     }
 
     #[test]
@@ -410,13 +417,18 @@ mod tests {
             header.set_size(payload.len() as u64);
             header.set_mode(0o755);
             header.set_cksum();
-            builder.append_data(&mut header, "simc", &payload[..]).unwrap();
+            builder
+                .append_data(&mut header, "simc", &payload[..])
+                .unwrap();
             builder.finish().unwrap();
         }
 
         extract_tar_gz(&archive_path, &out_dir).unwrap();
 
-        assert_eq!(fs::read(out_dir.join("simc")).unwrap(), b"fake-linux-binary");
+        assert_eq!(
+            fs::read(out_dir.join("simc")).unwrap(),
+            b"fake-linux-binary"
+        );
     }
 
     #[test]
@@ -428,12 +440,18 @@ mod tests {
         {
             let file = std::fs::File::create(&zip_path).unwrap();
             let mut zip = zip::ZipWriter::new(file);
-            zip.start_file("simc.exe", SimpleFileOptions::default()).unwrap();
+            zip.start_file("simc.exe", SimpleFileOptions::default())
+                .unwrap();
             zip.write_all(b"zip-binary").unwrap();
             zip.finish().unwrap();
         }
 
-        extract_archive(&zip_path, &zip_out, "https://example.com/simc-windows-x64.zip").unwrap();
+        extract_archive(
+            &zip_path,
+            &zip_out,
+            "https://example.com/simc-windows-x64.zip",
+        )
+        .unwrap();
         assert_eq!(fs::read(zip_out.join("simc.exe")).unwrap(), b"zip-binary");
     }
 }
