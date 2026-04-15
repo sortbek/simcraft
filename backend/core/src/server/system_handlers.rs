@@ -83,7 +83,9 @@ pub(super) async fn get_simc_versions(simc: web::Data<Arc<SimcBinaries>>) -> Htt
 
 fn normalized_branch_name(branch: &str) -> String {
     match branch.split_once('-') {
-        Some((prefix, _)) if matches!(prefix, "weekly" | "nightly") => prefix.to_string(),
+        Some((prefix, _)) if matches!(prefix, "weekly" | "nightly" | "source") => {
+            prefix.to_string()
+        }
         _ => branch.to_string(),
     }
 }
@@ -99,7 +101,7 @@ fn merge_simc_branches(simc: &SimcBinaries, enabled_branches: Option<&str>) -> V
 
     if let Some(enabled) = enabled_branches {
         for branch in enabled.split(',').map(str::trim).filter(|b| !b.is_empty()) {
-            if matches!(branch, "weekly" | "nightly") {
+            if matches!(branch, "weekly" | "nightly" | "source") {
                 branches.insert(branch.to_string());
             }
         }

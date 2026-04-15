@@ -192,6 +192,8 @@ impl SimcBinaries {
                     Some("weekly")
                 } else if tag.starts_with("nightly-") {
                     Some("nightly")
+                } else if tag.starts_with("source-") {
+                    Some("source")
                 } else {
                     None
                 };
@@ -239,7 +241,7 @@ impl SimcBinaries {
             .bins
             .keys()
             .filter_map(|key| match key.as_str() {
-                "weekly" | "nightly" | "default" => Some(key.as_str()),
+                "weekly" | "nightly" | "source" | "default" => Some(key.as_str()),
                 _ => None,
             })
             .collect();

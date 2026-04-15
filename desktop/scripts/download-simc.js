@@ -156,7 +156,7 @@ function listInstalledVersions(baseDir) {
     const binaryPath = path.join(baseDir, entry.name, BINARY_NAME);
     if (fs.existsSync(binaryPath)) {
       const tag = entry.name;
-      const type = tag.startsWith("weekly-") ? "weekly" : tag.startsWith("nightly-") ? "nightly" : "unknown";
+      const type = tag.startsWith("weekly-") ? "weekly" : tag.startsWith("nightly-") ? "nightly" : tag.startsWith("source-") ? "source" : "unknown";
       versions.push({ tag, type, binaryPath });
     }
   }

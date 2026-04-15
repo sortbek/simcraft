@@ -10,8 +10,8 @@ interface DesktopAvailableUpdate {
   installed: boolean;
 }
 
-function formatVersionDate(tag: string): string {
-  return tag.replace(/^(weekly|nightly)-/, '');
+function formatVersionTag(tag: string): string {
+  return tag.replace(/^(weekly|nightly)-/, '').replace(/^source-/, '');
 }
 
 export default function SimcEngineSection() {
@@ -89,6 +89,11 @@ export default function SimcEngineSection() {
     }
   };
 
+  const sourceVersion = useMemo(
+    () => versions.find((v) => v.type === 'source'),
+    [versions],
+  );
+
   const branchData = useMemo(() => {
     const branches = ['weekly', 'nightly'] as const;
     return branches.map((branch) => ({
@@ -109,7 +114,7 @@ export default function SimcEngineSection() {
         </div>
         <button
           onClick={handleCheckUpdates}
-          disabled={checking}
+          disabled={checking || !!sourceVersion}
           className="rounded bg-surface-container-highest px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-surface-bright disabled:opacity-50"
         >
           {checking ? 'Checking...' : 'Check for Updates'}
@@ -117,6 +122,30 @@ export default function SimcEngineSection() {
       </div>
 
       <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
+        {sourceVersion && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
+                  </svg>
+                  <p className="text-sm font-semibold text-primary">Built from Source</p>
+                </div>
+                <p className="mt-0.5 text-[10px] text-on-surface-variant/70">
+                  {formatVersionTag(sourceVersion.tag)}
+                </p>
+              </div>
+              <button
+                onClick={() => handleRemove(sourceVersion.tag)}
+                className="rounded px-3 py-1 text-[10px] font-bold uppercase text-error/60 transition-all hover:bg-error/10 hover:text-error"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center border-b border-outline-variant/20 px-3 pb-2">
           <span className="w-12 shrink-0 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
             Auto
@@ -129,7 +158,7 @@ export default function SimcEngineSection() {
           </span>
         </div>
 
-        <div className="space-y-2">
+        <div className={`space-y-2${sourceVersion ? ' pointer-events-none opacity-40' : ''}`}>
           {branchData.map(({ branch, installed, available }) => (
             <div
               key={branch}
@@ -161,16 +190,16 @@ export default function SimcEngineSection() {
                 </div>
                 {installed ? (
                   <p className="text-[10px] text-on-surface-variant/70">
-                    Installed: {formatVersionDate(installed.tag)}
+                    Installed: {formatVersionTag(installed.tag)}
                     {available && (
                       <span className="ml-2 text-primary">
-                        Update available: {formatVersionDate(available.tag)}
+                        Update available: {formatVersionTag(available.tag)}
                       </span>
                     )}
                   </p>
                 ) : (
                   <p className="text-[10px] text-on-surface-variant/50">
-                    {available ? `Available: ${formatVersionDate(available.tag)}` : 'Not installed'}
+                    {available ? `Available: ${formatVersionTag(available.tag)}` : 'Not installed'}
                   </p>
                 )}
               </div>
@@ -201,6 +230,12 @@ export default function SimcEngineSection() {
             </div>
           ))}
         </div>
+
+        {sourceVersion && (
+          <p className="text-[10px] text-on-surface-variant/50">
+            Weekly and Nightly branches are disabled while a source build is active.
+          </p>
+        )}
 
         {error && <p className="pt-1 text-xs text-error">{error}</p>}
       </div>

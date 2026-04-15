@@ -75,6 +75,39 @@ RUN set -e; \
     [ -n "$ACTIVE" ] || ACTIVE="weekly"; \
     echo "$ACTIVE" > /out/.active
 
+# --- Build SimC from source (opt-in via --build-arg SIMC_SOURCE=build) ---
+FROM debian:bookworm-slim AS simc-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates git g++ make \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG SIMC_GIT_REF=HEAD
+RUN set -e; \
+    git clone --depth 1 https://github.com/simulationcraft/simc.git /tmp/simc; \
+    cd /tmp/simc; \
+    if [ "${SIMC_GIT_REF}" != "HEAD" ]; then \
+      git fetch --depth 1 origin "${SIMC_GIT_REF}" && git checkout FETCH_HEAD; \
+    fi; \
+    cd engine; \
+    make LTO=1 NO_DEBUG=1 OPENSSL=0 -j$(nproc) OPTS="-ffast-math -fomit-frame-pointer"; \
+    REF_SAFE=$(echo "${SIMC_GIT_REF}" | tr '/' '-'); \
+    mkdir -p /out/source-${REF_SAFE}; \
+    cp simc /out/source-${REF_SAFE}/simc; \
+    chmod +x /out/source-${REF_SAFE}/simc; \
+    echo "source-${REF_SAFE}" > /out/.active; \
+    rm -rf /tmp/simc
+
+# --- SimC selector: pick prebuilt or source-built ---
+FROM scratch AS simc-selector-prebuilt
+COPY --from=simc-fetcher /out/ /out/
+
+FROM scratch AS simc-selector-build
+COPY --from=simc-builder /out/ /out/
+
+ARG SIMC_SOURCE=prebuilt
+FROM simc-selector-${SIMC_SOURCE} AS simc-final
+
 # --- Runtime ---
 FROM debian:trixie-slim
 
@@ -83,7 +116,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 ENV LANG=en_US.UTF-8
 
 COPY --from=builder /build/target/release/simhammer-server /usr/local/bin/simhammer-server
-COPY --from=simc-fetcher /out/ /app/resources/simc/
+COPY --from=simc-final /out/ /app/resources/simc/
 COPY --from=fetcher /data/compact /app/resources/data
 COPY server/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
