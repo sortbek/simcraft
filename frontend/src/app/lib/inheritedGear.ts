@@ -161,12 +161,13 @@ export function resolveInherits(
 ): SlotInherit[] {
   if (!invType) return [];
 
-  let slots = slotsForInvType(invType, spec);
+  const normalizedSpec = spec.toLowerCase();
+  let slots = slotsForInvType(invType, normalizedSpec);
 
   const offHandEquipped = Object.prototype.hasOwnProperty.call(equipped, 'off_hand');
   const twoHandEquipped = !offHandEquipped;
 
-  if (twoHandEquipped && !(spec === 'fury' && invType === 17)) {
+  if (twoHandEquipped && !(normalizedSpec === 'fury' && invType === 17)) {
     slots = slots.filter((s) => s !== 'off_hand');
   }
 
