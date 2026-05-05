@@ -1,7 +1,12 @@
-// Pure-data module. Mirrors backend `parse_base_profile` (parses equipped gear
-// from a simc input) and `inv_type_to_slots` (maps an item's inventory_type to
-// candidate gear slots), and computes the per-slot inheritance the drop finder
-// sends to the backend as `slot_inherits`.
+// Pure-data module. Mirrors three backend functions — keep in sync when those
+// change:
+//   - parse_base_profile  in backend/core/src/profileset_generator/base_profile.rs
+//   - inv_type_to_slots   in backend/core/src/types/class_data.rs
+//   - can_dual_wield      in backend/core/src/types/class_data.rs
+//                         (drives the DUAL_WIELD_SPECS set below)
+//
+// Used by the drop finder to compute the per-slot `slot_inherits` payload it
+// sends to the backend, and to render inherit badges in the loot table.
 
 export const GEAR_SLOTS = [
   'head',
@@ -71,6 +76,12 @@ export function parseEquippedGear(simcInput: string): EquippedGear {
 
     const slot = m[1] as Slot;
     const rest = m[2];
+
+    const cleaned = rest.trim();
+    if (cleaned === '' || cleaned === ',') {
+      // Placeholder line (e.g. `off_hand=,`) — no item equipped in this slot.
+      continue;
+    }
 
     const entry: EquippedSlot = {};
     const eMatch = rest.match(/enchant_id=(\d+)/);
