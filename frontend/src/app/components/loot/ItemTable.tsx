@@ -3,6 +3,12 @@ import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
 import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
+import {
+  resolveInherits,
+  type EquippedGear,
+  type Slot,
+  type SlotInherit,
+} from '../../lib/inheritedGear';
 
 const SLOT_ORDER = [
   'Main Hand', 'Off Hand', 'Head', 'Neck', 'Shoulder', 'Back',
@@ -21,6 +27,8 @@ interface ItemTableProps {
   upgradeTracks: UpgradeTracks;
   headerLabel: string;
   equippedEmbellishments?: number;
+  equippedGear: EquippedGear;
+  spec: string;
 }
 
 export default function ItemTable({
@@ -35,6 +43,8 @@ export default function ItemTable({
   upgradeTracks,
   headerLabel,
   equippedEmbellishments = 0,
+  equippedGear,
+  spec,
 }: ItemTableProps) {
   const { t, locale } = useLanguage();
   useItemNames();
@@ -191,7 +201,7 @@ export default function ItemTable({
 
       {/* Table Header */}
       <div className="grid grid-cols-12 border-b border-outline-variant/5 bg-surface-container-low px-4 py-2">
-        <div className="col-span-8 flex items-center gap-4">
+        <div className="col-span-5 flex items-center gap-4">
           <button
             onClick={() =>
               allSelected ? onClearItems(visibleItemIds) : onSelectItems(visibleItemIds)
@@ -211,6 +221,9 @@ export default function ItemTable({
           <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
             Item Name
           </span>
+        </div>
+        <div className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
+          Inherits
         </div>
         <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
           Slot
@@ -239,6 +252,7 @@ export default function ItemTable({
               const isOffSpec = item.off_spec === true;
               const embellishDisabled = isEmbellished && embellishmentsFull && !isSelected;
               const qualityColor = QUALITY_COLORS[resolved.quality] || 'text-gray-400';
+              const inherits = resolveInherits(item.inventory_type, spec, equippedGear);
 
               return (
                 <div
@@ -249,7 +263,7 @@ export default function ItemTable({
                   }`}
                 >
                   {/* Checkbox + Icon + Name */}
-                  <div className="col-span-8 flex items-center gap-3">
+                  <div className="col-span-5 flex items-center gap-3">
                     <button
                       onClick={() => !embellishDisabled && onToggle(item.item_id)}
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors ${
@@ -312,6 +326,11 @@ export default function ItemTable({
                     </div>
                   </div>
 
+                  {/* Inherits */}
+                  <div className="col-span-3 flex items-center justify-center gap-2">
+                    <InheritBadgeGroup inherits={inherits} />
+                  </div>
+
                   {/* Slot */}
                   <div className="col-span-2 text-center">
                     <span className="rounded bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase text-on-surface-variant">
@@ -350,4 +369,80 @@ function qualityBorderColor(quality: number): string {
     case 2: return '#1eff00'; // uncommon
     default: return '#9d9d9d'; // common
   }
+}
+
+function slotTag(slot: Slot): string {
+  switch (slot) {
+    case 'finger1': return 'F1';
+    case 'finger2': return 'F2';
+    case 'main_hand': return 'MH';
+    case 'off_hand': return 'OH';
+    case 'trinket1': return 'T1';
+    case 'trinket2': return 'T2';
+    default: return '';
+  }
+}
+
+const GEM_SLOT_SET: ReadonlySet<Slot> = new Set(['finger1', 'finger2', 'neck']);
+
+function InheritBadgeGroup({ inherits }: { inherits: SlotInherit[] }) {
+  if (inherits.length === 0) return <span className="text-[10px] text-on-surface-variant/30">—</span>;
+
+  return (
+    <div className="flex items-center gap-2">
+      {inherits.map((entry) => (
+        <div key={entry.slot} className="flex flex-col items-center gap-0.5">
+          {inherits.length > 1 && slotTag(entry.slot) && (
+            <span className="text-[9px] font-bold uppercase tracking-wider text-on-surface-variant/50">
+              {slotTag(entry.slot)}
+            </span>
+          )}
+          <div className="flex items-center gap-1">
+            <InheritIcon
+              kind="enchant"
+              id={entry.enchant_id}
+              ariaLabel={`Enchant for ${entry.slot}`}
+            />
+            {GEM_SLOT_SET.has(entry.slot) && (
+              <InheritIcon
+                kind="gem"
+                id={entry.gem_id}
+                ariaLabel={`Gem for ${entry.slot}`}
+              />
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InheritIcon({
+  kind,
+  id,
+  ariaLabel,
+}: {
+  kind: 'enchant' | 'gem';
+  id?: number;
+  ariaLabel: string;
+}) {
+  const wowheadAttr = id
+    ? kind === 'enchant'
+      ? `spell=${id}`
+      : `item=${id}`
+    : undefined;
+
+  return (
+    <span
+      aria-label={ariaLabel}
+      data-wowhead={wowheadAttr}
+      className={`flex h-5 w-5 items-center justify-center rounded border ${
+        id
+          ? 'border-gold/30 bg-gold/[0.08] text-gold'
+          : 'border-outline-variant/15 bg-surface-container-high text-on-surface-variant/30'
+      }`}
+    >
+      <span className="text-[9px] font-bold uppercase">{kind === 'enchant' ? 'E' : 'G'}</span>
+    </span>
+  );
 }

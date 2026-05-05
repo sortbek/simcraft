@@ -27,6 +27,11 @@ import {
   type Instance,
   type UpgradeTracks,
 } from '../components/loot/types';
+import {
+  parseEquippedGear,
+  resolveInherits,
+  type EquippedGear,
+} from '../lib/inheritedGear';
 
 
 const SLOT_ORDER = [
@@ -233,6 +238,11 @@ export default function DropFinderContent() {
     }
     return count;
   }, [simcInput]);
+
+  const equippedGear: EquippedGear = useMemo(
+    () => parseEquippedGear(simcInput),
+    [simcInput]
+  );
 
   const hasCharacter = hasInput;
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -532,7 +542,7 @@ export default function DropFinderContent() {
   // Sim submission
   const buildPayload = useCallback(() => {
     if (!visibleDrops || selected.size === 0) return null;
-    const dropItems: DropItem[] = [];
+    const dropItems: any[] = [];
     for (const items of Object.values(visibleDrops)) {
       for (const item of items) {
         if (selected.has(item.item_id)) {
@@ -543,17 +553,23 @@ export default function DropFinderContent() {
             upgradeLevel,
             upgradeTracks
           );
+          const slotInherits = resolveInherits(
+            item.inventory_type,
+            specName ?? '',
+            equippedGear
+          );
           dropItems.push({
             ...item,
             ilevel: resolved.ilvl,
             quality: resolved.quality,
             bonus_ids: resolved.bonus_id ? [resolved.bonus_id] : [],
+            slot_inherits: slotInherits,
           });
         }
       }
     }
     return { simc_input: simcInput, drop_items: dropItems };
-  }, [visibleDrops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
+  }, [visibleDrops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks, equippedGear, specName]);
 
   const validate = useCallback(() => {
     if (!visibleDrops || selected.size === 0) return t('validation.selectItems');
@@ -808,6 +824,8 @@ export default function DropFinderContent() {
             upgradeTracks={upgradeTracks}
             headerLabel={headerLabel}
             equippedEmbellishments={equippedEmbellishments}
+            equippedGear={equippedGear}
+            spec={specName ?? ''}
           />
 
           <SimcDownloadBanner />
