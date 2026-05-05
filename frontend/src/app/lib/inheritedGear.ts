@@ -40,18 +40,12 @@ export interface SlotInherit {
 const GEM_SLOTS: ReadonlySet<Slot> = new Set(['finger1', 'finger2', 'neck']);
 
 const DUAL_WIELD_SPECS: ReadonlySet<string> = new Set([
-  'fury',
-  'frost',         // dk frost dual-wield
-  'unholy',
-  'enhancement',
-  'assassination',
-  'outlaw',
-  'subtlety',
-  'havoc',
-  'survival',
-  'windwalker',
-  'brewmaster',
-  'mistweaver',
+  'fury',                                       // warrior
+  'assassination', 'outlaw', 'subtlety',        // rogue
+  'frost',                                      // death knight
+  'enhancement',                                // shaman
+  'brewmaster', 'windwalker',                   // monk
+  'havoc', 'vengeance',                         // demon hunter
 ]);
 
 function canDualWield(spec: string): boolean {
