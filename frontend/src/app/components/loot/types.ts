@@ -1,3 +1,7 @@
+import type { SlotInherit } from '../../lib/inheritedGear';
+
+export type { SlotInherit };
+
 export interface Instance {
   id: number;
   name: string;
@@ -41,6 +45,17 @@ export interface DropItem {
   specs?: number[];
   off_spec?: boolean;
   embellished?: boolean;
+}
+
+/**
+ * Drop item shape sent to the backend in the droptimizer request payload.
+ * Extends `DropItem` with the resolved upgrade fields and per-slot inheritance.
+ */
+export interface DropItemPayload extends DropItem {
+  ilevel: number;
+  quality: number;
+  bonus_ids: number[];
+  slot_inherits: SlotInherit[];
 }
 
 export const QUALITY_COLORS: Record<number, string> = {

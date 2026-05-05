@@ -24,6 +24,7 @@ import {
   getTrackInfo,
   resolveUpgrade,
   type DropItem,
+  type DropItemPayload,
   type Instance,
   type UpgradeTracks,
 } from '../components/loot/types';
@@ -542,7 +543,7 @@ export default function DropFinderContent() {
   // Sim submission
   const buildPayload = useCallback(() => {
     if (!visibleDrops || selected.size === 0) return null;
-    const dropItems: any[] = [];
+    const dropItems: DropItemPayload[] = [];
     for (const items of Object.values(visibleDrops)) {
       for (const item of items) {
         if (selected.has(item.item_id)) {

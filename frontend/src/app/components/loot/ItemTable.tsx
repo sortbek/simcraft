@@ -426,11 +426,11 @@ function InheritIcon({
   id?: number;
   ariaLabel: string;
 }) {
-  const wowheadAttr = id
-    ? kind === 'enchant'
-      ? `spell=${id}`
-      : `item=${id}`
-    : undefined;
+  // Gems: gem_id is the gem's WoW item id → standalone Wowhead tooltip works.
+  // Enchants: SimC enchant_id is not a spellId or item id; standalone Wowhead
+  // lookup requires data we don't have at this layer. Defer to the override
+  // picker work (follow-up).
+  const wowheadAttr = id && kind === 'gem' ? `item=${id}` : undefined;
 
   return (
     <span
