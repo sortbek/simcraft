@@ -34,7 +34,10 @@ pub(super) fn generate_droptimizer_input(
         oh.is_none() || oh == Some("") || oh == Some(",")
     };
 
-    let enchant_re = Regex::new(r"(enchant_id=\d+)").unwrap();
+    // Legacy fallback: regex-copy enchant_id from equipped slot when the drop item
+    // does not provide slot_inherits. Keeps direct API consumers working while
+    // the frontend rolls out. Remove in a follow-up release.
+    let legacy_enchant_re = Regex::new(r"enchant_id=(\d+)").unwrap();
 
     let mut combo_idx = 2usize;
     for item in drop_items {
@@ -59,6 +62,8 @@ pub(super) fn generate_droptimizer_input(
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
+        let slot_inherits = item.get("slot_inherits").and_then(|v| v.as_array());
+
         let mut slots = class_data::inv_type_to_slots(inv_type, &spec);
 
         if has_two_hand_equipped && !(spec == "fury" && inv_type == 17) {
@@ -81,9 +86,36 @@ pub(super) fn generate_droptimizer_input(
 
         for slot in &slots {
             let mut simc_str = base_simc_str.clone();
-            if let Some(equipped) = equipped_gear.get(*slot) {
-                if let Some(caps) = enchant_re.captures(equipped) {
-                    simc_str.push_str(&format!(",{}", &caps[1]));
+            let mut applied_enchant: u64 = 0;
+            let mut applied_gem: u64 = 0;
+
+            let inherit = slot_inherits.and_then(|arr| {
+                arr.iter().find(|entry| {
+                    entry.get("slot").and_then(|v| v.as_str()) == Some(*slot)
+                })
+            });
+
+            if let Some(entry) = inherit {
+                if let Some(eid) = entry.get("enchant_id").and_then(|v| v.as_u64()) {
+                    if eid > 0 {
+                        simc_str.push_str(&format!(",enchant_id={}", eid));
+                        applied_enchant = eid;
+                    }
+                }
+                if let Some(gid) = entry.get("gem_id").and_then(|v| v.as_u64()) {
+                    if gid > 0 {
+                        simc_str.push_str(&format!(",gem_id={}", gid));
+                        applied_gem = gid;
+                    }
+                }
+            } else if let Some(equipped) = equipped_gear.get(*slot) {
+                if let Some(caps) = legacy_enchant_re.captures(equipped) {
+                    if let Ok(eid) = caps[1].parse::<u64>() {
+                        if eid > 0 {
+                            simc_str.push_str(&format!(",enchant_id={}", eid));
+                            applied_enchant = eid;
+                        }
+                    }
                 }
             }
 
@@ -112,8 +144,8 @@ pub(super) fn generate_droptimizer_input(
                     "ilevel": ilevel,
                     "name": name,
                     "bonus_ids": bonus_ids,
-                    "enchant_id": 0,
-                    "gem_id": 0,
+                    "enchant_id": applied_enchant,
+                    "gem_id": applied_gem,
                     "is_kept": false,
                     "encounter": encounter,
                 }]),

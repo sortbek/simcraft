@@ -169,6 +169,104 @@ main_hand=,id=200\n";
     }
 
     #[test]
+    fn droptimizer_ring_drop_inherits_gem_and_enchant() {
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+finger1=,id=10,enchant_id=7437,gem_id=213743\n\
+finger2=,id=20,enchant_id=7438,gem_id=213744\n\
+main_hand=,id=200\n";
+
+        let drop_items = vec![json!({
+            "item_id": 555,
+            "ilevel": 671,
+            "name": "Test Ring",
+            "encounter": "Unit Test",
+            "inventory_type": 11,
+            "bonus_ids": [123],
+            "slot_inherits": [
+                { "slot": "finger1", "enchant_id": 7437, "gem_id": 213743 },
+                { "slot": "finger2", "enchant_id": 7438, "gem_id": 213744 }
+            ]
+        })];
+
+        let (input, combo_count, metadata) = generate_droptimizer_input(base_profile, &drop_items);
+
+        assert_eq!(combo_count, 2);
+        assert!(
+            input.contains("finger1=,id=555,ilevel=671,bonus_id=123,enchant_id=7437,gem_id=213743"),
+            "expected finger1 profileset with inherited enchant + gem; got:\n{input}"
+        );
+        assert!(
+            input.contains("finger2=,id=555,ilevel=671,bonus_id=123,enchant_id=7438,gem_id=213744"),
+            "expected finger2 profileset with inherited enchant + gem; got:\n{input}"
+        );
+
+        let f1 = metadata
+            .values()
+            .find(|v| v[0]["slot"] == "finger1")
+            .expect("missing finger1 metadata");
+        assert_eq!(f1[0]["enchant_id"], 7437);
+        assert_eq!(f1[0]["gem_id"], 213743);
+    }
+
+    #[test]
+    fn droptimizer_two_hand_weapon_drop_inherits_main_hand_enchant() {
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+main_hand=,id=200,enchant_id=7459\n";
+
+        let drop_items = vec![json!({
+            "item_id": 777,
+            "ilevel": 680,
+            "name": "Test 2H",
+            "encounter": "Unit Test",
+            "inventory_type": 17,
+            "bonus_ids": [],
+            "slot_inherits": [
+                { "slot": "main_hand", "enchant_id": 7459 }
+            ]
+        })];
+
+        let (input, combo_count, _metadata) =
+            generate_droptimizer_input(base_profile, &drop_items);
+
+        assert_eq!(combo_count, 1);
+        assert!(
+            input.contains("main_hand=,id=777,ilevel=680,enchant_id=7459"),
+            "expected main_hand profileset with inherited enchant; got:\n{input}"
+        );
+    }
+
+    #[test]
+    fn droptimizer_falls_back_to_equipped_enchant_when_slot_inherits_absent() {
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+head=,id=100,enchant_id=7460\n\
+main_hand=,id=200\n";
+
+        let drop_items = vec![json!({
+            "item_id": 888,
+            "ilevel": 670,
+            "name": "Test Helm",
+            "encounter": "Unit Test",
+            "inventory_type": 1,
+            "bonus_ids": []
+        })];
+
+        let (input, combo_count, _metadata) =
+            generate_droptimizer_input(base_profile, &drop_items);
+
+        assert_eq!(combo_count, 1);
+        assert!(
+            input.contains("head=,id=888,ilevel=670,enchant_id=7460"),
+            "fallback should still copy enchant from equipped head; got:\n{input}"
+        );
+    }
+
+    #[test]
     fn upgrade_compare_generator_returns_error_without_selected_items() {
         let base_profile = "\
 mage=test\n\
