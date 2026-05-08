@@ -31,7 +31,7 @@ export function gemBadgeClass(name?: string): string {
 
 export function dedupeEncounterResults(
   results: TopGearResult[],
-  hasEncounterData: boolean,
+  hasEncounterData: boolean
 ): TopGearResult[] {
   if (!hasEncounterData) {
     return results;
@@ -56,7 +56,7 @@ export function dedupeEncounterResults(
 
 export function groupResults(
   activeResults: TopGearResult[],
-  groupMode: GroupMode,
+  groupMode: GroupMode
 ): Array<[string, TopGearResult[]]> | null {
   if (groupMode === 'rank') {
     return null;
@@ -81,7 +81,7 @@ export function groupResults(
 
 export function buildBestGearSet(
   equippedGear: Record<string, ResultItem> | undefined,
-  selectedResult: TopGearResult | null,
+  selectedResult: TopGearResult | null
 ): Record<string, GearItem> {
   if (!equippedGear) {
     return {};
@@ -120,7 +120,10 @@ export function buildBestGearSet(
   return gearSet;
 }
 
-function collectChangedSlots(result: TopGearResult | null, include: (delta: number) => boolean): Set<string> {
+function collectChangedSlots(
+  result: TopGearResult | null,
+  include: (delta: number) => boolean
+): Set<string> {
   const slots = new Set<string>();
   if (!result || !include(result.delta)) {
     return slots;
@@ -148,7 +151,7 @@ export function collectDowngradeSlots(result: TopGearResult | null): Set<string>
 
 export function collectItemQueries(
   results: TopGearResult[],
-  equippedGear?: Record<string, ResultItem>,
+  equippedGear?: Record<string, ResultItem>
 ): ItemQuery[] {
   const seen = new Set<string>();
   const queries: ItemQuery[] = [];
@@ -184,7 +187,7 @@ export function collectItemQueries(
 function collectIds(
   results: TopGearResult[],
   equippedGear: Record<string, ResultItem> | undefined,
-  pick: (item: ResultItem) => number | undefined,
+  pick: (item: ResultItem) => number | undefined
 ): number[] {
   const ids = new Set<number>();
 
@@ -211,24 +214,28 @@ function collectIds(
 
 export function collectEnchantIds(
   results: TopGearResult[],
-  equippedGear?: Record<string, ResultItem>,
+  equippedGear?: Record<string, ResultItem>
 ): number[] {
   return collectIds(results, equippedGear, (item) => item.enchant_id);
 }
 
 export function collectGemIds(
   results: TopGearResult[],
-  equippedGear?: Record<string, ResultItem>,
+  equippedGear?: Record<string, ResultItem>
 ): number[] {
   return collectIds(results, equippedGear, (item) => item.gem_id);
 }
 
-export function getCharacterRenderUrl(playerRealm?: string, playerName?: string, playerRegion = 'eu'): string | null {
+export function getCharacterRenderUrl(
+  playerRealm?: string,
+  playerName?: string,
+  playerRegion = 'eu'
+): string | null {
   if (!playerRealm || !playerName) {
     return null;
   }
 
   return `https://simhammer.com/api/blizzard/character/${playerRegion}/${encodeURIComponent(
-    playerRealm.toLowerCase(),
+    playerRealm.toLowerCase()
   )}/${encodeURIComponent(playerName.toLowerCase())}/media/render`;
 }

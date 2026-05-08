@@ -39,14 +39,14 @@ export default function GeneralSettingsSection() {
   const selectedPresetIdx = useMemo(
     () =>
       THREAD_PRESETS.findIndex(
-        (preset) => maxThreads > 0 && Math.max(1, Math.round(maxThreads * preset.pct)) === threads,
+        (preset) => maxThreads > 0 && Math.max(1, Math.round(maxThreads * preset.pct)) === threads
       ),
-    [maxThreads, threads],
+    [maxThreads, threads]
   );
 
   return (
     <section className="space-y-4 pt-4">
-      <div className="flex items-center gap-2 text-primary-fixed-dim">
+      <div className="text-primary-fixed-dim flex items-center gap-2">
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
           <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
         </svg>
@@ -85,7 +85,7 @@ export default function GeneralSettingsSection() {
                     onClick={() => setThreads(threadCount)}
                     className={`flex flex-col items-center justify-center rounded-md py-3 transition-all ${
                       isActive
-                        ? 'bg-primary-container text-on-primary ring-1 ring-primary/30 shadow-lg shadow-primary/10'
+                        ? 'bg-primary-container text-on-primary shadow-lg shadow-primary/10 ring-1 ring-primary/30'
                         : 'hover:bg-surface-bright'
                     }`}
                   >
@@ -96,7 +96,9 @@ export default function GeneralSettingsSection() {
                     >
                       {t(preset.labelKey)}
                     </span>
-                    <span className={`text-[10px] ${isActive ? 'opacity-80' : 'text-on-surface-variant'}`}>
+                    <span
+                      className={`text-[10px] ${isActive ? 'opacity-80' : 'text-on-surface-variant'}`}
+                    >
                       {threadCount} {t('settings.threads')}
                     </span>
                   </button>

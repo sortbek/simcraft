@@ -204,9 +204,7 @@ export default function EnchantGemSelector({
     for (const slot of enchantSlots) {
       result[slot] = enchantOptions[slot]
         .filter((e) => !e.craftingQuality || e.craftingQuality === 2)
-        .sort((a, b) =>
-          (a.itemName || a.displayName).localeCompare(b.itemName || b.displayName)
-        );
+        .sort((a, b) => (a.itemName || a.displayName).localeCompare(b.itemName || b.displayName));
     }
     return result;
   }, [enchantSlots, enchantOptions]);
@@ -219,9 +217,7 @@ export default function EnchantGemSelector({
 
   // Group regular gems by color: rank 2 crafted, quality 3 (Flawless rare)
   const gemGroups = useMemo(() => {
-    const filtered = gemOptions.filter(
-      (g) => g.craftingQuality === 2 && (g.quality ?? 0) === 3
-    );
+    const filtered = gemOptions.filter((g) => g.craftingQuality === 2 && (g.quality ?? 0) === 3);
     const groups: Record<string, GemOption[]> = {};
     for (const g of filtered) {
       const color = g.algariColor || 'other';
@@ -257,40 +253,38 @@ export default function EnchantGemSelector({
           <p className="text-xs font-medium uppercase tracking-widest text-muted">
             {t('enchantGem.selectGems')}
           </p>
-          <p className="text-[11px] text-on-surface-variant/50 leading-snug normal-case tracking-normal">
+          <p className="text-[11px] normal-case leading-snug tracking-normal text-on-surface-variant/50">
             {t('enchantGem.selectGemsTooltip')}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {hasAnyGemSelected && (
             <div
-              className="flex items-center gap-2 cursor-pointer group"
+              className="group flex cursor-pointer items-center gap-2"
               onClick={() => onReplaceGemsChange(!replaceGems)}
             >
-              <div className={`w-8 h-[18px] rounded-full relative transition-colors shrink-0 ${replaceGems ? 'bg-gold' : 'bg-surface-container-highest'}`}>
-                <div className={`w-3 h-3 rounded-full absolute top-[3px] transition-all ${replaceGems ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`} />
+              <div
+                className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${replaceGems ? 'bg-gold' : 'bg-surface-container-highest'}`}
+              >
+                <div
+                  className={`absolute top-[3px] h-3 w-3 rounded-full transition-all ${replaceGems ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`}
+                />
               </div>
               <div className="flex flex-col">
-                <span className="text-[11px] font-semibold text-on-surface-variant group-hover:text-gold transition-colors leading-tight">
+                <span className="text-[11px] font-semibold leading-tight text-on-surface-variant transition-colors group-hover:text-gold">
                   {t('enchantGem.replaceGems')}
                 </span>
-                <span className="text-[10px] text-on-surface-variant/40 leading-snug">
+                <span className="text-[10px] leading-snug text-on-surface-variant/40">
                   {t('enchantGem.replaceGemsTooltip')}
                 </span>
               </div>
             </div>
           )}
           <button
-            onClick={() =>
-              allSelected
-                ? onDeselectAllGems('')
-                : onSelectAllGems('', allGemIds)
-            }
-            className="text-[11px] text-gold/60 hover:text-gold transition-colors"
+            onClick={() => (allSelected ? onDeselectAllGems('') : onSelectAllGems('', allGemIds))}
+            className="text-[11px] text-gold/60 transition-colors hover:text-gold"
           >
-            {allSelected
-              ? t('enchantGem.deselectAll')
-              : t('enchantGem.selectAll')}
+            {allSelected ? t('enchantGem.deselectAll') : t('enchantGem.selectAll')}
           </button>
         </div>
       </div>
@@ -299,25 +293,33 @@ export default function EnchantGemSelector({
       {diamonds.length > 0 && diamonds.some((d) => d.itemId && gemSelections.has(d.itemId)) && (
         <div className="flex items-center gap-4 px-1">
           <div
-            className="flex items-center gap-2 cursor-pointer group"
+            className="group flex cursor-pointer items-center gap-2"
             onClick={() => onDiamondAlwaysUseChange(!diamondAlwaysUse)}
           >
-            <div className={`w-8 h-[18px] rounded-full relative transition-colors shrink-0 ${diamondAlwaysUse ? 'bg-amber-500' : 'bg-surface-container-highest'}`}>
-              <div className={`w-3 h-3 rounded-full absolute top-[3px] transition-all ${diamondAlwaysUse ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`} />
+            <div
+              className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${diamondAlwaysUse ? 'bg-amber-500' : 'bg-surface-container-highest'}`}
+            >
+              <div
+                className={`absolute top-[3px] h-3 w-3 rounded-full transition-all ${diamondAlwaysUse ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`}
+              />
             </div>
-            <span className="text-[11px] font-semibold text-on-surface-variant group-hover:text-amber-400 transition-colors">
+            <span className="text-[11px] font-semibold text-on-surface-variant transition-colors group-hover:text-amber-400">
               {t('enchantGem.alwaysUse')}
             </span>
           </div>
           {diamondAlwaysUse && (
             <div
-              className="flex items-center gap-2 cursor-pointer group"
+              className="group flex cursor-pointer items-center gap-2"
               onClick={() => onMaxColorsChange(!maxColors)}
             >
-              <div className={`w-8 h-[18px] rounded-full relative transition-colors shrink-0 ${maxColors ? 'bg-amber-500' : 'bg-surface-container-highest'}`}>
-                <div className={`w-3 h-3 rounded-full absolute top-[3px] transition-all ${maxColors ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`} />
+              <div
+                className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${maxColors ? 'bg-amber-500' : 'bg-surface-container-highest'}`}
+              >
+                <div
+                  className={`absolute top-[3px] h-3 w-3 rounded-full transition-all ${maxColors ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`}
+                />
               </div>
-              <span className="text-[11px] font-semibold text-on-surface-variant group-hover:text-amber-400 transition-colors">
+              <span className="text-[11px] font-semibold text-on-surface-variant transition-colors group-hover:text-amber-400">
                 {t('enchantGem.onlyMaxColors')}
               </span>
             </div>
@@ -357,26 +359,25 @@ export default function EnchantGemSelector({
         )}
         {gemGroups.map(({ color, gems }) => {
           const groupIds = gems.map((g) => g.itemId!).filter(Boolean);
-          const groupSelected = groupIds.length > 0 && groupIds.every((id) => gemSelections.has(id));
+          const groupSelected =
+            groupIds.length > 0 && groupIds.every((id) => gemSelections.has(id));
           const colorLabel = color.charAt(0).toUpperCase() + color.slice(1);
 
           return (
             <div key={color} className="card space-y-1 p-3.5">
               <div className="mb-2 flex items-center justify-between">
-                <p className={`font-headline text-[13px] font-semibold uppercase tracking-widest ${GEM_COLOR_CLASS[color] || 'text-muted'}`}>
+                <p
+                  className={`font-headline text-[13px] font-semibold uppercase tracking-widest ${GEM_COLOR_CLASS[color] || 'text-muted'}`}
+                >
                   {colorLabel}
                 </p>
                 <button
                   onClick={() =>
-                    groupSelected
-                      ? onDeselectAllGems('', groupIds)
-                      : onSelectAllGems('', groupIds)
+                    groupSelected ? onDeselectAllGems('', groupIds) : onSelectAllGems('', groupIds)
                   }
-                  className="text-[11px] text-gold/60 hover:text-gold transition-colors"
+                  className="text-[11px] text-gold/60 transition-colors hover:text-gold"
                 >
-                  {groupSelected
-                    ? t('enchantGem.deselectAll')
-                    : t('enchantGem.selectAll')}
+                  {groupSelected ? t('enchantGem.deselectAll') : t('enchantGem.selectAll')}
                 </button>
               </div>
               {gems.map((g) => {

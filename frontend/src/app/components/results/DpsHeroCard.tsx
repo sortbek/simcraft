@@ -121,7 +121,7 @@ export default function DpsHeroCard({
             {playerClass}
           </p>
           <div className="space-y-1">
-            <div className="flex items-baseline gap-2 font-headline text-7xl font-black tracking-tighter text-primary tabular-nums md:text-8xl">
+            <div className="flex items-baseline gap-2 font-headline text-7xl font-black tabular-nums tracking-tighter text-primary md:text-8xl">
               {Math.round(dps).toLocaleString()}
               <span className="text-2xl font-bold opacity-50">{t('results.dps')}</span>
             </div>
@@ -151,17 +151,27 @@ export default function DpsHeroCard({
             />
           )}
           {fightLength != null && (
-            <HeroMetaStat label={t('results.fightLength')} value={formatDuration(fightLength)} border />
+            <HeroMetaStat
+              label={t('results.fightLength')}
+              value={formatDuration(fightLength)}
+              border
+            />
           )}
           {desiredTargets != null && desiredTargets > 0 && (
             <HeroMetaStat
               label={t('results.targets')}
-              value={desiredTargets === 1 ? '1 (Patchwerk)' : `${desiredTargets} ${t('results.targets')}`}
+              value={
+                desiredTargets === 1 ? '1 (Patchwerk)' : `${desiredTargets} ${t('results.targets')}`
+              }
               border
             />
           )}
           {iterations != null && iterations > 0 && (
-            <HeroMetaStat label={t('results.iterations')} value={iterations.toLocaleString()} border />
+            <HeroMetaStat
+              label={t('results.iterations')}
+              value={iterations.toLocaleString()}
+              border
+            />
           )}
           {elapsedTime != null && (
             <HeroMetaStat label={t('results.elapsed')} value={formatElapsed(elapsedTime)} border />

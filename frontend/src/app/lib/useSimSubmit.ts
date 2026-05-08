@@ -22,7 +22,12 @@ interface UseSimSubmitOptions {
   onBeforeNavigate?: () => void;
 }
 
-export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigate }: UseSimSubmitOptions) {
+export function useSimSubmit({
+  endpoint,
+  buildPayload,
+  validate,
+  onBeforeNavigate,
+}: UseSimSubmitOptions) {
   const { t } = useLanguage();
   const router = useRouter();
   const {
@@ -99,7 +104,11 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
         ...(simcFooter ? { simc_footer: simcFooter } : {}),
         // Raid buffs: only send overrides for disabled buffs
         ...(Object.values(raidBuffs).some((v) => !v)
-          ? { raid_buffs: Object.fromEntries(Object.entries(raidBuffs).map(([k, v]) => [k, v ? 1 : 0])) }
+          ? {
+              raid_buffs: Object.fromEntries(
+                Object.entries(raidBuffs).map(([k, v]) => [k, v ? 1 : 0])
+              ),
+            }
           : {}),
         // Consumables: only send non-empty selections
         ...(Object.values(consumables).some((v) => v)
@@ -107,7 +116,11 @@ export function useSimSubmit({ endpoint, buildPayload, validate, onBeforeNavigat
           : {}),
         // Expansion options: only send overrides for disabled options
         ...(Object.values(expansionOptions).some((v) => !v)
-          ? { expansion_options: Object.fromEntries(Object.entries(expansionOptions).map(([k, v]) => [k, v ? 1 : 0])) }
+          ? {
+              expansion_options: Object.fromEntries(
+                Object.entries(expansionOptions).map(([k, v]) => [k, v ? 1 : 0])
+              ),
+            }
           : {}),
         ...(simcBranch ? { simc_branch: simcBranch } : {}),
       };

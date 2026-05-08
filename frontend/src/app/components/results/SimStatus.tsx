@@ -103,7 +103,9 @@ export default function SimStatus({
 
       <div className="text-center">
         <p className="text-sm font-semibold text-on-surface">{title}</p>
-        {progressDetail && <p className="mt-1 text-[13px] text-on-surface-variant/60">{progressDetail}</p>}
+        {progressDetail && (
+          <p className="mt-1 text-[13px] text-on-surface-variant/60">{progressDetail}</p>
+        )}
       </div>
 
       <div className="w-72">
@@ -114,7 +116,9 @@ export default function SimStatus({
           />
         </div>
         <div className="mt-2 flex items-center justify-between">
-          <p className="font-mono text-[12px] tabular-nums text-on-surface-variant/60">{displayProgress}%</p>
+          <p className="font-mono text-[12px] tabular-nums text-on-surface-variant/60">
+            {displayProgress}%
+          </p>
           {cpuUsage !== null && (
             <p className="font-mono text-[12px] tabular-nums text-on-surface-variant/60">
               CPU {Math.round(cpuUsage)}%
@@ -180,7 +184,9 @@ export default function SimStatus({
               </div>
               <span className="text-[13px] text-on-surface-variant">
                 {progressStage}
-                {progressDetail && <span className="text-on-surface-variant/60"> · {progressDetail}</span>}
+                {progressDetail && (
+                  <span className="text-on-surface-variant/60"> · {progressDetail}</span>
+                )}
               </span>
             </div>
           )}

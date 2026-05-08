@@ -18,7 +18,10 @@ interface ConsumableEntry {
 // Current expansion for Midnight
 const CURRENT_EXPANSION = 11;
 
-function buildOptions(data: ConsumableEntry[], currentExpansion: number): { value: string; label: string }[] {
+function buildOptions(
+  data: ConsumableEntry[],
+  currentExpansion: number
+): { value: string; label: string }[] {
   const current = data.filter((d) => d.expansion === currentExpansion);
   const previous = data.filter((d) => d.expansion < currentExpansion);
   const options: { value: string; label: string }[] = [
@@ -87,9 +90,12 @@ const EMPTY_OPTIONS = [DEFAULT_OPTIONS, NONE_OPTION];
 export default function RaidBuffsConsumables() {
   const { t } = useLanguage();
   const {
-    raidBuffs, setRaidBuffs,
-    consumables, setConsumables,
-    expansionOptions, setExpansionOptions,
+    raidBuffs,
+    setRaidBuffs,
+    consumables,
+    setConsumables,
+    expansionOptions,
+    setExpansionOptions,
   } = useSimContext();
 
   const [apiData, setApiData] = useState<ConsumablesApiResponse | null>(null);
@@ -102,7 +108,14 @@ export default function RaidBuffsConsumables() {
   }, []);
 
   const consumableOptions = useMemo(() => {
-    if (!apiData) return { food: EMPTY_OPTIONS, flask: EMPTY_OPTIONS, potion: EMPTY_OPTIONS, augmentation: EMPTY_OPTIONS, weapon_rune: EMPTY_OPTIONS };
+    if (!apiData)
+      return {
+        food: EMPTY_OPTIONS,
+        flask: EMPTY_OPTIONS,
+        potion: EMPTY_OPTIONS,
+        augmentation: EMPTY_OPTIONS,
+        weapon_rune: EMPTY_OPTIONS,
+      };
     return {
       food: buildOptions(apiData.foods, CURRENT_EXPANSION),
       flask: buildOptions(apiData.flasks, CURRENT_EXPANSION),
@@ -155,7 +168,9 @@ export default function RaidBuffsConsumables() {
               type="button"
               onClick={() => setAllBuffs(true)}
               className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                allBuffsOn ? 'bg-gold/15 text-gold' : 'text-on-surface-variant/50 hover:text-on-surface-variant'
+                allBuffsOn
+                  ? 'bg-gold/15 text-gold'
+                  : 'text-on-surface-variant/50 hover:text-on-surface-variant'
               }`}
             >
               All
@@ -164,7 +179,9 @@ export default function RaidBuffsConsumables() {
               type="button"
               onClick={() => setAllBuffs(false)}
               className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                allBuffsOff ? 'bg-red-500/15 text-red-400' : 'text-on-surface-variant/50 hover:text-on-surface-variant'
+                allBuffsOff
+                  ? 'bg-red-500/15 text-red-400'
+                  : 'text-on-surface-variant/50 hover:text-on-surface-variant'
               }`}
             >
               None

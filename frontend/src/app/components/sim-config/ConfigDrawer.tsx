@@ -80,7 +80,7 @@ export default function ConfigDrawer({
       post_combos: simcPostCombos,
       footer: simcFooter,
     }),
-    [simcHeader, simcBasePlayer, simcRaidActors, simcPostCombos, simcFooter],
+    [simcHeader, simcBasePlayer, simcRaidActors, simcPostCombos, simcFooter]
   );
 
   const expertSetters: Record<ExpertTabKey, (value: string) => void> = useMemo(
@@ -91,20 +91,23 @@ export default function ConfigDrawer({
       post_combos: setSimcPostCombos,
       footer: setSimcFooter,
     }),
-    [setSimcHeader, setSimcBasePlayer, setSimcRaidActors, setSimcPostCombos, setSimcFooter],
+    [setSimcHeader, setSimcBasePlayer, setSimcRaidActors, setSimcPostCombos, setSimcFooter]
   );
 
   const hasExpertContent = Object.values(expertValues).some((value) => value.trim());
   const expertActiveTabInfo = EXPERT_TABS.find((tab) => tab.key === expertActiveTab)!;
 
   return (
-    <div className="border-t border-outline-variant/10 bg-[#0e0e0e]/95 backdrop-blur-xl animate-fade-in">
+    <div className="animate-fade-in border-t border-outline-variant/10 bg-[#0e0e0e]/95 backdrop-blur-xl">
       <div className="mx-auto max-w-screen-2xl px-8 py-5">
         <div className="mb-5 flex items-center gap-1">
-          {([
+          {[
             { key: 'simulation' as const, label: t('config.simulation') },
-            { key: 'buffs' as const, label: `${t('config.raidBuffs')} & ${t('config.consumables')}` },
-          ]).map((tab) => (
+            {
+              key: 'buffs' as const,
+              label: `${t('config.raidBuffs')} & ${t('config.consumables')}`,
+            },
+          ].map((tab) => (
             <button
               key={tab.key}
               type="button"
@@ -121,7 +124,7 @@ export default function ConfigDrawer({
         </div>
 
         {activeTab === 'simulation' && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="animate-fade-in space-y-6">
             <div className="grid grid-cols-4 gap-6">
               <div className="space-y-2">
                 <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
@@ -156,7 +159,9 @@ export default function ConfigDrawer({
                       }}
                       className="w-16 bg-transparent px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"
                     />
-                    <span className="pr-2 text-[9px] text-on-surface-variant/50">{t('config.sec')}</span>
+                    <span className="pr-2 text-[9px] text-on-surface-variant/50">
+                      {t('config.sec')}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -175,7 +180,9 @@ export default function ConfigDrawer({
                     className="flex-1 accent-primary"
                   />
                   <div className="min-w-[4.5rem] rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-1.5 text-center">
-                    <span className="font-mono text-sm font-bold tabular-nums text-primary">{targetCount}</span>
+                    <span className="font-mono text-sm font-bold tabular-nums text-primary">
+                      {targetCount}
+                    </span>
                     <span className="ml-1 text-[9px] text-on-surface-variant/50">
                       {targetCount === 1 ? t('config.boss') : t('config.bosses')}
                     </span>
@@ -190,7 +197,8 @@ export default function ConfigDrawer({
                   </label>
                   <div className="flex gap-1.5">
                     {availableBranches.map((branch) => {
-                      const isActive = simcBranch === branch || (!simcBranch && branch === 'weekly');
+                      const isActive =
+                        simcBranch === branch || (!simcBranch && branch === 'weekly');
                       return (
                         <button
                           key={branch}

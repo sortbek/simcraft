@@ -38,20 +38,20 @@ export default function StatWeightsTable({ statWeights }: StatWeightsTableProps)
   const maxWeight = entries.length > 0 ? entries[0].weight : 1;
 
   return (
-    <div className="bg-surface-container-low rounded-xl p-8 border border-outline-variant/10">
-      <h3 className="font-headline font-black text-sm uppercase tracking-widest text-on-surface-variant mb-6">
+    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-8">
+      <h3 className="mb-6 font-headline text-sm font-black uppercase tracking-widest text-on-surface-variant">
         {t('results.statWeights')}
       </h3>
       <div className="space-y-6">
         {entries.map(({ stat, weight }, i) => (
           <div key={stat} className="flex flex-col gap-2">
-            <div className="flex justify-between text-xs font-headline font-bold uppercase tracking-tight">
+            <div className="flex justify-between font-headline text-xs font-bold uppercase tracking-tight">
               <span>{stat}</span>
               <span className={i === 0 ? 'text-primary' : 'text-on-surface'}>
                 {weight.toFixed(2)}
               </span>
             </div>
-            <div className="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container-highest">
               <div
                 className={`h-full rounded-full ${BAR_COLORS[Math.min(i, BAR_COLORS.length - 1)]}`}
                 style={{ width: `${(weight / maxWeight) * 100}%` }}

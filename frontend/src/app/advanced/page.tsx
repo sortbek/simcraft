@@ -47,14 +47,12 @@ export default function AdvancedPage() {
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="card p-6 space-y-4">
+      <div className="card space-y-4 p-6">
         <div>
-          <h2 className="font-headline font-bold text-sm uppercase tracking-widest text-on-surface-variant mb-1">
+          <h2 className="mb-1 font-headline text-sm font-bold uppercase tracking-widest text-on-surface-variant">
             {t('advanced.title')}
           </h2>
-          <p className="text-[13px] text-on-surface-variant/50">
-            {t('advanced.description')}
-          </p>
+          <p className="text-[13px] text-on-surface-variant/50">{t('advanced.description')}</p>
         </div>
         <textarea
           value={rawInput}
@@ -73,13 +71,18 @@ export default function AdvancedPage() {
           type="button"
           onClick={submit}
           disabled={submitting || rawInput.trim().length < 10}
-          className="bg-gradient-to-r from-primary to-primary-container px-12 py-4 rounded-lg text-on-primary font-headline font-black text-sm uppercase tracking-widest shadow-[0_4px_20px_rgba(200,153,42,0.3)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-3"
+          className="flex items-center gap-3 rounded-lg bg-gradient-to-r from-primary to-primary-container px-12 py-4 font-headline text-sm font-black uppercase tracking-widest text-on-primary shadow-[0_4px_20px_rgba(200,153,42,0.3)] transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
         >
           {submitting ? (
             <>
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path
+                  d="M14 8a6 6 0 00-6-6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
               </svg>
               {t('config.running')}
             </>

@@ -59,7 +59,15 @@ function getBuildStatus(
 
 type ViewMode = 'collapsed' | 'view' | 'edit';
 
-export default function TalentPicker({ defaultView = 'collapsed', compact = false, hideCompare = false }: { defaultView?: ViewMode; compact?: boolean; hideCompare?: boolean }) {
+export default function TalentPicker({
+  defaultView = 'collapsed',
+  compact = false,
+  hideCompare = false,
+}: {
+  defaultView?: ViewMode;
+  compact?: boolean;
+  hideCompare?: boolean;
+}) {
   const { t } = useLanguage();
   const { simcInput, selectedTalent, setSelectedTalent, talentBuilds, setTalentBuilds } =
     useSimContext();
@@ -329,7 +337,8 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
                       : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
                   }`}
                 >
-                  {t('talent.compare')}{talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
+                  {t('talent.compare')}
+                  {talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
                 </button>
               )}
               <button
@@ -490,8 +499,12 @@ export default function TalentPicker({ defaultView = 'collapsed', compact = fals
 
       {/* Tree content */}
       {viewMode !== 'collapsed' && !compareMode && (
-        <div className={`border-t border-outline-variant/10 p-4 ${compact ? 'max-h-[280px] overflow-auto' : ''}`}>
-          {viewMode === 'view' && currentTalent && <TalentTree talentString={currentTalent} bare vertical={compact} />}
+        <div
+          className={`border-t border-outline-variant/10 p-4 ${compact ? 'max-h-[280px] overflow-auto' : ''}`}
+        >
+          {viewMode === 'view' && currentTalent && (
+            <TalentTree talentString={currentTalent} bare vertical={compact} />
+          )}
           {viewMode === 'edit' && specId && (
             <TalentTree
               talentString={selectedTalent || currentTalent}

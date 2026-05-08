@@ -67,7 +67,7 @@ export default function SimcEngineSection() {
       }
       await loadVersions();
       setUpdates((current) =>
-        current.map((item) => (item.tag === update.tag ? { ...item, installed: true } : item)),
+        current.map((item) => (item.tag === update.tag ? { ...item, installed: true } : item))
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Install failed');
@@ -89,10 +89,7 @@ export default function SimcEngineSection() {
     }
   };
 
-  const sourceVersion = useMemo(
-    () => versions.find((v) => v.type === 'source'),
-    [versions],
-  );
+  const sourceVersion = useMemo(() => versions.find((v) => v.type === 'source'), [versions]);
 
   const branchData = useMemo(() => {
     const branches = ['weekly', 'nightly'] as const;
@@ -106,7 +103,7 @@ export default function SimcEngineSection() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-primary-fixed-dim">
+        <div className="text-primary-fixed-dim flex items-center gap-2">
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
           </svg>
@@ -158,7 +155,7 @@ export default function SimcEngineSection() {
           </span>
         </div>
 
-        <div className={`space-y-2${sourceVersion ? ' pointer-events-none opacity-40' : ''}`}>
+        <div className={`space-y-2${sourceVersion ? 'pointer-events-none opacity-40' : ''}`}>
           {branchData.map(({ branch, installed, available }) => (
             <div
               key={branch}
@@ -183,7 +180,11 @@ export default function SimcEngineSection() {
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold capitalize">{branch}</p>
                   {branch === 'nightly' && (
-                    <svg className="h-3.5 w-3.5 text-error/70" viewBox="0 0 24 24" fill="currentColor">
+                    <svg
+                      className="h-3.5 w-3.5 text-error/70"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
                       <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
                     </svg>
                   )}

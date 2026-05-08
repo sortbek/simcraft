@@ -37,11 +37,7 @@ export function ScaleProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  return (
-    <ScaleContext.Provider value={{ scale, setScale }}>
-      {children}
-    </ScaleContext.Provider>
-  );
+  return <ScaleContext.Provider value={{ scale, setScale }}>{children}</ScaleContext.Provider>;
 }
 
 export default function ContentScaler({ children }: { children: React.ReactNode }) {
@@ -49,7 +45,7 @@ export default function ContentScaler({ children }: { children: React.ReactNode 
 
   return (
     <main
-      className="mx-auto max-w-screen-2xl px-8 py-8 origin-top"
+      className="mx-auto max-w-screen-2xl origin-top px-8 py-8"
       style={scale !== 100 ? { zoom: scale / 100 } : undefined}
     >
       {children}

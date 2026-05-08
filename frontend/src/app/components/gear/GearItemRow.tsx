@@ -71,7 +71,9 @@ export default function GearItemRow({
           <input type="checkbox" checked={checked} onChange={onToggle} className="peer sr-only" />
           <div
             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border transition-all ${
-              checked ? 'border-gold bg-gold' : 'border-outline-variant group-hover:border-outline-variant/40'
+              checked
+                ? 'border-gold bg-gold'
+                : 'border-outline-variant group-hover:border-outline-variant/40'
             }`}
           >
             {checked && (
@@ -105,7 +107,7 @@ export default function GearItemRow({
       <a
         href={href}
         data-wowhead={wowheadData}
-        className={`h-8 w-8 shrink-0 overflow-hidden rounded block ${
+        className={`block h-8 w-8 shrink-0 overflow-hidden rounded ${
           vault
             ? 'ring-2 ring-amber-400/70'
             : loot

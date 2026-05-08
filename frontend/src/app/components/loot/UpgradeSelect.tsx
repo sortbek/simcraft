@@ -14,11 +14,7 @@ interface UpgradeSelectProps {
   options: UpgradeOption[];
 }
 
-export default function UpgradeSelect({
-  value,
-  onChange,
-  options,
-}: UpgradeSelectProps) {
+export default function UpgradeSelect({ value, onChange, options }: UpgradeSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -44,12 +40,18 @@ export default function UpgradeSelect({
         <span className="flex items-center gap-2 truncate">
           <span className="font-medium text-on-surface">{selected?.label ?? 'Select'}</span>
           {selected && 'sublabel' in selected && selected.sublabel && (
-            <span className="text-xs tabular-nums text-on-surface-variant">ilvl {selected.sublabel}</span>
+            <span className="text-xs tabular-nums text-on-surface-variant">
+              ilvl {selected.sublabel}
+            </span>
           )}
         </span>
         <svg
           className={`h-4 w-4 shrink-0 text-on-surface-variant/40 transition-transform ${open ? 'rotate-180' : ''}`}
-          viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
         >
           <path d="M4 6l4 4 4-4" />
         </svg>
@@ -64,14 +66,21 @@ export default function UpgradeSelect({
               <button
                 key={opt.key}
                 type="button"
-                onClick={() => { onChange(opt.key); setOpen(false); }}
+                onClick={() => {
+                  onChange(opt.key);
+                  setOpen(false);
+                }}
                 className={`grid w-full gap-x-3 px-3 py-2 text-left text-sm transition-colors ${
-                  isActive ? 'bg-gold/[0.06] text-gold' : 'text-on-surface hover:bg-surface-container-high'
+                  isActive
+                    ? 'bg-gold/[0.06] text-gold'
+                    : 'text-on-surface hover:bg-surface-container-high'
                 }`}
                 style={{ gridTemplateColumns: '1fr auto' }}
               >
-                <span className="font-medium truncate">{opt.label}</span>
-                <span className={`text-xs tabular-nums text-right ${isActive ? 'text-gold/70' : 'text-on-surface-variant/50'}`}>
+                <span className="truncate font-medium">{opt.label}</span>
+                <span
+                  className={`text-right text-xs tabular-nums ${isActive ? 'text-gold/70' : 'text-on-surface-variant/50'}`}
+                >
                   {'sublabel' in opt && opt.sublabel ? `ilvl ${opt.sublabel}` : ''}
                 </span>
               </button>

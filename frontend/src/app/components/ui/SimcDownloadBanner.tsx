@@ -13,7 +13,7 @@ export default function SimcDownloadBanner() {
 
     const unsub = window.electronAPI.onSimcStatusChanged?.((s) => setStatus(s));
     const unsubProgress = window.electronAPI.onSimcDownloadProgress?.((progress) => {
-      setStatus((prev) => prev ? { ...prev, downloading: true, progress } : null);
+      setStatus((prev) => (prev ? { ...prev, downloading: true, progress } : null));
     });
 
     return () => {
@@ -30,8 +30,19 @@ export default function SimcDownloadBanner() {
       <div className="rounded-lg bg-surface-container px-4 py-3 text-sm text-on-surface-variant">
         <div className="flex items-center gap-3">
           <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
           </svg>
           <span>Downloading SimC engine... {percent}%</span>
         </div>

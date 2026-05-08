@@ -39,7 +39,7 @@ export default function LogConsole({ lines }: { lines: string[] }) {
   }
 
   return (
-    <div className="w-full border border-outline-variant/10 rounded-xl overflow-hidden">
+    <div className="w-full overflow-hidden rounded-xl border border-outline-variant/10">
       <div className="flex items-center justify-between bg-surface-container-high px-4 py-2">
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60" />

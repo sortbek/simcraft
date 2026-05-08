@@ -51,7 +51,9 @@ export default function TopGearRankings({
   return (
     <div className="card p-5">
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted">{t('gear.rankings')}</p>
+        <p className="text-xs font-medium uppercase tracking-widest text-muted">
+          {t('gear.rankings')}
+        </p>
         <div className="flex items-center gap-3">
           {hasEncounterData && (
             <div className="flex gap-1">
@@ -106,13 +108,17 @@ export default function TopGearRankings({
                   <div className="flex items-center gap-4 text-[11px]">
                     <span className="text-on-surface-variant/60">
                       {t('gear.expectedUpgrade')}
-                      <span className={`font-bold ${avgDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
+                      <span
+                        className={`font-bold ${avgDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}
+                      >
                         {avgDelta > 0 ? `+${((avgDelta / baseDps) * 100).toFixed(2)}%` : '--'}
                       </span>
                     </span>
                     <span className="text-on-surface-variant/60">
                       {t('gear.bestUpgrade')}
-                      <span className={`font-bold ${bestDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}>
+                      <span
+                        className={`font-bold ${bestDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}
+                      >
                         {bestDelta > 0 ? `+${((bestDelta / baseDps) * 100).toFixed(2)}%` : '--'}
                       </span>
                     </span>
@@ -238,8 +244,12 @@ function ResultRow({
   const { t } = useLanguage();
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
 
-  const changedItems = result.items.filter((item) => !item.is_kept && item.item_id > 0 && !item.type);
-  const enchantGemItems = result.items.filter((item) => item.type === 'enchant' || item.type === 'gem');
+  const changedItems = result.items.filter(
+    (item) => !item.is_kept && item.item_id > 0 && !item.type
+  );
+  const enchantGemItems = result.items.filter(
+    (item) => item.type === 'enchant' || item.type === 'gem'
+  );
   const isEquipped =
     (result.items.length === 0 || result.name.startsWith('Currently Equipped')) &&
     enchantGemItems.length === 0;
@@ -270,7 +280,7 @@ function ResultRow({
       onClick={onSelect}
       className={`relative cursor-pointer overflow-hidden rounded-lg transition-colors hover:bg-white/[0.04] ${
         isSelected && !isBest
-          ? 'ring-1 ring-emerald-500/50 bg-emerald-500/[0.04]'
+          ? 'bg-emerald-500/[0.04] ring-1 ring-emerald-500/50'
           : isBest
             ? `ring-1 ring-gold/30 ${isSelected ? 'bg-gold/[0.05]' : 'bg-transparent'}`
             : isEquipped
@@ -278,7 +288,10 @@ function ResultRow({
               : ''
       }`}
     >
-      <div className="absolute inset-y-0 left-0 bg-white/[0.02]" style={{ width: `${barWidth}%` }} />
+      <div
+        className="absolute inset-y-0 left-0 bg-white/[0.02]"
+        style={{ width: `${barWidth}%` }}
+      />
       <div className="relative flex items-center justify-between gap-3 px-3 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {rank != null && (
@@ -384,7 +397,11 @@ function ItemTag({
   useItemNames();
 
   const qualityColor = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
-  const name = localizedItemName(item.item_id, info?.name || item.name || `Item ${item.item_id}`, locale);
+  const name = localizedItemName(
+    item.item_id,
+    info?.name || item.name || `Item ${item.item_id}`,
+    locale
+  );
   const icon = info?.icon || 'inv_misc_questionmark';
   const wowheadData =
     item.item_id > 0

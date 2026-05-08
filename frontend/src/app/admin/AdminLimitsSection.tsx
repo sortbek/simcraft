@@ -46,7 +46,9 @@ export default function AdminLimitsSection() {
       })
       .catch(() => {});
 
-    fetchInstalledVersions().then(setSimc).catch(() => {});
+    fetchInstalledVersions()
+      .then(setSimc)
+      .catch(() => {});
   }, []);
 
   const handleCheckUpdates = useCallback(async () => {
@@ -76,7 +78,9 @@ export default function AdminLimitsSection() {
       if (!data.success) throw new Error(data.detail || 'Install failed');
 
       // Refresh installed versions and clear the update entry
-      try { setSimc(await fetchInstalledVersions()); } catch {}
+      try {
+        setSimc(await fetchInstalledVersions());
+      } catch {}
       setUpdates((prev) => prev.filter((u) => u.branch !== update.branch));
     } catch (err) {
       setCheckError(err instanceof Error ? err.message : 'Install failed');
@@ -85,20 +89,25 @@ export default function AdminLimitsSection() {
     }
   }, []);
 
-  const handleRemove = useCallback(async (branch: string) => {
-    setCheckError('');
-    try {
-      const res = await adminFetch(`/api/admin/simc/${branch}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.detail || 'Remove failed');
-      try { setSimc(await fetchInstalledVersions()); } catch {}
-      setUpdates([]);
-      // Auto-check for updates so the install button appears
-      handleCheckUpdates();
-    } catch (err) {
-      setCheckError(err instanceof Error ? err.message : 'Remove failed');
-    }
-  }, [handleCheckUpdates]);
+  const handleRemove = useCallback(
+    async (branch: string) => {
+      setCheckError('');
+      try {
+        const res = await adminFetch(`/api/admin/simc/${branch}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.detail || 'Remove failed');
+        try {
+          setSimc(await fetchInstalledVersions());
+        } catch {}
+        setUpdates([]);
+        // Auto-check for updates so the install button appears
+        handleCheckUpdates();
+      } catch (err) {
+        setCheckError(err instanceof Error ? err.message : 'Remove failed');
+      }
+    },
+    [handleCheckUpdates]
+  );
 
   const save = useCallback(async (partial: Partial<Settings>) => {
     setSaving(true);
@@ -132,7 +141,7 @@ export default function AdminLimitsSection() {
       {/* SimC Engine — matches desktop SimcEngineSection layout */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary-fixed-dim">
+          <div className="text-primary-fixed-dim flex items-center gap-2">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
             </svg>
@@ -176,7 +185,7 @@ export default function AdminLimitsSection() {
           </div>
 
           {/* Per-branch rows */}
-          <div className={`space-y-2${isSource ? ' pointer-events-none opacity-40' : ''}`}>
+          <div className={`space-y-2${isSource ? 'pointer-events-none opacity-40' : ''}`}>
             {allBranches.map((branch) => {
               const isEnabled = enabledBranches.includes(branch);
               const info = simc?.versions[branch];
@@ -189,10 +198,7 @@ export default function AdminLimitsSection() {
                   className="flex items-center justify-between rounded-lg border border-outline-variant/10 bg-surface-container p-3"
                 >
                   <div className="flex w-12 shrink-0 justify-center">
-                    <SettingsToggle
-                      checked={isEnabled}
-                      onChange={() => {}}
-                    />
+                    <SettingsToggle checked={isEnabled} onChange={() => {}} />
                   </div>
 
                   <div className="ml-4 flex-1">
@@ -204,7 +210,11 @@ export default function AdminLimitsSection() {
                         </span>
                       )}
                       {branch === 'nightly' && (
-                        <svg className="h-3.5 w-3.5 text-error/70" viewBox="0 0 24 24" fill="currentColor">
+                        <svg
+                          className="h-3.5 w-3.5 text-error/70"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
                           <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
                         </svg>
                       )}
@@ -278,7 +288,7 @@ export default function AdminLimitsSection() {
 
       {/* Server Limits */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2 text-primary-fixed-dim">
+        <div className="text-primary-fixed-dim flex items-center gap-2">
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
           </svg>
@@ -311,7 +321,7 @@ export default function AdminLimitsSection() {
                 }
               }}
               onBlur={() => save({ max_combinations: settings.max_combinations })}
-              className="h-10 w-28 rounded-md border-none bg-surface-container-highest px-3 text-right font-bold text-primary focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="h-10 w-28 rounded-md border-none bg-surface-container-highest px-3 text-right font-bold text-primary [appearance:textfield] focus:ring-1 focus:ring-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
 
@@ -335,7 +345,7 @@ export default function AdminLimitsSection() {
                 }
               }}
               onBlur={() => save({ max_scenarios: settings.max_scenarios })}
-              className="h-10 w-28 rounded-md border-none bg-surface-container-highest px-3 text-right font-bold text-primary focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="h-10 w-28 rounded-md border-none bg-surface-container-highest px-3 text-right font-bold text-primary [appearance:textfield] focus:ring-1 focus:ring-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
         </div>

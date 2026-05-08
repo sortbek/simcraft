@@ -68,7 +68,10 @@ export default function TopGearResults({
   }, [results, equippedGear]);
   const itemInfoMap = useItemInfo(allItemQueries);
 
-  const allEnchantIds = useMemo(() => collectEnchantIds(results, equippedGear), [results, equippedGear]);
+  const allEnchantIds = useMemo(
+    () => collectEnchantIds(results, equippedGear),
+    [results, equippedGear]
+  );
   const enchantInfoMap = useEnchantInfo(allEnchantIds);
 
   const allGemIds = useMemo(() => collectGemIds(results, equippedGear), [results, equippedGear]);

@@ -3,15 +3,23 @@ import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
 import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
-import {
-  resolveInherits,
-  type EquippedGear,
-  type SlotInherit,
-} from '../../lib/inheritedGear';
+import { resolveInherits, type EquippedGear, type SlotInherit } from '../../lib/inheritedGear';
 
 const SLOT_ORDER = [
-  'Main Hand', 'Off Hand', 'Head', 'Neck', 'Shoulder', 'Back',
-  'Chest', 'Wrist', 'Hands', 'Waist', 'Legs', 'Feet', 'Finger', 'Trinket',
+  'Main Hand',
+  'Off Hand',
+  'Head',
+  'Neck',
+  'Shoulder',
+  'Back',
+  'Chest',
+  'Wrist',
+  'Hands',
+  'Waist',
+  'Legs',
+  'Feet',
+  'Finger',
+  'Trinket',
 ];
 
 interface ItemTableProps {
@@ -110,7 +118,11 @@ export default function ItemTable({
     const byDungeon = new Map<string, DropItem[]>();
     for (const items of Object.values(drops)) {
       for (const item of items) {
-        if (filter && !localizedItemName(item.item_id, item.name, locale).toLowerCase().includes(filter)) continue;
+        if (
+          filter &&
+          !localizedItemName(item.item_id, item.name, locale).toLowerCase().includes(filter)
+        )
+          continue;
         const key = item.instance_name || 'Unknown';
         const list = byDungeon.get(key);
         if (list) list.push(item);
@@ -127,13 +139,15 @@ export default function ItemTable({
     [groupedItems]
   );
   const filteredTotal = groupedItems.reduce((n, [, items]) => n + items.length, 0);
-  const allSelected = filteredTotal > 0 && groupedItems.every(([, items]) => items.every((item) => selected.has(item.item_id)));
+  const allSelected =
+    filteredTotal > 0 &&
+    groupedItems.every(([, items]) => items.every((item) => selected.has(item.item_id)));
   return (
-    <div className="rounded-xl border border-outline-variant/5 bg-surface-container overflow-hidden shadow-2xl">
+    <div className="overflow-hidden rounded-xl border border-outline-variant/5 bg-surface-container shadow-2xl">
       {/* Header */}
       <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="font-headline font-black text-base uppercase tracking-tight text-on-surface">
+          <h3 className="font-headline text-base font-black uppercase tracking-tight text-on-surface">
             Available Drops
           </h3>
           <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">
@@ -147,7 +161,14 @@ export default function ItemTable({
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
-            <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/55" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <svg
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/55"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            >
               <circle cx="6.5" cy="6.5" r="4.5" />
               <path d="M10 10l4 4" />
             </svg>
@@ -165,7 +186,14 @@ export default function ItemTable({
                 className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant/55 transition-colors hover:bg-surface-container-highest hover:text-on-surface"
                 aria-label="Clear search"
               >
-                <svg viewBox="0 0 12 12" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <svg
+                  viewBox="0 0 12 12"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                >
                   <path d="M3 3l6 6M9 3L3 9" />
                 </svg>
               </button>
@@ -212,7 +240,15 @@ export default function ItemTable({
             }`}
           >
             {allSelected && (
-              <svg className="h-3 w-3 text-on-primary" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="h-3 w-3 text-on-primary"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M2.5 6l2.5 2.5 4.5-5" />
               </svg>
             )}
@@ -241,7 +277,13 @@ export default function ItemTable({
             </div>
 
             {items.map((item) => {
-              const resolved = resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks);
+              const resolved = resolveUpgrade(
+                item,
+                difficulty,
+                dungeonDiff,
+                upgradeLevel,
+                upgradeTracks
+              );
               const effectiveBonusId = getTrackInfo(item, difficulty, dungeonDiff)?.bonus_id;
               const isSelected = selected.has(item.item_id);
               const isEmbellished = item.embellished === true;
@@ -256,7 +298,9 @@ export default function ItemTable({
                   key={item.item_id}
                   onClick={() => !embellishDisabled && onToggle(item.item_id)}
                   className={`group grid grid-cols-12 items-center px-4 py-2 transition-colors ${
-                    embellishDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-surface-container-high/40 cursor-pointer'
+                    embellishDisabled
+                      ? 'cursor-not-allowed opacity-40'
+                      : 'cursor-pointer hover:bg-surface-container-high/40'
                   }`}
                 >
                   {/* Checkbox + Icon + Name */}
@@ -265,14 +309,22 @@ export default function ItemTable({
                       onClick={() => !embellishDisabled && onToggle(item.item_id)}
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors ${
                         embellishDisabled
-                          ? 'border-outline-variant/20 bg-transparent cursor-not-allowed'
+                          ? 'cursor-not-allowed border-outline-variant/20 bg-transparent'
                           : isSelected
-                            ? 'border-primary bg-primary cursor-pointer'
-                            : 'border-outline-variant/40 bg-transparent hover:border-on-surface-variant/60 cursor-pointer'
+                            ? 'cursor-pointer border-primary bg-primary'
+                            : 'cursor-pointer border-outline-variant/40 bg-transparent hover:border-on-surface-variant/60'
                       }`}
                     >
                       {isSelected && (
-                        <svg className="h-3 w-3 text-on-primary" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <svg
+                          className="h-3 w-3 text-on-primary"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
                           <path d="M2.5 6l2.5 2.5 4.5-5" />
                         </svg>
                       )}
@@ -286,7 +338,10 @@ export default function ItemTable({
                         onClick={(e) => e.stopPropagation()}
                         className="block"
                       >
-                        <div className={`h-9 w-9 overflow-hidden rounded-md bg-surface-container-highest border-b-2`} style={{ borderBottomColor: qualityBorderColor(resolved.quality) }}>
+                        <div
+                          className={`h-9 w-9 overflow-hidden rounded-md border-b-2 bg-surface-container-highest`}
+                          style={{ borderBottomColor: qualityBorderColor(resolved.quality) }}
+                        >
                           <img
                             src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`}
                             alt=""
@@ -317,7 +372,8 @@ export default function ItemTable({
                       </a>
                       {item.encounter && (
                         <p className="text-[10px] text-on-surface-variant/60">
-                          {item.instance_name && `${item.instance_name} • `}{item.encounter}
+                          {item.instance_name && `${item.instance_name} • `}
+                          {item.encounter}
                         </p>
                       )}
                     </div>
@@ -332,11 +388,10 @@ export default function ItemTable({
 
                   {/* Level */}
                   <div className="col-span-2 text-center">
-                    <span className="font-headline text-xs font-black text-on-surface tabular-nums">
+                    <span className="font-headline text-xs font-black tabular-nums text-on-surface">
                       {resolved.ilvl}
                     </span>
                   </div>
-
                 </div>
               );
             })}
@@ -367,11 +422,15 @@ function buildWowheadAttr(
 
 function qualityBorderColor(quality: number): string {
   switch (quality) {
-    case 5: return '#ff8000'; // legendary
-    case 4: return '#a335ee'; // epic
-    case 3: return '#0070dd'; // rare
-    case 2: return '#1eff00'; // uncommon
-    default: return '#9d9d9d'; // common
+    case 5:
+      return '#ff8000'; // legendary
+    case 4:
+      return '#a335ee'; // epic
+    case 3:
+      return '#0070dd'; // rare
+    case 2:
+      return '#1eff00'; // uncommon
+    default:
+      return '#9d9d9d'; // common
   }
 }
-

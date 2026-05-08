@@ -38,9 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Sidebar />
               <div className="pl-64">
                 <TopBar />
-                <ContentScaler>
-                  {children}
-                </ContentScaler>
+                <ContentScaler>{children}</ContentScaler>
                 <FooterDisclaimer version={packageJson.version} />
               </div>
             </SimProvider>

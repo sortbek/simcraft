@@ -47,7 +47,10 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
         </svg>
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full overflow-y-auto overscroll-contain rounded-lg bg-surface-container-high py-1 shadow-lg shadow-black/40" style={{ maxHeight: '12rem' }}>
+        <div
+          className="absolute z-50 mt-1 w-full overflow-y-auto overscroll-contain rounded-lg bg-surface-container-high py-1 shadow-lg shadow-black/40"
+          style={{ maxHeight: '12rem' }}
+        >
           {FIGHT_STYLES.map((fs) => (
             <button
               key={fs.value}

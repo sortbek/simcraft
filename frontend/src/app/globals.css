@@ -9,7 +9,7 @@
     scrollbar-gutter: stable;
   }
   body {
-    @apply bg-background text-on-surface-variant antialiased leading-relaxed;
+    @apply bg-background leading-relaxed text-on-surface-variant antialiased;
   }
   ::selection {
     @apply bg-primary/25 text-white;
@@ -24,7 +24,7 @@
     @apply card cursor-pointer hover:border-outline-variant/25 hover:bg-surface-container-high;
   }
   .btn-primary {
-    @apply relative rounded-lg bg-gradient-to-r from-primary to-primary-container px-5 py-2.5 font-semibold text-black transition-all duration-150 hover:brightness-110 hover:shadow-glow active:scale-[0.98] disabled:pointer-events-none disabled:bg-surface-container-highest disabled:from-surface-container-highest disabled:to-surface-container-highest disabled:text-on-surface-variant/40 disabled:shadow-none;
+    @apply relative rounded-lg bg-gradient-to-r from-primary to-primary-container px-5 py-2.5 font-semibold text-black transition-all duration-150 hover:shadow-glow hover:brightness-110 active:scale-[0.98] disabled:pointer-events-none disabled:bg-surface-container-highest disabled:from-surface-container-highest disabled:to-surface-container-highest disabled:text-on-surface-variant/40 disabled:shadow-none;
   }
   .btn-outline {
     @apply rounded-lg border border-outline-variant/30 bg-transparent px-5 py-2.5 text-on-surface-variant transition-all duration-150 hover:border-outline-variant/60 hover:bg-white/[0.03] hover:text-on-surface active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;

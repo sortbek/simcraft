@@ -67,25 +67,27 @@ export default function DungeonDrawer({
       onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-        <div className="flex items-center justify-between gap-3 flex-1 rounded-xl border border-outline-variant/15 bg-surface-container-high px-3 py-2.5">
+        <div className="flex flex-1 items-center justify-between gap-3 rounded-xl border border-outline-variant/15 bg-surface-container-high px-3 py-2.5">
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-bold text-on-surface">{summaryLabel}</span>
             <span className="text-xs text-on-surface-variant">{summaryDetail}</span>
           </div>
-          <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-gold/10 border border-gold/20 px-2 text-xs font-bold text-on-surface">
+          <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-gold/20 bg-gold/10 px-2 text-xs font-bold text-on-surface">
             {count}
           </span>
         </div>
       </summary>
 
       <div className="pt-3">
-        <div className="flex gap-3 pt-3 pb-2">
+        <div className="flex gap-3 pb-2 pt-3">
           <button
             type="button"
             onClick={toggleAll}
-            className="text-xs font-medium text-gold hover:text-gold/80 transition-colors"
+            className="text-xs font-medium text-gold transition-colors hover:text-gold/80"
           >
-            {allSelected ? (t('dropFinder.deselectAll') ?? 'Deselect all') : (t('dropFinder.selectAll') ?? 'Select all')}
+            {allSelected
+              ? (t('dropFinder.deselectAll') ?? 'Deselect all')
+              : (t('dropFinder.selectAll') ?? 'Select all')}
           </button>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -100,7 +102,7 @@ export default function DungeonDrawer({
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggleInstance(String(inst.id))}
-                  className="accent-gold h-4 w-4"
+                  className="h-4 w-4 accent-gold"
                 />
                 <span className="text-sm text-on-surface">{inst.name}</span>
               </label>

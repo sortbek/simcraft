@@ -87,7 +87,9 @@ export default function AdvancedOptions() {
             <circle cx="8" cy="8" r="2" />
             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
           </svg>
-          <span className="text-sm font-medium text-on-surface-variant">{t('config.advancedOptions')}</span>
+          <span className="text-sm font-medium text-on-surface-variant">
+            {t('config.advancedOptions')}
+          </span>
           {!open && !isDefault && (
             <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
               {t('config.modified')}
@@ -134,7 +136,7 @@ export default function AdvancedOptions() {
                     const v = Math.max(10, Math.min(3600, Number(e.target.value) || 0));
                     setFightLength(v);
                   }}
-                  className="w-16 bg-transparent text-right font-mono text-sm tabular-nums text-on-surface focus:outline-none focus:ring-1 focus:ring-gold/30 rounded px-1 py-0.5"
+                  className="w-16 rounded bg-transparent px-1 py-0.5 text-right font-mono text-sm tabular-nums text-on-surface focus:outline-none focus:ring-1 focus:ring-gold/30"
                 />
               </div>
             </div>
@@ -185,9 +187,7 @@ export default function AdvancedOptions() {
               placeholder={t('config.customAplPlaceholder')}
               className="input-field h-28 resize-y font-mono text-xs"
             />
-            <p className="text-[13px] text-on-surface-variant/40">
-              {t('config.customAplHelp')}
-            </p>
+            <p className="text-[13px] text-on-surface-variant/40">{t('config.customAplHelp')}</p>
           </div>
 
           <ExpertToggle

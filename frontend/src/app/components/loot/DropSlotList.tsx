@@ -198,7 +198,7 @@ function DropItemCard({
       onClick={embellishDisabled ? undefined : onToggle}
       className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-all ${
         embellishDisabled
-          ? 'border-transparent bg-surface-container-high opacity-40 cursor-not-allowed'
+          ? 'cursor-not-allowed border-transparent bg-surface-container-high opacity-40'
           : isSelected
             ? 'border-gold/40 bg-gold/10'
             : 'border-transparent bg-surface-container-high hover:bg-surface-container-highest'
@@ -240,7 +240,9 @@ function DropItemCard({
         >
           {localizedItemName(item.item_id, item.name, locale)}
         </a>
-        {item.encounter && <span className="text-[12px] text-on-surface-variant/60">{item.encounter}</span>}
+        {item.encounter && (
+          <span className="text-[12px] text-on-surface-variant/60">{item.encounter}</span>
+        )}
       </div>
       <span
         className={`shrink-0 text-[13px] tabular-nums text-on-surface-variant/40 ${isOffSpec ? 'opacity-60' : ''}`}

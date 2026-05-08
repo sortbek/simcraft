@@ -23,8 +23,8 @@ export function useFaction(realm?: string, name?: string, region = 'eu'): string
       try {
         const res = await fetch(
           `https://simhammer.com/api/blizzard/character/${region}/${encodeURIComponent(
-            realm.toLowerCase(),
-          )}/${encodeURIComponent(name.toLowerCase())}/profile`,
+            realm.toLowerCase()
+          )}/${encodeURIComponent(name.toLowerCase())}/profile`
         );
         if (!res.ok || cancelled) {
           return;
@@ -50,14 +50,14 @@ export function getCharacterMediaUrl(
   realm: string | undefined,
   name: string | undefined,
   type: 'inset' | 'render',
-  region = 'eu',
+  region = 'eu'
 ): string | null {
   if (!realm || !name) {
     return null;
   }
 
   return `https://simhammer.com/api/blizzard/character/${region}/${encodeURIComponent(
-    realm.toLowerCase(),
+    realm.toLowerCase()
   )}/${encodeURIComponent(name.toLowerCase())}/media/${type}`;
 }
 

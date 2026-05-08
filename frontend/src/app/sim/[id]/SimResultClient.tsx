@@ -215,7 +215,7 @@ export default function SimResultClient() {
                   className={`rounded-lg border px-2.5 py-1 text-[14px] font-medium transition-all ${
                     isCurrent
                       ? 'border-gold/40 bg-gold/[0.08] text-gold'
-                      : 'border-border bg-surface-2 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
+                      : 'bg-surface-2 border-border text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                   }`}
                 >
                   {formatScenarioLabel(s)}
@@ -273,17 +273,28 @@ export default function SimResultClient() {
             iterations={r.iterations as number | undefined}
             targetError={r.target_error as number | undefined}
             elapsedTime={r.elapsed_time_seconds as number | undefined}
-            backLink={hasTopGearState ? (
-              <a
-                href="/top-gear"
-                className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/20 hover:border-primary/50"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                  <path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" />
-                </svg>
-                {t('results.backToTopGear')}
-              </a>
-            ) : undefined}
+            backLink={
+              hasTopGearState ? (
+                <a
+                  href="/top-gear"
+                  className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="h-4 w-4"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  {t('results.backToTopGear')}
+                </a>
+              ) : undefined
+            }
           />
           {typeof r.talent_string === 'string' && r.talent_string && (
             <TalentTree talentString={r.talent_string as string} />
@@ -306,17 +317,16 @@ export default function SimResultClient() {
             elapsedTime={r.elapsed_time_seconds as number | undefined}
             baseDps={r.base_dps as number | undefined}
           />
-          {r.equipped_gear &&
-            Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 ? (
-              <GearOverview
-                gear={r.equipped_gear as Record<string, GearItem>}
-                characterRenderUrl={
-                  r.realm && r.player_name
-                    ? `https://simhammer.com/api/blizzard/character/${(r.region as string) || 'eu'}/${encodeURIComponent((r.realm as string).toLowerCase())}/${encodeURIComponent((r.player_name as string).toLowerCase())}/media/render`
-                    : null
-                }
-              />
-            ) : null}
+          {r.equipped_gear && Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 ? (
+            <GearOverview
+              gear={r.equipped_gear as Record<string, GearItem>}
+              characterRenderUrl={
+                r.realm && r.player_name
+                  ? `https://simhammer.com/api/blizzard/character/${(r.region as string) || 'eu'}/${encodeURIComponent((r.realm as string).toLowerCase())}/${encodeURIComponent((r.player_name as string).toLowerCase())}/media/render`
+                  : null
+              }
+            />
+          ) : null}
           {r.stat_weights ? (
             <StatWeightsTable statWeights={r.stat_weights as Record<string, number>} />
           ) : null}

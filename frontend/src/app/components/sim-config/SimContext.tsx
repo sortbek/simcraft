@@ -4,7 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { FightScenario } from '../../lib/types';
 import { API_URL } from '../../lib/api';
 
-
 interface SimContextType {
   simcInput: string;
   setSimcInput: (v: string) => void;
@@ -124,7 +123,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [simcFooter, setSimcFooter] = useState('');
   const [raidBuffs, _setRaidBuffs] = useState<Record<string, boolean>>(DEFAULT_RAID_BUFFS);
   const [consumables, _setConsumables] = useState<Record<string, string>>({});
-  const [expansionOptions, _setExpansionOptions] = useState<Record<string, boolean>>(DEFAULT_EXPANSION_OPTIONS);
+  const [expansionOptions, _setExpansionOptions] =
+    useState<Record<string, boolean>>(DEFAULT_EXPANSION_OPTIONS);
   const [simcBranch, _setSimcBranch] = useState('');
   const [talentBuilds, setTalentBuilds] = useState<{ name: string; talentString: string }[]>([]);
   const [scenarios, setScenarios] = useState<FightScenario[]>([]);
@@ -145,9 +145,10 @@ export function SimProvider({ children }: { children: ReactNode }) {
       }
       _setRaidBuffs(readStoredJson('simhammer_raid_buffs', DEFAULT_RAID_BUFFS));
       _setConsumables(readStoredJson('simhammer_consumables', {}));
-      _setExpansionOptions(readStoredJson('simhammer_expansion_options', DEFAULT_EXPANSION_OPTIONS));
+      _setExpansionOptions(
+        readStoredJson('simhammer_expansion_options', DEFAULT_EXPANSION_OPTIONS)
+      );
     } catch {}
-
   }, []);
 
   const addScenario = useCallback(() => {
@@ -176,17 +177,23 @@ export function SimProvider({ children }: { children: ReactNode }) {
 
   const setRaidBuffs = useCallback((v: Record<string, boolean>) => {
     _setRaidBuffs(v);
-    try { localStorage.setItem('simhammer_raid_buffs', JSON.stringify(v)); } catch {}
+    try {
+      localStorage.setItem('simhammer_raid_buffs', JSON.stringify(v));
+    } catch {}
   }, []);
 
   const setConsumables = useCallback((v: Record<string, string>) => {
     _setConsumables(v);
-    try { localStorage.setItem('simhammer_consumables', JSON.stringify(v)); } catch {}
+    try {
+      localStorage.setItem('simhammer_consumables', JSON.stringify(v));
+    } catch {}
   }, []);
 
   const setExpansionOptions = useCallback((v: Record<string, boolean>) => {
     _setExpansionOptions(v);
-    try { localStorage.setItem('simhammer_expansion_options', JSON.stringify(v)); } catch {}
+    try {
+      localStorage.setItem('simhammer_expansion_options', JSON.stringify(v));
+    } catch {}
   }, []);
 
   const setThreads = useCallback((v: number) => {
@@ -206,7 +213,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
 
   const setTargetError = useCallback((v: number) => {
     _setTargetError(v);
-    try { localStorage.setItem('simhammer_target_error', String(v)); } catch {}
+    try {
+      localStorage.setItem('simhammer_target_error', String(v));
+    } catch {}
   }, []);
 
   return (

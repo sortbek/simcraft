@@ -218,11 +218,7 @@ export default function UpgradeComparePage() {
   };
 
   if (!hasCharacter) {
-    return (
-      <p className="py-6 text-center text-sm text-muted">
-        {t('upgradeCompare.pasteExport')}
-      </p>
-    );
+    return <p className="py-6 text-center text-sm text-muted">{t('upgradeCompare.pasteExport')}</p>;
   }
 
   const submitLabel = !hasCurrencies
@@ -233,12 +229,13 @@ export default function UpgradeComparePage() {
 
   return (
     <div className="space-y-6 pb-20">
-            <div>
-        <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
+      <div>
+        <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
           Crest Upgrades
         </h1>
-        <p className="text-sm text-on-surface-variant max-w-2xl">
-          Compare upgrade paths for your equipped gear using crests. Find the most impactful upgrades for your budget.
+        <p className="max-w-2xl text-sm text-on-surface-variant">
+          Compare upgrade paths for your equipped gear using crests. Find the most impactful
+          upgrades for your budget.
         </p>
       </div>
       <TalentPicker />
@@ -321,7 +318,8 @@ export default function UpgradeComparePage() {
                         className="h-4 w-4 shrink-0 rounded-sm"
                       />
                       <p className="text-[13px] font-semibold uppercase tracking-widest text-muted">
-                        {group.currency?.name || t('upgradeCompare.unknownCurrency', { id: group.currencyId })}
+                        {group.currency?.name ||
+                          t('upgradeCompare.unknownCurrency', { id: group.currencyId })}
                       </p>
                     </div>
                     <button
@@ -341,7 +339,11 @@ export default function UpgradeComparePage() {
                       <GearItemRow
                         key={c.slot}
                         icon={info?.icon || 'inv_misc_questionmark'}
-                        name={localizedItemName(c.item_id, info?.name || `Item ${c.item_id}`, locale)}
+                        name={localizedItemName(
+                          c.item_id,
+                          info?.name || `Item ${c.item_id}`,
+                          locale
+                        )}
                         nameColor={qc}
                         details={[
                           { text: SLOT_LABELS[c.slot] || c.slot },
@@ -358,7 +360,11 @@ export default function UpgradeComparePage() {
                           setSelectedSlots(next);
                         }}
                         href={c.item_id > 0 ? getWowheadUrl(c.item_id, locale) : undefined}
-                        wowheadData={c.item_id > 0 ? `bonus=${c.bonus_ids.join(':')}&ilvl=${c.ilevel}` : undefined}
+                        wowheadData={
+                          c.item_id > 0
+                            ? `bonus=${c.bonus_ids.join(':')}&ilvl=${c.ilevel}`
+                            : undefined
+                        }
                       />
                     );
                   })}

@@ -67,7 +67,9 @@ export default function ExpertToggle({
             }`}
           />
         </div>
-        <span className="text-sm font-medium text-on-surface-variant">{t('config.expertMode')}</span>
+        <span className="text-sm font-medium text-on-surface-variant">
+          {t('config.expertMode')}
+        </span>
         {!open && hasContent && (
           <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
             {t('config.modified')}
@@ -99,7 +101,9 @@ export default function ExpertToggle({
           <textarea
             value={expertValues[activeTab]}
             onChange={(e) => expertSetters[activeTab](e.target.value)}
-            placeholder={t('config.pasteSimcTab', { label: t(activeTabInfo.labelKey).toLowerCase() })}
+            placeholder={t('config.pasteSimcTab', {
+              label: t(activeTabInfo.labelKey).toLowerCase(),
+            })}
             className="input-field h-32 resize-y font-mono text-xs"
           />
           <p className="text-[13px] text-on-surface-variant/40">{t(activeTabInfo.descKey)}</p>

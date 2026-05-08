@@ -227,7 +227,11 @@ export default function TalentTree({
 
   return (
     <div className={bare ? 'space-y-3' : 'card space-y-3 p-4'}>
-      {!bare && <p className="text-xs font-medium uppercase tracking-widest text-on-surface-variant/60">{t('config.talents')}</p>}
+      {!bare && (
+        <p className="text-xs font-medium uppercase tracking-widest text-on-surface-variant/60">
+          {t('config.talents')}
+        </p>
+      )}
       <div className={`flex flex-col gap-3 ${vertical ? '' : 'lg:flex-row lg:gap-4'}`}>
         <TreeSection
           label={tree.className}

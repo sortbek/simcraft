@@ -43,7 +43,9 @@ export default function GearSlotRow({
 
   if (!item || item.item_id <= 0) {
     return (
-      <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
+      <div
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}
+      >
         <div className="h-7 w-7 shrink-0 rounded-md bg-surface-container-high" />
         <div className={rtl ? 'text-right' : ''}>
           <p className="text-[13px] text-on-surface-variant">{SLOT_LABELS[slot] || slot}</p>
@@ -57,7 +59,11 @@ export default function GearSlotRow({
   const enchant = item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined;
   const gem = item.gem_id ? gemInfoMap[item.gem_id] : undefined;
   const qualityColor = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
-  const name = localizedItemName(item.item_id, info?.name || item.name || `Item ${item.item_id}`, locale);
+  const name = localizedItemName(
+    item.item_id,
+    info?.name || item.name || `Item ${item.item_id}`,
+    locale
+  );
   const icon = info?.icon || 'inv_misc_questionmark';
   const wowheadData =
     item.item_id > 0
@@ -66,7 +72,9 @@ export default function GearSlotRow({
   const fadeDir = rtl ? 'to left' : 'to right';
 
   return (
-    <div className={`relative flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
+    <div
+      className={`relative flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}
+    >
       {isUpgrade && (
         <div
           className="pointer-events-none absolute inset-0 rounded-lg bg-emerald-500/[0.15] ring-1 ring-emerald-500/30"

@@ -146,39 +146,39 @@ export default function QuickSimPage() {
   return (
     <div className="space-y-6 pb-20">
       <div>
-        <h1 className="font-headline font-black text-4xl uppercase tracking-tighter text-on-surface mb-2">
+        <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
           Quick Sim
         </h1>
-        <p className="text-sm text-on-surface-variant max-w-2xl">
-          Run a quick simulation to check your DPS and stat weights with your current gear and talents.
+        <p className="max-w-2xl text-sm text-on-surface-variant">
+          Run a quick simulation to check your DPS and stat weights with your current gear and
+          talents.
         </p>
       </div>
 
-
       {/* Character summary card */}
       {characterInfo && (
-        <div className="bg-surface-container-low rounded-xl border border-outline-variant/10 p-6 flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-6">
           <div className="flex items-center gap-5">
             {insetUrl && (
               <img
                 src={insetUrl}
                 alt=""
-                className="w-16 h-16 rounded-full border-2 border-outline-variant/30 object-cover"
+                className="h-16 w-16 rounded-full border-2 border-outline-variant/30 object-cover"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = 'none';
                 }}
               />
             )}
             <div>
-              <h2 className="font-headline font-extrabold text-2xl tracking-tight text-on-surface">
+              <h2 className="font-headline text-2xl font-extrabold tracking-tight text-on-surface">
                 {characterInfo.name}
               </h2>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="bg-primary-container/20 text-primary px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">
+              <div className="mt-1 flex items-center gap-3">
+                <span className="rounded bg-primary-container/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">
                   {specDisplayName(characterInfo.spec)} {characterInfo.className.replace(/_/g, ' ')}
                 </span>
                 {characterInfo.realm && (
-                  <span className="text-on-surface-variant text-sm border-l border-outline-variant/30 pl-3">
+                  <span className="border-l border-outline-variant/30 pl-3 text-sm text-on-surface-variant">
                     {characterInfo.realm}
                   </span>
                 )}
@@ -192,8 +192,10 @@ export default function QuickSimPage() {
               href={`/sim/${lastSim.id}`}
               className="text-right transition-colors hover:opacity-80"
             >
-              <div className="text-[10px] uppercase text-on-surface-variant/50 mb-1">{t('quickSim.lastSim')}</div>
-              <div className="font-headline font-black text-2xl text-primary tabular-nums">
+              <div className="mb-1 text-[10px] uppercase text-on-surface-variant/50">
+                {t('quickSim.lastSim')}
+              </div>
+              <div className="font-headline text-2xl font-black tabular-nums text-primary">
                 {Math.round(lastSim.dps).toLocaleString()}
               </div>
               <div className="text-[10px] text-on-surface-variant/40">

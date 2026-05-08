@@ -44,9 +44,7 @@ export interface SavedTalentBuild {
 
 export async function getTalentBuilds(characterId: string): Promise<SavedTalentBuild[]> {
   try {
-    return await fetchJson<SavedTalentBuild[]>(
-      `${API_URL}/api/characters/${characterId}/talents`
-    );
+    return await fetchJson<SavedTalentBuild[]>(`${API_URL}/api/characters/${characterId}/talents`);
   } catch {
     return [];
   }

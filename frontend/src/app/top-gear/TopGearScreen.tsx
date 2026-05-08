@@ -377,7 +377,7 @@ export default function TopGearScreen() {
       selectedItemsJson,
       maxUpgrade,
       copyEnchants,
-  
+
       talentBuilds,
       catalyst,
       catalystCharges,

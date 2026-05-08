@@ -35,7 +35,9 @@ export default function ResultsChartRow({
   onToggle,
 }: ResultsChartRowProps) {
   const name = ability.name.replace(/_/g, ' ');
-  const containerClass = compact ? 'mt-2 flex items-center gap-4 pl-14 opacity-75' : 'flex items-center gap-4';
+  const containerClass = compact
+    ? 'mt-2 flex items-center gap-4 pl-14 opacity-75'
+    : 'flex items-center gap-4';
   const iconBoxClass = compact
     ? 'flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded border border-outline-variant bg-surface-container-highest'
     : 'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border border-outline-variant bg-surface-container-highest';
@@ -48,7 +50,9 @@ export default function ResultsChartRow({
   const dpsValueClass = compact
     ? 'font-headline text-xs font-bold text-on-surface-variant'
     : 'font-headline text-sm font-bold text-on-surface';
-  const dpsLabelClass = compact ? 'block text-[9px] uppercase opacity-40' : 'block text-[10px] uppercase opacity-50';
+  const dpsLabelClass = compact
+    ? 'block text-[9px] uppercase opacity-40'
+    : 'block text-[10px] uppercase opacity-50';
 
   return (
     <div className={containerClass}>

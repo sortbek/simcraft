@@ -183,9 +183,10 @@ export default function EnchantGemPage() {
     validate,
   });
 
-  const buttonText = comboCount && comboCount > 0
-    ? t('button.findBestEnchants', { count: comboCount })
-    : buttonLabel(t('button.findBestEnchantsDefault'));
+  const buttonText =
+    comboCount && comboCount > 0
+      ? t('button.findBestEnchants', { count: comboCount })
+      : buttonLabel(t('button.findBestEnchantsDefault'));
 
   return (
     <div className="space-y-6 pb-20">

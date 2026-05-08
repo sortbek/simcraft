@@ -63,7 +63,7 @@ export default function SidebarCharacter() {
     <div className="shrink-0 px-3 py-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-headline font-bold text-xs uppercase transition-all duration-150 ${
+        className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-headline text-xs font-bold uppercase transition-all duration-150 ${
           open
             ? 'bg-primary-container/10 text-primary'
             : 'text-on-surface-variant hover:bg-surface hover:text-white'
@@ -113,8 +113,7 @@ export default function SidebarCharacter() {
             <div className="space-y-0.5">
               {characters.map((char) => {
                 const isActive =
-                  characterInfo?.name === char.name &&
-                  simcInput.includes(`server=${char.realm}`);
+                  characterInfo?.name === char.name && simcInput.includes(`server=${char.realm}`);
                 return (
                   <div
                     key={char.id}
@@ -135,7 +134,7 @@ export default function SidebarCharacter() {
                     </button>
                     <button
                       onClick={() => deleteCharacter(char.id).then(refreshCharacters)}
-                      className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 hover:text-red-400 transition-colors"
+                      className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 transition-colors hover:text-red-400"
                     >
                       &times;
                     </button>
@@ -149,7 +148,7 @@ export default function SidebarCharacter() {
             value={simcInput}
             onChange={(e) => setSimcInput(e.target.value)}
             placeholder={t('layout.pasteSimcExport')}
-            className="h-28 w-full resize-y rounded-lg bg-surface-container-high px-2.5 py-2 font-mono text-[11px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:ring-1 focus:ring-primary/30 focus:outline-none"
+            className="h-28 w-full resize-y rounded-lg bg-surface-container-high px-2.5 py-2 font-mono text-[11px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
           />
         </div>
       )}

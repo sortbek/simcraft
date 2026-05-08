@@ -37,7 +37,11 @@ const simTypes: SimType[] = [
     matchPaths: ['/drop-finder', '/upgrade-compare'],
     children: [
       { href: '/drop-finder', labelKey: 'page.dropFinder', descriptionKey: 'page.dropFinderDesc' },
-      { href: '/upgrade-compare', labelKey: 'page.crestUpgrades', descriptionKey: 'page.crestUpgradesDesc' },
+      {
+        href: '/upgrade-compare',
+        labelKey: 'page.crestUpgrades',
+        descriptionKey: 'page.crestUpgradesDesc',
+      },
     ],
   },
   {
@@ -128,7 +132,9 @@ export default function SimTypeCards() {
                       >
                         <div className="min-w-0">
                           <p className="text-[15px] font-medium">{t(child.labelKey)}</p>
-                          <p className="text-[12px] text-on-surface-variant/60">{t(child.descriptionKey)}</p>
+                          <p className="text-[12px] text-on-surface-variant/60">
+                            {t(child.descriptionKey)}
+                          </p>
                         </div>
                       </Link>
                     );

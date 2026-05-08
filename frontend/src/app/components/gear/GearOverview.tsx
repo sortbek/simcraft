@@ -6,7 +6,12 @@ import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import GearSlotRow from './GearSlotRow';
-import { GEAR_ORDER_BOTTOM, GEAR_ORDER_LEFT, GEAR_ORDER_RIGHT, type GearItem } from './gearOverviewTypes';
+import {
+  GEAR_ORDER_BOTTOM,
+  GEAR_ORDER_LEFT,
+  GEAR_ORDER_RIGHT,
+  type GearItem,
+} from './gearOverviewTypes';
 import { collectEnchantIds, collectGemIds, collectItemQueries } from './gearOverviewUtils';
 
 interface GearOverviewProps {

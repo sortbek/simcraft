@@ -75,9 +75,7 @@ export default function ScenarioBuilder() {
         >
           {t('config.addCurrentConfig')}
         </button>
-        <p className="text-[13px] text-on-surface-variant/40">
-          {t('config.scenarioHelp')}
-        </p>
+        <p className="text-[13px] text-on-surface-variant/40">{t('config.scenarioHelp')}</p>
       </div>
     </div>
   );

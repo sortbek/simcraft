@@ -13,9 +13,17 @@ export default function LanguageSelector() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-4 py-2 font-headline font-bold text-[10px] uppercase text-on-surface-variant/60 hover:text-primary transition-all"
+        className="flex w-full items-center gap-3 px-4 py-2 font-headline text-[10px] font-bold uppercase text-on-surface-variant/60 transition-all hover:text-primary"
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          className="h-4 w-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="12" cy="12" r="10" />
           <path d="M2 12h20" />
           <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />

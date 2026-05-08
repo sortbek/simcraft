@@ -97,7 +97,9 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
                       color={childColor}
                       percent={childPercent}
                       barWidth={childBarWidth}
-                      iconName={child.icon || (child.spell_id ? icons.get(child.spell_id) : undefined)}
+                      iconName={
+                        child.icon || (child.spell_id ? icons.get(child.spell_id) : undefined)
+                      }
                       compact
                     />
                   );

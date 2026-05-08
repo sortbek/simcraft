@@ -44,7 +44,7 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
     <div className="flex items-center justify-center pt-32">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-xl border border-outline-variant/10 bg-surface-container-low p-8 space-y-6"
+        className="w-full max-w-sm space-y-6 rounded-xl border border-outline-variant/10 bg-surface-container-low p-8"
       >
         <div>
           <h2 className="font-headline text-xl font-extrabold uppercase tracking-tight text-on-surface">
@@ -66,9 +66,7 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
           />
         </div>
 
-        {error && (
-          <p className="text-xs font-medium text-error">{error}</p>
-        )}
+        {error && <p className="text-xs font-medium text-error">{error}</p>}
 
         <button
           type="submit"

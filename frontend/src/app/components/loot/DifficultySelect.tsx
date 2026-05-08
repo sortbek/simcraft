@@ -78,16 +78,23 @@ export default function DifficultySelect({
           <span className="font-medium text-on-surface">{selected?.label ?? 'Select'}</span>
           {selected?.track && !isCrafted && (
             <span className={`text-xs ${selectedTrackColor ?? 'text-on-surface-variant'}`}>
-              {TRACK_SHORT[selected.track] ?? selected.track} {selected.level}/{selectedDetails?.max}
+              {TRACK_SHORT[selected.track] ?? selected.track} {selected.level}/
+              {selectedDetails?.max}
             </span>
           )}
           {selectedDetails?.ilvl && (
-            <span className="text-xs tabular-nums text-on-surface-variant">ilvl {selectedDetails.ilvl}</span>
+            <span className="text-xs tabular-nums text-on-surface-variant">
+              ilvl {selectedDetails.ilvl}
+            </span>
           )}
         </span>
         <svg
           className={`h-4 w-4 shrink-0 text-on-surface-variant/40 transition-transform ${open ? 'rotate-180' : ''}`}
-          viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
         >
           <path d="M4 6l4 4 4-4" />
         </svg>
@@ -106,25 +113,34 @@ export default function DifficultySelect({
               {group.difficulties.map((d) => {
                 const isActive = value === d.key;
                 const { max, ilvl } = getDiffDetails(d, upgradeTracks);
-                const short = d.track && !isCrafted ? TRACK_SHORT[d.track] ?? d.track : null;
+                const short = d.track && !isCrafted ? (TRACK_SHORT[d.track] ?? d.track) : null;
                 const trackColor = d.track ? TRACK_COLORS[d.track] : null;
                 return (
                   <button
                     key={d.key}
                     type="button"
-                    onClick={() => { onChange(d.key, d.level ?? 0); setOpen(false); }}
+                    onClick={() => {
+                      onChange(d.key, d.level ?? 0);
+                      setOpen(false);
+                    }}
                     className={`grid w-full gap-x-3 px-3 py-2 text-left text-sm transition-colors ${
-                      isActive ? 'bg-gold/[0.06] text-gold' : 'text-on-surface hover:bg-surface-container-high'
+                      isActive
+                        ? 'bg-gold/[0.06] text-gold'
+                        : 'text-on-surface hover:bg-surface-container-high'
                     }`}
                     style={{ gridTemplateColumns: hasTrack ? '1fr auto auto' : '1fr auto' }}
                   >
-                    <span className="font-medium truncate">{d.label}</span>
+                    <span className="truncate font-medium">{d.label}</span>
                     {hasTrack && (
-                      <span className={`text-xs tabular-nums ${isActive ? 'text-gold/70' : trackColor ?? 'text-on-surface-variant/50'}`}>
+                      <span
+                        className={`text-xs tabular-nums ${isActive ? 'text-gold/70' : (trackColor ?? 'text-on-surface-variant/50')}`}
+                      >
                         {short ? `${short} ${d.level}/${max}` : ''}
                       </span>
                     )}
-                    <span className={`text-xs tabular-nums text-right ${isActive ? 'text-gold/70' : 'text-on-surface-variant/50'}`}>
+                    <span
+                      className={`text-right text-xs tabular-nums ${isActive ? 'text-gold/70' : 'text-on-surface-variant/50'}`}
+                    >
                       {ilvl ? `ilvl ${ilvl}` : ''}
                     </span>
                   </button>

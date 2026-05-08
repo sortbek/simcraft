@@ -22,7 +22,9 @@ export function useSpellIcons(spellIds: number[]) {
     Promise.all(
       missing.map(async (id) => {
         try {
-          const res = await fetch(`https://nether.wowhead.com/tooltip/spell/${id}?dataEnv=1&locale=0`);
+          const res = await fetch(
+            `https://nether.wowhead.com/tooltip/spell/${id}?dataEnv=1&locale=0`
+          );
           if (!res.ok) {
             return;
           }
@@ -33,7 +35,7 @@ export function useSpellIcons(spellIds: number[]) {
         } catch {
           // ignore
         }
-      }),
+      })
     ).then(() => {
       if (!cancelled) {
         setIcons(new Map(iconCache));
