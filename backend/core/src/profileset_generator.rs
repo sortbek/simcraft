@@ -229,8 +229,7 @@ main_hand=,id=200,enchant_id=7459\n";
             ]
         })];
 
-        let (input, combo_count, _metadata) =
-            generate_droptimizer_input(base_profile, &drop_items);
+        let (input, combo_count, _metadata) = generate_droptimizer_input(base_profile, &drop_items);
 
         assert_eq!(combo_count, 1);
         assert!(
@@ -256,8 +255,7 @@ main_hand=,id=200\n";
             "bonus_ids": []
         })];
 
-        let (input, combo_count, _metadata) =
-            generate_droptimizer_input(base_profile, &drop_items);
+        let (input, combo_count, _metadata) = generate_droptimizer_input(base_profile, &drop_items);
 
         assert_eq!(combo_count, 1);
         assert!(

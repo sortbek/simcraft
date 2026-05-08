@@ -90,9 +90,8 @@ pub(super) fn generate_droptimizer_input(
             let mut applied_gem: u64 = 0;
 
             let inherit = slot_inherits.and_then(|arr| {
-                arr.iter().find(|entry| {
-                    entry.get("slot").and_then(|v| v.as_str()) == Some(*slot)
-                })
+                arr.iter()
+                    .find(|entry| entry.get("slot").and_then(|v| v.as_str()) == Some(*slot))
             });
 
             if let Some(entry) = inherit {
