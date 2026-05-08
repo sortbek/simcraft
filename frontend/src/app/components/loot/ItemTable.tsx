@@ -253,6 +253,7 @@ export default function ItemTable({
               const embellishDisabled = isEmbellished && embellishmentsFull && !isSelected;
               const qualityColor = QUALITY_COLORS[resolved.quality] || 'text-gray-400';
               const inherits = resolveInherits(item.inventory_type, spec, equippedGear);
+              const wowheadAttr = buildWowheadAttr(item.item_id, effectiveBonusId, inherits[0]);
 
               return (
                 <div
@@ -283,7 +284,7 @@ export default function ItemTable({
                     <div className="relative shrink-0">
                       <a
                         href={getWowheadUrl(item.item_id, locale)}
-                        data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
+                        data-wowhead={wowheadAttr}
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
@@ -310,7 +311,7 @@ export default function ItemTable({
                     <div className="min-w-0">
                       <a
                         href={getWowheadUrl(item.item_id, locale)}
-                        data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
+                        data-wowhead={wowheadAttr}
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
@@ -359,6 +360,18 @@ export default function ItemTable({
       )}
     </div>
   );
+}
+
+function buildWowheadAttr(
+  itemId: number,
+  bonusId: number | undefined,
+  inherit: SlotInherit | undefined
+): string {
+  let s = `item=${itemId}`;
+  if (bonusId) s += `&bonus=${bonusId}`;
+  if (inherit?.enchant_id) s += `&ench=${inherit.enchant_id}`;
+  if (inherit?.gem_id) s += `&gems=${inherit.gem_id}`;
+  return s;
 }
 
 function qualityBorderColor(quality: number): string {
