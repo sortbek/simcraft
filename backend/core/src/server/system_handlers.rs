@@ -238,6 +238,16 @@ fn check_updates_blocking(simc: &SimcBinaries) -> Result<serde_json::Value, Stri
     }))
 }
 
+#[cfg(feature = "desktop")]
+pub(super) async fn system_stats(stats: web::Data<Arc<Mutex<SystemStats>>>) -> HttpResponse {
+    let mut s = stats.lock().unwrap();
+    s.refresh();
+    let cpu = s.cpu_usage();
+    HttpResponse::Ok().json(json!({
+        "cpu_usage": (cpu * 10.0).round() / 10.0,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{merge_simc_branches, normalized_branch_name};
@@ -267,14 +277,4 @@ mod tests {
         assert_eq!(normalized_branch_name("nightly-2026-04-12"), "nightly");
         assert_eq!(normalized_branch_name("default"), "default");
     }
-}
-
-#[cfg(feature = "desktop")]
-pub(super) async fn system_stats(stats: web::Data<Arc<Mutex<SystemStats>>>) -> HttpResponse {
-    let mut s = stats.lock().unwrap();
-    s.refresh();
-    let cpu = s.cpu_usage();
-    HttpResponse::Ok().json(json!({
-        "cpu_usage": (cpu * 10.0).round() / 10.0,
-    }))
 }

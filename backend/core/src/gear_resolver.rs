@@ -364,7 +364,7 @@ fn resolve_gear_impl(
     for slot_res in slots.values_mut() {
         slot_res
             .alternatives
-            .sort_by(|a, b| b.ilevel.cmp(&a.ilevel));
+            .sort_by_key(|a| std::cmp::Reverse(a.ilevel));
     }
 
     // Mark items that can be converted via catalyst

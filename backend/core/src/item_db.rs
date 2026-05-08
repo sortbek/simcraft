@@ -461,7 +461,7 @@ pub fn load(data_dir: &Path) {
         .unwrap_or_default();
 
         // Find the latest conversion group (highest numeric key)
-        let latest_group = data.iter().filter_map(|(k, _)| k.parse::<u64>().ok()).max();
+        let latest_group = data.keys().filter_map(|k| k.parse::<u64>().ok()).max();
 
         if let Some(group_id) = latest_group {
             if let Some(group) = data.get(&group_id.to_string()) {

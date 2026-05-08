@@ -28,6 +28,7 @@ pub fn generate_top_gear_input(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn generate_top_gear_input_with_talents(
     base_profile: &str,
     items_by_slot: &HashMap<String, Vec<Value>>,

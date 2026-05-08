@@ -75,6 +75,7 @@ pub fn generate_top_gear_input(
 
 /// Generate top-gear profileset input, optionally multiplying by talent builds
 /// and enchant/gem variations.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_top_gear_input_with_talents(
     base_profile: &str,
     items_by_slot: &HashMap<String, Vec<Value>>,
@@ -582,12 +583,10 @@ pub fn generate_top_gear_input_with_talents(
                     result = set_enchant_id(&result, axis.options[option_idx]);
                     changed = true;
                 }
-                "gem" => {
-                    // Per-slot gem handling (legacy, not used with new gem_combos)
-                    if axis.slot == slot {
-                        result = set_gem_id(&result, axis.options[option_idx]);
-                        changed = true;
-                    }
+                // Per-slot gem handling (legacy, not used with new gem_combos)
+                "gem" if axis.slot == slot => {
+                    result = set_gem_id(&result, axis.options[option_idx]);
+                    changed = true;
                 }
                 _ => {}
             }
@@ -754,11 +753,7 @@ pub fn generate_top_gear_input_with_talents(
                     if let Some(gc) = gem_combo_opt {
                         let socketed: HashSet<String> = GEAR_SLOTS
                             .iter()
-                            .filter(|s| {
-                                equipped_gear
-                                    .get(&s.to_string())
-                                    .map_or(false, |v| simc_has_socket(v))
-                            })
+                            .filter(|s| equipped_gear.get(**s).is_some_and(|v| simc_has_socket(v)))
                             .map(|s| s.to_string())
                             .collect();
                         combo_items.extend(build_gem_meta(gc, Some(&socketed)));
@@ -805,7 +800,7 @@ pub fn generate_top_gear_input_with_talents(
                             .iter()
                             .filter(|s| {
                                 let slot_str = s.to_string();
-                                equipped_gear.get(&slot_str).map_or(false, |v| {
+                                equipped_gear.get(&slot_str).is_some_and(|v| {
                                     let modified = apply_eg_combo(&slot_str, v, eg_idx);
                                     simc_has_socket(modified.as_deref().unwrap_or(v))
                                 })
@@ -1008,7 +1003,7 @@ pub fn generate_top_gear_input_with_talents(
                                             equipped_gear.get(&slot_str).map(|v| v.as_str())
                                         })
                                 };
-                                simc.map_or(false, |v| {
+                                simc.is_some_and(|v| {
                                     let modified = apply_eg_combo(&slot_str, v, eg_idx);
                                     simc_has_socket(modified.as_deref().unwrap_or(v))
                                 })
