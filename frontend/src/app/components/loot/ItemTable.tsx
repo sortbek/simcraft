@@ -6,7 +6,6 @@ import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import {
   resolveInherits,
   type EquippedGear,
-  type Slot,
   type SlotInherit,
 } from '../../lib/inheritedGear';
 
@@ -222,10 +221,7 @@ export default function ItemTable({
             Item Name
           </span>
         </div>
-        <div className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-          Inherits
-        </div>
-        <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
+        <div className="col-span-5 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
           Slot
         </div>
         <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
@@ -327,13 +323,8 @@ export default function ItemTable({
                     </div>
                   </div>
 
-                  {/* Inherits */}
-                  <div className="col-span-3 flex items-center justify-center gap-2">
-                    <InheritBadgeGroup inherits={inherits} />
-                  </div>
-
                   {/* Slot */}
-                  <div className="col-span-2 text-center">
+                  <div className="col-span-5 text-center">
                     <span className="rounded bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase text-on-surface-variant">
                       {itemSlotMap.get(item.item_id) ?? slot}
                     </span>
@@ -384,78 +375,3 @@ function qualityBorderColor(quality: number): string {
   }
 }
 
-function slotTag(slot: Slot): string {
-  switch (slot) {
-    case 'finger1': return 'F1';
-    case 'finger2': return 'F2';
-    case 'main_hand': return 'MH';
-    case 'off_hand': return 'OH';
-    case 'trinket1': return 'T1';
-    case 'trinket2': return 'T2';
-    default: return '';
-  }
-}
-
-const GEM_SLOT_SET: ReadonlySet<Slot> = new Set(['finger1', 'finger2', 'neck']);
-
-function InheritBadgeGroup({ inherits }: { inherits: SlotInherit[] }) {
-  if (inherits.length === 0) return <span className="text-[10px] text-on-surface-variant/30">—</span>;
-
-  return (
-    <div className="flex items-center gap-2">
-      {inherits.map((entry) => (
-        <div key={entry.slot} className="flex flex-col items-center gap-0.5">
-          {inherits.length > 1 && slotTag(entry.slot) && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-              {slotTag(entry.slot)}
-            </span>
-          )}
-          <div className="flex items-center gap-1">
-            <InheritIcon
-              kind="enchant"
-              id={entry.enchant_id}
-              ariaLabel={`Enchant for ${entry.slot}`}
-            />
-            {GEM_SLOT_SET.has(entry.slot) && (
-              <InheritIcon
-                kind="gem"
-                id={entry.gem_id}
-                ariaLabel={`Gem for ${entry.slot}`}
-              />
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function InheritIcon({
-  kind,
-  id,
-  ariaLabel,
-}: {
-  kind: 'enchant' | 'gem';
-  id?: number;
-  ariaLabel: string;
-}) {
-  // Gems: gem_id is the gem's WoW item id → standalone Wowhead tooltip works.
-  // Enchants: SimC enchant_id is not a spellId or item id; standalone Wowhead
-  // lookup requires data we don't have at this layer. Defer to the override
-  // picker work (follow-up).
-  const wowheadAttr = id && kind === 'gem' ? `item=${id}` : undefined;
-
-  return (
-    <span
-      aria-label={ariaLabel}
-      data-wowhead={wowheadAttr}
-      className={`flex h-5 w-5 items-center justify-center rounded border ${
-        id
-          ? 'border-gold/30 bg-gold/[0.08] text-gold'
-          : 'border-outline-variant/15 bg-surface-container-high text-on-surface-variant/30'
-      }`}
-    >
-      <span className="text-[9px] font-bold uppercase">{kind === 'enchant' ? 'E' : 'G'}</span>
-    </span>
-  );
-}
