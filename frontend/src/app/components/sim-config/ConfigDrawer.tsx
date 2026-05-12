@@ -40,6 +40,8 @@ export default function ConfigDrawer({
     setTargetError,
     customApl,
     setCustomApl,
+    rotationMode,
+    setRotationMode,
     simcHeader,
     setSimcHeader,
     simcBasePlayer,
@@ -225,8 +227,58 @@ export default function ConfigDrawer({
 
             <div className="space-y-2">
               <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                {t('config.rotationMode')}
+              </label>
+              <div className="flex gap-2">
+                {([
+                  { value: 'default', label: t('config.rotationModeDefault'), hint: null },
+                  {
+                    value: 'assisted_combat',
+                    label: t('config.rotationModeAssisted'),
+                    hint: t('config.rotationModeAssistedHint'),
+                  },
+                  {
+                    value: 'one_button',
+                    label: t('config.rotationModeOneButton'),
+                    hint: t('config.rotationModeOneButtonHint'),
+                  },
+                ] as const).map((mode) => {
+                  const isActive = rotationMode === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() => setRotationMode(mode.value)}
+                      className={`flex-1 rounded-lg px-3 py-2 text-center transition-all ${
+                        isActive
+                          ? 'bg-primary-container text-on-primary'
+                          : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
+                      }`}
+                    >
+                      <div className="text-xs font-bold uppercase">{mode.label}</div>
+                      {mode.hint && (
+                        <div className="mt-0.5 text-[10px] font-normal normal-case opacity-70">
+                          {mode.hint}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-on-surface-variant/40">
+                {t('config.rotationModeDpsOnly')}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
                 {t('config.customAplSimcOptions')}
               </label>
+              {rotationMode !== 'default' && (
+                <div className="rounded-md bg-tertiary-container/40 px-3 py-2 text-[11px] text-on-tertiary-container">
+                  {t('config.rotationModeAplWarning')}
+                </div>
+              )}
               <textarea
                 value={customApl}
                 onChange={(event) => setCustomApl(event.target.value)}

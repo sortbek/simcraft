@@ -1,3 +1,4 @@
+use crate::types::RotationMode;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -221,6 +222,10 @@ pub fn build_full_simc_input(
     let consumables = options.get("consumables").and_then(|v| v.as_object());
     let expansion_opts = options.get("expansion_options").and_then(|v| v.as_object());
     let raid_buffs = options.get("raid_buffs").and_then(|v| v.as_object());
+    let rotation_mode: RotationMode = options
+        .get("rotation_mode")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
 
     // Extract character name for the name= line
     let char_name: Option<String> = simc_input.lines().find_map(|l| {
@@ -276,6 +281,20 @@ pub fn build_full_simc_input(
             .map(|v| v != 0)
             .unwrap_or(true);
         base_actor_lines.push(format!("{}={}", key, if enabled { "1" } else { "0" }));
+    }
+
+    // Rotation Mode (Assisted Combat / One Button)
+    match rotation_mode {
+        RotationMode::AssistedCombat => {
+            base_actor_lines.push("\n# Rotation".to_string());
+            base_actor_lines.push("use_blizzard_action_list=1".to_string());
+        }
+        RotationMode::OneButton => {
+            base_actor_lines.push("\n# Rotation".to_string());
+            base_actor_lines.push("use_blizzard_action_list=1".to_string());
+            base_actor_lines.push("one_button_mode=1".to_string());
+        }
+        RotationMode::Default => {}
     }
 
     // Find insertion point for base actor options

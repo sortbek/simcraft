@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { FightScenario } from '../../lib/types';
 import { API_URL } from '../../lib/api';
 
+export type RotationMode = 'default' | 'assisted_combat' | 'one_button';
+
 interface SimContextType {
   simcInput: string;
   setSimcInput: (v: string) => void;
@@ -23,6 +25,8 @@ interface SimContextType {
   setTargetError: (v: number) => void;
   customApl: string;
   setCustomApl: (v: string) => void;
+  rotationMode: RotationMode;
+  setRotationMode: (v: RotationMode) => void;
   // Expert Mode injection points
   simcHeader: string;
   setSimcHeader: (v: string) => void;
@@ -116,6 +120,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [fightLength, setFightLength] = useState(300);
   const [targetError, _setTargetError] = useState(0.1);
   const [customApl, setCustomApl] = useState('');
+  const [rotationMode, _setRotationMode] = useState<RotationMode>('default');
   const [simcHeader, setSimcHeader] = useState('');
   const [simcBasePlayer, setSimcBasePlayer] = useState('');
   const [simcRaidActors, setSimcRaidActors] = useState('');
@@ -148,6 +153,14 @@ export function SimProvider({ children }: { children: ReactNode }) {
       _setExpansionOptions(
         readStoredJson('simhammer_expansion_options', DEFAULT_EXPANSION_OPTIONS)
       );
+      const storedRotationMode = localStorage.getItem('simhammer_rotation_mode');
+      if (
+        storedRotationMode === 'default' ||
+        storedRotationMode === 'assisted_combat' ||
+        storedRotationMode === 'one_button'
+      ) {
+        _setRotationMode(storedRotationMode);
+      }
     } catch {}
   }, []);
 
@@ -218,6 +231,13 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const setRotationMode = useCallback((v: RotationMode) => {
+    _setRotationMode(v);
+    try {
+      localStorage.setItem('simhammer_rotation_mode', v);
+    } catch {}
+  }, []);
+
   return (
     <SimContext.Provider
       value={{
@@ -238,6 +258,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setTargetError,
         customApl,
         setCustomApl,
+        rotationMode,
+        setRotationMode,
         simcHeader,
         setSimcHeader,
         simcBasePlayer,

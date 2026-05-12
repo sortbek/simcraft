@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::helpers::sanitize_custom_simc;
+use crate::types::RotationMode;
 
 /// Newtype wrapper to avoid colliding with the simc `web::Data<PathBuf>`.
 #[derive(Clone)]
@@ -33,6 +34,9 @@ pub struct SimOptions {
     /// Custom APL and SimC expansion options (e.g., actions=..., midnight.*, use_blizzard_action_list).
     #[serde(default)]
     pub custom_apl: String,
+    /// Which rotation source to use: SimC's default APL, Blizzard's Assisted Combat APL, or One Button mode.
+    #[serde(default)]
+    pub rotation_mode: RotationMode,
     // Batch grouping
     #[serde(default)]
     pub batch_id: Option<String>,
@@ -93,6 +97,9 @@ impl SimOptions {
         }
         if !self.simc_branch.is_empty() {
             v["simc_branch"] = json!(self.simc_branch);
+        }
+        if self.rotation_mode != RotationMode::Default {
+            v["rotation_mode"] = json!(self.rotation_mode);
         }
         v
     }

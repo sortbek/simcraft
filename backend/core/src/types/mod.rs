@@ -3,6 +3,17 @@ pub mod season;
 
 use serde::{Deserialize, Serialize};
 
+// ---- Rotation Mode ----
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RotationMode {
+    #[default]
+    Default,
+    AssistedCombat,
+    OneButton,
+}
+
 // ---- Item Origin ----
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
