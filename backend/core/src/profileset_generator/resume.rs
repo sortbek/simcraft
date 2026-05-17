@@ -218,7 +218,7 @@ async fn resume_triage(
 async fn resume_staged(
     job_id: &str,
     job: &Job,
-    _request_json: &str,
+    request_json: &str,
     checkpoint: &Checkpoint,
     inputs: ResumeInputs,
 ) -> Result<(), String> {
@@ -226,6 +226,25 @@ async fn resume_staged(
         CheckpointPhase::Staged(sc) => sc,
         _ => return Err("resume_staged called with non-Staged checkpoint".to_string()),
     };
+
+    // 0. Parse the original request envelope to recover full options + base_profile.
+    let envelope: serde_json::Value = serde_json::from_str(request_json)
+        .map_err(|e| format!("Invalid request_json: {}", e))?;
+    let payload = envelope
+        .get("payload")
+        .ok_or_else(|| "request_json missing payload".to_string())?;
+    let options = payload
+        .get("options")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({
+            "iterations": job.iterations,
+            "target_error": job.target_error,
+            "fight_style": job.fight_style,
+        }));
+    let base_profile = payload
+        .get("base_profile")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "request_json missing base_profile".to_string())?;
 
     // 1. Load survivor profileset_simc fragments for the saved combo_ids.
     let metadata_repo = crate::db::ComboMetadataRepo::new(inputs.pool.clone());
@@ -246,19 +265,12 @@ async fn resume_staged(
         return Err("No survivor profileset_simc fragments to resume with".to_string());
     }
 
-    let combined = format!("{}\n{}", job.simc_input, survivor_simc);
+    // Use raw base_profile prefixed with "# Base Actor\n" to match the format
+    // produced by the fresh handoff_to_staged path in top_gear_handlers.rs.
+    let combined = format!("# Base Actor\n{}\n{}", base_profile, survivor_simc);
     let combo_count = id_set.len();
 
-    // 2. Reconstruct a minimal options Value for run_simc_staged. The function
-    // reads fight_style, target_error, iterations (and a few others with sane
-    // defaults) from the Value. All of these are persisted on the Job row.
-    let options = serde_json::json!({
-        "iterations": job.iterations,
-        "target_error": job.target_error,
-        "fight_style": job.fight_style,
-    });
-
-    // 3. Flip status back to Running and clear pause_requested.
+    // 2. Flip status back to Running and clear pause_requested.
     inputs
         .repo
         .set_pause_requested(job_id, false)
@@ -270,13 +282,13 @@ async fn resume_staged(
         .await
         .map_err(|e| format!("Failed to set Running: {}", e))?;
 
-    // 4. Resolve the simc binary.
+    // 3. Resolve the simc binary.
     let simc_bin = inputs
         .simc_bins
         .resolve("")
         .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
 
-    // 5. Spawn the staged pipeline at the saved next_stage_idx.
+    // 4. Spawn the staged pipeline at the saved next_stage_idx.
     //    base_start=50 because Triage already ran (5-50% covered); staged
     //    pipeline uses 50-95%.
     crate::server::helpers::spawn_staged_sim(
