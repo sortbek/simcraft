@@ -1,7 +1,7 @@
-//! Streaming Triage stage. Pulls candidates from a ProfilesetIterator in
+﻿//! Streaming Triage stage. Pulls candidates from a ProfilesetIterator in
 //! adaptive batches, runs cheap simc on each batch, and keeps survivors
 //! via a statistical CI-window retention with a global survivor budget.
-//! See spec §2 (transaction lifecycle) and §3 (Triage stage) for design.
+//! See spec Â§2 (transaction lifecycle) and Â§3 (Triage stage) for design.
 
 use std::collections::HashSet;
 use serde_json::Value;
@@ -15,8 +15,8 @@ use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, Triag
 
 // Defaults locked from calibration (Task 28). Treat as initial values.
 // Batch size targets keep individual batches small enough that a pause mid-Triage
-// only loses a small unit of work on replay (spec §5 pause/resume). At ~1.4KB per
-// profileset, 1.5 MiB ≈ 1100 profilesets per batch.
+// only loses a small unit of work on replay (spec Â§5 pause/resume). At ~1.4KB per
+// profileset, 1.5 MiB â‰ˆ 1100 profilesets per batch.
 pub const TARGET_BATCH_INPUT_BYTES: usize = 1_572_864; // 1.5 MiB
 pub const MIN_BATCH_PROFILESETS: usize = 500;
 pub const MAX_BATCH_PROFILESETS: usize = 5_000;
@@ -145,12 +145,12 @@ impl<'a> BatchDriver<'a> {
             .insert_chunked(&mut *tx, self.job_id, &candidate_keys)
             .await?;
 
-        // Filter pending → accepted (new keys only). Assign combo_ids.
+        // Filter pending â†’ accepted (new keys only). Assign combo_ids.
         // state.next_combo_id is incremented here but NOT persisted in the checkpoint.
         // If the process crashes between this commit and commit_survivors, the next
         // combo_id values are lost. Phase 2 resume must reconstruct next_combo_id from
         // MAX(combo_id) over committed-but-not-completed batches' accepted_count, or
-        // from the dedup rows. See review Important #7 and spec §5 resume flow.
+        // from the dedup rows. See review Important #7 and spec Â§5 resume flow.
         let mut accepted: Vec<AcceptedCandidate> = Vec::new();
         for (cand, key) in pending.into_iter().zip(candidate_keys.iter()) {
             if !existing.contains(key) {
@@ -290,7 +290,7 @@ impl Default for TriageConstants {
     }
 }
 
-// ── Task 17: Adaptive batch sizing ───────────────────────────────────────────
+// â”€â”€ Task 17: Adaptive batch sizing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Compute the next batch's target candidate count from observed avg bytes-per-profileset.
 /// Uses module-level constants (production path).
@@ -356,11 +356,12 @@ mod sizing_tests {
     fn target_count_typical() {
         let n = next_batch_target_count(1024);
         assert!(n >= MIN_BATCH_PROFILESETS && n <= MAX_BATCH_PROFILESETS);
-        assert!(n > 10_000);
+        // 1.5 MiB / 1 KiB approx 1536 profilesets - comfortably inside [MIN, MAX].
+        assert!(n > MIN_BATCH_PROFILESETS && n < MAX_BATCH_PROFILESETS);
     }
 }
 
-// ── Task 18: Statistical retention with CI-window + min-keep floor ────────────
+// â”€â”€ Task 18: Statistical retention with CI-window + min-keep floor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Decide which combo_ids survive a Triage batch based on simc output.
 /// Uses module-level constants (production path).
@@ -418,7 +419,7 @@ pub fn select_survivors_with(
     // NOTE: This averages raw stddev/mean*100, not the simc CI half-width
     // (which would be 1.96 * stddev / sqrt(iterations) / mean * 100). The result is
     // roughly sqrt(iterations) times too generous at keeping survivors compared to
-    // a true CI half-width — at triage_iterations=50 that's about 7x over-keep.
+    // a true CI half-width â€” at triage_iterations=50 that's about 7x over-keep.
     // This is the SAFE direction (false positives, not false negatives). The
     // calibration harness (backend/calibration) tunes TRIAGE_CUTOFF_MULTIPLIER
     // against winner-loss rates on a real scenario; running calibration once will
@@ -515,7 +516,7 @@ mod retention_tests {
     }
 }
 
-// ── Task 19: Global survivor budget enforcement ───────────────────────────────
+// â”€â”€ Task 19: Global survivor budget enforcement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Uses module-level constants (production path).
 pub fn enforce_hard_max(current_survivors: usize, next_count: usize) -> Option<usize> {
@@ -562,7 +563,7 @@ mod budget_tests {
     }
 }
 
-// ── Task 20 Part B: run_triage ────────────────────────────────────────────────
+// â”€â”€ Task 20 Part B: run_triage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 pub struct TriageRunResult {
     pub survivor_combo_ids: Vec<i64>,
@@ -727,7 +728,7 @@ pub async fn run_triage_with_constants(
         }
     }
 
-    // Final Triage→Staged transition checkpoint. The staged pipeline (Task 4)
+    // Final Triageâ†’Staged transition checkpoint. The staged pipeline (Task 4)
     // will write its own Checkpoints from here on. If a crash happens between
     // Triage completion and the first staged stage starting, this checkpoint
     // is what resume uses to skip Triage entirely.
