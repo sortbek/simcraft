@@ -112,7 +112,7 @@ pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>
     };
 
     match job.status {
-        JobStatus::Pending | JobStatus::Running => {
+        JobStatus::Pending | JobStatus::Running | JobStatus::Paused => {
             let _ = repo.update_status(&job_id, JobStatus::Cancelled).await;
             simc_runner::kill_job(&job_id);
 

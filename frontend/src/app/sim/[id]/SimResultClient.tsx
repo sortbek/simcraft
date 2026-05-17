@@ -200,18 +200,32 @@ export default function SimResultClient() {
                 <span className="text-xl font-black text-amber-400">{job.progress}%</span>
               </div>
             </div>
-            <button
-              onClick={async () => {
-                try {
-                  await resumeSim(id);
-                } catch (e) {
-                  console.error('Resume failed:', e);
-                }
-              }}
-              className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
-            >
-              Resume
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={async () => {
+                  try {
+                    await resumeSim(id);
+                  } catch (e) {
+                    console.error('Resume failed:', e);
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
+              >
+                Resume
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await fetch(`${API_URL}/api/sim/${id}/cancel`, { method: 'POST' });
+                  } catch (e) {
+                    console.error('Cancel failed:', e);
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-400 transition-colors hover:border-red-500/50 hover:bg-red-500/20"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         ) : (
           <SimStatus
