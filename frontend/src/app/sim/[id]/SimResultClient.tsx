@@ -291,7 +291,7 @@ export default function SimResultClient() {
             desiredTargets={r.desired_targets as number | undefined}
             iterations={r.iterations as number | undefined}
             targetError={r.target_error as number | undefined}
-            elapsedTime={r.elapsed_time_seconds as number | undefined}
+            elapsedTime={(r.total_elapsed_seconds ?? r.elapsed_time_seconds) as number | undefined}
             backLink={
               hasTopGearState ? (
                 <a
@@ -333,7 +333,7 @@ export default function SimResultClient() {
             desiredTargets={r.desired_targets as number | undefined}
             iterations={r.iterations as number | undefined}
             targetError={r.target_error as number | undefined}
-            elapsedTime={r.elapsed_time_seconds as number | undefined}
+            elapsedTime={(r.total_elapsed_seconds ?? r.elapsed_time_seconds) as number | undefined}
             baseDps={r.base_dps as number | undefined}
           />
           {r.equipped_gear && Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 ? (

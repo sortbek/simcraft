@@ -242,6 +242,17 @@ pub(super) fn apply_spec_override(simc_input: &str, spec: &str) -> String {
     }
 }
 
+/// Inject end-to-end elapsed time (job creation → now) into the parsed result.
+/// Covers the full process including Triage and all staged-pipeline stages, not
+/// just the final-stage simc wall time that simc itself reports.
+pub(super) fn inject_total_elapsed(parsed: &mut Value, created_at: &str) {
+    if let Ok(created) = chrono::DateTime::parse_from_rfc3339(created_at) {
+        let now = chrono::Utc::now();
+        let total = (now - created.with_timezone(&chrono::Utc)).num_milliseconds() as f64 / 1000.0;
+        parsed["total_elapsed_seconds"] = json!((total * 100.0).round() / 100.0);
+    }
+}
+
 /// Extract server= (realm), region=, talents= from a simc input string and inject into result.
 pub(super) fn inject_realm(parsed: &mut Value, simc_input: &str) {
     for line in simc_input.lines() {
@@ -396,6 +407,9 @@ pub(super) fn spawn_staged_sim(
 
                 let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
                 inject_realm(&mut parsed, &simc_input);
+                if let Some(ref snap) = job_snap {
+                    inject_total_elapsed(&mut parsed, &snap.created_at);
+                }
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
                 if let Err(e) = repo

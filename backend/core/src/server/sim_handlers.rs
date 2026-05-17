@@ -87,6 +87,7 @@ pub(super) async fn create_sim(
     let job_id_clone = job_id.clone();
     let logs = log_buffer.get_ref().clone();
     let jid_logs = job_id.clone();
+    let created_at_for_task = created_at.clone();
 
     tokio::spawn(async move {
         if let Err(e) = repo_clone
@@ -111,6 +112,7 @@ pub(super) async fn create_sim(
             Ok(output) => {
                 let mut parsed = result_parser::parse_simc_result(&output.json);
                 inject_realm(&mut parsed, &simc_input);
+                inject_total_elapsed(&mut parsed, &created_at_for_task);
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
                 if let Err(e) = repo_clone
