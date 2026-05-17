@@ -63,6 +63,16 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
     }
 }
 
+/// Read `options.simc_branch` from a parsed envelope payload. Returns `""`
+/// when absent, which `SimcBinaries::resolve` treats as "use the default branch".
+fn simc_branch_from_payload(payload: &serde_json::Value) -> &str {
+    payload
+        .get("options")
+        .and_then(|opts| opts.get("simc_branch"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+}
+
 /// Triage-phase resume. Reconstructs the iterator, restores state from the
 /// checkpoint, discards any orphaned committed-pending batches, and spawns
 /// `run_triage_with_constants` to continue from the saved cursor.
@@ -110,9 +120,13 @@ async fn resume_triage(
         .await
         .map_err(|e| format!("Failed to load survivors: {}", e))?;
 
-    // 3. Rebuild the iterator config from request_json.
+    // 3. Rebuild the iterator config from request_json. Also parse the
+    // envelope once so step 6 can read options.simc_branch without re-parsing.
     let iter_cfg =
         super::iterator_from_request::build_iterator_from_request_json(request_json)?;
+    let envelope: crate::server::request_json::NormalizedRequest =
+        serde_json::from_str(request_json)
+            .map_err(|e| format!("Invalid request_json: {}", e))?;
 
     // 4. Restore TriageState from the checkpoint.
     let restored_state = super::triage::TriageState {
@@ -140,10 +154,11 @@ async fn resume_triage(
         .await
         .map_err(|e| format!("Failed to set Running: {}", e))?;
 
-    // 6. Resolve the simc binary (use the default branch).
+    // 6. Resolve the simc binary using the original branch from request_json
+    // (an empty string falls back to the default branch).
     let simc_bin_path = inputs
         .simc_bins
-        .resolve("")
+        .resolve(simc_branch_from_payload(&envelope.payload))
         .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
 
     // 7. Spawn the Triage continuation as a background task.
@@ -281,10 +296,10 @@ async fn resume_staged(
         .await
         .map_err(|e| format!("Failed to set Running: {}", e))?;
 
-    // 3. Resolve the simc binary.
+    // 3. Resolve the simc binary using the original branch from request_json.
     let simc_bin = inputs
         .simc_bins
-        .resolve("")
+        .resolve(simc_branch_from_payload(payload))
         .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
 
     // 4. Spawn the staged pipeline at the saved next_stage_idx.
