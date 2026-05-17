@@ -445,11 +445,11 @@ pub(crate) fn spawn_staged_sim(
                     eprintln!("[{}] Failed to set report files: {}", job_id, e);
                 }
             }
-            Err(e) if e == simc_runner::PAUSED_SENTINEL => {
+            Err(simc_runner::StagedRunError::Paused) => {
                 // Job was paused mid-pipeline. Status is already set to Paused
                 // inside run_simc_staged — nothing more to do here.
             }
-            Err(e) => {
+            Err(simc_runner::StagedRunError::Other(e)) => {
                 let is_cancelled = repo
                     .get(&job_id)
                     .await

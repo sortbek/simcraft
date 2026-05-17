@@ -304,7 +304,7 @@ impl Iterator for ProfilesetIterator {
 /// Produce simc profileset lines for one candidate.
 ///
 /// Known duplication: the eager path in `top_gear.rs` has equivalent inline
-/// logic. Consolidation deferred to Task 28 (calibration).
+/// logic. Consolidation pending calibration work.
 fn format_streaming_profileset_lines(
     name: &str,
     gear_set: &HashMap<String, Arc<Value>>,

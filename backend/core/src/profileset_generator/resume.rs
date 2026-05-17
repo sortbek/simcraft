@@ -1,9 +1,6 @@
 //! Resume entry point for paused jobs. Reads the Checkpoint from
 //! `jobs.checkpoint`, the normalized request from `jobs.request_json`,
 //! validates state, and dispatches to the phase-appropriate continuation.
-//!
-//! Tasks 7 + 8 implement the actual continuation logic; this module is the
-//! dispatcher.
 
 use std::sync::Arc;
 use sqlx::AnyPool;
@@ -59,7 +56,7 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
     let checkpoint = Checkpoint::from_json_str(checkpoint_json)
         .map_err(|e| format!("Invalid checkpoint JSON: {}", e))?;
 
-    // 2. Dispatch by phase. Tasks 7 + 8 implement these stubs.
+    // 2. Dispatch by phase.
     match checkpoint.phase {
         CheckpointPhase::Triage(_) => resume_triage(job_id, &job, request_json, &checkpoint, inputs).await,
         CheckpointPhase::Staged(_) => resume_staged(job_id, &job, request_json, &checkpoint, inputs).await,
@@ -196,7 +193,7 @@ async fn resume_triage(
             Ok(_result) => {
                 // Triage finished. The final Staged checkpoint was written by
                 // run_triage_with_constants. The user can click Resume again to
-                // enter the staged path once Task 8 is implemented.
+                // continue from the staged path.
             }
             Err(e) => {
                 let _ = repo_for_task
@@ -310,7 +307,6 @@ async fn resume_staged(
 
 #[cfg(test)]
 mod tests {
-    // Integration tests against a real sqlx pool are deferred to Task 16
-    // (manual verification). Unit-testing the dispatcher logic in isolation
-    // would require mocking JobRepo, which has no current mock infrastructure.
+    // Integration tests against a real sqlx pool require mocking JobRepo,
+    // which has no current mock infrastructure.
 }

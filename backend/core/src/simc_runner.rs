@@ -928,9 +928,35 @@ pub async fn run_simc(
     .await
 }
 
-/// Sentinel returned by `run_simc_staged` when the job is paused mid-pipeline.
-/// `spawn_staged_sim` checks for this exact string and exits without setting an error.
-pub const PAUSED_SENTINEL: &str = "paused_by_user";
+/// Error type returned by `run_simc_staged`.
+#[derive(Debug)]
+pub enum StagedRunError {
+    /// The user paused mid-run; status has already been set to Paused.
+    Paused,
+    /// Any other error.
+    Other(String),
+}
+
+impl std::fmt::Display for StagedRunError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Paused => f.write_str("paused_by_user"),
+            Self::Other(s) => f.write_str(s),
+        }
+    }
+}
+
+impl From<String> for StagedRunError {
+    fn from(s: String) -> Self {
+        Self::Other(s)
+    }
+}
+
+impl From<&str> for StagedRunError {
+    fn from(s: &str) -> Self {
+        Self::Other(s.to_string())
+    }
+}
 
 /// Parse the combo_id integer out of a combo_name in the canonical "Combo N" format.
 /// Returns None for any name that doesn't match.
@@ -967,7 +993,7 @@ pub async fn run_simc_staged(
     on_progress: impl Fn(u8, &str, &str),
     on_stage_complete: impl Fn(&str),
     on_log: impl Fn(&str) + Clone,
-) -> Result<SimcOutput, String> {
+) -> Result<SimcOutput, StagedRunError> {
     let fight_style = options
         .get("fight_style")
         .and_then(|v| v.as_str())
@@ -1023,7 +1049,8 @@ pub async fn run_simc_staged(
             },
             on_log,
         )
-        .await;
+        .await
+        .map_err(Into::into);
     }
 
     let mut current_input = simc_input.to_string();
@@ -1126,7 +1153,6 @@ pub async fn run_simc_staged(
                 profilesets.len()
             ));
 
-            // Streamed-mode: write checkpoint + poll pause after each stage.
             if simc_input_mode == crate::models::SimcInputMode::Streamed {
                 if let Some(ref p) = pool {
                     let next_idx = stage_idx + 1;
@@ -1166,7 +1192,7 @@ pub async fn run_simc_staged(
                         let _ = pause_repo
                             .update_status(job_id, crate::models::JobStatus::Paused)
                             .await;
-                        return Err(PAUSED_SENTINEL.to_string());
+                        return Err(StagedRunError::Paused);
                     }
                 }
             }
@@ -1199,7 +1225,6 @@ pub async fn run_simc_staged(
             profilesets.len()
         );
 
-        // Streamed-mode: write checkpoint + poll pause after each stage.
         if simc_input_mode == crate::models::SimcInputMode::Streamed {
             if let Some(ref p) = pool {
                 let next_idx = stage_idx + 1;
@@ -1238,7 +1263,7 @@ pub async fn run_simc_staged(
                     let _ = pause_repo
                         .update_status(job_id, crate::models::JobStatus::Paused)
                         .await;
-                    return Err(PAUSED_SENTINEL.to_string());
+                    return Err(StagedRunError::Paused);
                 }
             }
         }
@@ -1279,7 +1304,7 @@ pub async fn run_simc_staged(
         }
     }
 
-    result.ok_or_else(|| "No simulation result produced".to_string())
+    result.ok_or_else(|| StagedRunError::Other("No simulation result produced".to_string()))
 }
 
 /// Run simc on a single Triage batch's profileset input.

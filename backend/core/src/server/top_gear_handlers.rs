@@ -270,7 +270,7 @@ pub(super) async fn create_top_gear_sim(
     })
 }
 
-/// Task 22: Full streaming triage path.
+/// Full streaming triage path.
 ///
 /// Creates a job with `simc_input_mode = Streamed`, inserts it, then spawns a
 /// background task that runs Triage and hands off survivors to the staged pipeline.

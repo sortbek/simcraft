@@ -13,7 +13,7 @@ use crate::db::{
 use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIteratorConfig};
 use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, TriageCheckpoint, StagedCheckpoint};
 
-// Defaults locked from calibration (Task 28). Treat as initial values.
+// Defaults locked from calibration. Treat as initial values.
 // Batch size targets keep individual batches small enough that a pause mid-Triage
 // only loses a small unit of work on replay (spec Â§5 pause/resume). At ~1.4KB per
 // profileset, 1.5 MiB â‰ˆ 1100 profilesets per batch.
@@ -297,7 +297,7 @@ impl Default for TriageConstants {
     }
 }
 
-// â”€â”€ Task 17: Adaptive batch sizing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Adaptive batch sizing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Compute the next batch's target candidate count from observed avg bytes-per-profileset.
 /// Uses module-level constants (production path).
@@ -368,7 +368,7 @@ mod sizing_tests {
     }
 }
 
-// â”€â”€ Task 18: Statistical retention with CI-window + min-keep floor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Statistical retention with CI-window + min-keep floor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Decide which combo_ids survive a Triage batch based on simc output.
 /// Uses module-level constants (production path).
@@ -523,7 +523,7 @@ mod retention_tests {
     }
 }
 
-// â”€â”€ Task 19: Global survivor budget enforcement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Global survivor budget enforcement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Uses module-level constants (production path).
 pub fn enforce_hard_max(current_survivors: usize, next_count: usize) -> Option<usize> {
@@ -570,7 +570,7 @@ mod budget_tests {
     }
 }
 
-// â”€â”€ Task 20 Part B: run_triage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ run_triage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 pub struct TriageRunResult {
     pub survivor_combo_ids: Vec<i64>,
@@ -786,7 +786,7 @@ pub async fn run_triage_with_constants(
         }
     }
 
-    // Final Triageâ†’Staged transition checkpoint. The staged pipeline (Task 4)
+    // Final Triageâ†’Staged transition checkpoint. The staged pipeline
     // will write its own Checkpoints from here on. If a crash happens between
     // Triage completion and the first staged stage starting, this checkpoint
     // is what resume uses to skip Triage entirely.
