@@ -213,8 +213,11 @@ async fn resume_triage(
 
 /// Staged-phase resume. Loads survivor profileset_simc fragments from
 /// combo_metadata for the combo_ids saved in the Staged checkpoint, builds the
-/// combined simc input (base profile + survivors), and spawns
-/// `spawn_staged_sim` starting at the saved `next_stage_idx`.
+/// combined simc input (raw base_profile + "# Base Actor\n" prefix + survivors),
+/// and spawns `spawn_staged_sim` starting at the saved `next_stage_idx`.
+/// The base_profile is taken from request_json.payload.base_profile (not from
+/// job.simc_input, which for streamed jobs is the decorated form produced by
+/// build_simc_input_from_options and not suitable as a raw profileset base).
 async fn resume_staged(
     job_id: &str,
     job: &Job,
