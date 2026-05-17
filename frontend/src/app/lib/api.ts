@@ -44,3 +44,32 @@ export async function pauseSim(jobId: string): Promise<void> {
 export async function resumeSim(jobId: string): Promise<void> {
   await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/resume`, { method: 'POST' });
 }
+
+export type JobActiveStatus =
+  | 'pending'
+  | 'running'
+  | 'paused'
+  | 'done'
+  | 'failed'
+  | 'cancelled';
+
+export interface JobActiveSummary {
+  id: string;
+  status: JobActiveStatus;
+  sim_type: string;
+  created_at: string;
+  progress_pct: number;
+  progress_stage: string | null;
+  progress_detail: string | null;
+  player_name: string | null;
+  player_class: string | null;
+  fight_style: string;
+  simc_input_mode: 'inline' | 'streamed';
+  pause_requested: boolean;
+  error_message: string | null;
+}
+
+/** Active sims (pending/running/paused) + up to 20 most recent terminal jobs. */
+export async function fetchActiveJobs(): Promise<JobActiveSummary[]> {
+  return fetchJson<JobActiveSummary[]>(`${API_URL}/api/jobs/active`);
+}
