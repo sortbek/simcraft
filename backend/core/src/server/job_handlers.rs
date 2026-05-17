@@ -120,6 +120,10 @@ pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>
                 let _ = metadata.delete_for_job(&job_id).await;
             }
 
+            // Defensive: clear pause_requested so a hypothetical re-use of this job_id
+            // doesn't see a stale pending pause.
+            let _ = repo.set_pause_requested(&job_id, false).await;
+
             HttpResponse::Ok().json(json!({"status": "cancelled"}))
         }
         _ => HttpResponse::BadRequest().json(json!({"detail": "Job is not running"})),
