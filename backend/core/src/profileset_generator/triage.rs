@@ -17,14 +17,12 @@ use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, Triag
 // Batch size targets keep individual batches small enough that a pause mid-Triage
 // only loses a small unit of work on replay (spec Â§5 pause/resume). At ~1.4KB per
 // profileset, 1.5 MiB â‰ˆ 1100 profilesets per batch.
-// simc init cost is ~5s constant (game data load) + ~10ms per profileset
-// (gear resolve + APL build). Smaller batches pay the constant cost more
-// often, so bigger batches dramatically reduce total init overhead even
-// though per-profileset cost is unavoidable. 16 MiB targets ~12K profilesets
-// at typical 1.4 KB each. Worst-case pause replay loses ~30K profilesets.
-pub const TARGET_BATCH_INPUT_BYTES: usize = 16 * 1024 * 1024; // 16 MiB
-pub const MIN_BATCH_PROFILESETS: usize = 5_000;
-pub const MAX_BATCH_PROFILESETS: usize = 30_000;
+// BENCHMARK TEST A: small batches (500). Pinning MIN=MAX forces every
+// batch to land exactly at 500 regardless of byte size, isolating the
+// per-profileset-cost question from adaptive sizing.
+pub const TARGET_BATCH_INPUT_BYTES: usize = 1 * 1024 * 1024; // 1 MiB (won't bind)
+pub const MIN_BATCH_PROFILESETS: usize = 500;
+pub const MAX_BATCH_PROFILESETS: usize = 500;
 pub const TRIAGE_ITERATIONS: u32 = 50;
 pub const TRIAGE_CUTOFF_MULTIPLIER: f64 = 3.0;
 pub const MIN_TRIAGE_TARGET_ERROR_FALLBACK: f64 = 1.0;
@@ -288,10 +286,10 @@ pub struct TriageConstants {
 impl Default for TriageConstants {
     fn default() -> Self {
         Self {
-            target_batch_input_bytes: TARGET_BATCH_INPUT_BYTES,
-            min_batch_profilesets: MIN_BATCH_PROFILESETS,
-            max_batch_profilesets: MAX_BATCH_PROFILESETS,
-            triage_iterations: TRIAGE_ITERATIONS,
+            target_batch_input_bytes: env_usize("TRIAGE_TARGET_BATCH_BYTES", TARGET_BATCH_INPUT_BYTES),
+            min_batch_profilesets: env_usize("TRIAGE_MIN_BATCH", MIN_BATCH_PROFILESETS),
+            max_batch_profilesets: env_usize("TRIAGE_MAX_BATCH", MAX_BATCH_PROFILESETS),
+            triage_iterations: env_u32("TRIAGE_ITERATIONS", TRIAGE_ITERATIONS),
             triage_cutoff_multiplier: TRIAGE_CUTOFF_MULTIPLIER,
             min_triage_target_error_fallback: MIN_TRIAGE_TARGET_ERROR_FALLBACK,
             min_keep_per_batch: MIN_KEEP_PER_BATCH,
@@ -300,6 +298,14 @@ impl Default for TriageConstants {
             probe_size: PROBE_SIZE,
         }
     }
+}
+
+fn env_usize(key: &str, fallback: usize) -> usize {
+    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
+}
+
+fn env_u32(key: &str, fallback: u32) -> u32 {
+    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
 }
 
 // â”€â”€ Adaptive batch sizing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -345,6 +351,61 @@ pub fn update_avg_bytes(current_avg: usize, batch_total_bytes: usize, batch_coun
     }
 }
 
+/// Format the trailing " · ETA …" segment of the Triage progress message.
+/// Returns an empty string before any batches have completed (no timing data
+/// to extrapolate from).
+fn format_eta_suffix(
+    elapsed_seconds: f64,
+    batches_completed: usize,
+    estimated_total_batches: usize,
+) -> String {
+    if batches_completed == 0 || elapsed_seconds <= 0.0 {
+        return String::new();
+    }
+    let remaining = estimated_total_batches.saturating_sub(batches_completed);
+    if remaining == 0 {
+        return String::new();
+    }
+    let avg = elapsed_seconds / batches_completed as f64;
+    let eta_seconds = (avg * remaining as f64) as u64;
+    let mins = eta_seconds / 60;
+    let secs = eta_seconds % 60;
+    if mins > 0 {
+        format!(" \u{00b7} ETA {}m {}s", mins, secs)
+    } else {
+        format!(" \u{00b7} ETA {}s", secs)
+    }
+}
+
+#[cfg(test)]
+mod eta_tests {
+    use super::*;
+
+    #[test]
+    fn eta_empty_when_no_batches_done() {
+        assert_eq!(format_eta_suffix(0.0, 0, 10), "");
+        assert_eq!(format_eta_suffix(5.0, 0, 10), "");
+    }
+
+    #[test]
+    fn eta_empty_when_no_batches_remaining() {
+        assert_eq!(format_eta_suffix(60.0, 10, 10), "");
+        assert_eq!(format_eta_suffix(60.0, 11, 10), "");
+    }
+
+    #[test]
+    fn eta_formats_minutes_and_seconds() {
+        // 3 batches in 60s → avg 20s/batch. 7 remaining → ETA 140s = 2m 20s.
+        assert_eq!(format_eta_suffix(60.0, 3, 10), " \u{00b7} ETA 2m 20s");
+    }
+
+    #[test]
+    fn eta_formats_seconds_only_under_a_minute() {
+        // 4 batches in 40s → avg 10s. 5 remaining → ETA 50s.
+        assert_eq!(format_eta_suffix(40.0, 4, 9), " \u{00b7} ETA 50s");
+    }
+}
+
 #[cfg(test)]
 mod sizing_tests {
     use super::*;
@@ -368,8 +429,6 @@ mod sizing_tests {
     fn target_count_typical() {
         let n = next_batch_target_count(1024);
         assert!(n >= MIN_BATCH_PROFILESETS && n <= MAX_BATCH_PROFILESETS);
-        // 1.5 MiB / 1 KiB approx 1536 profilesets - comfortably inside [MIN, MAX].
-        assert!(n > MIN_BATCH_PROFILESETS && n < MAX_BATCH_PROFILESETS);
     }
 }
 
@@ -664,6 +723,16 @@ pub async fn run_triage_with_constants(
 
     let mut total_candidates = 0usize;
     let mut total_accepted = 0usize;
+    let triage_start = std::time::Instant::now();
+
+    println!(
+        "[{}] Triage starting: target_batch_bytes={}, min_batch={}, max_batch={}, iterations={}",
+        inputs.job_id,
+        target_batch_input_bytes,
+        min_batch_profilesets,
+        max_batch_profilesets,
+        triage_iterations,
+    );
 
     loop {
         let target = next_batch_target_count_with(
@@ -688,10 +757,15 @@ pub async fn run_triage_with_constants(
         total_candidates += pre.candidate_count;
         total_accepted += pre.accepted.len();
 
+        let eta_suffix = format_eta_suffix(
+            triage_start.elapsed().as_secs_f64(),
+            pre.batch_idx as usize,
+            state.estimated_total_batches,
+        );
         (inputs.on_progress)(
             ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0).min(100.0) as u8,
-            format!("Triage batch {} \u{00b7} simc on {} profilesets",
-                    pre.batch_idx + 1, pre.accepted.len()),
+            format!("Triage batch {} \u{00b7} simc on {} profilesets{}",
+                    pre.batch_idx + 1, pre.accepted.len(), eta_suffix),
         );
 
         // Concatenate profileset_simc lines for this batch.
@@ -700,6 +774,7 @@ pub async fn run_triage_with_constants(
             .collect::<Vec<_>>()
             .join("\n");
 
+        let batch_start = std::time::Instant::now();
         let parsed = crate::simc_runner::run_simc_triage_batch(
             inputs.base_profile,
             &profileset_simc_block,
@@ -710,6 +785,16 @@ pub async fn run_triage_with_constants(
             inputs.job_id,
             inputs.log_buffer.clone(),
         ).await?;
+        let batch_secs = batch_start.elapsed().as_secs_f64();
+        let batch_per_ps_ms = if pre.accepted.is_empty() {
+            0.0
+        } else {
+            batch_secs * 1000.0 / pre.accepted.len() as f64
+        };
+        println!(
+            "[{}] Triage batch {}: {:.1}s on {} profilesets ({:.1} ms/profileset)",
+            inputs.job_id, pre.batch_idx + 1, batch_secs, pre.accepted.len(), batch_per_ps_ms,
+        );
 
         let global_remaining = global_remaining_for_with(&state, global_survivor_target);
         let batches_remaining = state.estimated_total_batches.saturating_sub(state.next_batch_idx as usize).max(1);
@@ -812,6 +897,18 @@ pub async fn run_triage_with_constants(
         .execute(inputs.pool)
         .await
         .map_err(|e| format!("Failed to write final Triage checkpoint: {}", e))?;
+
+    let elapsed = triage_start.elapsed().as_secs_f64();
+    let batches = state.next_batch_idx as usize;
+    let per_ps_ms = if total_accepted > 0 {
+        elapsed * 1000.0 / total_accepted as f64
+    } else {
+        0.0
+    };
+    println!(
+        "[{}] Triage complete: {:.1}s wall, {} batches, {} candidates, {} accepted, {:.1} ms/profileset",
+        inputs.job_id, elapsed, batches, total_candidates, total_accepted, per_ps_ms,
+    );
 
     Ok(TriageRunResult {
         survivor_combo_ids: all_survivors,
