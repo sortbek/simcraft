@@ -7,6 +7,7 @@ mod estimate;
 pub mod gem_combos;
 pub mod identity_key;
 pub mod iterator;
+pub mod iterator_from_request;
 mod selection;
 mod simc;
 pub mod triage;
@@ -23,6 +24,7 @@ pub use iterator::{
     ProfilesetIteratorConfig,
 };
 pub(crate) use top_gear::build_iterator_config;
+pub use iterator_from_request::build_iterator_from_request_json;
 
 use once_cell::sync::Lazy;
 use serde_json::Value;
