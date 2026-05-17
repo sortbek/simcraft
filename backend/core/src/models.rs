@@ -111,6 +111,26 @@ pub struct JobStatusSummary {
     pub pause_requested: bool,
 }
 
+/// Slim row for the sims-overview endpoint. Excludes large columns
+/// (simc_input, request_json, result_json, raw_json, html_report, text_output)
+/// so the list endpoint stays cheap even when 50+ jobs are returned.
+#[derive(Debug, Clone, Serialize)]
+pub struct JobActiveSummary {
+    pub id: String,
+    pub status: JobStatus,
+    pub sim_type: String,
+    pub created_at: String,
+    pub progress_pct: u8,
+    pub progress_stage: Option<String>,
+    pub progress_detail: Option<String>,
+    pub player_name: Option<String>,
+    pub player_class: Option<String>,
+    pub fight_style: String,
+    pub simc_input_mode: SimcInputMode,
+    pub pause_requested: bool,
+    pub error_message: Option<String>,
+}
+
 pub struct ResultSummary {
     pub player_name: Option<String>,
     pub player_class: Option<String>,
