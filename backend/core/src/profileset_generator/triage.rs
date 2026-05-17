@@ -216,7 +216,7 @@ impl<'a> BatchDriver<'a> {
 /// Tunable Triage parameters. Defaults come from the module-level constants;
 /// the calibration harness varies these to grid-search optimal values.
 /// Production callers use `TriageConstants::default()`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct TriageConstants {
     pub target_batch_input_bytes: usize,
     pub min_batch_profilesets: usize,

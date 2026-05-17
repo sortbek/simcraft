@@ -1,4 +1,5 @@
 mod base_profile;
+pub mod checkpoint;
 mod constraints;
 mod droptimizer;
 mod enchant_gem;
@@ -11,6 +12,8 @@ mod simc;
 pub mod triage;
 mod top_gear;
 mod upgrade_compare;
+
+pub use checkpoint::{Checkpoint, CheckpointPhase, StagedCheckpoint, TriageCheckpoint};
 
 pub use estimate::estimate_top_gear_combo_count;
 pub use iterator::{
