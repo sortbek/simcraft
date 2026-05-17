@@ -78,6 +78,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::post().to(job_handlers::resume_sim),
         )
         .route(
+            "/api/jobs/active",
+            web::get().to(job_handlers::list_active_jobs),
+        )
+        .route(
             "/api/sim/{id}/input",
             web::get().to(job_handlers::get_sim_input),
         )

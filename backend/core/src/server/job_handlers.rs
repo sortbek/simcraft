@@ -34,6 +34,15 @@ pub(super) async fn list_sims_filtered(
     }
 }
 
+/// List active sims (Pending / Running / Paused) plus the N most recent
+/// terminal jobs. Powers the /sims overview page and the header indicator.
+pub(super) async fn list_active_jobs(repo: web::Data<JobRepo>) -> HttpResponse {
+    match repo.list_active(20).await {
+        Ok(summaries) => HttpResponse::Ok().json(summaries),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
+}
+
 pub(super) async fn get_sim_status(
     path: web::Path<String>,
     repo: web::Data<JobRepo>,
