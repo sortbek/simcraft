@@ -1,10 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { API_URL } from '../lib/api';
-import { pauseSim, resumeSim, type JobActiveSummary } from '../lib/api';
-import { useActiveSims } from '../lib/useActiveSims';
+import { pauseSim, resumeSim, type JobActiveStatus } from '../lib/api';
+import { isActiveStatus, useActiveSims } from '../lib/useActiveSims';
+import { specDisplayName } from '../lib/types';
 
 const SIM_TYPE_LABELS: Record<string, string> = {
   quick: 'Quick Sim',
@@ -25,18 +26,17 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function StatusDot({ status }: { status: JobActiveSummary['status'] }) {
-  const color =
-    status === 'running'
-      ? 'bg-amber-500 animate-pulse'
-      : status === 'paused'
-        ? 'bg-sky-400'
-        : status === 'done'
-          ? 'bg-emerald-500'
-          : status === 'failed'
-            ? 'bg-red-500'
-            : 'bg-on-surface-variant/40';
-  return <span className={`inline-block h-2 w-2 rounded-full ${color}`} />;
+const STATUS_DOT_COLOR: Record<JobActiveStatus, string> = {
+  pending: 'bg-on-surface-variant/40',
+  running: 'bg-amber-500 animate-pulse',
+  paused: 'bg-sky-400',
+  done: 'bg-emerald-500',
+  failed: 'bg-red-500',
+  cancelled: 'bg-on-surface-variant/40',
+};
+
+function StatusDot({ status }: { status: JobActiveStatus }) {
+  return <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLOR[status]}`} />;
 }
 
 type Filter = 'active' | 'all';
@@ -48,8 +48,9 @@ export default function SimsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const filtered = jobs.filter((j) =>
-    filter === 'all' ? true : ['pending', 'running', 'paused'].includes(j.status)
+  const filtered = useMemo(
+    () => (filter === 'all' ? jobs : jobs.filter((j) => isActiveStatus(j.status))),
+    [jobs, filter],
   );
 
   const handlePause = async (id: string) => {
@@ -166,10 +167,18 @@ export default function SimsPage() {
                   className="cursor-pointer border-b border-outline-variant/5 transition-colors hover:bg-surface-container-high/50 focus:bg-surface-container-high/30 focus:outline-none"
                 >
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                    <div
+                      className="flex items-center gap-2"
+                      title={j.error_message ?? undefined}
+                    >
                       <StatusDot status={j.status} />
                       <span className="text-[13px] capitalize text-on-surface">{j.status}</span>
                     </div>
+                    {j.status === 'failed' && j.error_message && (
+                      <div className="mt-0.5 max-w-xs truncate text-[11px] text-red-400/70">
+                        {j.error_message}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-[13px] text-on-surface-variant">
                     {SIM_TYPE_LABELS[j.sim_type] ?? j.sim_type}
@@ -178,7 +187,7 @@ export default function SimsPage() {
                     {j.player_name ?? '—'}
                     {j.player_class && (
                       <span className="ml-1.5 text-on-surface-variant/60">
-                        ({j.player_class})
+                        ({specDisplayName(j.player_class)})
                       </span>
                     )}
                   </td>
@@ -225,7 +234,7 @@ export default function SimsPage() {
                           Resume
                         </button>
                       )}
-                      {['pending', 'running', 'paused'].includes(j.status) && (
+                      {isActiveStatus(j.status) && (
                         <button
                           disabled={busy === j.id}
                           onClick={(e) => {

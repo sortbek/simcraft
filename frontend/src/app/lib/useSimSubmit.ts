@@ -80,6 +80,10 @@ export function useSimSubmit({
 
     // Soft warning if other sims are already running. v1 uses confirm()
     // — a styled modal is a future polish.
+    //
+    // Intentionally narrower than isActiveStatus: Paused jobs are "active"
+    // for UI purposes (still incomplete) but don't compete for CPU here, so
+    // they don't trigger the warning.
     try {
       const active = await fetchActiveJobs();
       const activeCount = active.filter((j) =>
