@@ -10,15 +10,22 @@ full-precision baseline. The chosen defaults are then locked into
 
 ### 1. Capture a reference scenario
 
-In the running app (web or desktop):
+The harness reads a `NormalizedRequest` envelope — the same JSON shape stored
+in `jobs.request_json` for streamed-mode jobs. Capturing it:
 
-1. Configure a Top Gear sim that produces a substantial combo count (target: >=1M,
-   ideally ~5M). A real Mistweaver setup with many trinket/weapon/embellishment
+1. Configure and start a Top Gear sim with a substantial combo count (target:
+   >=1M). A real Mistweaver setup with many trinket/weapon/embellishment
    options is a good baseline.
-2. Open browser devtools -> Network tab.
-3. Click "Start sim".
-4. Inspect the POST to `/api/top-gear/sim`. Copy the request body JSON.
-5. Save to `backend/calibration/scenarios/topgear-<spec>-<combo-count>k.json`.
+2. Let the job hit at least the streaming path (≥`TRIAGE_THRESHOLD` combos).
+   Pausing it immediately after start is fine — we only need the persisted
+   `request_json`.
+3. Pull the envelope out of SQLite (desktop or web):
+
+   ```sql
+   SELECT request_json FROM jobs WHERE id = '<your-job-id>';
+   ```
+4. Save the JSON to
+   `backend/calibration/scenarios/topgear-<spec>-<combo-count>k.json`.
 
 ### 2. Produce the baseline result
 
@@ -81,13 +88,21 @@ Confirm the result's top-10 matches the baseline's top-10.
 
 ## Notes
 
-- The scaffold's grid loop currently has a TODO where `run_triage_with_constants`
-  should be wired in. To complete the wiring, extract `build_iterator_config`
-  from `top_gear_handlers.rs::start_streaming_top_gear_job` into a `pub` function
-  (e.g., `pub fn build_iterator_config_from_request(...)`) so the harness can
-  call it without going through actix.
-- Defer the wiring to when calibration is actually being run -- the harness
-  structure is in place; the inner loop is mechanical to fill in.
+- The inner loop is wired through
+  [`build_iterator_from_request_json`](../core/src/profileset_generator/iterator_from_request.rs)
+  (also used by the resume path), so the harness reads exactly the same
+  envelope shape stored in `jobs.request_json`.
+- Each grid point runs against a fresh in-memory SQLite DB
+  (`sqlite::memory:`) so combo_metadata / combo_dedup / triage_batches don't
+  leak between points.
 - `TriageConstants` in `triage.rs` exposes all tunable parameters. The three
   grid axes are `target_batch_input_bytes`, `triage_iterations`, and
   `triage_cutoff_multiplier`; the rest stay at `Default` during grid search.
+- **Winner-loss matching limitation:** combos are matched by name across the
+  baseline and the survivors. The streaming iterator assigns names in its own
+  order, so identical *content* may appear under different names across runs
+  (eager-baseline "Combo 12345" likely refers to different gear than
+  streaming "Combo 12345"). For true content-based recall, export the
+  baseline's full `profileset_simc` per top combo and switch the matching to
+  content hashing — see [`identity_key.rs`](../core/src/profileset_generator/identity_key.rs)
+  for the effective-form hash used by the iterator. Filed as a follow-up.
