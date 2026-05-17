@@ -465,6 +465,7 @@ pub(super) async fn create_upgrade_compare_sim(
         10, // inline/eager path: staged pipeline spans 10-95%
         crate::models::SimcInputMode::Inline,
         0,
+        crate::profileset_generator::triage::TriageConstants::default(),
     );
 
     HttpResponse::Ok().json(SimResponse {

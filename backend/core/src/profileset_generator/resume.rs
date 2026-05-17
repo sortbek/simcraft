@@ -309,6 +309,7 @@ async fn resume_staged(
         50, // base_start: Triage consumed 5-50%
         SimcInputMode::Streamed,
         staged_cp.next_stage_idx,
+        checkpoint.constants,
     );
 
     Ok(())

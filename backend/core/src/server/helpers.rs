@@ -305,6 +305,11 @@ fn enqueue_job_update(
 ///
 /// `simc_input_mode` controls whether checkpoint writes and pause polling are
 /// active. Inline-mode jobs skip those paths; only Streamed-mode jobs support pause/resume.
+///
+/// `constants` are the TriageConstants used for this job. Passed through to
+/// checkpoint writes so resume can reconstruct the exact same calibration.
+/// Eager (Inline) callers pass `TriageConstants::default()`; Streamed callers
+/// pass the constants from the Triage checkpoint.
 pub(crate) fn spawn_staged_sim(
     repo: JobRepo,
     simc: PathBuf,
@@ -316,6 +321,7 @@ pub(crate) fn spawn_staged_sim(
     base_start: u8,
     simc_input_mode: SimcInputMode,
     start_stage_idx: usize,
+    constants: crate::profileset_generator::triage::TriageConstants,
 ) {
     tokio::spawn(async move {
         if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
@@ -364,6 +370,7 @@ pub(crate) fn spawn_staged_sim(
             simc_input_mode,
             pool_opt,
             start_stage_idx,
+            constants,
             move |pct, stage, detail| {
                 enqueue_job_update(
                     &tx_progress,

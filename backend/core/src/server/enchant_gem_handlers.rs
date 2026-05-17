@@ -147,6 +147,7 @@ pub(super) async fn create_enchant_gem_sim(
         10, // inline/eager path: staged pipeline spans 10-95%
         crate::models::SimcInputMode::Inline,
         0,
+        crate::profileset_generator::triage::TriageConstants::default(),
     );
 
     HttpResponse::Ok().json(SimResponse {

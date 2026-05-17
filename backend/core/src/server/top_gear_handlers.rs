@@ -260,6 +260,7 @@ pub(super) async fn create_top_gear_sim(
         10, // inline/eager path: staged pipeline spans 10-95%
         SimcInputMode::Inline,
         0,
+        crate::profileset_generator::triage::TriageConstants::default(),
     );
 
     HttpResponse::Ok().json(SimResponse {
@@ -517,6 +518,7 @@ async fn handoff_to_staged(
         50, // streamed path: Triage consumed 5-50%, staged pipeline spans 50-95%
         crate::models::SimcInputMode::Streamed,
         0,
+        crate::profileset_generator::triage::TriageConstants::default(),
     );
 }
 

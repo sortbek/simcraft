@@ -956,6 +956,7 @@ pub async fn run_simc_staged(
     simc_input_mode: crate::models::SimcInputMode,
     pool: Option<sqlx::AnyPool>,
     start_stage_idx: usize,
+    constants: crate::profileset_generator::triage::TriageConstants,
     on_progress: impl Fn(u8, &str, &str),
     on_stage_complete: impl Fn(&str),
     on_log: impl Fn(&str) + Clone,
@@ -1146,7 +1147,7 @@ pub async fn run_simc_staged(
                                     survivor_combo_ids,
                                 },
                             ),
-                            constants: crate::profileset_generator::triage::TriageConstants::default(),
+                            constants,
                         };
                     if let Ok(json) = checkpoint.to_json_string() {
                         let _ = sqlx::query(
@@ -1224,7 +1225,7 @@ pub async fn run_simc_staged(
                                 survivor_combo_ids,
                             },
                         ),
-                        constants: crate::profileset_generator::triage::TriageConstants::default(),
+                        constants,
                     };
                 if let Ok(json) = checkpoint.to_json_string() {
                     let _ = sqlx::query(
