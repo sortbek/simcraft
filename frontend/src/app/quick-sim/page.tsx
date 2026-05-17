@@ -49,7 +49,7 @@ function useLastSim(name: string | null, realm: string | null): LastSim | null {
       return;
     }
     fetch(
-      `${API_URL}/api/sims?player=${encodeURIComponent(name)}&realm=${encodeURIComponent(realm)}`
+      `${API_URL}/api/jobs?status=all&player=${encodeURIComponent(name)}&realm=${encodeURIComponent(realm)}`
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((sims: LastSim[]) => {

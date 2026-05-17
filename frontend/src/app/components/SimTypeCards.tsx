@@ -45,11 +45,11 @@ const simTypes: SimType[] = [
     ],
   },
   {
-    href: '/history',
+    href: '/sims',
     labelKey: 'page.history',
     descriptionKey: 'page.historyDesc',
     icon: 'M8 8m-6.5 0a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0M8 4.5V8l2.5 2.5',
-    matchPaths: ['/history'],
+    matchPaths: ['/sims', '/history'],
   },
 ];
 

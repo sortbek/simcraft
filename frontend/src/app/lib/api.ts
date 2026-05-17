@@ -82,9 +82,35 @@ export interface JobActiveSummary {
   simc_input_mode: 'inline' | 'streamed';
   pause_requested: boolean;
   error_message: string | null;
+  iterations: number;
+  realm: string | null;
+  region: string | null;
+  dps: number | null;
+  batch_id: string | null;
 }
 
 /** Active sims (pending/running/paused) + up to 20 most recent terminal jobs. */
 export async function fetchActiveJobs(): Promise<JobActiveSummary[]> {
   return fetchJson<JobActiveSummary[]>(`${API_URL}/api/jobs/active`);
+}
+
+/** Full job list for the /sims overview's All / By-character views.
+ * Optional player+realm filter. Returns up to ~200 jobs. */
+export async function fetchAllJobs(opts?: {
+  player?: string;
+  realm?: string;
+  limit?: number;
+}): Promise<JobActiveSummary[]> {
+  const params = new URLSearchParams({ status: 'all' });
+  if (opts?.player) params.set('player', opts.player);
+  if (opts?.realm) params.set('realm', opts.realm);
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  return fetchJson<JobActiveSummary[]>(`${API_URL}/api/jobs?${params}`);
+}
+
+/** Delete a terminal-state job (Done/Failed/Cancelled). Active jobs must
+ * be cancelled first. Also removes per-job rows in combo_metadata,
+ * combo_dedup, and triage_batches. */
+export async function deleteJob(jobId: string): Promise<void> {
+  await fetchJson<unknown>(`${API_URL}/api/jobs/${jobId}`, { method: 'DELETE' });
 }

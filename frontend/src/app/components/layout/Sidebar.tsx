@@ -43,12 +43,8 @@ export default function Sidebar() {
     {
       href: '/sims',
       label: t('nav.sims'),
-      matchPaths: ['/sims', '/sim'], // also highlights when viewing /sim/[id]
-    },
-    {
-      href: '/history',
-      label: t('nav.history'),
-      matchPaths: ['/history'],
+      // Also highlights when viewing /sim/[id] or following old /history links.
+      matchPaths: ['/sims', '/sim', '/history'],
     },
   ];
 
