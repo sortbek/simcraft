@@ -11,6 +11,7 @@ import {
 } from '../../lib/saved-characters';
 import WindowControls from './WindowTitlebar';
 import DesktopAppLink from './DesktopAppLink';
+import ActiveSimsIndicator from './ActiveSimsIndicator';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
 import { isValidSimcExport, validateChecksum } from '../../lib/simcDetect';
@@ -300,6 +301,7 @@ export default function TopBar() {
       </div>
 
       <div className="desktop-no-drag flex items-center gap-3">
+        <ActiveSimsIndicator />
         {!isDesktop && <DesktopAppLink />}
         <WindowControls />
       </div>
