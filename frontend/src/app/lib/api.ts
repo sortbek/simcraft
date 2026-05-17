@@ -37,18 +37,10 @@ export async function fetchSimInputPreview(jobId: string): Promise<SimInputPrevi
 
 /** Request that a running streamed-mode sim pause at the next checkpoint. */
 export async function pauseSim(jobId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/sim/${jobId}/pause`, { method: 'POST' });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to pause: ${res.status}`);
-  }
+  await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/pause`, { method: 'POST' });
 }
 
 /** Resume a paused sim. Delegates to backend resume_job which dispatches by phase. */
 export async function resumeSim(jobId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/sim/${jobId}/resume`, { method: 'POST' });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Failed to resume: ${res.status}`);
-  }
+  await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/resume`, { method: 'POST' });
 }

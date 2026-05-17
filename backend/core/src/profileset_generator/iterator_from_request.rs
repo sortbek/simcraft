@@ -11,26 +11,21 @@ use serde_json::Value;
 
 use super::iterator::ProfilesetIteratorConfig;
 use super::GemEnchantOptions;
+use crate::server::request_json::NormalizedRequest;
 
 /// Rebuild a `ProfilesetIteratorConfig` from a stored normalized request envelope.
 /// The envelope shape is `{ sim_type, version, payload }` per
 /// [crate::server::request_json::NormalizedRequest].
 pub fn build_iterator_from_request_json(json: &str) -> Result<ProfilesetIteratorConfig, String> {
-    let envelope: Value = serde_json::from_str(json)
+    let envelope: NormalizedRequest = serde_json::from_str(json)
         .map_err(|e| format!("Invalid request_json: {}", e))?;
-    let sim_type = envelope
-        .get("sim_type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    if sim_type != "top_gear" {
+    if envelope.sim_type != "top_gear" {
         return Err(format!(
             "Resume not supported for sim_type={} (only top_gear in Phase 2)",
-            sim_type
+            envelope.sim_type
         ));
     }
-    let payload = envelope
-        .get("payload")
-        .ok_or_else(|| "request_json missing payload".to_string())?;
+    let payload = &envelope.payload;
 
     let base_profile = payload
         .get("base_profile")
@@ -164,7 +159,7 @@ mod tests {
             "version": 1
         });
         let err = unwrap_err(build_iterator_from_request_json(&envelope.to_string()));
-        assert!(err.contains("missing payload"), "unexpected error: {err}");
+        assert!(err.contains("payload"), "unexpected error: {err}");
     }
 
     #[test]

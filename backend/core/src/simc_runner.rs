@@ -932,6 +932,13 @@ pub async fn run_simc(
 /// `spawn_staged_sim` checks for this exact string and exits without setting an error.
 pub const PAUSED_SENTINEL: &str = "paused_by_user";
 
+/// Parse the combo_id integer out of a combo_name in the canonical "Combo N" format.
+/// Returns None for any name that doesn't match.
+fn parse_combo_id(name: &str) -> Option<i64> {
+    name.strip_prefix("Combo ")
+        .and_then(|s| s.trim().parse::<i64>().ok())
+}
+
 /// Run a multi-stage simulation for Top Gear.
 ///
 /// `base_start` is the lower bound of the progress-bar range allocated to the
@@ -1130,14 +1137,8 @@ pub async fn run_simc_staged(
                     // All profilesets survived — collect their combo_ids.
                     // combo_name format is "Combo N" where N is the combo_id,
                     // so parse the integer directly instead of DB round-trips.
-                    let mut survivor_combo_ids: Vec<i64> = Vec::with_capacity(keep_combos.len());
-                    for name in &keep_combos {
-                        if let Some(suffix) = name.strip_prefix("Combo ") {
-                            if let Ok(id) = suffix.trim().parse::<i64>() {
-                                survivor_combo_ids.push(id);
-                            }
-                        }
-                    }
+                    let survivor_combo_ids: Vec<i64> =
+                        keep_combos.iter().filter_map(|n| parse_combo_id(n)).collect();
                     let checkpoint =
                         crate::profileset_generator::checkpoint::Checkpoint {
                             phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
@@ -1208,14 +1209,8 @@ pub async fn run_simc_staged(
                     .unwrap_or_else(|| "Done".to_string());
                 // combo_name format is "Combo N" where N is the combo_id,
                 // so parse the integer directly instead of DB round-trips.
-                let mut survivor_combo_ids: Vec<i64> = Vec::with_capacity(keep_combos.len());
-                for name in &keep_combos {
-                    if let Some(suffix) = name.strip_prefix("Combo ") {
-                        if let Ok(id) = suffix.trim().parse::<i64>() {
-                            survivor_combo_ids.push(id);
-                        }
-                    }
-                }
+                let survivor_combo_ids: Vec<i64> =
+                    keep_combos.iter().filter_map(|n| parse_combo_id(n)).collect();
                 let checkpoint =
                     crate::profileset_generator::checkpoint::Checkpoint {
                         phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(

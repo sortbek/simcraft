@@ -1,9 +1,9 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The shape stored in `jobs.request_json`. Each sim type wraps its normalized
 /// request in this envelope so the resumer can dispatch by `sim_type`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NormalizedRequest {
     pub sim_type: String,
     pub version: u32,

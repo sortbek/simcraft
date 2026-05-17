@@ -38,14 +38,7 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
     if job.status != JobStatus::Paused {
         return Err(format!(
             "Job is not paused (status is {})",
-            match job.status {
-                JobStatus::Pending => "pending",
-                JobStatus::Running => "running",
-                JobStatus::Paused => "paused",
-                JobStatus::Done => "done",
-                JobStatus::Failed => "failed",
-                JobStatus::Cancelled => "cancelled",
-            }
+            job.status
         ));
     }
 
@@ -236,11 +229,10 @@ async fn resume_staged(
     };
 
     // 0. Parse the original request envelope to recover full options + base_profile.
-    let envelope: serde_json::Value = serde_json::from_str(request_json)
-        .map_err(|e| format!("Invalid request_json: {}", e))?;
-    let payload = envelope
-        .get("payload")
-        .ok_or_else(|| "request_json missing payload".to_string())?;
+    let envelope: crate::server::request_json::NormalizedRequest =
+        serde_json::from_str(request_json)
+            .map_err(|e| format!("Invalid request_json: {}", e))?;
+    let payload = &envelope.payload;
     let options = payload
         .get("options")
         .cloned()

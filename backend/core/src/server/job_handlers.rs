@@ -134,17 +134,7 @@ pub(super) async fn pause_sim(
 
     if job.status != JobStatus::Running {
         return HttpResponse::BadRequest().json(json!({
-            "detail": format!(
-                "Job is not running (status is {})",
-                match job.status {
-                    JobStatus::Pending => "pending",
-                    JobStatus::Running => "running",
-                    JobStatus::Paused => "paused",
-                    JobStatus::Done => "done",
-                    JobStatus::Failed => "failed",
-                    JobStatus::Cancelled => "cancelled",
-                }
-            )
+            "detail": format!("Job is not running (status is {})", job.status)
         }));
     }
 
