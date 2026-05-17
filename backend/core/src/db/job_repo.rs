@@ -538,6 +538,111 @@ impl JobRepo {
         }
     }
 
+    /// Return all active (Pending / Running / Paused) jobs plus the most
+    /// recent `limit_recent` terminal jobs. Used by the sims overview page.
+    ///
+    /// The slim shape (no simc_input / result_json bodies in the returned
+    /// struct) keeps payloads small enough to poll every 2-3s without
+    /// burning memory.
+    pub async fn list_active(
+        &self,
+        limit_recent: usize,
+    ) -> Result<Vec<crate::models::JobActiveSummary>, sqlx::Error> {
+        use crate::models::{JobActiveSummary, JobStatus as JS};
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                let active_rows = sqlx::query(
+                    "SELECT id, status, sim_type, created_at, fight_style, \
+                            progress_pct, progress_stage, progress_detail, \
+                            simc_input_mode, pause_requested, error_message, \
+                            result_json, simc_input \
+                     FROM jobs \
+                     WHERE status IN ('pending', 'running', 'paused') \
+                     ORDER BY created_at DESC",
+                )
+                .fetch_all(pool)
+                .await?;
+
+                let terminal_rows = sqlx::query(
+                    "SELECT id, status, sim_type, created_at, fight_style, \
+                            progress_pct, progress_stage, progress_detail, \
+                            simc_input_mode, pause_requested, error_message, \
+                            result_json, simc_input \
+                     FROM jobs \
+                     WHERE status IN ('done', 'failed', 'cancelled') \
+                     ORDER BY created_at DESC LIMIT $1",
+                )
+                .bind(limit_recent as i32)
+                .fetch_all(pool)
+                .await?;
+
+                let mut out: Vec<JobActiveSummary> =
+                    Vec::with_capacity(active_rows.len() + terminal_rows.len());
+                for r in active_rows.iter().chain(terminal_rows.iter()) {
+                    let status_str: String = r.get("status");
+                    let progress_pct: i32 = r.get("progress_pct");
+                    let result_json: Option<String> = r.get("result_json");
+                    let simc_input: String = r.get("simc_input");
+                    let summary = extract_result_summary(&result_json, &simc_input);
+                    out.push(JobActiveSummary {
+                        id: r.get("id"),
+                        status: Self::str_to_status(&status_str),
+                        sim_type: r.get("sim_type"),
+                        created_at: r.get("created_at"),
+                        progress_pct: progress_pct.clamp(0, 100) as u8,
+                        progress_stage: r.get("progress_stage"),
+                        progress_detail: r.get("progress_detail"),
+                        player_name: summary.player_name,
+                        player_class: summary.player_class,
+                        fight_style: r.get("fight_style"),
+                        simc_input_mode: SimcInputMode::from_str(
+                            &r.try_get::<String, _>("simc_input_mode")
+                                .unwrap_or_else(|_| "inline".to_string()),
+                        ),
+                        pause_requested: r
+                            .try_get::<i32, _>("pause_requested")
+                            .unwrap_or(0)
+                            != 0,
+                        error_message: r.get("error_message"),
+                    });
+                }
+                Ok(out)
+            }
+            JobBackend::Memory(jobs) => {
+                let guard = jobs.lock().unwrap();
+                let mut active: Vec<JobActiveSummary> = Vec::new();
+                let mut terminal: Vec<JobActiveSummary> = Vec::new();
+                for j in guard.iter() {
+                    let s = extract_result_summary(&j.result_json, &j.simc_input);
+                    let summary = JobActiveSummary {
+                        id: j.id.clone(),
+                        status: j.status.clone(),
+                        sim_type: j.sim_type.clone(),
+                        created_at: j.created_at.clone(),
+                        progress_pct: j.progress_pct,
+                        progress_stage: j.progress_stage.clone(),
+                        progress_detail: j.progress_detail.clone(),
+                        player_name: s.player_name,
+                        player_class: s.player_class,
+                        fight_style: j.fight_style.clone(),
+                        simc_input_mode: j.simc_input_mode,
+                        pause_requested: j.pause_requested,
+                        error_message: j.error_message.clone(),
+                    };
+                    match j.status {
+                        JS::Pending | JS::Running | JS::Paused => active.push(summary),
+                        _ => terminal.push(summary),
+                    }
+                }
+                active.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                terminal.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                terminal.truncate(limit_recent);
+                active.extend(terminal);
+                Ok(active)
+            }
+        }
+    }
+
     /// Slim read for `get_sim_status`. Returns only the columns the status
     /// endpoint actually reads — excludes raw_json, html_report, text_output,
     /// request_json, and simc_input (which can be many MB for completed jobs).
@@ -612,5 +717,101 @@ impl JobRepo {
                     pause_requested: j.pause_requested,
                 })),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_job(id: &str, status: JobStatus) -> Job {
+        Job {
+            id: id.to_string(),
+            status,
+            sim_type: "quick".to_string(),
+            simc_input: String::new(),
+            result_json: None,
+            raw_json: None,
+            combo_metadata_json: None,
+            error_message: None,
+            progress_pct: 0,
+            progress_stage: None,
+            progress_detail: None,
+            stages_completed: Vec::new(),
+            iterations: 1000,
+            fight_style: "Patchwerk".to_string(),
+            target_error: 0.05,
+            created_at: "2026-05-17T00:00:00Z".to_string(),
+            html_report: None,
+            text_output: None,
+            batch_id: None,
+            request_json: None,
+            simc_input_mode: SimcInputMode::Inline,
+            checkpoint: None,
+            pause_requested: false,
+        }
+    }
+
+    impl JobRepo {
+        async fn insert_test_job(&self, job: Job) -> Result<(), sqlx::Error> {
+            match &self.backend {
+                JobBackend::Memory(jobs) => {
+                    jobs.lock().unwrap().push(job);
+                    Ok(())
+                }
+                _ => panic!("insert_test_job is only implemented for Memory backend"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn list_active_includes_running_paused_and_recent_terminal() {
+        let repo = JobRepo::new_memory();
+
+        let mut running = make_test_job("run-1", JobStatus::Running);
+        running.created_at = "2026-05-17T10:00:00Z".to_string();
+        let mut paused = make_test_job("pause-1", JobStatus::Paused);
+        paused.created_at = "2026-05-17T11:00:00Z".to_string();
+        let mut pending = make_test_job("pending-1", JobStatus::Pending);
+        pending.created_at = "2026-05-17T09:00:00Z".to_string();
+
+        let mut done_new = make_test_job("done-1", JobStatus::Done);
+        done_new.created_at = "2026-05-17T12:00:00Z".to_string();
+        let mut failed_old = make_test_job("failed-1", JobStatus::Failed);
+        failed_old.created_at = "2026-05-16T08:00:00Z".to_string();
+
+        repo.insert_test_job(running).await.unwrap();
+        repo.insert_test_job(paused).await.unwrap();
+        repo.insert_test_job(pending).await.unwrap();
+        repo.insert_test_job(done_new).await.unwrap();
+        repo.insert_test_job(failed_old).await.unwrap();
+
+        let summaries = repo.list_active(10).await.unwrap();
+        let ids: Vec<&str> = summaries.iter().map(|s| s.id.as_str()).collect();
+
+        assert!(ids.contains(&"run-1"));
+        assert!(ids.contains(&"pause-1"));
+        assert!(ids.contains(&"pending-1"));
+        assert!(ids.contains(&"done-1"));
+        assert!(ids.contains(&"failed-1"));
+
+        let first_terminal_idx = ids.iter().position(|i| *i == "done-1").unwrap();
+        assert!(ids.iter().take(first_terminal_idx).all(|i| {
+            *i == "run-1" || *i == "pause-1" || *i == "pending-1"
+        }));
+    }
+
+    #[tokio::test]
+    async fn list_active_limits_terminal_jobs() {
+        let repo = JobRepo::new_memory();
+        for i in 0..5 {
+            let mut j = make_test_job(&format!("done-{i}"), JobStatus::Done);
+            j.created_at = format!("2026-05-17T1{i}:00:00Z");
+            repo.insert_test_job(j).await.unwrap();
+        }
+        let summaries = repo.list_active(2).await.unwrap();
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].id, "done-4");
+        assert_eq!(summaries[1].id, "done-3");
     }
 }
