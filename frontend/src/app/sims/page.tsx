@@ -1,11 +1,10 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { API_URL } from '../lib/api';
 import { pauseSim, resumeSim, type JobActiveSummary } from '../lib/api';
 import { useActiveSims } from '../lib/useActiveSims';
-import { useLanguage } from '../lib/i18n';
 
 const SIM_TYPE_LABELS: Record<string, string> = {
   quick: 'Quick Sim',
@@ -43,7 +42,7 @@ function StatusDot({ status }: { status: JobActiveSummary['status'] }) {
 type Filter = 'active' | 'all';
 
 export default function SimsPage() {
-  const { t } = useLanguage();
+  const router = useRouter();
   const { jobs, error, refresh } = useActiveSims();
   const [filter, setFilter] = useState<Filter>('active');
   const [busy, setBusy] = useState<string | null>(null);
@@ -145,13 +144,18 @@ export default function SimsPage() {
               {filtered.map((j) => (
                 <tr
                   key={j.id}
-                  className="border-b border-outline-variant/5 transition-colors hover:bg-surface-container-high/50"
+                  onClick={() => router.push(`/sim/${j.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') router.push(`/sim/${j.id}`);
+                  }}
+                  tabIndex={0}
+                  className="cursor-pointer border-b border-outline-variant/5 transition-colors hover:bg-surface-container-high/50 focus:bg-surface-container-high/30 focus:outline-none"
                 >
                   <td className="px-4 py-3">
-                    <Link href={`/sim/${j.id}`} className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <StatusDot status={j.status} />
                       <span className="text-[13px] capitalize text-on-surface">{j.status}</span>
-                    </Link>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-[13px] text-on-surface-variant">
                     {SIM_TYPE_LABELS[j.sim_type] ?? j.sim_type}
@@ -186,7 +190,10 @@ export default function SimsPage() {
                       {j.status === 'running' && j.simc_input_mode === 'streamed' && (
                         <button
                           disabled={busy === j.id || j.pause_requested}
-                          onClick={() => handlePause(j.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePause(j.id);
+                          }}
                           className="rounded px-2 py-1 text-[12px] text-on-surface-variant/60 hover:bg-white/5 hover:text-on-surface disabled:opacity-40"
                         >
                           {j.pause_requested ? 'Pausing…' : 'Pause'}
@@ -195,7 +202,10 @@ export default function SimsPage() {
                       {j.status === 'paused' && (
                         <button
                           disabled={busy === j.id}
-                          onClick={() => handleResume(j.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleResume(j.id);
+                          }}
                           className="rounded px-2 py-1 text-[12px] text-primary hover:bg-primary/10 disabled:opacity-40"
                         >
                           Resume
@@ -204,7 +214,10 @@ export default function SimsPage() {
                       {['pending', 'running', 'paused'].includes(j.status) && (
                         <button
                           disabled={busy === j.id}
-                          onClick={() => handleCancel(j.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCancel(j.id);
+                          }}
                           className="rounded px-2 py-1 text-[12px] text-on-surface-variant/60 hover:bg-red-500/10 hover:text-error disabled:opacity-40"
                         >
                           Cancel
