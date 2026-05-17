@@ -723,6 +723,35 @@ pub async fn run_triage_with_constants(
 
         all_survivors.extend(survivors);
 
+        // Pause boundary: honor a pending pause request at the cleanest possible point —
+        // after survivors are persisted and state is fully consistent. The checkpoint
+        // is already on disk from pre_simc_phase, so resume picks up at exactly the
+        // next batch's cursor. Clear the flag and transition to Paused.
+        let pause_check_repo = crate::db::JobRepo::new(inputs.pool.clone());
+        match pause_check_repo.get_pause_requested(inputs.job_id).await {
+            Ok(true) => {
+                // Clear the flag and flip status. Order matters: clear flag first so a
+                // concurrent reader doesn't see Paused + pending pause.
+                let _ = pause_check_repo.set_pause_requested(inputs.job_id, false).await;
+                let _ = pause_check_repo
+                    .update_status(inputs.job_id, crate::models::JobStatus::Paused)
+                    .await;
+                return Ok(TriageRunResult {
+                    survivor_combo_ids: all_survivors,
+                    total_batches: state.next_batch_idx as usize,
+                    total_candidates,
+                    total_accepted,
+                });
+            }
+            Ok(false) => {}
+            Err(e) => {
+                eprintln!(
+                    "[{}] Failed to read pause_requested (continuing): {}",
+                    inputs.job_id, e
+                );
+            }
+        }
+
         if hard_max_hit || pre.iterator_exhausted {
             break;
         }

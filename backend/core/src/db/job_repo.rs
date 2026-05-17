@@ -516,4 +516,25 @@ impl JobRepo {
         }
         Ok(())
     }
+
+    pub async fn get_pause_requested(&self, id: &str) -> Result<bool, sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                let row = sqlx::query("SELECT pause_requested FROM jobs WHERE id = $1")
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await?;
+                Ok(row
+                    .map(|r| r.get::<i32, _>("pause_requested") != 0)
+                    .unwrap_or(false))
+            }
+            JobBackend::Memory(jobs) => Ok(jobs
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|j| j.id == id)
+                .map(|j| j.pause_requested)
+                .unwrap_or(false)),
+        }
+    }
 }
