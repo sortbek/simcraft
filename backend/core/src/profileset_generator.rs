@@ -14,6 +14,8 @@ mod top_gear;
 mod upgrade_compare;
 
 pub use checkpoint::{Checkpoint, CheckpointPhase, StagedCheckpoint, TriageCheckpoint};
+pub mod resume;
+pub use resume::{resume_job, ResumeInputs};
 
 pub use estimate::estimate_top_gear_combo_count;
 pub use iterator::{
