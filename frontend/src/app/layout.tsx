@@ -5,6 +5,7 @@ import TopBar from './components/layout/TopBar';
 import FooterDisclaimer from './components/layout/FooterDisclaimer';
 import { SimProvider } from './components/sim-config/SimContext';
 import { LanguageProvider } from './lib/i18n';
+import { ActiveSimsProvider } from './lib/useActiveSims';
 import ContentScaler, { ScaleProvider } from './components/layout/ContentScaler';
 import './globals.css';
 import packageJson from '../../package.json';
@@ -33,12 +34,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <LanguageProvider>
           <ScaleProvider>
             <SimProvider>
-              <Sidebar />
-              <div className="pl-64">
-                <TopBar />
-                <ContentScaler>{children}</ContentScaler>
-                <FooterDisclaimer version={packageJson.version} />
-              </div>
+              <ActiveSimsProvider>
+                <Sidebar />
+                <div className="pl-64">
+                  <TopBar />
+                  <ContentScaler>{children}</ContentScaler>
+                  <FooterDisclaimer version={packageJson.version} />
+                </div>
+              </ActiveSimsProvider>
             </SimProvider>
           </ScaleProvider>
         </LanguageProvider>
