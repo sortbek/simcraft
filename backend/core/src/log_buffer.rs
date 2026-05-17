@@ -1,7 +1,11 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
-const MAX_LINES_PER_JOB: usize = 500;
+// Per-job ring-buffer cap. Sized to comfortably hold the log output of a
+// long Triage sim (50-100 batches × ~10 lines/batch ≈ 500-1000 lines) plus
+// the Staged pipeline output, with headroom for users who leave the page
+// and return mid-sim. ~2000 × ~100 bytes ≈ 200 KB per active job.
+const MAX_LINES_PER_JOB: usize = 2000;
 
 struct JobLog {
     lines: VecDeque<String>,
