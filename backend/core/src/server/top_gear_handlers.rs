@@ -205,12 +205,6 @@ pub(super) async fn create_top_gear_sim(
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();
 
-    let meta_json = serde_json::to_string(&json!({
-        "_combo_metadata": combo_metadata,
-        "_combo_count": combo_count,
-    }))
-    .unwrap_or_default();
-
     // Build normalized request envelope for resumability.
     let envelope = NormalizedRequest::new(
         "top_gear",
@@ -234,7 +228,6 @@ pub(super) async fn create_top_gear_sim(
     );
 
     let mut job = job;
-    job.combo_metadata_json = Some(meta_json);
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = req.options.batch_id.clone();
     if let Err(e) = repo.insert(&job).await {

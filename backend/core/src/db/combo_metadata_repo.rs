@@ -60,8 +60,8 @@ impl ComboMetadataRepo {
         Ok(())
     }
 
-    /// Query survivors by name (used by the helpers.rs reader that today
-    /// reads jobs.combo_metadata_json).
+    /// Query a single combo row by name. Used when result parsing needs the
+    /// metadata for a specific surviving profileset.
     pub async fn get_by_name(
         &self,
         job_id: &str,

@@ -407,14 +407,7 @@ pub(crate) fn spawn_staged_sim(
         match result {
             Ok(output) => {
                 let job_snap = repo.get(&job_id).await.ok().flatten();
-                // Build legacy JSON fallback for combo_metadata (from the JSON column).
-                let legacy_combo_json: Option<String> = job_snap
-                    .as_ref()
-                    .and_then(|j| j.combo_metadata_json.as_ref())
-                    .cloned();
-                // Prefer the combo_metadata table; fall back to legacy JSON column.
-                let raw_meta =
-                    load_combo_metadata(&repo, &job_id, legacy_combo_json.as_deref()).await;
+                let raw_meta = load_combo_metadata(&repo, &job_id).await;
                 let meta: Option<HashMap<String, Vec<Value>>> = if raw_meta.is_empty() {
                     None
                 } else {
@@ -493,7 +486,6 @@ pub(super) async fn validate_batch(
 
 /// Write combo_metadata rows to the `combo_metadata` table.
 /// This is a best-effort write — failures are logged but don't block the job.
-/// The legacy `combo_metadata_json` column remains the source of truth during bake-in.
 ///
 /// `metadata_strs`: pre-serialized `(combo_name, metadata_json)` pairs ordered by combo_id.
 pub(super) async fn write_combo_metadata_table_raw(
@@ -577,29 +569,24 @@ pub(super) async fn write_combo_metadata_table_value(
     write_combo_metadata_table_raw(repo, job_id, &metadata_strs).await;
 }
 
-/// Load combo_metadata for a job: prefer the `combo_metadata` table, fall back to
-/// the legacy `jobs.combo_metadata_json` column if the table is empty.
+/// Load combo_metadata for a job from the `combo_metadata` table.
+/// Returns an empty map for in-memory repos or when no rows exist.
 pub(super) async fn load_combo_metadata(
     repo: &JobRepo,
     job_id: &str,
-    legacy_json: Option<&str>,
 ) -> HashMap<String, Vec<Value>> {
-    if let Some(pool) = repo.pool() {
-        let meta_repo = ComboMetadataRepo::new(pool.clone());
-        if let Ok(rows) = meta_repo.list_for_job(job_id, None).await {
-            if !rows.is_empty() {
-                return rows
-                    .into_iter()
-                    .filter_map(|r| {
-                        let deltas: Vec<Value> = serde_json::from_str(&r.metadata_json).ok()?;
-                        Some((r.combo_name, deltas))
-                    })
-                    .collect();
-            }
-        }
+    let Some(pool) = repo.pool() else {
+        return HashMap::new();
+    };
+    let meta_repo = ComboMetadataRepo::new(pool.clone());
+    match meta_repo.list_for_job(job_id, None).await {
+        Ok(rows) => rows
+            .into_iter()
+            .filter_map(|r| {
+                let deltas: Vec<Value> = serde_json::from_str(&r.metadata_json).ok()?;
+                Some((r.combo_name, deltas))
+            })
+            .collect(),
+        Err(_) => HashMap::new(),
     }
-    // Fall back to legacy JSON column
-    legacy_json
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default()
 }

@@ -69,19 +69,18 @@ impl JobRepo {
             JobBackend::Database(pool) => {
                 let stages_json = serde_json::to_string(&job.stages_completed).unwrap_or_default();
                 sqlx::query(
-                    "INSERT INTO jobs (id, status, sim_type, simc_input, result_json, combo_metadata_json,
+                    "INSERT INTO jobs (id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, batch_id,
                      request_json, simc_input_mode, checkpoint, pause_requested)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                             $17, $18, $19, $20)",
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                             $16, $17, $18, $19)",
                 )
                 .bind(&job.id)
                 .bind(Self::status_to_str(&job.status))
                 .bind(&job.sim_type)
                 .bind(&job.simc_input)
                 .bind(&job.result_json)
-                .bind(&job.combo_metadata_json)
                 .bind(&job.error_message)
                 .bind(job.progress_pct as i32)
                 .bind(&job.progress_stage)
@@ -121,7 +120,7 @@ impl JobRepo {
         match &self.backend {
             JobBackend::Database(pool) => {
                 let row = sqlx::query(
-                    "SELECT id, status, sim_type, simc_input, result_json, combo_metadata_json,
+                    "SELECT id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
                      request_json, simc_input_mode, checkpoint, pause_requested
@@ -143,7 +142,6 @@ impl JobRepo {
                         sim_type: r.get("sim_type"),
                         simc_input: r.get("simc_input"),
                         result_json: r.get("result_json"),
-                        combo_metadata_json: r.get("combo_metadata_json"),
                         error_message: r.get("error_message"),
                         progress_pct: pct as u8,
                         progress_stage: r.get("progress_stage"),
@@ -393,7 +391,7 @@ impl JobRepo {
     ) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
-                sqlx::query("UPDATE jobs SET result_json = $1, raw_json = $2, status = 'done' WHERE id = $3")
+                sqlx::query("UPDATE jobs SET result_json = $1, raw_json = $2, status = 'done', progress_pct = 100 WHERE id = $3")
                     .bind(result)
                     .bind(raw_json)
                     .bind(id)
@@ -733,7 +731,6 @@ mod tests {
             simc_input: String::new(),
             result_json: None,
             raw_json: None,
-            combo_metadata_json: None,
             error_message: None,
             progress_pct: 0,
             progress_stage: None,
@@ -760,7 +757,33 @@ mod tests {
                     jobs.lock().unwrap().push(job);
                     Ok(())
                 }
-                _ => panic!("insert_test_job is only implemented for Memory backend"),
+                JobBackend::Database(pool) => {
+                    let status = Self::status_to_str(&job.status);
+                    let simc_input_mode = match job.simc_input_mode {
+                        SimcInputMode::Inline => "inline",
+                        SimcInputMode::Streamed => "streamed",
+                    };
+                    sqlx::query(
+                        "INSERT INTO jobs (id, status, sim_type, simc_input, iterations, \
+                            fight_style, target_error, created_at, progress_pct, \
+                            simc_input_mode, pause_requested) \
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                    )
+                    .bind(&job.id)
+                    .bind(status)
+                    .bind(&job.sim_type)
+                    .bind(&job.simc_input)
+                    .bind(job.iterations as i32)
+                    .bind(&job.fight_style)
+                    .bind(job.target_error)
+                    .bind(&job.created_at)
+                    .bind(job.progress_pct as i32)
+                    .bind(simc_input_mode)
+                    .bind(if job.pause_requested { 1i32 } else { 0i32 })
+                    .execute(pool)
+                    .await?;
+                    Ok(())
+                }
             }
         }
     }
@@ -830,5 +853,52 @@ mod tests {
         let summaries = repo.list_active(0).await.unwrap();
         let ids: Vec<&str> = summaries.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["r1"]);
+    }
+
+    /// Exercises the Database arm of list_active against a real in-memory
+    /// SQLite — the Memory tests above never run the `SUBSTR(simc_input,…)`
+    /// query, the two-query union, or the status-string filtering, so without
+    /// this test a SQL or dialect regression would slip through.
+    #[tokio::test]
+    async fn list_active_database_backend_matches_expected_order() {
+        sqlx::any::install_default_drivers();
+        let db = crate::db::Database::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        let repo = JobRepo::new(db.pool.clone());
+
+        let mut running = make_test_job("run-1", JobStatus::Running);
+        running.created_at = "2026-05-17T10:00:00Z".to_string();
+        let mut paused = make_test_job("pause-1", JobStatus::Paused);
+        paused.created_at = "2026-05-17T11:00:00Z".to_string();
+        let mut done_new = make_test_job("done-1", JobStatus::Done);
+        done_new.created_at = "2026-05-17T12:00:00Z".to_string();
+        let mut failed_old = make_test_job("failed-1", JobStatus::Failed);
+        failed_old.created_at = "2026-05-16T08:00:00Z".to_string();
+
+        repo.insert_test_job(running).await.unwrap();
+        repo.insert_test_job(paused).await.unwrap();
+        repo.insert_test_job(done_new).await.unwrap();
+        repo.insert_test_job(failed_old).await.unwrap();
+
+        let summaries = repo.list_active(10).await.unwrap();
+        let ids: Vec<&str> = summaries.iter().map(|s| s.id.as_str()).collect();
+
+        // Active (DESC by created_at): pause-1 (11:00), run-1 (10:00)
+        // Terminal (DESC by created_at, LIMIT 10): done-1 (12:00), failed-1 (May 16)
+        assert_eq!(ids, vec!["pause-1", "run-1", "done-1", "failed-1"]);
+
+        // Sanity-check the SUBSTR path: insert a job with a multi-line simc_input
+        // and confirm list_active still returns it without truncation-induced errors.
+        let mut chatty = make_test_job("chatty-1", JobStatus::Running);
+        chatty.created_at = "2026-05-17T13:00:00Z".to_string();
+        chatty.simc_input = "deathknight=\"Tester\"\n".repeat(500); // > 4 KB
+        repo.insert_test_job(chatty).await.unwrap();
+
+        let summaries = repo.list_active(10).await.unwrap();
+        let ids: Vec<&str> = summaries.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids[0], "chatty-1");
+        let chatty_summary = summaries.iter().find(|s| s.id == "chatty-1").unwrap();
+        assert_eq!(chatty_summary.player_name.as_deref(), Some("Tester"));
     }
 }
