@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { API_URL } from '../lib/api';
+import { API_URL, fetchJson } from '../lib/api';
 import { useLanguage } from '../lib/i18n';
 import { useSimContext } from '../components/sim-config/SimContext';
 
@@ -345,8 +345,7 @@ export default function HistoryPage() {
   useEffect(() => {
     if (isDesktop !== true) return;
     setLoading(true);
-    fetch(`${API_URL}/api/sims`)
-      .then((r) => (r.ok ? r.json() : []))
+    fetchJson<JobSummary[]>(`${API_URL}/api/sims`)
       .then((data) => setSims(Array.isArray(data) ? data : []))
       .catch(() => setSims([]))
       .finally(() => setLoading(false));
@@ -367,10 +366,9 @@ export default function HistoryPage() {
       return;
     }
     setLoading(true);
-    fetch(
+    fetchJson<JobSummary[]>(
       `${API_URL}/api/sims?player=${encodeURIComponent(char.name)}&realm=${encodeURIComponent(char.realm)}`
     )
-      .then((r) => (r.ok ? r.json() : []))
       .then((data) => setSims(Array.isArray(data) ? data : []))
       .catch(() => setSims([]))
       .finally(() => setLoading(false));

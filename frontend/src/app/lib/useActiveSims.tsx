@@ -60,29 +60,32 @@ function usePolledActiveSims(): UseActiveSimsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  // poll lives in a ref so `refresh` outside the effect can fire it. Defined
+  // once on mount inside the effect — never reassigned per render.
   const pollRef = useRef<() => Promise<void>>(async () => undefined);
-
-  pollRef.current = async () => {
-    try {
-      const list = await fetchActiveJobs();
-      if (!mountedRef.current) return;
-      setJobs((prev) => (jobListsEqual(prev, list) ? prev : list));
-      setError(null);
-    } catch (e: unknown) {
-      if (!mountedRef.current) return;
-      setError(e instanceof Error ? e.message : 'Failed to fetch active sims');
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  };
 
   useEffect(() => {
     mountedRef.current = true;
     let timer: number | undefined;
 
+    const poll = async () => {
+      try {
+        const list = await fetchActiveJobs();
+        if (!mountedRef.current) return;
+        setJobs((prev) => (jobListsEqual(prev, list) ? prev : list));
+        setError(null);
+      } catch (e: unknown) {
+        if (!mountedRef.current) return;
+        setError(e instanceof Error ? e.message : 'Failed to fetch active sims');
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    };
+    pollRef.current = poll;
+
     const schedule = () => {
       if (document.visibilityState !== 'visible') return;
-      pollRef.current();
+      void poll();
       timer = window.setTimeout(schedule, POLL_INTERVAL_MS);
     };
 
