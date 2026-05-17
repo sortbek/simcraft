@@ -11,6 +11,7 @@ use crate::db::{
     ComboDedupRepo, ComboMetadataInsert, ComboMetadataRepo, TriageBatchesRepo,
 };
 use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIteratorConfig};
+use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, TriageCheckpoint, StagedCheckpoint};
 
 // Defaults locked from calibration (Task 28). Treat as initial values.
 // Batch size targets keep individual batches small enough that a pause mid-Triage
@@ -73,6 +74,23 @@ pub struct BatchDriver<'a> {
     pub job_id: &'a str,
 }
 
+/// Write the Checkpoint JSON blob to jobs.checkpoint inside the caller's
+/// transaction. Used by pre_simc_phase so the batch_idx + cursor + survivor
+/// counts land atomically with the dedup INSERTs and triage_batches row.
+async fn write_checkpoint_in_tx(
+    executor: &mut sqlx::AnyConnection,
+    job_id: &str,
+    checkpoint: &Checkpoint,
+) -> Result<(), sqlx::Error> {
+    let json = checkpoint.to_json_string().unwrap_or_default();
+    sqlx::query("UPDATE jobs SET checkpoint = $1 WHERE id = $2")
+        .bind(&json)
+        .bind(job_id)
+        .execute(&mut *executor)
+        .await?;
+    Ok(())
+}
+
 impl<'a> BatchDriver<'a> {
     /// Pull `target_count` candidates from the iterator. Snapshot existing keys
     /// in the SAME transaction as dedup inserts to detect duplicates. Assigns
@@ -83,6 +101,7 @@ impl<'a> BatchDriver<'a> {
         iter: &mut ProfilesetIterator,
         state: &mut TriageState,
         target_count: usize,
+        constants: TriageConstants,
     ) -> Result<PreSimcResult, sqlx::Error> {
         // 1. Pull candidates.
         let start_cursor: Vec<usize> = iter.cursor().to_vec();
@@ -153,6 +172,30 @@ impl<'a> BatchDriver<'a> {
                 accepted.len() as i64,
             )
             .await?;
+
+        // Persist Checkpoint inside the same transaction so cursor + batch state
+        // land atomically with the dedup rows. On resume:
+        //   - triage_batches shows this batch as 'committed' (not yet 'completed')
+        //   - jobs.checkpoint shows next_cursor = where we'll resume from after this batch
+        //   - if simc never finishes for this batch, resume re-runs it (dedup is idempotent)
+        let checkpoint = Checkpoint {
+            phase: CheckpointPhase::Triage(TriageCheckpoint {
+                // After the current batch completes, the iterator will be at the cursor
+                // we just captured as end_cursor. That's where the NEXT batch starts.
+                next_cursor: end_cursor.clone(),
+                // state.next_batch_idx still holds the CURRENT batch's idx; it'll be
+                // incremented after this commit. Persist the post-increment value so
+                // resume picks up the next batch.
+                next_batch_idx: state.next_batch_idx + 1,
+                // state.next_combo_id was already advanced for this batch's accepted candidates.
+                next_combo_id: state.next_combo_id,
+                estimated_total_batches: state.estimated_total_batches,
+                survivors_so_far: state.survivors_so_far,
+                avg_bytes_per_profileset: state.avg_bytes_per_profileset,
+            }),
+            constants,
+        };
+        write_checkpoint_in_tx(&mut *tx, self.job_id, &checkpoint).await?;
 
         tx.commit().await?;
         state.next_batch_idx += 1;
@@ -599,7 +642,7 @@ pub async fn run_triage_with_constants(
             format!("Preparing batch {}", state.next_batch_idx + 1),
         );
 
-        let pre = driver.pre_simc_phase(&mut iter, &mut state, target).await
+        let pre = driver.pre_simc_phase(&mut iter, &mut state, target, constants).await
             .map_err(|e| format!("Triage pre-simc DB phase failed: {}", e))?;
 
         if pre.accepted.is_empty() && pre.iterator_exhausted {
@@ -683,6 +726,26 @@ pub async fn run_triage_with_constants(
             break;
         }
     }
+
+    // Final Triage→Staged transition checkpoint. The staged pipeline (Task 4)
+    // will write its own Checkpoints from here on. If a crash happens between
+    // Triage completion and the first staged stage starting, this checkpoint
+    // is what resume uses to skip Triage entirely.
+    let final_checkpoint = Checkpoint {
+        phase: CheckpointPhase::Staged(StagedCheckpoint {
+            next_stage_idx: 0,
+            next_stage_name: "Probe".to_string(),
+            survivor_combo_ids: all_survivors.clone(),
+        }),
+        constants,
+    };
+    let json = final_checkpoint.to_json_string().unwrap_or_default();
+    let _ = sqlx::query("UPDATE jobs SET checkpoint = $1 WHERE id = $2")
+        .bind(&json)
+        .bind(inputs.job_id)
+        .execute(inputs.pool)
+        .await
+        .map_err(|e| format!("Failed to write final Triage checkpoint: {}", e))?;
 
     Ok(TriageRunResult {
         survivor_combo_ids: all_survivors,
