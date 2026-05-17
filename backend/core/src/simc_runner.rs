@@ -1319,6 +1319,7 @@ pub async fn run_simc_triage_batch(
     target_error: f64,
     simc_bin: &std::path::Path,
     job_id: &str,
+    log_buffer: std::sync::Arc<crate::log_buffer::LogBuffer>,
 ) -> Result<Vec<Value>, String> {
     // Build a minimal simc input: base profile + profilesets + sim options.
     // Intentionally bypasses build_full_simc_input to avoid injecting consumables
@@ -1348,6 +1349,8 @@ pub async fn run_simc_triage_batch(
 
     // Use `raw=true` so run_simc_subprocess skips build_full_simc_input.
     let options = serde_json::json!({});
+    let logs = log_buffer.clone();
+    let log_jid = job_id.to_string();
     let output = run_simc_subprocess(
         simc_bin,
         true, // raw — input is already fully composed above
@@ -1365,7 +1368,7 @@ pub async fn run_simc_triage_batch(
         "triage",
         false, // generate_html
         |_, _| {}, // no per-profileset progress callbacks needed
-        |_| {},    // no log callback needed
+        move |line| logs.push_line(&log_jid, line.to_string()),
     )
     .await?;
 

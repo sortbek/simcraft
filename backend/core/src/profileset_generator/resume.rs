@@ -149,6 +149,7 @@ async fn resume_triage(
     // 7. Spawn the Triage continuation as a background task.
     let pool_for_task = inputs.pool.clone();
     let repo_for_task = inputs.repo.clone();
+    let log_buffer_for_task = inputs.log_buffer.clone();
     let job_id_owned = job_id.to_string();
     let fight_style = job.fight_style.clone();
     let target_error = job.target_error;
@@ -178,6 +179,7 @@ async fn resume_triage(
             fight_style: &fight_style,
             target_error,
             base_profile: &base_profile_owned,
+            log_buffer: log_buffer_for_task,
             on_progress: Box::new(on_progress),
         };
 

@@ -402,6 +402,7 @@ async fn start_streaming_top_gear_job(
             fight_style: &fight_style,
             target_error,
             base_profile: &base_profile_owned,
+            log_buffer: log_buffer_owned.clone(),
             on_progress: Box::new(on_progress),
         };
 

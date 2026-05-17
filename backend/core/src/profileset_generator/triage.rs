@@ -586,6 +586,7 @@ pub struct TriageRunInputs<'a> {
     pub fight_style: &'a str,
     pub target_error: f64,
     pub base_profile: &'a str,
+    pub log_buffer: std::sync::Arc<crate::log_buffer::LogBuffer>,
     pub on_progress: Box<dyn Fn(u8, String) + Send + Sync + 'a>,
 }
 
@@ -702,6 +703,7 @@ pub async fn run_triage_with_constants(
             inputs.target_error,
             inputs.simc_bin,
             inputs.job_id,
+            inputs.log_buffer.clone(),
         ).await?;
 
         let global_remaining = global_remaining_for_with(&state, global_survivor_target);
