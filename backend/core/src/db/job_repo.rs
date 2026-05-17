@@ -541,9 +541,11 @@ impl JobRepo {
     /// Return all active (Pending / Running / Paused) jobs plus the most
     /// recent `limit_recent` terminal jobs. Used by the sims overview page.
     ///
-    /// The slim shape (no simc_input / result_json bodies in the returned
-    /// struct) keeps payloads small enough to poll every 2-3s without
-    /// burning memory.
+    /// Returns a slim `JobActiveSummary` (no full simc_input / result_json
+    /// bodies). The Database backend reads only the head of `simc_input`
+    /// (4 KB) to extract player_name/class via regex, keeping per-poll I/O
+    /// cheap even with many jobs. The header where the player= line lives
+    /// is always near the start of the profile, so the truncation is safe.
     pub async fn list_active(
         &self,
         limit_recent: usize,
@@ -555,7 +557,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            result_json, simc_input \
+                            SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('pending', 'running', 'paused') \
                      ORDER BY created_at DESC",
@@ -567,7 +569,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            result_json, simc_input \
+                            SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('done', 'failed', 'cancelled') \
                      ORDER BY created_at DESC LIMIT $1",
@@ -581,9 +583,8 @@ impl JobRepo {
                 for r in active_rows.iter().chain(terminal_rows.iter()) {
                     let status_str: String = r.get("status");
                     let progress_pct: i32 = r.get("progress_pct");
-                    let result_json: Option<String> = r.get("result_json");
-                    let simc_input: String = r.get("simc_input");
-                    let summary = extract_result_summary(&result_json, &simc_input);
+                    let simc_input: String = r.get("simc_input_head");
+                    let summary = extract_result_summary(&None, &simc_input);
                     out.push(JobActiveSummary {
                         id: r.get("id"),
                         status: Self::str_to_status(&status_str),
@@ -789,16 +790,10 @@ mod tests {
         let summaries = repo.list_active(10).await.unwrap();
         let ids: Vec<&str> = summaries.iter().map(|s| s.id.as_str()).collect();
 
-        assert!(ids.contains(&"run-1"));
-        assert!(ids.contains(&"pause-1"));
-        assert!(ids.contains(&"pending-1"));
-        assert!(ids.contains(&"done-1"));
-        assert!(ids.contains(&"failed-1"));
-
-        let first_terminal_idx = ids.iter().position(|i| *i == "done-1").unwrap();
-        assert!(ids.iter().take(first_terminal_idx).all(|i| {
-            *i == "run-1" || *i == "pause-1" || *i == "pending-1"
-        }));
+        // Exact expected order:
+        //   active jobs DESC by created_at: pause-1 (11:00), run-1 (10:00), pending-1 (09:00)
+        //   then terminal DESC by created_at: done-1 (12:00), failed-1 (16th 08:00)
+        assert_eq!(ids, vec!["pause-1", "run-1", "pending-1", "done-1", "failed-1"]);
     }
 
     #[tokio::test]
@@ -813,5 +808,27 @@ mod tests {
         assert_eq!(summaries.len(), 2);
         assert_eq!(summaries[0].id, "done-4");
         assert_eq!(summaries[1].id, "done-3");
+    }
+
+    #[tokio::test]
+    async fn list_active_returns_empty_for_empty_repo() {
+        let repo = JobRepo::new_memory();
+        let summaries = repo.list_active(10).await.unwrap();
+        assert!(summaries.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_active_zero_limit_drops_all_terminal() {
+        let repo = JobRepo::new_memory();
+        let mut running = make_test_job("r1", JobStatus::Running);
+        running.created_at = "2026-05-17T10:00:00Z".to_string();
+        let mut done = make_test_job("d1", JobStatus::Done);
+        done.created_at = "2026-05-17T11:00:00Z".to_string();
+        repo.insert_test_job(running).await.unwrap();
+        repo.insert_test_job(done).await.unwrap();
+
+        let summaries = repo.list_active(0).await.unwrap();
+        let ids: Vec<&str> = summaries.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["r1"]);
     }
 }
