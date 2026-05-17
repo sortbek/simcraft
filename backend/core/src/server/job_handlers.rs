@@ -2,6 +2,7 @@ use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
 
 use super::types::*;
+use super::SimcBinaries;
 use crate::db::{ComboDedupRepo, ComboMetadataRepo, JobRepo, TriageBatchesRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::{JobStatus, SimcInputMode};
@@ -171,6 +172,33 @@ pub(super) async fn pause_sim(
         "status": "pause_requested",
         "message": "Pause will take effect at the next batch or stage boundary."
     }))
+}
+
+pub(super) async fn resume_sim(
+    path: web::Path<String>,
+    repo: web::Data<JobRepo>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
+) -> HttpResponse {
+    let job_id = path.into_inner();
+    let pool = match repo.pool() {
+        Some(p) => p.clone(),
+        None => return HttpResponse::InternalServerError().json(json!({
+            "detail": "Resume requires a SQLite-backed JobRepo"
+        })),
+    };
+
+    let inputs = crate::profileset_generator::ResumeInputs {
+        pool,
+        repo: repo.get_ref().clone(),
+        log_buffer: log_buffer.get_ref().clone(),
+        simc_bins: simc_bins.get_ref().clone(),
+    };
+
+    match crate::profileset_generator::resume_job(&job_id, inputs).await {
+        Ok(()) => HttpResponse::Ok().json(json!({"status": "resumed"})),
+        Err(e) => HttpResponse::BadRequest().json(json!({"detail": e})),
+    }
 }
 
 pub(super) async fn get_sim_input(
