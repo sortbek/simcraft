@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchActiveJobs, type JobActiveSummary } from './api';
 
 const POLL_INTERVAL_MS = 2500;
@@ -26,23 +26,23 @@ export function useActiveSims(): UseActiveSimsResult {
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
+  const poll = useCallback(async () => {
+    try {
+      const list = await fetchActiveJobs();
+      if (!mountedRef.current) return;
+      setJobs(list);
+      setError(null);
+    } catch (e: unknown) {
+      if (!mountedRef.current) return;
+      setError(e instanceof Error ? e.message : 'Failed to fetch active sims');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     let timer: number | undefined;
-
-    const poll = async () => {
-      try {
-        const list = await fetchActiveJobs();
-        if (!mountedRef.current) return;
-        setJobs(list);
-        setError(null);
-      } catch (e: unknown) {
-        if (!mountedRef.current) return;
-        setError(e instanceof Error ? e.message : 'Failed to fetch active sims');
-      } finally {
-        if (mountedRef.current) setLoading(false);
-      }
-    };
 
     const schedule = () => {
       if (document.visibilityState === 'visible') {
@@ -63,7 +63,7 @@ export function useActiveSims(): UseActiveSimsResult {
       if (timer) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, []);
+  }, [poll]);
 
   const activeCount = jobs.filter((j) => ACTIVE_STATUSES.has(j.status)).length;
 
@@ -73,7 +73,7 @@ export function useActiveSims(): UseActiveSimsResult {
     loading,
     error,
     refresh: () => {
-      fetchActiveJobs().then(setJobs).catch(() => undefined);
+      void poll();
     },
   };
 }
