@@ -116,6 +116,35 @@ export default function SimResultClient() {
     };
   }, [showLogs, id, job?.status]);
 
+  // Final flush: when the job transitions to a terminal state, fetch any
+  // log lines that arrived between the last successful poll and the status
+  // change. The polling effect above stops on terminal status, so without
+  // this the trailing output (e.g. a Final stage that ran in under 1s) is
+  // lost from the UI even though it's still in the backend ring buffer.
+  useEffect(() => {
+    if (!showLogs || !id || id === '_') return;
+    if (
+      job?.status !== 'done' &&
+      job?.status !== 'failed' &&
+      job?.status !== 'cancelled'
+    )
+      return;
+    const cursor = logCursorRef.current;
+    fetch(`${API_URL}/api/sim/${id}/logs?after=${cursor}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || !data.lines || data.lines.length === 0) return;
+        setLogLines((prev) => {
+          const merged = [...prev, ...data.lines];
+          return merged.length > 1000 ? merged.slice(-1000) : merged;
+        });
+        logCursorRef.current = data.next;
+      })
+      .catch(() => {
+        /* ignore */
+      });
+  }, [showLogs, id, job?.status]);
+
   const handleToggleLogs = useCallback(() => setShowLogs((v) => !v), []);
 
   const handleToggleInputPreview = useCallback(() => {
