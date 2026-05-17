@@ -137,6 +137,18 @@ impl ComboMetadataRepo {
             .collect())
     }
 
+    /// Fetch only combo_ids for a job — used by resume_triage to seed
+    /// `already_collected_survivors` without loading profileset_simc payloads.
+    pub async fn list_combo_ids_for_job(&self, job_id: &str) -> Result<Vec<i64>, sqlx::Error> {
+        let rows = sqlx::query(
+            "SELECT combo_id FROM combo_metadata WHERE job_id = $1 ORDER BY combo_id",
+        )
+        .bind(job_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|r| r.get("combo_id")).collect())
+    }
+
     pub async fn count_for_job(&self, job_id: &str) -> Result<i64, sqlx::Error> {
         let row = sqlx::query("SELECT COUNT(*) AS n FROM combo_metadata WHERE job_id = $1")
             .bind(job_id)

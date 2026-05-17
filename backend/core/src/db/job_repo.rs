@@ -1,4 +1,4 @@
-use crate::models::{extract_result_summary, Job, JobStatus, JobSummary, SimcInputMode};
+use crate::models::{extract_result_summary, Job, JobStatus, JobStatusSummary, JobSummary, SimcInputMode};
 use sqlx::{AnyPool, Row};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -535,6 +535,82 @@ impl JobRepo {
                 .find(|j| j.id == id)
                 .map(|j| j.pause_requested)
                 .unwrap_or(false)),
+        }
+    }
+
+    /// Slim read for `get_sim_status`. Returns only the columns the status
+    /// endpoint actually reads — excludes raw_json, html_report, text_output,
+    /// request_json, and simc_input (which can be many MB for completed jobs).
+    pub async fn get_status_summary(
+        &self,
+        id: &str,
+    ) -> Result<Option<JobStatusSummary>, sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                let row = sqlx::query(
+                    "SELECT id, status, progress_pct, progress_stage, progress_detail,
+                     stages_completed, result_json, error_message, simc_input_mode,
+                     pause_requested
+                     FROM jobs WHERE id = $1",
+                )
+                .bind(id)
+                .fetch_optional(pool)
+                .await?;
+
+                Ok(row.map(|r| {
+                    let stages_str: String = r.get("stages_completed");
+                    let stages: Vec<String> =
+                        serde_json::from_str(&stages_str).unwrap_or_default();
+                    let status_str: String = r.get("status");
+                    let status = Self::str_to_status(&status_str);
+                    let pct: i32 = r.get("progress_pct");
+                    // Only return result_json when the job is done.
+                    let result_json: Option<String> = if status == JobStatus::Done {
+                        r.get("result_json")
+                    } else {
+                        None
+                    };
+                    JobStatusSummary {
+                        id: r.get("id"),
+                        status,
+                        progress_pct: pct as u8,
+                        progress_stage: r.get("progress_stage"),
+                        progress_detail: r.get("progress_detail"),
+                        stages_completed: stages,
+                        result_json,
+                        error_message: r.get("error_message"),
+                        simc_input_mode: SimcInputMode::from_str(
+                            &r.try_get::<String, _>("simc_input_mode")
+                                .unwrap_or_else(|_| "inline".to_string()),
+                        ),
+                        pause_requested: r
+                            .try_get::<i32, _>("pause_requested")
+                            .unwrap_or(0)
+                            != 0,
+                    }
+                }))
+            }
+            JobBackend::Memory(jobs) => Ok(jobs
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|j| j.id == id)
+                .map(|j| JobStatusSummary {
+                    id: j.id.clone(),
+                    status: j.status.clone(),
+                    progress_pct: j.progress_pct,
+                    progress_stage: j.progress_stage.clone(),
+                    progress_detail: j.progress_detail.clone(),
+                    stages_completed: j.stages_completed.clone(),
+                    result_json: if j.status == JobStatus::Done {
+                        j.result_json.clone()
+                    } else {
+                        None
+                    },
+                    error_message: j.error_message.clone(),
+                    simc_input_mode: j.simc_input_mode,
+                    pause_requested: j.pause_requested,
+                })),
         }
     }
 }

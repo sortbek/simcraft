@@ -39,7 +39,7 @@ pub(super) async fn get_sim_status(
     repo: web::Data<JobRepo>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
-    let job = match repo.get(&job_id).await {
+    let job = match repo.get_status_summary(&job_id).await {
         Ok(Some(j)) => j,
         Ok(None) => {
             return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
@@ -49,41 +49,26 @@ pub(super) async fn get_sim_status(
         }
     };
 
-    let status_str = match job.status {
-        JobStatus::Pending => "pending",
-        JobStatus::Running => "running",
-        JobStatus::Paused => "paused",
-        JobStatus::Done => "done",
-        JobStatus::Failed => "failed",
-        JobStatus::Cancelled => "cancelled",
-    };
-
     let progress = match job.status {
         JobStatus::Done => 100,
         _ => job.progress_pct as i32,
     };
 
-    let parsed_result: Option<Value> = if job.status == JobStatus::Done {
-        job.result_json
-            .as_ref()
-            .and_then(|s| serde_json::from_str(s).ok())
-    } else {
-        None
-    };
+    let parsed_result: Option<Value> = job
+        .result_json
+        .as_ref()
+        .and_then(|s| serde_json::from_str(s).ok());
 
     HttpResponse::Ok().json(json!({
         "id": job.id,
-        "status": status_str,
+        "status": job.status,
         "progress": progress,
         "progress_stage": job.progress_stage,
         "progress_detail": job.progress_detail,
         "stages_completed": job.stages_completed,
         "result": parsed_result,
         "error": job.error_message,
-        "simc_input_mode": match job.simc_input_mode {
-            SimcInputMode::Inline => "inline",
-            SimcInputMode::Streamed => "streamed",
-        },
+        "simc_input_mode": job.simc_input_mode.as_str(),
         "pause_requested": job.pause_requested,
     }))
 }

@@ -111,13 +111,14 @@ async fn resume_triage(
 
     // 2. Re-load already-collected survivors from combo_metadata so the
     // all_survivors accumulator in run_triage_with_constants is seeded correctly
-    // for the final Triage→Staged handoff checkpoint.
+    // for the final Triage→Staged handoff checkpoint. Only combo_ids are needed;
+    // loading full rows (including profileset_simc payloads) would be ~200 MB at
+    // 150K survivors.
     let metadata_repo = crate::db::ComboMetadataRepo::new(inputs.pool.clone());
-    let rows = metadata_repo
-        .list_for_job(job_id, None)
+    let already_collected_survivors = metadata_repo
+        .list_combo_ids_for_job(job_id)
         .await
         .map_err(|e| format!("Failed to load survivors: {}", e))?;
-    let already_collected_survivors: Vec<i64> = rows.iter().map(|r| r.combo_id).collect();
 
     // 3. Rebuild the iterator config from request_json.
     let iter_cfg =

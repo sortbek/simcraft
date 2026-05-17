@@ -80,6 +80,23 @@ pub struct JobSummary {
     pub batch_id: Option<String>,
 }
 
+/// Slim view of a Job row used by the status polling endpoint.
+/// Excludes large columns (raw_json, html_report, text_output, request_json,
+/// simc_input) that are unnecessary for a 2-second poll.
+#[derive(Debug, Clone)]
+pub struct JobStatusSummary {
+    pub id: String,
+    pub status: JobStatus,
+    pub progress_pct: u8,
+    pub progress_stage: Option<String>,
+    pub progress_detail: Option<String>,
+    pub stages_completed: Vec<String>,
+    pub result_json: Option<String>,
+    pub error_message: Option<String>,
+    pub simc_input_mode: SimcInputMode,
+    pub pause_requested: bool,
+}
+
 pub struct ResultSummary {
     pub player_name: Option<String>,
     pub player_class: Option<String>,
