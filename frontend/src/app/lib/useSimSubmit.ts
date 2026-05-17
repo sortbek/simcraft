@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSimContext } from '../components/sim-config/SimContext';
-import { API_URL } from './api';
+import { API_URL, fetchActiveJobs } from './api';
 import { useLanguage } from './i18n';
 import { decodeHeader } from './talentDecode';
 import { SPEC_ID_TO_NAME } from './types';
@@ -76,6 +76,26 @@ export function useSimSubmit({
         setError(err);
         return;
       }
+    }
+
+    // Soft warning if other sims are already running. v1 uses confirm()
+    // — a styled modal is a future polish.
+    try {
+      const active = await fetchActiveJobs();
+      const activeCount = active.filter((j) =>
+        ['pending', 'running'].includes(j.status)
+      ).length;
+      if (activeCount >= 1) {
+        const stronger = activeCount >= 2;
+        const message = stronger
+          ? `You have ${activeCount} sims already running. Adding another will slow them all down significantly. Consider pausing one of the active sims first. Continue anyway?`
+          : `You have 1 sim already running. Each simc uses all CPU cores by default — running multiple at once will slow each one down proportionally. Continue?`;
+        if (!window.confirm(message)) {
+          return;
+        }
+      }
+    } catch {
+      // If the active-list fetch fails, fall through silently — don't block submission on a stat call.
     }
 
     const pagePayload = buildPayload();
