@@ -73,15 +73,142 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
     }
 }
 
-/// Triage-phase resume. Task 7 fills this in.
+/// Triage-phase resume. Reconstructs the iterator, restores state from the
+/// checkpoint, discards any orphaned committed-pending batches, and spawns
+/// `run_triage_with_constants` to continue from the saved cursor.
 async fn resume_triage(
-    _job_id: &str,
-    _job: &Job,
-    _request_json: &str,
-    _checkpoint: &Checkpoint,
-    _inputs: ResumeInputs,
+    job_id: &str,
+    job: &Job,
+    request_json: &str,
+    checkpoint: &Checkpoint,
+    inputs: ResumeInputs,
 ) -> Result<(), String> {
-    Err("resume_triage not yet implemented (Phase 2 Task 7)".to_string())
+    let triage_cp = match &checkpoint.phase {
+        CheckpointPhase::Triage(tc) => tc,
+        _ => return Err("resume_triage called with non-Triage checkpoint".to_string()),
+    };
+
+    // 1. Clean up orphaned committed-but-not-completed batches.
+    // The pre_simc_phase checkpoint already advanced next_cursor and next_batch_idx
+    // past these batches, so we trust the checkpoint and delete the orphan rows.
+    // Their dedup rows stay — harmless, since the iterator only moves forward.
+    let triage_repo = crate::db::TriageBatchesRepo::new(inputs.pool.clone());
+    let pending = triage_repo
+        .committed_pending(job_id)
+        .await
+        .map_err(|e| format!("Failed to load committed-pending batches: {}", e))?;
+    for batch in &pending {
+        let _ = sqlx::query("DELETE FROM triage_batches WHERE job_id = $1 AND batch_idx = $2")
+            .bind(job_id)
+            .bind(batch.batch_idx)
+            .execute(&inputs.pool)
+            .await;
+    }
+
+    // 2. Re-load already-collected survivors from combo_metadata so the
+    // all_survivors accumulator in run_triage_with_constants is seeded correctly
+    // for the final Triage→Staged handoff checkpoint.
+    let metadata_repo = crate::db::ComboMetadataRepo::new(inputs.pool.clone());
+    let rows = metadata_repo
+        .list_for_job(job_id, None)
+        .await
+        .map_err(|e| format!("Failed to load survivors: {}", e))?;
+    let already_collected_survivors: Vec<i64> = rows.iter().map(|r| r.combo_id).collect();
+
+    // 3. Rebuild the iterator config from request_json.
+    let iter_cfg =
+        super::iterator_from_request::build_iterator_from_request_json(request_json)?;
+
+    // 4. Restore TriageState from the checkpoint.
+    let restored_state = super::triage::TriageState {
+        next_combo_id: triage_cp.next_combo_id,
+        next_batch_idx: triage_cp.next_batch_idx,
+        survivors_so_far: triage_cp.survivors_so_far,
+        avg_bytes_per_profileset: triage_cp.avg_bytes_per_profileset,
+        estimated_total_batches: triage_cp.estimated_total_batches,
+    };
+    let resume_state = super::triage::TriageResumeState {
+        state: restored_state,
+        cursor: triage_cp.next_cursor.clone(),
+        already_collected_survivors,
+    };
+
+    // 5. Flip status back to Running and clear pause_requested.
+    inputs
+        .repo
+        .set_pause_requested(job_id, false)
+        .await
+        .map_err(|e| format!("Failed to clear pause_requested: {}", e))?;
+    inputs
+        .repo
+        .update_status(job_id, crate::models::JobStatus::Running)
+        .await
+        .map_err(|e| format!("Failed to set Running: {}", e))?;
+
+    // 6. Resolve the simc binary (use the default branch).
+    let simc_bin_path = inputs
+        .simc_bins
+        .resolve("")
+        .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
+
+    // 7. Spawn the Triage continuation as a background task.
+    let pool_for_task = inputs.pool.clone();
+    let repo_for_task = inputs.repo.clone();
+    let job_id_owned = job_id.to_string();
+    let fight_style = job.fight_style.clone();
+    let target_error = job.target_error;
+    let base_profile_owned = job.simc_input.clone();
+    let constants_for_task = checkpoint.constants;
+    let estimate = constants_for_task.global_survivor_target as u64;
+
+    tokio::spawn(async move {
+        let on_progress = {
+            let repo = repo_for_task.clone();
+            let jid = job_id_owned.clone();
+            move |pct: u8, detail: String| {
+                // Map triage 0-100 → overall 5-50
+                let mapped: u8 = (5u32 + (pct as u32 * 45 / 100)).min(50) as u8;
+                let r = repo.clone();
+                let i = jid.clone();
+                tokio::spawn(async move {
+                    let _ = r.update_progress(&i, mapped, "Triage", &detail).await;
+                });
+            }
+        };
+
+        let triage_inputs = super::triage::TriageRunInputs {
+            pool: &pool_for_task,
+            job_id: &job_id_owned,
+            simc_bin: &simc_bin_path,
+            fight_style: &fight_style,
+            target_error,
+            base_profile: &base_profile_owned,
+            on_progress: Box::new(on_progress),
+        };
+
+        match super::triage::run_triage_with_constants(
+            iter_cfg,
+            triage_inputs,
+            estimate,
+            constants_for_task,
+            Some(resume_state),
+        )
+        .await
+        {
+            Ok(_result) => {
+                // Triage finished. The final Staged checkpoint was written by
+                // run_triage_with_constants. The user can click Resume again to
+                // enter the staged path once Task 8 is implemented.
+            }
+            Err(e) => {
+                let _ = repo_for_task
+                    .set_error(&job_id_owned, &format!("Triage resume failed: {}", e))
+                    .await;
+            }
+        }
+    });
+
+    Ok(())
 }
 
 /// Staged-phase resume. Task 8 fills this in.

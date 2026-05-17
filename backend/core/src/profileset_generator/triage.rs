@@ -582,6 +582,18 @@ pub struct TriageRunInputs<'a> {
     pub on_progress: Box<dyn Fn(u8, String) + Send + Sync + 'a>,
 }
 
+/// State needed to resume a paused Triage run from its last checkpoint.
+pub struct TriageResumeState {
+    /// Restored TriageState (next_combo_id, next_batch_idx, etc.).
+    pub state: TriageState,
+    /// Cursor position to seek the iterator to before pulling the next batch.
+    pub cursor: Vec<usize>,
+    /// combo_ids of survivors already accepted in prior batches. Used to seed
+    /// the all_survivors accumulator so the final Triage→Staged checkpoint
+    /// includes everything, not just survivors from the resumed batches.
+    pub already_collected_survivors: Vec<i64>,
+}
+
 /// Production entry point. Delegates to `run_triage_with_constants` using
 /// `TriageConstants::default()`, so existing callers are unaffected.
 pub async fn run_triage(
@@ -589,7 +601,7 @@ pub async fn run_triage(
     inputs: TriageRunInputs<'_>,
     estimated_total_combos: u64,
 ) -> Result<TriageRunResult, String> {
-    run_triage_with_constants(iter_cfg, inputs, estimated_total_combos, TriageConstants::default()).await
+    run_triage_with_constants(iter_cfg, inputs, estimated_total_combos, TriageConstants::default(), None).await
 }
 
 /// Full Triage run with explicit constants. Called by `run_triage` (production)
@@ -599,6 +611,7 @@ pub async fn run_triage_with_constants(
     inputs: TriageRunInputs<'_>,
     estimated_total_combos: u64,
     constants: TriageConstants,
+    resume: Option<TriageResumeState>,  // None = fresh run; Some = resumed from checkpoint
 ) -> Result<TriageRunResult, String> {
     // Shadow module-level consts with values from the constants struct so all
     // helper call-sites below read from the struct without needing extra parameters.
@@ -624,9 +637,18 @@ pub async fn run_triage_with_constants(
         job_id: inputs.job_id,
     };
 
+    let (mut state, mut all_survivors, resume_cursor) = match resume {
+        Some(rs) => (rs.state, rs.already_collected_survivors, Some(rs.cursor)),
+        None => (TriageState::default(), Vec::new(), None),
+    };
+
     let mut iter = ProfilesetIterator::new(iter_cfg);
-    let mut state = TriageState::default();
-    let mut all_survivors: Vec<i64> = Vec::new();
+    if let Some(cursor) = resume_cursor {
+        if !iter.seek(cursor) {
+            return Err("Resume cursor seek failed — request_json may not match the checkpoint".to_string());
+        }
+    }
+
     let mut total_candidates = 0usize;
     let mut total_accepted = 0usize;
 
