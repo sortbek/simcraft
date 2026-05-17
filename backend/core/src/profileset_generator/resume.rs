@@ -2,14 +2,14 @@
 //! `jobs.checkpoint`, the normalized request from `jobs.request_json`,
 //! validates state, and dispatches to the phase-appropriate continuation.
 
-use std::sync::Arc;
 use sqlx::AnyPool;
+use std::sync::Arc;
 
+use super::checkpoint::{Checkpoint, CheckpointPhase};
 use crate::db::JobRepo;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus, SimcInputMode};
 use crate::server::SimcBinaries;
-use super::checkpoint::{Checkpoint, CheckpointPhase};
 
 /// Bundle of dependencies the resume code needs. Built once by the HTTP
 /// handler and threaded through to the phase-specific continuations.
@@ -33,10 +33,7 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
         .ok_or_else(|| "Job not found".to_string())?;
 
     if job.status != JobStatus::Paused {
-        return Err(format!(
-            "Job is not paused (status is {})",
-            job.status
-        ));
+        return Err(format!("Job is not paused (status is {})", job.status));
     }
 
     if !matches!(job.simc_input_mode, SimcInputMode::Streamed) {
@@ -58,8 +55,12 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
 
     // 2. Dispatch by phase.
     match checkpoint.phase {
-        CheckpointPhase::Triage(_) => resume_triage(job_id, &job, request_json, &checkpoint, inputs).await,
-        CheckpointPhase::Staged(_) => resume_staged(job_id, &job, request_json, &checkpoint, inputs).await,
+        CheckpointPhase::Triage(_) => {
+            resume_triage(job_id, &job, request_json, &checkpoint, inputs).await
+        }
+        CheckpointPhase::Staged(_) => {
+            resume_staged(job_id, &job, request_json, &checkpoint, inputs).await
+        }
     }
 }
 
@@ -73,9 +74,41 @@ fn simc_branch_from_payload(payload: &serde_json::Value) -> &str {
         .unwrap_or("")
 }
 
+struct TriageRewind {
+    cursor: Vec<usize>,
+    next_batch_idx: i64,
+    next_combo_id: i64,
+}
+
+fn rewind_for_pending_batches(
+    checkpoint: &super::checkpoint::TriageCheckpoint,
+    pending: &[crate::db::TriageBatchRow],
+) -> Result<Option<TriageRewind>, String> {
+    let Some(first_pending) = pending.first() else {
+        return Ok(None);
+    };
+
+    let cursor: Vec<usize> = serde_json::from_str(&first_pending.start_cursor_json)
+        .map_err(|e| format!("Invalid pending triage start cursor: {}", e))?;
+    let accepted_to_replay: i64 = pending
+        .iter()
+        .map(|batch| batch.accepted_count.unwrap_or(0))
+        .sum();
+    let next_combo_id = checkpoint
+        .next_combo_id
+        .saturating_sub(accepted_to_replay)
+        .max(1);
+
+    Ok(Some(TriageRewind {
+        cursor,
+        next_batch_idx: first_pending.batch_idx,
+        next_combo_id,
+    }))
+}
+
 /// Triage-phase resume. Reconstructs the iterator, restores state from the
-/// checkpoint, discards any orphaned committed-pending batches, and spawns
-/// `run_triage_with_constants` to continue from the saved cursor.
+/// checkpoint, rewinds any committed-pending batches, and spawns
+/// `run_triage_with_constants` to continue from the correct cursor.
 async fn resume_triage(
     job_id: &str,
     job: &Job,
@@ -88,25 +121,28 @@ async fn resume_triage(
         _ => return Err("resume_triage called with non-Triage checkpoint".to_string()),
     };
 
-    // 1. Clean up orphaned committed-but-not-completed batches. The checkpoint we
-    // wrote inside pre_simc_phase already advanced next_cursor PAST this batch,
-    // so resume continues from there. Dedup rows for orphan batches stay; they
-    // don't interfere with the forward-only iterator. Net effect: any
-    // candidates accepted in the orphan batch but never sim'd are silently
-    // skipped. Worst-case data loss: one batch's worth of survivors. Acceptable
-    // for Phase 2 v1 — the alternative is rewinding cursor + deleting dedup
-    // rows, which is materially more complex.
+    // 1. Clean up committed-but-not-completed batches. The checkpoint is written
+    // before simc runs, so a crash here means the batch's dedup keys exist but
+    // survivor metadata does not. Delete those batch-scoped keys and rewind to
+    // the first pending batch's start cursor so no candidates are lost.
     let triage_repo = crate::db::TriageBatchesRepo::new(inputs.pool.clone());
+    let dedup_repo = crate::db::ComboDedupRepo::new(inputs.pool.clone());
     let pending = triage_repo
         .committed_pending(job_id)
         .await
         .map_err(|e| format!("Failed to load committed-pending batches: {}", e))?;
+    let rewind = rewind_for_pending_batches(triage_cp, &pending)?;
     for batch in &pending {
-        let _ = sqlx::query("DELETE FROM triage_batches WHERE job_id = $1 AND batch_idx = $2")
+        dedup_repo
+            .delete_for_batch(job_id, batch.batch_idx)
+            .await
+            .map_err(|e| format!("Failed to delete pending dedup keys: {}", e))?;
+        sqlx::query("DELETE FROM triage_batches WHERE job_id = $1 AND batch_idx = $2")
             .bind(job_id)
             .bind(batch.batch_idx)
             .execute(&inputs.pool)
-            .await;
+            .await
+            .map_err(|e| format!("Failed to delete pending triage batch: {}", e))?;
     }
 
     // 2. Re-load already-collected survivors from combo_metadata so the
@@ -122,23 +158,29 @@ async fn resume_triage(
 
     // 3. Rebuild the iterator config from request_json. Also parse the
     // envelope once so step 6 can read options.simc_branch without re-parsing.
-    let iter_cfg =
-        super::iterator_from_request::build_iterator_from_request_json(request_json)?;
+    let iter_cfg = super::iterator_from_request::build_iterator_from_request_json(request_json)?;
     let envelope: crate::server::request_json::NormalizedRequest =
-        serde_json::from_str(request_json)
-            .map_err(|e| format!("Invalid request_json: {}", e))?;
+        serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
 
     // 4. Restore TriageState from the checkpoint.
     let restored_state = super::triage::TriageState {
-        next_combo_id: triage_cp.next_combo_id,
-        next_batch_idx: triage_cp.next_batch_idx,
+        next_combo_id: rewind
+            .as_ref()
+            .map(|r| r.next_combo_id)
+            .unwrap_or(triage_cp.next_combo_id),
+        next_batch_idx: rewind
+            .as_ref()
+            .map(|r| r.next_batch_idx)
+            .unwrap_or(triage_cp.next_batch_idx),
         survivors_so_far: triage_cp.survivors_so_far,
         avg_bytes_per_profileset: triage_cp.avg_bytes_per_profileset,
         estimated_total_batches: triage_cp.estimated_total_batches,
     };
     let resume_state = super::triage::TriageResumeState {
         state: restored_state,
-        cursor: triage_cp.next_cursor.clone(),
+        cursor: rewind
+            .map(|r| r.cursor)
+            .unwrap_or_else(|| triage_cp.next_cursor.clone()),
         already_collected_survivors,
     };
 
@@ -244,17 +286,15 @@ async fn resume_staged(
 
     // 0. Parse the original request envelope to recover full options + base_profile.
     let envelope: crate::server::request_json::NormalizedRequest =
-        serde_json::from_str(request_json)
-            .map_err(|e| format!("Invalid request_json: {}", e))?;
+        serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
     let payload = &envelope.payload;
-    let options = payload
-        .get("options")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({
+    let options = payload.get("options").cloned().unwrap_or_else(|| {
+        serde_json::json!({
             "iterations": job.iterations,
             "target_error": job.target_error,
             "fight_style": job.fight_style,
-        }));
+        })
+    });
     let base_profile = payload
         .get("base_profile")
         .and_then(|v| v.as_str())
@@ -263,14 +303,11 @@ async fn resume_staged(
     // 1. Load survivor profileset_simc fragments for the saved combo_ids.
     let metadata_repo = crate::db::ComboMetadataRepo::new(inputs.pool.clone());
     let rows = metadata_repo
-        .list_for_job(job_id, None)
+        .list_for_combo_ids(job_id, &staged_cp.survivor_combo_ids)
         .await
         .map_err(|e| format!("Failed to load survivors: {}", e))?;
-    let id_set: std::collections::HashSet<i64> =
-        staged_cp.survivor_combo_ids.iter().copied().collect();
     let survivor_simc: String = rows
         .iter()
-        .filter(|r| id_set.contains(&r.combo_id))
         .map(|r| r.profileset_simc.as_str())
         .collect::<Vec<_>>()
         .join("\n");
@@ -282,7 +319,7 @@ async fn resume_staged(
     // Use raw base_profile prefixed with "# Base Actor\n" to match the format
     // produced by the fresh handoff_to_staged path in top_gear_handlers.rs.
     let combined = format!("# Base Actor\n{}\n{}", base_profile, survivor_simc);
-    let combo_count = id_set.len();
+    let combo_count = rows.len();
 
     // 2. Flip status back to Running and clear pause_requested.
     inputs
@@ -331,6 +368,62 @@ async fn resume_staged(
 
 #[cfg(test)]
 mod tests {
-    // Integration tests against a real sqlx pool require mocking JobRepo,
-    // which has no current mock infrastructure.
+    use super::*;
+    use crate::db::TriageBatchRow;
+
+    #[test]
+    fn rewind_for_pending_batches_replays_from_first_pending_batch() {
+        let checkpoint = super::super::checkpoint::TriageCheckpoint {
+            next_cursor: vec![9, 9],
+            next_batch_idx: 4,
+            next_combo_id: 140,
+            estimated_total_batches: 10,
+            survivors_so_far: 25,
+            avg_bytes_per_profileset: 1200,
+        };
+        let pending = vec![
+            TriageBatchRow {
+                batch_idx: 2,
+                start_cursor_json: "[3,4]".to_string(),
+                end_cursor_json: Some("[5,6]".to_string()),
+                candidate_count: Some(500),
+                accepted_count: Some(30),
+                survivors_count: None,
+                status: "committed".to_string(),
+            },
+            TriageBatchRow {
+                batch_idx: 3,
+                start_cursor_json: "[5,6]".to_string(),
+                end_cursor_json: Some("[9,9]".to_string()),
+                candidate_count: Some(500),
+                accepted_count: Some(20),
+                survivors_count: None,
+                status: "committed".to_string(),
+            },
+        ];
+
+        let rewind = rewind_for_pending_batches(&checkpoint, &pending)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(rewind.cursor, vec![3, 4]);
+        assert_eq!(rewind.next_batch_idx, 2);
+        assert_eq!(rewind.next_combo_id, 90);
+    }
+
+    #[test]
+    fn rewind_for_pending_batches_is_empty_without_pending_rows() {
+        let checkpoint = super::super::checkpoint::TriageCheckpoint {
+            next_cursor: vec![1],
+            next_batch_idx: 1,
+            next_combo_id: 5,
+            estimated_total_batches: 1,
+            survivors_so_far: 0,
+            avg_bytes_per_profileset: 0,
+        };
+
+        assert!(rewind_for_pending_batches(&checkpoint, &[])
+            .unwrap()
+            .is_none());
+    }
 }

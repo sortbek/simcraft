@@ -11,6 +11,7 @@ mod job_handlers;
 pub mod request_json;
 mod route_handlers;
 mod sim_handlers;
+mod streaming_top_gear;
 mod system_handlers;
 mod top_gear_handlers;
 mod types;

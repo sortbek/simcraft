@@ -8,7 +8,7 @@ use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
-use crate::db::{ComboMetadataRepo, JobRepo};
+use crate::db::JobRepo;
 use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
@@ -140,24 +140,30 @@ pub(super) async fn create_top_gear_sim(
         talent_builds.len().max(1),
     );
 
-    let use_streaming_path = estimate >= TRIAGE_THRESHOLD;
+    let effective_estimate = max_combinations
+        .map(|cap| estimate.min(cap as u64))
+        .unwrap_or(estimate);
+    let use_streaming_path = effective_estimate >= TRIAGE_THRESHOLD;
 
     if use_streaming_path {
         let simc = match simc_bins.resolve(&req.options.simc_branch) {
             Ok(path) => path,
             Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
         };
-        return start_streaming_top_gear_job(
-            req,
-            repo,
-            simc,
-            log_buffer,
-            base_profile,
-            items_by_slot,
-            talent_builds,
-            socketed_ids,
-            catalyst_charges,
-            estimate,
+        return super::streaming_top_gear::start_streaming_top_gear_job(
+            super::streaming_top_gear::StreamingTopGearStart {
+                req,
+                repo,
+                simc,
+                log_buffer,
+                base_profile,
+                items_by_slot,
+                talent_builds,
+                socketed_ids,
+                catalyst_charges,
+                max_combinations,
+                estimate,
+            },
         )
         .await;
     }
@@ -262,255 +268,6 @@ pub(super) async fn create_top_gear_sim(
         created_at,
     })
 }
-
-/// Full streaming triage path.
-///
-/// Creates a job with `simc_input_mode = Streamed`, inserts it, then spawns a
-/// background task that runs Triage and hands off survivors to the staged pipeline.
-#[allow(clippy::too_many_arguments)]
-async fn start_streaming_top_gear_job(
-    req: web::Json<TopGearRequest>,
-    repo: web::Data<JobRepo>,
-    simc: std::path::PathBuf,
-    log_buffer: web::Data<Arc<LogBuffer>>,
-    base_profile: String,
-    items_by_slot: HashMap<String, Vec<Value>>,
-    talent_builds: Vec<(String, String)>,
-    socketed_ids: HashSet<u64>,
-    catalyst_charges: Option<u32>,
-    estimate: u64,
-) -> HttpResponse {
-    // ── Build iterator config ─────────────────────────────────────────────────
-    let gem_opts = profileset_generator::GemEnchantOptions {
-        enchant_selections: Some(&req.enchant_selections),
-        gem_options: &req.gem_options,
-        socketed_item_ids: Some(&socketed_ids),
-        replace_gems: req.replace_gems,
-        diamond_always_use: req.diamond_always_use,
-        max_colors: req.max_colors,
-    };
-    let iter_cfg = profileset_generator::build_iterator_config(
-        &base_profile,
-        &items_by_slot,
-        &req.selected_items,
-        &talent_builds,
-        &gem_opts,
-    );
-
-    // ── Validate batch ────────────────────────────────────────────────────────
-    if let Some(resp) = validate_batch(&req.options.batch_id, repo.get_ref()).await {
-        return resp;
-    }
-
-    // ── Create Job ────────────────────────────────────────────────────────────
-    // For Streamed mode we store only the base profile as simc_input (no profilesets).
-    let options_json = req.options.to_json();
-    let display_input =
-        simc_runner::build_simc_input_from_options(&base_profile, &options_json);
-
-    let mut job = Job::new(
-        display_input,
-        "top_gear".to_string(),
-        req.options.iterations,
-        req.options.fight_style.clone(),
-        req.options.target_error,
-    );
-    job.simc_input_mode = SimcInputMode::Streamed;
-    job.batch_id = req.options.batch_id.clone();
-
-    // Normalized request envelope (mirrors eager path)
-    let max_combinations = capped_max_combinations(req.max_combinations);
-    let envelope = NormalizedRequest::new(
-        "top_gear",
-        json!({
-            "items_by_slot": items_by_slot,
-            "selected_items": req.selected_items,
-            "enchant_selections": req.enchant_selections,
-            "gem_options": req.gem_options,
-            "socketed_item_ids": socketed_ids.iter().collect::<Vec<_>>(),
-            "replace_gems": req.replace_gems,
-            "diamond_always_use": req.diamond_always_use,
-            "max_colors": req.max_colors,
-            "talent_builds": talent_builds,
-            "catalyst_charges": catalyst_charges,
-            "spec": req.options.spec_override,
-            "base_profile": base_profile,
-            "max_combinations": max_combinations,
-            "void_forge": req.void_forge,
-            "options": req.options.to_json(),
-            "streaming": true,
-            "estimate": estimate,
-        }),
-    );
-    job.request_json = Some(envelope.to_json_string().unwrap_or_default());
-
-    let job_id = job.id.clone();
-    let created_at = job.created_at.clone();
-
-    if let Err(e) = repo.insert(&job).await {
-        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
-    }
-
-    // ── Spawn background triage + staged pipeline ─────────────────────────────
-    let repo_for_task = repo.get_ref().clone();
-    let simc_bin_for_task = simc.clone();
-    let job_id_task = job_id.clone();
-    let fight_style = job.fight_style.clone();
-    let target_error = job.target_error;
-    let options_for_task = options_json.clone();
-    let base_profile_owned = base_profile.clone();
-    let log_buffer_owned = log_buffer.get_ref().clone();
-
-    tokio::spawn(async move {
-        // Progress callback: triage segment occupies 5–50% of overall progress.
-        let repo_progress = repo_for_task.clone();
-        let jid_progress = job_id_task.clone();
-
-        let on_progress = move |pct: u8, detail: String| {
-            // Map triage 0-100 → overall 5-50
-            let mapped: u8 = 5u8.saturating_add(((pct as f64) * 0.45) as u8);
-            let r = repo_progress.clone();
-            let i = jid_progress.clone();
-            tokio::spawn(async move {
-                let _ = r.update_progress(&i, mapped, "Triage", &detail).await;
-            });
-        };
-
-        let pool_opt = repo_for_task.pool().cloned();
-        let pool = match pool_opt {
-            Some(p) => p,
-            None => {
-                // In-memory backend (desktop dev mode): mark failed.
-                let _ = repo_for_task
-                    .set_error(&job_id_task, "Streaming path requires SQLite storage")
-                    .await;
-                return;
-            }
-        };
-
-        let inputs = crate::profileset_generator::triage::TriageRunInputs {
-            pool: &pool,
-            job_id: &job_id_task,
-            simc_bin: &simc_bin_for_task,
-            fight_style: &fight_style,
-            target_error,
-            base_profile: &base_profile_owned,
-            log_buffer: log_buffer_owned.clone(),
-            on_progress: Box::new(on_progress),
-        };
-
-        match crate::profileset_generator::triage::run_triage(iter_cfg, inputs, estimate).await {
-            Ok(result) => {
-                // Hand off survivors to staged pipeline (occupies 50-100% of progress).
-                let _ = repo_for_task
-                    .update_progress(&job_id_task, 50, "Staging", "Building final sim from survivors")
-                    .await;
-
-                handoff_to_staged(
-                    &pool,
-                    &repo_for_task,
-                    &simc_bin_for_task,
-                    &job_id_task,
-                    &base_profile_owned,
-                    &options_for_task,
-                    &result.survivor_combo_ids,
-                    &log_buffer_owned,
-                )
-                .await;
-            }
-            Err(e) => {
-                let _ = repo_for_task.set_error(&job_id_task, &e).await;
-                log_buffer_owned.remove(&job_id_task);
-            }
-        }
-    });
-
-    HttpResponse::Ok().json(json!({
-        "id": job_id,
-        "status": "pending",
-        "created_at": created_at,
-        "estimate": estimate,
-    }))
-}
-
-/// Read survivor profileset_simc fragments from the combo_metadata table,
-/// concatenate them with the base profile, and hand off to the existing staged pipeline.
-async fn handoff_to_staged(
-    pool: &sqlx::AnyPool,
-    repo: &JobRepo,
-    simc_bin: &std::path::Path,
-    job_id: &str,
-    base_profile: &str,
-    options: &Value,
-    survivor_combo_ids: &[i64],
-    log_buffer: &Arc<LogBuffer>,
-) {
-    let metadata_repo = ComboMetadataRepo::new(pool.clone());
-    let rows = match metadata_repo.list_for_job(job_id, None).await {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = repo
-                .set_error(job_id, &format!("Handoff: failed to read combo metadata: {}", e))
-                .await;
-            log_buffer.remove(job_id);
-            return;
-        }
-    };
-
-    if survivor_combo_ids.is_empty() {
-        let _ = repo
-            .set_error(job_id, "Triage eliminated all candidates; no survivors to sim.")
-            .await;
-        log_buffer.remove(job_id);
-        return;
-    }
-
-    let id_set: std::collections::HashSet<i64> =
-        survivor_combo_ids.iter().copied().collect();
-
-    // Use survivor profileset_simc fragments as-is. Earlier versions renamed
-    // these sequentially ("Combo 42" → "Combo 2") but that broke metadata
-    // lookup in result_parser (the combo_metadata table stays keyed by the
-    // original triage-assigned name) AND staged-pipeline resume (parse_combo_id
-    // on a renamed survivor returns the sequential index, not the real
-    // combo_id). Keeping the original names everywhere preserves the chain.
-    let survivor_simc_lines: Vec<&str> = rows
-        .iter()
-        .filter(|r| id_set.contains(&r.combo_id))
-        .map(|r| r.profileset_simc.as_str())
-        .collect();
-
-    let combo_count = survivor_simc_lines.len();
-
-    if combo_count == 0 {
-        let _ = repo
-            .set_error(job_id, "Triage produced no survivor profilesets to sim.")
-            .await;
-        log_buffer.remove(job_id);
-        return;
-    }
-
-    // Build the full simc input: base actor + profilesets.
-    let profileset_block = survivor_simc_lines.join("\n");
-    let combined_input = format!("# Base Actor\n{}\n{}", base_profile, profileset_block);
-
-    // Delegate to spawn_staged_sim. Triage already consumed 5-50% of the
-    // progress bar, so the staged pipeline starts at 50 rather than 10.
-    spawn_staged_sim(
-        repo.clone(),
-        simc_bin.to_path_buf(),
-        options.clone(),
-        job_id.to_string(),
-        combined_input,
-        combo_count,
-        log_buffer.clone(),
-        50, // streamed path: Triage consumed 5-50%, staged pipeline spans 50-95%
-        crate::models::SimcInputMode::Streamed,
-        crate::simc_runner::StagedResumeState::default(),
-        crate::profileset_generator::triage::TriageConstants::default(),
-    );
-}
-
 pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)

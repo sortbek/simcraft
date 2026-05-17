@@ -94,6 +94,21 @@ async fn write_checkpoint_in_tx(
     Ok(())
 }
 
+fn rename_profileset_candidate(
+    mut candidate: ProfilesetCandidate,
+    combo_name: &str,
+) -> ProfilesetCandidate {
+    if candidate.profileset_name == combo_name {
+        return candidate;
+    }
+
+    let old = format!("profileset.\"{}\"", candidate.profileset_name);
+    let new = format!("profileset.\"{}\"", combo_name);
+    candidate.profileset_simc = candidate.profileset_simc.replace(&old, &new);
+    candidate.profileset_name = combo_name.to_string();
+    candidate
+}
+
 impl<'a> BatchDriver<'a> {
     /// Pull `target_count` candidates from the iterator. Snapshot existing keys
     /// in the SAME transaction as dedup inserts to detect duplicates. Assigns
@@ -152,22 +167,21 @@ impl<'a> BatchDriver<'a> {
             .await?;
 
         self.dedup_repo
-            .insert_chunked(&mut *tx, self.job_id, &candidate_keys)
+            .insert_chunked(&mut *tx, self.job_id, batch_idx, &candidate_keys)
             .await?;
 
         // Filter pending â†’ accepted (new keys only). Assign combo_ids.
-        // state.next_combo_id is incremented here but NOT persisted in the checkpoint.
-        // If the process crashes between this commit and commit_survivors, the next
-        // combo_id values are lost. Phase 2 resume must reconstruct next_combo_id from
-        // MAX(combo_id) over committed-but-not-completed batches' accepted_count, or
-        // from the dedup rows. See review Important #7 and spec §5 resume flow.
+        // state.next_combo_id is incremented here and persisted in the checkpoint.
+        // If the process crashes before commit_survivors, resume rewinds to this
+        // batch's start cursor and deletes the batch-scoped dedup keys.
         let mut accepted: Vec<AcceptedCandidate> = Vec::new();
         for (cand, key) in pending.into_iter().zip(candidate_keys.iter()) {
             if !existing.contains(key) {
                 let combo_id = state.next_combo_id;
                 state.next_combo_id += 1;
                 let combo_name = format!("Combo {}", combo_id);
-                accepted.push(AcceptedCandidate { candidate: cand, combo_id, combo_name });
+                let candidate = rename_profileset_candidate(cand, &combo_name);
+                accepted.push(AcceptedCandidate { candidate, combo_id, combo_name });
             }
         }
 
@@ -187,7 +201,8 @@ impl<'a> BatchDriver<'a> {
         // land atomically with the dedup rows. On resume:
         //   - triage_batches shows this batch as 'committed' (not yet 'completed')
         //   - jobs.checkpoint shows next_cursor = where we'll resume from after this batch
-        //   - if simc never finishes for this batch, resume re-runs it (dedup is idempotent)
+        //   - if simc never finishes for this batch, resume deletes this batch's
+        //     dedup keys and replays it from start_cursor.
         let checkpoint = Checkpoint {
             phase: CheckpointPhase::Triage(TriageCheckpoint {
                 // After the current batch completes, the iterator will be at the cursor
@@ -538,6 +553,30 @@ mod retention_tests {
             combo_id,
             combo_name: name.to_string(),
         }
+    }
+
+    #[test]
+    fn rename_profileset_candidate_keeps_simc_names_in_sync_with_combo_id() {
+        let candidate = ProfilesetCandidate {
+            cursor_at_emission: vec![1, 0, 0],
+            profileset_name: "Combo 8".to_string(),
+            profileset_simc:
+                "profileset.\"Combo 8\"+=head=,id=1\nprofileset.\"Combo 8\"+=talents=abc"
+                    .to_string(),
+            metadata: json!(null),
+            identity_key: "same-key-after-dedup".to_string(),
+        };
+
+        let renamed = rename_profileset_candidate(candidate, "Combo 3");
+
+        assert_eq!(renamed.profileset_name, "Combo 3");
+        assert!(renamed
+            .profileset_simc
+            .contains("profileset.\"Combo 3\"+=head"));
+        assert!(renamed
+            .profileset_simc
+            .contains("profileset.\"Combo 3\"+=talents"));
+        assert!(!renamed.profileset_simc.contains("Combo 8"));
     }
 
     #[test]

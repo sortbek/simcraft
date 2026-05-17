@@ -4,7 +4,7 @@ use std::collections::HashSet;
 /// Per-job dedup-key storage backing the streaming Triage path.
 /// Operations are designed to run inside short transactions; callers
 /// must NOT hold a transaction across simc subprocess invocation
-/// (see spec §2: transaction lifecycle).
+/// (see the transaction lifecycle notes in the streaming design).
 #[derive(Clone)]
 pub struct ComboDedupRepo {
     pool: AnyPool,
@@ -14,6 +14,7 @@ pub struct ComboDedupRepo {
 /// SQLITE_LIMIT_VARIABLE_NUMBER is historically 999, so 500 leaves
 /// margin and works on every supported version.
 const IN_CHUNK_SIZE: usize = 500;
+const INSERT_CHUNK_SIZE: usize = 400;
 
 impl ComboDedupRepo {
     pub fn new(pool: AnyPool) -> Self {
@@ -55,27 +56,47 @@ impl ComboDedupRepo {
     }
 
     /// Chunked INSERT ... ON CONFLICT DO NOTHING. Safe to call with
-    /// keys that may already exist — duplicates are silently skipped.
+    /// keys that may already exist; duplicates are silently skipped.
     ///
     /// Callers pass `&mut *tx` where `tx: sqlx::Transaction<'_, sqlx::Any>`.
     pub async fn insert_chunked(
         &self,
         executor: &mut sqlx::AnyConnection,
         job_id: &str,
+        batch_idx: i64,
         keys: &[String],
     ) -> Result<(), sqlx::Error> {
-        for chunk in keys.chunks(IN_CHUNK_SIZE) {
-            for k in chunk {
-                sqlx::query(
-                    "INSERT INTO combo_dedup (job_id, combo_key) \
-                     VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                )
-                .bind(job_id)
-                .bind(k.as_str())
-                .execute(&mut *executor)
-                .await?;
+        for chunk in keys.chunks(INSERT_CHUNK_SIZE) {
+            if chunk.is_empty() {
+                continue;
             }
+
+            let values = (0..chunk.len())
+                .map(|i| {
+                    let base = i * 3;
+                    format!("(${}, ${}, ${})", base + 1, base + 2, base + 3)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let sql = format!(
+                "INSERT INTO combo_dedup (job_id, batch_idx, combo_key) VALUES {} ON CONFLICT DO NOTHING",
+                values
+            );
+            let mut q = sqlx::query(&sql);
+            for k in chunk {
+                q = q.bind(job_id).bind(batch_idx).bind(k.as_str());
+            }
+            q.execute(&mut *executor).await?;
         }
+        Ok(())
+    }
+
+    pub async fn delete_for_batch(&self, job_id: &str, batch_idx: i64) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM combo_dedup WHERE job_id = $1 AND batch_idx = $2")
+            .bind(job_id)
+            .bind(batch_idx)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
