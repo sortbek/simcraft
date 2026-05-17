@@ -46,6 +46,7 @@ export default function SimsPage() {
   const { jobs, error, refresh } = useActiveSims();
   const [filter, setFilter] = useState<Filter>('active');
   const [busy, setBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const filtered = jobs.filter((j) =>
     filter === 'all' ? true : ['pending', 'running', 'paused'].includes(j.status)
@@ -53,9 +54,12 @@ export default function SimsPage() {
 
   const handlePause = async (id: string) => {
     setBusy(id);
+    setActionError(null);
     try {
       await pauseSim(id);
       refresh();
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Failed to pause sim');
     } finally {
       setBusy(null);
     }
@@ -63,9 +67,12 @@ export default function SimsPage() {
 
   const handleResume = async (id: string) => {
     setBusy(id);
+    setActionError(null);
     try {
       await resumeSim(id);
       refresh();
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Failed to resume sim');
     } finally {
       setBusy(null);
     }
@@ -74,9 +81,16 @@ export default function SimsPage() {
   const handleCancel = async (id: string) => {
     if (!window.confirm('Cancel this sim? This cannot be undone.')) return;
     setBusy(id);
+    setActionError(null);
     try {
-      await fetch(`${API_URL}/api/sim/${id}/cancel`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/sim/${id}/cancel`, { method: 'POST' });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Cancel failed (${res.status})`);
+      }
       refresh();
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Failed to cancel sim');
     } finally {
       setBusy(null);
     }
@@ -117,9 +131,9 @@ export default function SimsPage() {
         </div>
       </div>
 
-      {error && (
+      {(error || actionError) && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-[13px] text-red-400">
-          {error}
+          {actionError ?? error}
         </div>
       )}
 
