@@ -1031,7 +1031,7 @@ fn parse_combo_id(name: &str) -> Option<i64> {
 /// Resume calls pass the `next_stage_idx` from the Staged checkpoint to skip
 /// already-completed stages. The `simc_input` must already contain only the
 /// survivor profilesets for the resumed stage.
-#[allow(clippy::too_many_arguments)]
+
 /// Persist a Staged checkpoint and check whether a pause has been requested.
 /// No-op for non-Streamed jobs or when no pool is configured.
 ///
@@ -1067,6 +1067,7 @@ async fn write_staged_checkpoint_and_check_pause(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_simc_staged(
     simc_path: &Path,
     job_id: &str,
@@ -1236,6 +1237,9 @@ pub async fn run_simc_staged(
         let stage_names = list_profileset_names(&current_input);
         let total_batches = (stage_names.len() + batch_size - 1) / batch_size;
         let batches: Vec<&[String]> = stage_names.chunks(batch_size).collect();
+        // Survivor ids for this stage don't change across batches — compute once.
+        let stage_survivor_combo_ids: Vec<i64> =
+            stage_names.iter().filter_map(|n| parse_combo_id(n)).collect();
 
         let mut all_results: Vec<Value> = std::mem::take(&mut resumed_batch_results);
         let mut last_batch_json: Option<Value> = None;
@@ -1325,14 +1329,12 @@ pub async fn run_simc_staged(
             // stays as the input to this stage (unchanged mid-stage); next_batch_idx
             // advances; batch_results holds accumulated profileset results so we can
             // skip already-completed batches on resume.
-            let survivor_combo_ids: Vec<i64> =
-                stage_names.iter().filter_map(|n| parse_combo_id(n)).collect();
             let checkpoint = crate::profileset_generator::checkpoint::Checkpoint {
                 phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
                     crate::profileset_generator::checkpoint::StagedCheckpoint {
                         next_stage_idx: stage_idx,
                         next_stage_name: stage.name.to_string(),
-                        survivor_combo_ids,
+                        survivor_combo_ids: stage_survivor_combo_ids.clone(),
                         next_batch_idx: batch_idx + 1,
                         batch_results: all_results.clone(),
                     },

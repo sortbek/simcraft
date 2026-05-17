@@ -278,6 +278,16 @@ pub(super) async fn sim_row(
     );
 
     let fight_style = source.fight_style.clone();
+    // Inherit the simc branch from the source job — if the parent ran on
+    // a PTR / custom / dev build, the verify needs the same binary to be
+    // comparable. Falls back to the default branch when no override.
+    let simc_branch = envelope
+        .payload
+        .get("options")
+        .and_then(|o| o.get("simc_branch"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     // Fixed Quick Sim precision: 0.05% target_error, matching the
     // /quick-sim default. The point of the verify button is to nail down the
     // row's true DPS, so we always go to full Quick Sim precision regardless
@@ -291,7 +301,12 @@ pub(super) async fn sim_row(
         "desired_targets": 1,
         "max_time": 300,
         "single_actor_batch": true,
+        "simc_branch": simc_branch,
     });
+
+    // Render the input the same way Quick Sim does so "View Raw Input" on
+    // the new job shows the full simc input with options inline.
+    let display_input = simc_runner::build_simc_input_from_options(&combined_input, &options);
 
     // The new job is a regular Quick Sim. The verify-of metadata is preserved
     // in request_json so the UI can label it later if it wants.
@@ -307,7 +322,7 @@ pub(super) async fn sim_row(
     );
 
     let mut job = Job::new(
-        combined_input.clone(),
+        display_input,
         "quick".to_string(),
         iterations,
         fight_style,
@@ -321,7 +336,7 @@ pub(super) async fn sim_row(
         return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
     }
 
-    let simc = match simc_bins.resolve("") {
+    let simc = match simc_bins.resolve(&simc_branch) {
         Ok(path) => path,
         Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
     };

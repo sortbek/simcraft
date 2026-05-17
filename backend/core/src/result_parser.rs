@@ -233,13 +233,13 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         .get("desired_targets")
         .and_then(|v| v.as_u64())
         .unwrap_or(1);
-    // The user's `target_error` is simc's 95% CI half-width target. Use it
-    // directly so the displayed error matches what was asked for. simc
-    // typically delivers it (subject to iteration budget); when it doesn't,
-    // the per-row precision badge surfaces the actual achieved precision.
-    let error_pct = target_error;
-    // Match the absolute number to the percent so they stay coherent.
-    let dps_error_abs = dps_mean * target_error / 100.0;
+    // Achieved 95% CI half-width as a percent of the mean (matches the
+    // semantics of the user's `target_error` input). When simc hits target
+    // this equals target_error; when it undershoots (iteration budget), the
+    // displayed number is honestly larger. Same formula as the per-row badges
+    // so the hero card and the rows agree.
+    let error_pct = precision_pct_from_simc(dps_data, dps_mean).unwrap_or(target_error);
+    let dps_error_abs = dps_mean * error_pct / 100.0;
 
     let mut result = json!({
         "player_name": player.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown"),
@@ -620,12 +620,12 @@ pub fn parse_top_gear_result(
         .get("max_time")
         .and_then(|v| v.as_f64())
         .unwrap_or(300.0);
-    // Use the user's target_error as the displayed precision (it's the
-    // 95% CI half-width simc was asked to deliver). The per-row precision
-    // badges show what each row actually achieved, so anything that drifted
-    // is visible there.
-    let error_pct = target_error;
-    let dps_error_abs = base_dps * target_error / 100.0;
+    // Achieved 95% CI half-width as % of mean — same formula as the per-row
+    // precision badges so the hero card and the rows agree. Falls back to
+    // target_error when mean_std_dev is missing.
+    let dps_block = collected.get("dps").unwrap_or(&empty);
+    let error_pct = precision_pct_from_simc(dps_block, base_dps).unwrap_or(target_error);
+    let dps_error_abs = base_dps * error_pct / 100.0;
 
     json!({
         "type": "top_gear",
