@@ -13,16 +13,19 @@ use crate::db::{
 use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIteratorConfig};
 
 // Defaults locked from calibration (Task 28). Treat as initial values.
-pub const TARGET_BATCH_INPUT_BYTES: usize = 32 * 1024 * 1024;
-pub const MIN_BATCH_PROFILESETS: usize = 1_000;
-pub const MAX_BATCH_PROFILESETS: usize = 50_000;
+// Batch size targets keep individual batches small enough that a pause mid-Triage
+// only loses a small unit of work on replay (spec §5 pause/resume). At ~1.4KB per
+// profileset, 1.5 MiB ≈ 1100 profilesets per batch.
+pub const TARGET_BATCH_INPUT_BYTES: usize = 1_572_864; // 1.5 MiB
+pub const MIN_BATCH_PROFILESETS: usize = 500;
+pub const MAX_BATCH_PROFILESETS: usize = 5_000;
 pub const TRIAGE_ITERATIONS: u32 = 50;
 pub const TRIAGE_CUTOFF_MULTIPLIER: f64 = 3.0;
 pub const MIN_TRIAGE_TARGET_ERROR_FALLBACK: f64 = 1.0;
 pub const MIN_KEEP_PER_BATCH: usize = 100;
 pub const GLOBAL_SURVIVOR_TARGET: usize = 150_000;
 pub const GLOBAL_SURVIVOR_HARD_MAX: usize = 500_000;
-pub const TRIAGE_THRESHOLD: u64 = 50_000;
+pub const TRIAGE_THRESHOLD: u64 = 500;
 pub const PROBE_SIZE: usize = 100;
 
 /// State carried across batches in a single Triage run.
