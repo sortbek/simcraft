@@ -96,6 +96,13 @@ impl<'a> BatchDriver<'a> {
     /// in the SAME transaction as dedup inserts to detect duplicates. Assigns
     /// combo_ids to newly-accepted candidates. Inserts the 'committed' row in
     /// triage_batches. Commits BEFORE simc runs.
+    ///
+    /// Crash safety: the persisted checkpoint already advances next_cursor PAST
+    /// this batch's range. On resume, an orphan committed-but-not-completed row
+    /// is deleted, dedup rows stay (harmless since the iterator only moves
+    /// forward), and any candidates that were accepted but not sim'd are
+    /// silently dropped. Worst-case data loss: one batch's accepted candidates,
+    /// bounded by ~MAX_BATCH_PROFILESETS. Acceptable for Phase 2 v1.
     pub async fn pre_simc_phase(
         &self,
         iter: &mut ProfilesetIterator,

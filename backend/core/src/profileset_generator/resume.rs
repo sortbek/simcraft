@@ -88,10 +88,14 @@ async fn resume_triage(
         _ => return Err("resume_triage called with non-Triage checkpoint".to_string()),
     };
 
-    // 1. Clean up orphaned committed-but-not-completed batches.
-    // The pre_simc_phase checkpoint already advanced next_cursor and next_batch_idx
-    // past these batches, so we trust the checkpoint and delete the orphan rows.
-    // Their dedup rows stay — harmless, since the iterator only moves forward.
+    // 1. Clean up orphaned committed-but-not-completed batches. The checkpoint we
+    // wrote inside pre_simc_phase already advanced next_cursor PAST this batch,
+    // so resume continues from there. Dedup rows for orphan batches stay; they
+    // don't interfere with the forward-only iterator. Net effect: any
+    // candidates accepted in the orphan batch but never sim'd are silently
+    // skipped. Worst-case data loss: one batch's worth of survivors. Acceptable
+    // for Phase 2 v1 — the alternative is rewinding cursor + deleting dedup
+    // rows, which is materially more complex.
     let triage_repo = crate::db::TriageBatchesRepo::new(inputs.pool.clone());
     let pending = triage_repo
         .committed_pending(job_id)
