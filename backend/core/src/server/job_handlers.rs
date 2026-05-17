@@ -130,6 +130,49 @@ pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>
     }
 }
 
+pub(super) async fn pause_sim(
+    path: web::Path<String>,
+    repo: web::Data<JobRepo>,
+) -> HttpResponse {
+    let job_id = path.into_inner();
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+
+    if job.status != JobStatus::Running {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": format!(
+                "Job is not running (status is {})",
+                match job.status {
+                    JobStatus::Pending => "pending",
+                    JobStatus::Running => "running",
+                    JobStatus::Paused => "paused",
+                    JobStatus::Done => "done",
+                    JobStatus::Failed => "failed",
+                    JobStatus::Cancelled => "cancelled",
+                }
+            )
+        }));
+    }
+
+    if matches!(job.simc_input_mode, SimcInputMode::Inline) {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "Inline-mode jobs cannot be paused (only streamed Top Gear jobs support pause/resume)"
+        }));
+    }
+
+    if let Err(e) = repo.set_pause_requested(&job_id, true).await {
+        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+    }
+
+    HttpResponse::Ok().json(json!({
+        "status": "pause_requested",
+        "message": "Pause will take effect at the next batch or stage boundary."
+    }))
+}
+
 pub(super) async fn get_sim_input(
     path: web::Path<String>,
     repo: web::Data<JobRepo>,
