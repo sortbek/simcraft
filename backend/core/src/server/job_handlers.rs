@@ -80,6 +80,11 @@ pub(super) async fn get_sim_status(
         "stages_completed": job.stages_completed,
         "result": parsed_result,
         "error": job.error_message,
+        "simc_input_mode": match job.simc_input_mode {
+            SimcInputMode::Inline => "inline",
+            SimcInputMode::Streamed => "streamed",
+        },
+        "pause_requested": job.pause_requested,
     }))
 }
 

@@ -11,7 +11,7 @@ import StatWeightsTable from '../../components/results/StatWeightsTable';
 import TalentTree from '../../components/talents/TalentTree';
 import TopGearResults from '../../components/gear/TopGearResults';
 
-import { API_URL, fetchSimInputPreview, type SimInputPreview } from '../../lib/api';
+import { API_URL, fetchSimInputPreview, pauseSim, resumeSim, type SimInputPreview } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import {
   getScenarioSiblings,
@@ -22,13 +22,15 @@ import { getTopGearState } from '../../lib/topgear-state';
 
 interface JobData {
   id: string;
-  status: string;
+  status: 'pending' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
   progress: number;
   progress_stage?: string;
   progress_detail?: string;
   stages_completed?: string[];
   result: Record<string, unknown> | null;
   error: string | null;
+  simc_input_mode?: 'inline' | 'streamed';
+  pause_requested?: boolean;
 }
 
 export default function SimResultClient() {
@@ -70,7 +72,7 @@ export default function SimResultClient() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: JobData = await res.json();
         if (active) setJob(data);
-        if (active && (data.status === 'pending' || data.status === 'running')) {
+        if (active && (data.status === 'pending' || data.status === 'running' || data.status === 'paused')) {
           timer = setTimeout(poll, 2000);
         }
       } catch (err) {
@@ -179,21 +181,75 @@ export default function SimResultClient() {
     );
   }
 
-  if (job.status === 'pending' || job.status === 'running') {
+  if (job.status === 'pending' || job.status === 'running' || job.status === 'paused') {
     return (
       <div className="space-y-3">
-        <SimStatus
-          status={job.status}
-          progress={job.progress}
-          progressStage={job.progress_stage}
-          progressDetail={job.progress_detail}
-          stagesCompleted={job.stages_completed}
-          jobId={id}
-          onCancelled={() => setJob({ ...job, status: 'cancelled' })}
-          logLines={logLines}
-          showLogs={showLogs}
-          onToggleLogs={handleToggleLogs}
-        />
+        {job.status === 'paused' ? (
+          <div className="flex flex-col items-center justify-center space-y-6 py-16">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 w-72">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-wider text-amber-400">Paused</p>
+                  {job.progress_stage && (
+                    <p className="text-xs text-on-surface-variant mt-0.5">
+                      at {job.progress_stage}
+                      {job.progress_detail ? ` · ${job.progress_detail}` : ''}
+                    </p>
+                  )}
+                </div>
+                <span className="text-xl font-black text-amber-400">{job.progress}%</span>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await resumeSim(id);
+                } catch (e) {
+                  console.error('Resume failed:', e);
+                }
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
+            >
+              Resume
+            </button>
+          </div>
+        ) : (
+          <SimStatus
+            status={job.status}
+            progress={job.progress}
+            progressStage={job.progress_stage}
+            progressDetail={job.progress_detail}
+            stagesCompleted={job.stages_completed}
+            jobId={id}
+            onCancelled={() => setJob({ ...job, status: 'cancelled' })}
+            logLines={logLines}
+            showLogs={showLogs}
+            onToggleLogs={handleToggleLogs}
+          />
+        )}
+        {job.status === 'running' && job.simc_input_mode === 'streamed' && !job.pause_requested && (
+          <div className="flex justify-center">
+            <button
+              onClick={async () => {
+                try {
+                  await pauseSim(id);
+                } catch (e) {
+                  console.error('Pause failed:', e);
+                }
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-400 transition-colors hover:border-amber-500/50 hover:bg-amber-500/20"
+            >
+              Pause
+            </button>
+          </div>
+        )}
+        {job.status === 'running' && job.pause_requested && (
+          <div className="flex justify-center">
+            <span className="text-sm italic text-on-surface-variant">
+              Pausing at next checkpoint…
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-center text-[10px] uppercase tracking-wider text-on-surface-variant/40">
           <a
             href={`${API_URL}/api/sim/${id}/input`}
