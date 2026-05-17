@@ -1,6 +1,8 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { simRow } from '../../lib/api';
 import { SLOT_LABELS, specDisplayName } from '../../lib/types';
 import {
   QUALITY_COLORS,
@@ -16,6 +18,28 @@ import { useLanguage } from '../../lib/i18n';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
 import { gemBadgeClass, groupResults } from './topGearResultsUtils';
 
+/** Extract the numeric combo id from a "Combo N" result name. Returns null
+ * for any other shape (e.g. "Currently Equipped"). */
+function comboIdFromName(name: string): number | null {
+  const match = name.match(/^Combo (\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+/** Color band for a precision value (95% CI half-width as % of mean).
+ * Reflects how trustworthy the displayed DPS is, not what was targeted.
+ *   ≤0.5% → green     (Final-pass precision)
+ *   ≤1.0% → emerald   (Refine band)
+ *   ≤2.0% → yellow    (Coarse band)
+ *   ≤4.0% → orange    (Probe / rough)
+ *   >4.0% → red       (early-stage prune, treat with caution) */
+function precisionTone(pct: number): string {
+  if (pct <= 0.5) return 'text-emerald-300/80';
+  if (pct <= 1.0) return 'text-emerald-400/70';
+  if (pct <= 2.0) return 'text-yellow-300/80';
+  if (pct <= 4.0) return 'text-orange-300/80';
+  return 'text-red-400/80';
+}
+
 const INITIAL_VISIBLE = 8;
 
 interface TopGearRankingsProps {
@@ -30,6 +54,8 @@ interface TopGearRankingsProps {
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
+  sourceJobId?: string;
+  sourceIsStreamed?: boolean;
 }
 
 export default function TopGearRankings({
@@ -44,9 +70,12 @@ export default function TopGearRankings({
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
+  sourceJobId,
+  sourceIsStreamed,
 }: TopGearRankingsProps) {
   const { t } = useLanguage();
   const grouped = useMemo(() => groupResults(results, groupMode), [results, groupMode]);
+  const verifyEnabled = !!sourceJobId && !!sourceIsStreamed;
 
   return (
     <div className="card p-5">
@@ -137,6 +166,7 @@ export default function TopGearRankings({
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
+                      sourceJobId={verifyEnabled ? sourceJobId : undefined}
                     />
                   ))}
                 </div>
@@ -154,6 +184,7 @@ export default function TopGearRankings({
           gemInfoMap={gemInfoMap}
           selectedResultName={selectedResultName}
           onSelectResult={onSelectResult}
+          sourceJobId={verifyEnabled ? sourceJobId : undefined}
         />
       )}
     </div>
@@ -169,6 +200,7 @@ function RankedResults({
   gemInfoMap,
   selectedResultName,
   onSelectResult,
+  sourceJobId,
 }: {
   results: TopGearResult[];
   maxDps: number;
@@ -178,6 +210,7 @@ function RankedResults({
   gemInfoMap: Record<number, GemInfo>;
   selectedResultName: string | null;
   onSelectResult: (name: string) => void;
+  sourceJobId?: string;
 }) {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
@@ -199,6 +232,7 @@ function RankedResults({
           itemInfoMap={itemInfoMap}
           enchantInfoMap={enchantInfoMap}
           gemInfoMap={gemInfoMap}
+          sourceJobId={sourceJobId}
         />
       ))}
       {hasMore && (
@@ -229,6 +263,7 @@ function ResultRow({
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
+  sourceJobId,
 }: {
   result: TopGearResult;
   rank?: number;
@@ -240,9 +275,16 @@ function ResultRow({
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
+  /** When present, the row shows a "Sim" button that re-runs this combo as
+   * a high-precision Quick Sim. Omitted for non-streamed source jobs. */
+  sourceJobId?: string;
 }) {
   const { t } = useLanguage();
+  const router = useRouter();
+  const [verifying, setVerifying] = useState(false);
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
+  const comboId = comboIdFromName(result.name);
+  const showVerifyButton = !!sourceJobId && comboId !== null;
 
   const changedItems = result.items.filter(
     (item) => !item.is_kept && item.item_id > 0 && !item.type
@@ -374,9 +416,39 @@ function ResultRow({
               </span>
             )}
           </span>
-          <span className="w-16 text-right font-mono text-sm tabular-nums text-on-surface">
-            {Math.round(result.dps).toLocaleString()}
+          <span className="flex w-16 flex-col items-end">
+            <span className="font-mono text-sm tabular-nums text-on-surface">
+              {Math.round(result.dps).toLocaleString()}
+            </span>
+            {result.precision_pct != null && (
+              <span
+                className={`font-mono text-[10px] tabular-nums leading-none ${precisionTone(result.precision_pct)}`}
+                title={`95% confidence interval: ±${result.precision_pct.toFixed(2)}% of mean DPS`}
+              >
+                ±{result.precision_pct.toFixed(result.precision_pct >= 1 ? 1 : 2)}%
+              </span>
+            )}
           </span>
+          {showVerifyButton && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!sourceJobId || comboId == null || verifying) return;
+                setVerifying(true);
+                try {
+                  const newId = await simRow(sourceJobId, comboId);
+                  router.push(`/sim/${newId}`);
+                } catch {
+                  setVerifying(false);
+                }
+              }}
+              disabled={verifying}
+              title="Re-run this row as a high-precision Quick Sim"
+              className="rounded border border-outline-variant/20 bg-surface-container-high/60 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-primary-container/30 hover:text-primary disabled:opacity-50"
+            >
+              {verifying ? '…' : 'Sim'}
+            </button>
+          )}
         </div>
       </div>
     </div>

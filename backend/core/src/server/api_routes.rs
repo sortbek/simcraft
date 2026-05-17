@@ -16,6 +16,10 @@ use super::upgrade_compare;
 pub(super) fn configure(cfg: &mut web::ServiceConfig) {
     cfg.route("/api/sim", web::post().to(sim_handlers::create_sim))
         .route(
+            "/api/sim/{id}/sim-row",
+            web::post().to(sim_handlers::sim_row),
+        )
+        .route(
             "/api/top-gear/sim",
             web::post().to(top_gear_handlers::create_top_gear_sim),
         )

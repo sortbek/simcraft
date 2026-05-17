@@ -1,4 +1,7 @@
 use actix_web::{web, HttpResponse};
+use once_cell::sync::Lazy;
+use regex::Regex;
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -6,10 +9,10 @@ use super::helpers::*;
 use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
-use crate::db::JobRepo;
+use crate::db::{ComboMetadataRepo, JobRepo};
 use crate::game_data;
 use crate::log_buffer::LogBuffer;
-use crate::models::{Job, JobStatus};
+use crate::models::{Job, JobStatus, SimcInputMode};
 use crate::result_parser;
 use crate::simc_runner;
 
@@ -155,4 +158,276 @@ pub(super) async fn create_sim(
         status: "pending".to_string(),
         created_at,
     })
+}
+
+#[derive(Deserialize)]
+pub(super) struct SimRowRequest {
+    combo_id: i64,
+}
+
+/// Strip the `profileset."<name>"+=` prefix from each line so the overrides
+/// apply directly to the base actor instead of as a profileset comparison.
+/// Used by sim_row to re-run a single Top Gear result row as a high-precision
+/// Quick Sim.
+fn profileset_overrides_to_direct(profileset_simc: &str) -> String {
+    static PROFILESET_PREFIX_RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r#"^\s*profileset\."[^"]+"\+="#).unwrap());
+    profileset_simc
+        .lines()
+        .map(|line| PROFILESET_PREFIX_RE.replace(line, "").into_owned())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Re-run a single Top Gear result row as a high-precision Quick Sim. Takes
+/// the source job's `base_profile` from `request_json`, the row's gear/talents
+/// from `combo_metadata.profileset_simc`, and applies the overrides directly
+/// to the base actor. Returns the new job_id; the caller navigates to its
+/// result page.
+pub(super) async fn sim_row(
+    path: web::Path<String>,
+    req: web::Json<SimRowRequest>,
+    repo: web::Data<JobRepo>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
+    log_buffer: web::Data<Arc<LogBuffer>>,
+) -> HttpResponse {
+    let source_id = path.into_inner();
+
+    let source = match repo.get(&source_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(json!({"detail": "Source job not found"}))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
+    };
+
+    if source.sim_type != "top_gear" {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "sim-row is only supported for top_gear jobs"
+        }));
+    }
+    if source.simc_input_mode != SimcInputMode::Streamed {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "sim-row requires a streamed-mode (large combo count) source job"
+        }));
+    }
+
+    let request_json = match source.request_json.as_deref() {
+        Some(j) => j,
+        None => {
+            return HttpResponse::InternalServerError().json(json!({
+                "detail": "Source job has no request_json — cannot reconstruct base profile"
+            }))
+        }
+    };
+    let envelope: NormalizedRequest = match serde_json::from_str(request_json) {
+        Ok(e) => e,
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({
+                "detail": format!("Invalid request_json on source job: {}", e)
+            }))
+        }
+    };
+    let base_profile = match envelope
+        .payload
+        .get("base_profile")
+        .and_then(|v| v.as_str())
+    {
+        Some(s) => s.to_string(),
+        None => {
+            return HttpResponse::InternalServerError().json(json!({
+                "detail": "Source job's request_json missing base_profile"
+            }))
+        }
+    };
+
+    let pool = match repo.pool() {
+        Some(p) => p.clone(),
+        None => {
+            return HttpResponse::BadRequest().json(json!({
+                "detail": "sim-row requires SQLite-backed storage"
+            }))
+        }
+    };
+    let metadata_repo = ComboMetadataRepo::new(pool);
+    let combo_name = format!("Combo {}", req.combo_id);
+    let row = match metadata_repo.get_by_name(&source_id, &combo_name).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(json!({
+                "detail": format!("{} not found in source job's metadata", combo_name)
+            }))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
+    };
+
+    // Apply the combo's overrides directly to the base actor — simc parses
+    // top-to-bottom, so the trailing slot= / talents= lines override the
+    // matching lines in base_profile.
+    let direct_overrides = profileset_overrides_to_direct(&row.profileset_simc);
+    let combined_input = format!(
+        "{}\n# Sim-row verification of combo {} from job {}\n{}\n",
+        base_profile.trim_end(),
+        req.combo_id,
+        source_id,
+        direct_overrides
+    );
+
+    let fight_style = source.fight_style.clone();
+    // Fixed Quick Sim precision: 0.05% target_error, matching the
+    // /quick-sim default. The point of the verify button is to nail down the
+    // row's true DPS, so we always go to full Quick Sim precision regardless
+    // of what the parent Top Gear job used.
+    let target_error = 0.05_f64;
+    let iterations: u32 = 100_000;
+    let options = json!({
+        "fight_style": fight_style,
+        "target_error": target_error,
+        "iterations": iterations,
+        "desired_targets": 1,
+        "max_time": 300,
+        "single_actor_batch": true,
+    });
+
+    // The new job is a regular Quick Sim. The verify-of metadata is preserved
+    // in request_json so the UI can label it later if it wants.
+    let verify_envelope = NormalizedRequest::new(
+        "quick",
+        json!({
+            "simc_input": combined_input,
+            "sim_type": "quick",
+            "raw": true,
+            "options": options,
+            "verify_of": { "source_id": source_id, "combo_id": req.combo_id },
+        }),
+    );
+
+    let mut job = Job::new(
+        combined_input.clone(),
+        "quick".to_string(),
+        iterations,
+        fight_style,
+        target_error,
+    );
+    job.request_json = Some(verify_envelope.to_json_string().unwrap_or_default());
+    let job_id = job.id.clone();
+    let created_at = job.created_at.clone();
+
+    if let Err(e) = repo.insert(&job).await {
+        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+    }
+
+    let simc = match simc_bins.resolve("") {
+        Ok(path) => path,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+    let repo_clone = repo.get_ref().clone();
+    let logs = log_buffer.get_ref().clone();
+    let job_id_clone = job_id.clone();
+    let jid_logs = job_id.clone();
+    let created_at_for_task = created_at.clone();
+    let mut options_with_raw = options.clone();
+    options_with_raw["raw"] = json!(true);
+    let input_for_task = combined_input.clone();
+
+    tokio::spawn(async move {
+        if let Err(e) = repo_clone
+            .update_status(&job_id_clone, JobStatus::Running)
+            .await
+        {
+            eprintln!("[{}] Failed to set Running status: {}", job_id_clone, e);
+        }
+        if let Err(e) = repo_clone
+            .update_progress(&job_id_clone, 20, "Simulating", "")
+            .await
+        {
+            eprintln!("[{}] Failed to update progress: {}", job_id_clone, e);
+        }
+        let logs_cb = logs.clone();
+        let jid_cb = jid_logs.clone();
+        match simc_runner::run_simc(
+            &simc,
+            &job_id_clone,
+            &input_for_task,
+            &options_with_raw,
+            move |line| {
+                logs_cb.push_line(&jid_cb, line.to_string());
+            },
+        )
+        .await
+        {
+            Ok(output) => {
+                let mut parsed = result_parser::parse_simc_result(&output.json);
+                inject_realm(&mut parsed, &input_for_task);
+                inject_total_elapsed(&mut parsed, &created_at_for_task);
+                let result_str = serde_json::to_string(&parsed).unwrap_or_default();
+                let raw_str = serde_json::to_string(&output.json).ok();
+                if let Err(e) = repo_clone
+                    .set_result(&job_id_clone, &result_str, raw_str.as_deref())
+                    .await
+                {
+                    eprintln!("[{}] Failed to set result: {}", job_id_clone, e);
+                }
+                if let Err(e) = repo_clone
+                    .set_report_files(
+                        &job_id_clone,
+                        output.html_report.as_deref(),
+                        output.text_output.as_deref(),
+                    )
+                    .await
+                {
+                    eprintln!("[{}] Failed to set report files: {}", job_id_clone, e);
+                }
+            }
+            Err(e) => {
+                let is_cancelled = repo_clone
+                    .get(&job_id_clone)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|j| j.status == JobStatus::Cancelled)
+                    .unwrap_or(false);
+                if !is_cancelled {
+                    if let Err(db_err) = repo_clone.set_error(&job_id_clone, &e).await {
+                        eprintln!("[{}] Failed to set error: {}", job_id_clone, db_err);
+                    }
+                }
+            }
+        }
+        logs.remove(&jid_logs);
+    });
+
+    HttpResponse::Ok().json(SimResponse {
+        id: job_id,
+        status: "pending".to_string(),
+        created_at,
+    })
+}
+
+#[cfg(test)]
+mod sim_row_tests {
+    use super::*;
+
+    #[test]
+    fn strips_profileset_prefix_from_each_line() {
+        let input = "profileset.\"Combo 42\"+=head=,id=99\n\
+            profileset.\"Combo 42\"+=neck=,id=100\n\
+            profileset.\"Combo 42\"+=talents=ABCDEF";
+        let out = profileset_overrides_to_direct(input);
+        assert_eq!(
+            out,
+            "head=,id=99\nneck=,id=100\ntalents=ABCDEF"
+        );
+    }
+
+    #[test]
+    fn leaves_non_profileset_lines_alone() {
+        let input = "# comment\nhead=,id=99";
+        let out = profileset_overrides_to_direct(input);
+        assert_eq!(out, "# comment\nhead=,id=99");
+    }
 }

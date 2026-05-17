@@ -35,6 +35,8 @@ export default function TopGearResults({
   targetError,
   elapsedTime,
   backLink,
+  sourceJobId,
+  sourceIsStreamed,
 }: TopGearResultsProps) {
   const { t } = useLanguage();
   const hasEncounterData = results.some((result) => result.items.some((item) => item.encounter));
@@ -137,6 +139,8 @@ export default function TopGearResults({
         itemInfoMap={itemInfoMap}
         enchantInfoMap={enchantInfoMap}
         gemInfoMap={gemInfoMap}
+        sourceJobId={sourceJobId}
+        sourceIsStreamed={sourceIsStreamed}
       />
     </div>
   );

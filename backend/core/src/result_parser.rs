@@ -206,10 +206,6 @@ pub fn parse_simc_result(raw: &Value) -> Value {
     let dps_data = collected.get("dps").unwrap_or(&empty3);
 
     let dps_mean = dps_data.get("mean").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let dps_error = dps_data
-        .get("mean_std_dev")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
 
     let fight_length = sim
         .get("statistics")
@@ -237,11 +233,13 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         .get("desired_targets")
         .and_then(|v| v.as_u64())
         .unwrap_or(1);
-    let error_pct = if dps_mean > 0.0 {
-        (dps_error / dps_mean) * 100.0
-    } else {
-        0.0
-    };
+    // The user's `target_error` is simc's 95% CI half-width target. Use it
+    // directly so the displayed error matches what was asked for. simc
+    // typically delivers it (subject to iteration budget); when it doesn't,
+    // the per-row precision badge surfaces the actual achieved precision.
+    let error_pct = target_error;
+    // Match the absolute number to the percent so they stay coherent.
+    let dps_error_abs = dps_mean * target_error / 100.0;
 
     let mut result = json!({
         "player_name": player.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown"),
@@ -250,7 +248,7 @@ pub fn parse_simc_result(raw: &Value) -> Value {
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown"),
         "dps": round1(dps_mean),
-        "dps_error": round1(dps_error),
+        "dps_error": round1(dps_error_abs),
         "dps_error_pct": round2(error_pct),
         "fight_length": round1(fight_length),
         "desired_targets": desired_targets,
@@ -502,12 +500,22 @@ pub fn parse_top_gear_result(
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
+        // 95% CI half-width as a percent of the mean. simc reports the
+        // standard error of the mean in `mean_std_dev`; the half-width is
+        // 1.96 × that. Smaller is better. For combos that were pruned at an
+        // early stage the displayed mean carries this stage's looser CI,
+        // which the UI surfaces so users can see how trustworthy a row is.
+        let precision_pct = precision_pct_from_simc(ps, mean_dps);
+
         let mut entry = json!({
             "name": combo_name,
             "items": items,
             "dps": round1(mean_dps),
             "delta": round1(mean_dps - base_dps),
         });
+        if let Some(p) = precision_pct {
+            entry["precision_pct"] = json!(round2(p));
+        }
         if !talent_build.is_empty() {
             entry["talent_build"] = json!(talent_build);
         }
@@ -551,12 +559,19 @@ pub fn parse_top_gear_result(
         baseline_items
     };
 
+    let baseline_precision_pct = player
+        .get("collected_data")
+        .and_then(|c| c.get("dps"))
+        .and_then(|d| precision_pct_from_simc(d, base_dps));
     let mut baseline_entry = json!({
         "name": baseline_key.as_deref().unwrap_or("Currently Equipped"),
         "items": baseline_items,
         "dps": round1(base_dps),
         "delta": 0,
     });
+    if let Some(p) = baseline_precision_pct {
+        baseline_entry["precision_pct"] = json!(round2(p));
+    }
     if !baseline_talent.is_empty() {
         baseline_entry["talent_build"] = json!(baseline_talent);
     }
@@ -605,21 +620,17 @@ pub fn parse_top_gear_result(
         .get("max_time")
         .and_then(|v| v.as_f64())
         .unwrap_or(300.0);
-    let dps_error = collected
-        .get("dps")
-        .and_then(|d| d.get("mean_std_dev"))
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let error_pct = if base_dps > 0.0 {
-        (dps_error / base_dps) * 100.0
-    } else {
-        0.0
-    };
+    // Use the user's target_error as the displayed precision (it's the
+    // 95% CI half-width simc was asked to deliver). The per-row precision
+    // badges show what each row actually achieved, so anything that drifted
+    // is visible there.
+    let error_pct = target_error;
+    let dps_error_abs = base_dps * target_error / 100.0;
 
     json!({
         "type": "top_gear",
         "base_dps": round1(base_dps),
-        "dps_error": round1(dps_error),
+        "dps_error": round1(dps_error_abs),
         "dps_error_pct": round2(error_pct),
         "fight_length": round1(fight_length),
         "desired_targets": desired_targets,
@@ -637,6 +648,18 @@ pub fn parse_top_gear_result(
         "results": results,
         "equipped_gear": Value::Object(equipped_gear),
     })
+}
+
+/// 95% CI half-width as a percent of the mean, read from a simc result block
+/// that carries a `mean_std_dev` field (works for both player.collected_data.dps
+/// and individual profileset entries — same shape). Returns `None` when the
+/// input lacks the field or the mean is zero.
+fn precision_pct_from_simc(block: &Value, mean: f64) -> Option<f64> {
+    if mean <= 0.0 {
+        return None;
+    }
+    let mean_std_dev = block.get("mean_std_dev").and_then(|v| v.as_f64())?;
+    Some(1.96 * mean_std_dev / mean * 100.0)
 }
 
 fn round1(v: f64) -> f64 {
