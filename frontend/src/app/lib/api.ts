@@ -16,3 +16,21 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
   }
   return res.json();
 }
+
+/** The shape returned by GET /api/sim/:id/input/preview */
+export type SimInputPreview =
+  | { mode: 'inline'; input: string }
+  | {
+      mode: 'streamed';
+      base_profile: string;
+      survivor_count: number;
+      preview_profilesets: string[];
+      note: string;
+    };
+
+/** Fetch the SimC input preview for a job (works for both inline and streamed jobs). */
+export async function fetchSimInputPreview(jobId: string): Promise<SimInputPreview> {
+  const res = await fetch(`${API_URL}/api/sim/${jobId}/input/preview`);
+  if (!res.ok) throw new Error(`Failed to fetch input preview: ${res.status}`);
+  return res.json();
+}

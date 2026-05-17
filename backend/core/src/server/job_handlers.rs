@@ -2,9 +2,9 @@ use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
 
 use super::types::*;
-use crate::db::JobRepo;
+use crate::db::{ComboDedupRepo, ComboMetadataRepo, JobRepo, TriageBatchesRepo};
 use crate::log_buffer::LogBuffer;
-use crate::models::JobStatus;
+use crate::models::{JobStatus, SimcInputMode};
 use crate::simc_runner;
 use std::sync::Arc;
 
@@ -51,6 +51,7 @@ pub(super) async fn get_sim_status(
     let status_str = match job.status {
         JobStatus::Pending => "pending",
         JobStatus::Running => "running",
+        JobStatus::Paused => "paused",
         JobStatus::Done => "done",
         JobStatus::Failed => "failed",
         JobStatus::Cancelled => "cancelled",
@@ -108,6 +109,17 @@ pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>
         JobStatus::Pending | JobStatus::Running => {
             let _ = repo.update_status(&job_id, JobStatus::Cancelled).await;
             simc_runner::kill_job(&job_id);
+
+            // Best-effort cleanup of per-job triage rows; failures don't block cancellation.
+            if let Some(pool) = repo.pool() {
+                let dedup = ComboDedupRepo::new(pool.clone());
+                let triage = TriageBatchesRepo::new(pool.clone());
+                let metadata = ComboMetadataRepo::new(pool.clone());
+                let _ = dedup.delete_for_job(&job_id).await;
+                let _ = triage.delete_for_job(&job_id).await;
+                let _ = metadata.delete_for_job(&job_id).await;
+            }
+
             HttpResponse::Ok().json(json!({"status": "cancelled"}))
         }
         _ => HttpResponse::BadRequest().json(json!({"detail": "Job is not running"})),
@@ -129,9 +141,69 @@ pub(super) async fn get_sim_input(
         }
     };
 
+    if matches!(job.simc_input_mode, SimcInputMode::Streamed) {
+        return HttpResponse::UnprocessableEntity().json(json!({
+            "error": "streamed_input",
+            "message": "This sim used streamed input. Use /api/sim/:id/input/preview for a preview.",
+            "preview_endpoint": format!("/api/sim/{}/input/preview", job_id),
+        }));
+    }
+
     HttpResponse::Ok()
         .content_type("text/plain; charset=utf-8")
         .body(job.simc_input)
+}
+
+pub(super) async fn get_sim_input_preview(
+    path: web::Path<String>,
+    repo: web::Data<JobRepo>,
+) -> HttpResponse {
+    let job_id = path.into_inner();
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(json!({"detail": "Job not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+        }
+    };
+
+    match job.simc_input_mode {
+        SimcInputMode::Inline => HttpResponse::Ok().json(json!({
+            "mode": "inline",
+            "input": job.simc_input,
+        })),
+        SimcInputMode::Streamed => {
+            let Some(pool) = repo.pool() else {
+                return HttpResponse::InternalServerError().json(json!({
+                    "error": "no_pool",
+                    "message": "Streamed mode requires SQLite-backed JobRepo",
+                }));
+            };
+            let metadata_repo = ComboMetadataRepo::new(pool.clone());
+            let survivor_count = metadata_repo.count_for_job(&job_id).await.unwrap_or(0);
+            let preview_rows = metadata_repo
+                .list_for_job(&job_id, Some(50))
+                .await
+                .unwrap_or_default();
+            let preview_profilesets: Vec<&str> = preview_rows
+                .iter()
+                .map(|r| r.profileset_simc.as_str())
+                .collect();
+            let shown = preview_profilesets.len();
+            HttpResponse::Ok().json(json!({
+                "mode": "streamed",
+                "base_profile": job.simc_input,
+                "survivor_count": survivor_count,
+                "preview_profilesets": preview_profilesets,
+                "note": format!(
+                    "Only the first {} of {} profilesets are shown. Full input is streamed in batches and not stored.",
+                    shown, survivor_count
+                ),
+            }))
+        }
+    }
 }
 
 pub(super) async fn get_sim_raw(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {

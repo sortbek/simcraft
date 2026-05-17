@@ -1,4 +1,4 @@
-use crate::models::{extract_result_summary, Job, JobStatus, JobSummary};
+use crate::models::{extract_result_summary, Job, JobStatus, JobSummary, SimcInputMode};
 use sqlx::{AnyPool, Row};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -27,10 +27,20 @@ impl JobRepo {
         }
     }
 
+    /// Returns the underlying database pool if this repo uses a real database.
+    /// Returns None for in-memory repos (e.g. desktop fallback mode).
+    pub fn pool(&self) -> Option<&AnyPool> {
+        match &self.backend {
+            JobBackend::Database(pool) => Some(pool),
+            JobBackend::Memory(_) => None,
+        }
+    }
+
     fn status_to_str(status: &JobStatus) -> &'static str {
         match status {
             JobStatus::Pending => "pending",
             JobStatus::Running => "running",
+            JobStatus::Paused => "paused",
             JobStatus::Done => "done",
             JobStatus::Failed => "failed",
             JobStatus::Cancelled => "cancelled",
@@ -40,6 +50,7 @@ impl JobRepo {
     fn str_to_status(s: &str) -> JobStatus {
         match s {
             "running" => JobStatus::Running,
+            "paused" => JobStatus::Paused,
             "done" => JobStatus::Done,
             "failed" => JobStatus::Failed,
             "cancelled" => JobStatus::Cancelled,
@@ -60,8 +71,10 @@ impl JobRepo {
                 sqlx::query(
                     "INSERT INTO jobs (id, status, sim_type, simc_input, result_json, combo_metadata_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
-                     iterations, fight_style, target_error, created_at, batch_id)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+                     iterations, fight_style, target_error, created_at, batch_id,
+                     request_json, simc_input_mode, checkpoint, pause_requested)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                             $17, $18, $19, $20)",
                 )
                 .bind(&job.id)
                 .bind(Self::status_to_str(&job.status))
@@ -79,6 +92,10 @@ impl JobRepo {
                 .bind(job.target_error)
                 .bind(&job.created_at)
                 .bind(&job.batch_id)
+                .bind(&job.request_json)
+                .bind(job.simc_input_mode.as_str())
+                .bind(&job.checkpoint)
+                .bind(if job.pause_requested { 1i32 } else { 0i32 })
                 .execute(pool)
                 .await?;
 
@@ -106,7 +123,8 @@ impl JobRepo {
                 let row = sqlx::query(
                     "SELECT id, status, sim_type, simc_input, result_json, combo_metadata_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
-                     iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id
+                     iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
+                     request_json, simc_input_mode, checkpoint, pause_requested
                      FROM jobs WHERE id = $1",
                 )
                 .bind(id)
@@ -139,6 +157,13 @@ impl JobRepo {
                         html_report: r.get("html_report"),
                         text_output: r.get("text_output"),
                         batch_id: r.get("batch_id"),
+                        request_json: r.get("request_json"),
+                        simc_input_mode: SimcInputMode::from_str(
+                            &r.try_get::<String, _>("simc_input_mode")
+                              .unwrap_or_else(|_| "inline".to_string()),
+                        ),
+                        checkpoint: r.get("checkpoint"),
+                        pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
                     }
                 }))
             }
@@ -448,5 +473,47 @@ impl JobRepo {
                 .filter(|job| job.batch_id.as_deref() == Some(batch_id))
                 .count()),
         }
+    }
+
+    pub async fn update_checkpoint(
+        &self,
+        id: &str,
+        checkpoint: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                sqlx::query("UPDATE jobs SET checkpoint = $1 WHERE id = $2")
+                    .bind(checkpoint)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
+            JobBackend::Memory(jobs) => {
+                let mut jobs = jobs.lock().unwrap();
+                if let Some(job) = jobs.iter_mut().find(|j| j.id == id) {
+                    job.checkpoint = checkpoint.map(ToString::to_string);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn set_pause_requested(&self, id: &str, requested: bool) -> Result<(), sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                sqlx::query("UPDATE jobs SET pause_requested = $1 WHERE id = $2")
+                    .bind(if requested { 1i32 } else { 0i32 })
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
+            JobBackend::Memory(jobs) => {
+                let mut jobs = jobs.lock().unwrap();
+                if let Some(job) = jobs.iter_mut().find(|j| j.id == id) {
+                    job.pause_requested = requested;
+                }
+            }
+        }
+        Ok(())
     }
 }

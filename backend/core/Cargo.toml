@@ -26,6 +26,8 @@ ureq = { version = "3", features = ["json"] }
 flate2 = "1"
 tar = "0.4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+hex = "0.4"
 
 [dependencies.sysinfo]
 version = "0.33"

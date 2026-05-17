@@ -3,6 +3,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 use super::helpers::*;
+use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
@@ -60,12 +61,26 @@ pub(super) async fn create_droptimizer_sim(
     }))
     .unwrap_or_default();
 
+    // Build normalized request envelope for resumability.
+    let envelope = NormalizedRequest::new(
+        "droptimizer",
+        json!({
+            "base_profile": base_profile,
+            "drop_items": req.drop_items,
+            "options": req.options.to_json(),
+        }),
+    );
+
     let mut job = job;
     job.combo_metadata_json = Some(meta_json);
+    job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = req.options.batch_id.clone();
     if let Err(e) = repo.insert(&job).await {
         return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
     }
+
+    // Best-effort write of per-combo metadata rows to the combo_metadata table.
+    write_combo_metadata_table_value(repo.get_ref(), &job_id, &combo_metadata).await;
 
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
         Ok(path) => path,
@@ -80,6 +95,7 @@ pub(super) async fn create_droptimizer_sim(
         generated_input,
         combo_count,
         log_buffer.get_ref().clone(),
+        10, // inline/eager path: staged pipeline spans 10-95%
     );
 
     HttpResponse::Ok().json(SimResponse {

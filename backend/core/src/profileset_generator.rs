@@ -2,10 +2,22 @@ mod base_profile;
 mod constraints;
 mod droptimizer;
 mod enchant_gem;
+mod estimate;
+pub mod gem_combos;
+pub mod identity_key;
+pub mod iterator;
 mod selection;
 mod simc;
+pub mod triage;
 mod top_gear;
 mod upgrade_compare;
+
+pub use estimate::estimate_top_gear_combo_count;
+pub use iterator::{
+    EnchantAxis, GemCombosResolver, ProfilesetCandidate, ProfilesetIterator,
+    ProfilesetIteratorConfig,
+};
+pub(crate) use top_gear::build_iterator_config;
 
 use once_cell::sync::Lazy;
 use serde_json::Value;

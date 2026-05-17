@@ -74,6 +74,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(job_handlers::get_sim_input),
         )
         .route(
+            "/api/sim/{id}/input/preview",
+            web::get().to(job_handlers::get_sim_input_preview),
+        )
+        .route(
             "/api/sim/{id}/raw",
             web::get().to(job_handlers::get_sim_raw),
         )

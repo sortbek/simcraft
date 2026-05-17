@@ -199,13 +199,14 @@ fn iterations_for_stage(stage_idx: usize, total_stages: usize, user_iters: u32) 
 }
 
 /// Progress-bar range `(start_pct, end_pct)` allocated to stage `idx` of `total`.
-/// Spans 10..95 evenly across the full schedule so skipped stages produce a
-/// visible jump forward when fast-forwarding to final.
-fn progress_range_for_stage(stage_idx: usize, total_stages: usize) -> (u8, u8) {
-    let span = 95u8 - 10u8;
+/// `base_start` is the lower bound of the allocated range (10 for inline jobs,
+/// 50 for streamed jobs that ran Triage first), and the upper bound is always 95.
+/// Skipped stages produce a visible jump forward when fast-forwarding to final.
+fn progress_range_for_stage(stage_idx: usize, total_stages: usize, base_start: u8) -> (u8, u8) {
+    let span = 95u8 - base_start;
     let per_stage = span as f64 / total_stages as f64;
-    let start = 10u8 + (stage_idx as f64 * per_stage) as u8;
-    let end = 10u8 + ((stage_idx + 1) as f64 * per_stage) as u8;
+    let start = base_start + (stage_idx as f64 * per_stage) as u8;
+    let end = base_start + ((stage_idx + 1) as f64 * per_stage) as u8;
     (start, end)
 }
 
@@ -928,6 +929,10 @@ pub async fn run_simc(
 }
 
 /// Run a multi-stage simulation for Top Gear.
+///
+/// `base_start` is the lower bound of the progress-bar range allocated to the
+/// staged pipeline (10 for inline/eager jobs, 50 for streamed jobs that ran
+/// Triage first and already consumed 5-50%).
 #[allow(clippy::too_many_arguments)]
 pub async fn run_simc_staged(
     simc_path: &Path,
@@ -935,6 +940,7 @@ pub async fn run_simc_staged(
     simc_input: &str,
     options: &Value,
     combo_count: usize,
+    base_start: u8,
     on_progress: impl Fn(u8, &str, &str),
     on_stage_complete: impl Fn(&str),
     on_log: impl Fn(&str) + Clone,
@@ -1017,7 +1023,7 @@ pub async fn run_simc_staged(
     while stage_idx < total_stages {
         let stage = &stages[stage_idx];
         let is_final = stage_idx == final_idx;
-        let (range_start, range_end) = progress_range_for_stage(stage_idx, total_stages);
+        let (range_start, range_end) = progress_range_for_stage(stage_idx, total_stages, base_start);
         let stage_iters = iterations_for_stage(stage_idx, total_stages, user_iterations);
 
         on_progress(
@@ -1158,6 +1164,80 @@ pub async fn run_simc_staged(
     }
 
     result.ok_or_else(|| "No simulation result produced".to_string())
+}
+
+/// Run simc on a single Triage batch's profileset input.
+/// Fixed 50 iterations (or the caller-supplied value), no scale factors,
+/// no HTML report, no consumables / expansion options injection.
+/// Returns the parsed `sim.profilesets.results` JSON array.
+pub async fn run_simc_triage_batch(
+    base_profile: &str,
+    profileset_simc_lines: &str,
+    iterations: u32,
+    fight_style: &str,
+    target_error: f64,
+    simc_bin: &std::path::Path,
+    job_id: &str,
+) -> Result<Vec<Value>, String> {
+    // Build a minimal simc input: base profile + profilesets + sim options.
+    // Intentionally bypasses build_full_simc_input to avoid injecting consumables
+    // and expansion options that are irrelevant for the cheap triage pass.
+    let threads = max_threads();
+    let mut triage_input = String::with_capacity(
+        base_profile.len() + profileset_simc_lines.len() + 256,
+    );
+    triage_input.push_str(base_profile);
+    triage_input.push('\n');
+    triage_input.push_str(profileset_simc_lines);
+    triage_input.push_str("\n\n# Simulation Options\n");
+    triage_input.push_str(&format!("iterations={}\n", iterations));
+    triage_input.push_str(&format!("target_error={}\n", target_error));
+    triage_input.push_str(&format!("fight_style={}\n", fight_style));
+    triage_input.push_str("calculate_scale_factors=0\n");
+    triage_input.push_str("single_actor_batch=1\n");
+    triage_input.push_str("optimize_expressions=1\n");
+    triage_input.push_str("report_details=0\n");
+    // Use parallel profilesets for triage — many profilesets, low iterations.
+    triage_input.push_str("profileset_work_threads=1\n");
+
+    // Reuse existing overrides for buffs/baseline consistency.
+    for opt in OVERRIDES {
+        triage_input.push_str(&format!("{}\n", opt));
+    }
+
+    // Use `raw=true` so run_simc_subprocess skips build_full_simc_input.
+    let options = serde_json::json!({});
+    let output = run_simc_subprocess(
+        simc_bin,
+        true, // raw — input is already fully composed above
+        job_id,
+        &triage_input,
+        &options,
+        fight_style,
+        target_error,
+        iterations,
+        threads,
+        1,     // desired_targets
+        300,   // max_time (seconds)
+        false, // calculate_scale_factors
+        true,  // single_actor_batch
+        "triage",
+        false, // generate_html
+        |_, _| {}, // no per-profileset progress callbacks needed
+        |_| {},    // no log callback needed
+    )
+    .await?;
+
+    let results = output
+        .json
+        .get("sim")
+        .and_then(|s| s.get("profilesets"))
+        .and_then(|p| p.get("results"))
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -1396,22 +1476,41 @@ mod tests {
     // ---- progress_range_for_stage ----
 
     #[test]
-    fn progress_ranges_span_10_to_95() {
-        let (start, _) = progress_range_for_stage(0, 6);
+    fn progress_ranges_span_10_to_95_inline() {
+        // Inline (eager) path: base_start = 10, spans 10..95.
+        let (start, _) = progress_range_for_stage(0, 6, 10);
         assert_eq!(start, 10);
-        let (_, end) = progress_range_for_stage(5, 6);
+        let (_, end) = progress_range_for_stage(5, 6, 10);
+        assert!(end >= 90 && end <= 95);
+    }
+
+    #[test]
+    fn progress_ranges_span_50_to_95_streamed() {
+        // Streamed path: base_start = 50, spans 50..95.
+        let (start, _) = progress_range_for_stage(0, 6, 50);
+        assert_eq!(start, 50);
+        let (_, end) = progress_range_for_stage(5, 6, 50);
         assert!(end >= 90 && end <= 95);
     }
 
     #[test]
     fn progress_ranges_are_monotonic_and_non_overlapping() {
         let total = 6;
-        let mut prev_end = 0u8;
-        for i in 0..total {
-            let (start, end) = progress_range_for_stage(i, total);
-            assert!(start >= prev_end, "stage {i} start {start} < prev end {prev_end}");
-            assert!(end > start, "stage {i} end {end} <= start {start}");
-            prev_end = end;
+        // Test both inline (base_start=10) and streamed (base_start=50) paths.
+        for base_start in [10u8, 50u8] {
+            let mut prev_end = 0u8;
+            for i in 0..total {
+                let (start, end) = progress_range_for_stage(i, total, base_start);
+                assert!(
+                    start >= prev_end,
+                    "base_start={base_start} stage {i} start {start} < prev end {prev_end}"
+                );
+                assert!(
+                    end > start,
+                    "base_start={base_start} stage {i} end {end} <= start {start}"
+                );
+                prev_end = end;
+            }
         }
     }
 

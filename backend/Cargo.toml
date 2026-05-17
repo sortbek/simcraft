@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "server"]
+members = ["core", "server", "calibration"]
 resolver = "2"
 
 [workspace.package]

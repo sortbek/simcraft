@@ -8,6 +8,7 @@ mod frontend;
 mod game_data_handlers;
 mod helpers;
 mod job_handlers;
+pub mod request_json;
 mod route_handlers;
 mod sim_handlers;
 mod system_handlers;

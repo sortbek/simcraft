@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::types::SimOptions;
-use crate::db::{self, JobRepo};
+use crate::db::{self, ComboMetadataInsert, ComboMetadataRepo, JobRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::JobStatus;
 use crate::result_parser;
@@ -287,6 +287,10 @@ fn enqueue_job_update(
 /// racing. An unbounded channel keeps these callbacks lossless because staged
 /// sim runs emit a finite burst of updates and we always await the writer drain
 /// before persisting terminal state.
+///
+/// `base_start` is the lower bound of the progress-bar range for the staged
+/// pipeline: 10 for inline/eager jobs (progress spans 10-95%), 50 for streamed
+/// jobs that ran Triage first (Triage consumed 5-50%, staged pipeline uses 50-95%).
 pub(super) fn spawn_staged_sim(
     repo: JobRepo,
     simc: PathBuf,
@@ -295,6 +299,7 @@ pub(super) fn spawn_staged_sim(
     simc_input: String,
     combo_count: usize,
     log_buffer: Arc<LogBuffer>,
+    base_start: u8,
 ) {
     tokio::spawn(async move {
         if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
@@ -338,6 +343,7 @@ pub(super) fn spawn_staged_sim(
             &simc_input,
             &options,
             combo_count,
+            base_start,
             move |pct, stage, detail| {
                 enqueue_job_update(
                     &tx_progress,
@@ -374,12 +380,19 @@ pub(super) fn spawn_staged_sim(
         match result {
             Ok(output) => {
                 let job_snap = repo.get(&job_id).await.ok().flatten();
-                let meta: Option<HashMap<String, Vec<Value>>> = job_snap
+                // Build legacy JSON fallback for combo_metadata (from the JSON column).
+                let legacy_combo_json: Option<String> = job_snap
                     .as_ref()
                     .and_then(|j| j.combo_metadata_json.as_ref())
-                    .and_then(|s| serde_json::from_str::<Value>(s).ok())
-                    .and_then(|v| v.get("_combo_metadata").cloned())
-                    .and_then(|v| serde_json::from_value(v).ok());
+                    .cloned();
+                // Prefer the combo_metadata table; fall back to legacy JSON column.
+                let raw_meta =
+                    load_combo_metadata(&repo, &job_id, legacy_combo_json.as_deref()).await;
+                let meta: Option<HashMap<String, Vec<Value>>> = if raw_meta.is_empty() {
+                    None
+                } else {
+                    Some(raw_meta)
+                };
 
                 let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
                 inject_realm(&mut parsed, &simc_input);
@@ -442,4 +455,117 @@ pub(super) async fn validate_batch(
         })));
     }
     None
+}
+
+/// Write combo_metadata rows to the `combo_metadata` table.
+/// This is a best-effort write — failures are logged but don't block the job.
+/// The legacy `combo_metadata_json` column remains the source of truth during bake-in.
+///
+/// `metadata_strs`: pre-serialized `(combo_name, metadata_json)` pairs ordered by combo_id.
+pub(super) async fn write_combo_metadata_table_raw(
+    repo: &JobRepo,
+    job_id: &str,
+    metadata_strs: &[(String, String)],
+) {
+    if metadata_strs.is_empty() {
+        return;
+    }
+    let pool = match repo.pool() {
+        Some(p) => p.clone(),
+        None => return, // in-memory backend, no table to write to
+    };
+    let metadata_repo = ComboMetadataRepo::new(pool.clone());
+
+    let mut tx = match pool.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[{}] combo_metadata table write: failed to begin tx: {}", job_id, e);
+            return;
+        }
+    };
+    let inserts: Vec<ComboMetadataInsert> = metadata_strs
+        .iter()
+        .enumerate()
+        .map(|(i, (name, meta_json))| ComboMetadataInsert {
+            combo_id: (i as i64) + 1,
+            combo_name: name.as_str(),
+            combo_key: "",
+            batch_idx: None,
+            cursor_json: "[]",
+            profileset_simc: "",
+            metadata_json: meta_json.as_str(),
+        })
+        .collect();
+    if let Err(e) = metadata_repo.insert_batch(&mut tx, job_id, &inserts).await {
+        eprintln!("[{}] combo_metadata table write failed (non-fatal): {}", job_id, e);
+        return;
+    }
+    if let Err(e) = tx.commit().await {
+        eprintln!("[{}] combo_metadata table write: commit failed (non-fatal): {}", job_id, e);
+    }
+}
+
+/// Convenience wrapper for handlers that have `HashMap<String, Vec<Value>>` combo_metadata
+/// (top_gear, enchant_gem, upgrade_compare).
+pub(super) async fn write_combo_metadata_table(
+    repo: &JobRepo,
+    job_id: &str,
+    combo_metadata: &HashMap<String, Vec<Value>>,
+) {
+    let metadata_strs: Vec<(String, String)> = combo_metadata
+        .iter()
+        .map(|(name, deltas)| {
+            (
+                name.clone(),
+                serde_json::to_string(deltas).unwrap_or_else(|_| "[]".to_string()),
+            )
+        })
+        .collect();
+    write_combo_metadata_table_raw(repo, job_id, &metadata_strs).await;
+}
+
+/// Convenience wrapper for handlers that have `HashMap<String, Value>` combo_metadata
+/// (droptimizer).
+pub(super) async fn write_combo_metadata_table_value(
+    repo: &JobRepo,
+    job_id: &str,
+    combo_metadata: &HashMap<String, Value>,
+) {
+    let metadata_strs: Vec<(String, String)> = combo_metadata
+        .iter()
+        .map(|(name, val)| {
+            (
+                name.clone(),
+                serde_json::to_string(val).unwrap_or_else(|_| "null".to_string()),
+            )
+        })
+        .collect();
+    write_combo_metadata_table_raw(repo, job_id, &metadata_strs).await;
+}
+
+/// Load combo_metadata for a job: prefer the `combo_metadata` table, fall back to
+/// the legacy `jobs.combo_metadata_json` column if the table is empty.
+pub(super) async fn load_combo_metadata(
+    repo: &JobRepo,
+    job_id: &str,
+    legacy_json: Option<&str>,
+) -> HashMap<String, Vec<Value>> {
+    if let Some(pool) = repo.pool() {
+        let meta_repo = ComboMetadataRepo::new(pool.clone());
+        if let Ok(rows) = meta_repo.list_for_job(job_id, None).await {
+            if !rows.is_empty() {
+                return rows
+                    .into_iter()
+                    .filter_map(|r| {
+                        let deltas: Vec<Value> = serde_json::from_str(&r.metadata_json).ok()?;
+                        Some((r.combo_name, deltas))
+                    })
+                    .collect();
+            }
+        }
+    }
+    // Fall back to legacy JSON column
+    legacy_json
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default()
 }

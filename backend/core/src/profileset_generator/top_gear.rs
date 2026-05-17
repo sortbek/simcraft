@@ -11,8 +11,8 @@ use super::constraints::{
 };
 use super::selection::build_slot_candidates;
 use super::simc::{
-    combinations, extract_enchant_id, extract_gem_id, extract_item_id,
-    extract_spec_id_from_talent_string, gem_color, is_diamond, set_enchant_id, set_gem_id,
+    extract_enchant_id, extract_gem_id, extract_item_id,
+    extract_spec_id_from_talent_string, is_diamond, set_enchant_id, set_gem_id,
     simc_has_socket,
 };
 use super::{GemEnchantOptions, ProfilesetResult, MAX_COMBINATIONS};
@@ -25,27 +25,160 @@ struct EnchantGemAxis {
     options: Vec<u64>,
 }
 
-fn dedupe_gem_assignments(
-    combos: Vec<HashMap<String, u64>>,
-    max_diamonds: usize,
-) -> Vec<HashMap<String, u64>> {
-    let mut seen: HashSet<Vec<u64>> = HashSet::new();
-    let mut result = Vec::new();
+/// Build a [`ProfilesetIteratorConfig`] for the streaming/triage path.
+///
+/// Mirrors the axis-building logic from [`generate_top_gear_input_with_talents`]
+/// (enchant axes, gem combo list, slot item lists, varying slots) without
+/// running the full eager generator. Called by the Top Gear handler when the
+/// estimated combo count exceeds [`TRIAGE_THRESHOLD`].
+pub(crate) fn build_iterator_config(
+    base_profile: &str,
+    items_by_slot: &HashMap<String, Vec<Value>>,
+    selected_items: &HashMap<String, Vec<String>>,
+    talent_builds: &[(String, String)],
+    gem_opts: &GemEnchantOptions,
+) -> super::iterator::ProfilesetIteratorConfig {
+    use super::iterator::{EnchantAxis, GemCombosResolver, ProfilesetIteratorConfig};
 
-    for combo in combos {
-        let diamond_count = combo.values().filter(|&&gid| is_diamond(gid)).count();
-        if diamond_count > max_diamonds {
+    let enchant_selections = gem_opts.enchants();
+    let gem_options = gem_opts.gem_options;
+    let socketed_item_ids = gem_opts.sockets();
+    let replace_gems = gem_opts.replace_gems;
+    let diamond_always_use = gem_opts.diamond_always_use;
+    let max_colors = gem_opts.max_colors;
+
+    let (_, equipped_gear, _, spec) = parse_base_profile(base_profile);
+
+    // Build slot_item_lists (same as eager path)
+    let slot_item_lists: HashMap<String, Vec<Arc<Value>>> =
+        build_slot_candidates(base_profile, items_by_slot, selected_items)
+            .into_iter()
+            .map(|(k, v)| (k, v.into_iter().map(Arc::new).collect()))
+            .collect();
+
+    // Find varying slots (> 1 item), sorted for determinism
+    let mut varying_slots: Vec<String> = slot_item_lists
+        .iter()
+        .filter(|(_, items)| items.len() > 1)
+        .map(|(slot, _)| slot.clone())
+        .collect();
+    varying_slots.sort();
+
+    // Build enchant axes (same logic as eager path's eg_axes, "enchant" kind only)
+    let mut enchant_axes: Vec<EnchantAxis> = Vec::new();
+    for (slot, ids) in enchant_selections {
+        if ids.is_empty() {
             continue;
         }
-
-        let mut key: Vec<u64> = combo.values().copied().collect();
-        key.sort();
-        if seen.insert(key) {
-            result.push(combo);
+        let equipped_simc = match equipped_gear.get(slot) {
+            Some(s) => s,
+            None => continue,
+        };
+        let current = extract_enchant_id(equipped_simc);
+        let mut options: Vec<u64> = Vec::new();
+        // Index 0 = equipped baseline
+        if current > 0 {
+            options.push(current);
+        } else {
+            options.push(0); // placeholder for "no enchant"
         }
+        for &id in ids {
+            if id != current {
+                options.push(id);
+            }
+        }
+        if options.len() <= 1 {
+            continue;
+        }
+        enchant_axes.push(EnchantAxis {
+            slot: slot.clone(),
+            options,
+        });
     }
+    enchant_axes.sort_by(|a, b| a.slot.cmp(&b.slot));
 
-    result
+    // Build gem combos (mirrors top_gear.rs lines ~262-332)
+    let gem_combos: Vec<std::collections::HashMap<String, u64>> = if !gem_options.is_empty() {
+        let mut gem_slots: Vec<String> = Vec::new();
+        for slot in crate::types::class_data::GEAR_SLOTS {
+            let slot_str = slot.to_string();
+            let equipped_has_socket = equipped_gear
+                .get(&slot_str)
+                .map(|simc| {
+                    let item_id = extract_item_id(simc);
+                    socketed_item_ids.contains(&item_id)
+                        && (replace_gems || extract_gem_id(simc) == 0)
+                })
+                .unwrap_or(false);
+            let alt_has_socket = items_by_slot
+                .get(&slot_str)
+                .map(|items| {
+                    items.iter().any(|item| {
+                        let has_sockets =
+                            item.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0) > 0;
+                        let has_gem =
+                            item.get("gem_id").and_then(|g| g.as_u64()).unwrap_or(0) > 0;
+                        has_sockets && (replace_gems || !has_gem)
+                    })
+                })
+                .unwrap_or(false);
+            if equipped_has_socket || alt_has_socket {
+                gem_slots.push(slot_str);
+            }
+        }
+
+        let mut gems: Vec<u64> = Vec::new();
+        for &gid in gem_options {
+            if !gems.contains(&gid) {
+                gems.push(gid);
+            }
+        }
+        if !replace_gems {
+            let has_equipped_diamond = equipped_gear.values().any(|simc| {
+                let gid = extract_gem_id(simc);
+                gid > 0 && is_diamond(gid)
+            });
+            if has_equipped_diamond {
+                gems.retain(|g| !is_diamond(*g));
+            }
+        }
+
+        let diamond_ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();
+        gems.retain(|g| !is_diamond(*g));
+
+        let builder = crate::profileset_generator::gem_combos::GemCombosBuilder {
+            gem_options: &gems,
+            gem_slots: &gem_slots,
+            diamond_ids: &diamond_ids,
+            diamond_always_use,
+            max_colors,
+        };
+        crate::profileset_generator::gem_combos::enumerate_all(&builder)
+    } else {
+        Vec::new()
+    };
+
+    let gem_combo_count = gem_combos.len();
+    let gem_combos_resolver = GemCombosResolver::new(gem_combos);
+
+    // Socketed item ids as HashSet<u64> (already available)
+    let socketed_ids_owned: std::collections::HashSet<u64> =
+        socketed_item_ids.iter().copied().collect();
+
+    // Talent builds: if empty, pass empty vec (iterator treats as single-pass)
+    let talent_builds_owned: Vec<(String, String)> = talent_builds.to_vec();
+
+    ProfilesetIteratorConfig {
+        spec,
+        base_profile: Arc::from(base_profile),
+        slot_item_lists,
+        varying_slots,
+        enchant_axes,
+        gem_combo_count,
+        gem_combos_resolver,
+        socketed_item_ids: socketed_ids_owned,
+        talent_builds: talent_builds_owned,
+    }
 }
 
 /// Generate a simc input string with full-set profilesets for Top Gear.
@@ -341,122 +474,14 @@ pub fn generate_top_gear_input_with_talents(
         let diamond_ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();
         gems.retain(|g| !is_diamond(*g));
 
-        // Helper: generate colored gem combos for a set of non-diamond slots
-        let gen_color_combos =
-            |slots: &[String], gems: &[u64], max_colors: bool| -> Vec<HashMap<String, u64>> {
-                if slots.is_empty() {
-                    return vec![HashMap::new()];
-                }
-                if gems.is_empty() {
-                    return vec![HashMap::new()];
-                }
-                if max_colors {
-                    let mut by_color: HashMap<String, Vec<u64>> = HashMap::new();
-                    for &gid in gems {
-                        let color = gem_color(gid).unwrap_or_else(|| "other".to_string());
-                        by_color.entry(color).or_default().push(gid);
-                    }
-                    let colors: Vec<String> = by_color.keys().cloned().collect();
-                    let n_colors = colors.len().min(slots.len());
-
-                    let color_combos = combinations(&colors, n_colors);
-                    let mut result: Vec<HashMap<String, u64>> = Vec::new();
-                    for color_set in &color_combos {
-                        let per_slot_gems: Vec<&Vec<u64>> =
-                            color_set.iter().map(|c| by_color.get(c).unwrap()).collect();
-                        let mut slot_combos: Vec<Vec<u64>> = vec![vec![]];
-                        for slot_gems in &per_slot_gems {
-                            let mut next = Vec::new();
-                            for combo in &slot_combos {
-                                for &gid in *slot_gems {
-                                    let mut c = combo.clone();
-                                    c.push(gid);
-                                    next.push(c);
-                                }
-                            }
-                            slot_combos = next;
-                        }
-                        for slot_combo in slot_combos {
-                            let combo: HashMap<String, u64> = slot_combo
-                                .iter()
-                                .enumerate()
-                                .filter(|(i, _)| *i < slots.len())
-                                .map(|(i, &gid)| (slots[i].clone(), gid))
-                                .collect();
-                            result.push(combo);
-                        }
-                    }
-                    result
-                } else {
-                    // Cartesian product: each slot independently gets each gem,
-                    // then deduplicate mirror combos (gems are slot-independent).
-                    let mut result: Vec<HashMap<String, u64>> = vec![HashMap::new()];
-                    for slot in slots {
-                        let mut next = Vec::new();
-                        for combo in &result {
-                            for &gid in gems {
-                                let mut c = combo.clone();
-                                c.insert(slot.clone(), gid);
-                                next.push(c);
-                            }
-                        }
-                        result = next;
-                    }
-                    dedupe_gem_assignments(result, 0)
-                }
-            };
-
-        if gems.is_empty() && diamond_ids.is_empty() {
-            Vec::new()
-        } else if !diamond_ids.is_empty() && diamond_always_use {
-            // Diamond always-use: try exactly one diamond in each socketed slot position.
-            let mut result: Vec<HashMap<String, u64>> = Vec::new();
-            for (d_idx, d_slot) in gem_slots.iter().enumerate() {
-                let remaining: Vec<String> = gem_slots
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| *i != d_idx)
-                    .map(|(_, s)| s.clone())
-                    .collect();
-                let color_combos = gen_color_combos(&remaining, &gems, max_colors);
-                for &did in &diamond_ids {
-                    for base in &color_combos {
-                        let mut combo = base.clone();
-                        combo.insert(d_slot.clone(), did);
-                        result.push(combo);
-                    }
-                }
-            }
-            dedupe_gem_assignments(result, 1)
-        } else if !diamond_ids.is_empty() {
-            // Diamond optional: allow either no diamond or exactly one diamond, never more.
-            let mut result = if gems.is_empty() {
-                Vec::new()
-            } else {
-                gen_color_combos(&gem_slots, &gems, max_colors)
-            };
-
-            for (d_idx, d_slot) in gem_slots.iter().enumerate() {
-                let remaining: Vec<String> = gem_slots
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| *i != d_idx)
-                    .map(|(_, s)| s.clone())
-                    .collect();
-                let color_combos = gen_color_combos(&remaining, &gems, max_colors);
-                for &did in &diamond_ids {
-                    for base in &color_combos {
-                        let mut combo = base.clone();
-                        combo.insert(d_slot.clone(), did);
-                        result.push(combo);
-                    }
-                }
-            }
-
-            dedupe_gem_assignments(result, 1)
-        } else {
-            gen_color_combos(&gem_slots, &gems, max_colors)
-        }
+        let builder = crate::profileset_generator::gem_combos::GemCombosBuilder {
+            gem_options: &gems,
+            gem_slots: &gem_slots,
+            diamond_ids: &diamond_ids,
+            diamond_always_use,
+            max_colors,
+        };
+        crate::profileset_generator::gem_combos::enumerate_all(&builder)
     } else {
         Vec::new()
     };

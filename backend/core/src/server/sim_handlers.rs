@@ -3,6 +3,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 use super::helpers::*;
+use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::db::JobRepo;
@@ -45,6 +46,18 @@ pub(super) async fn create_sim(
         simc_runner::build_simc_input_from_options(&simc_input, &options_for_display)
     };
 
+    // Build normalized request envelope for resumability.
+    let envelope = NormalizedRequest::new(
+        req.sim_type.as_str(),
+        json!({
+            "simc_input": req.simc_input,
+            "sim_type": req.sim_type,
+            "max_upgrade": req.max_upgrade,
+            "raw": req.raw,
+            "options": req.options.to_json_with_sim_type(&req.sim_type),
+        }),
+    );
+
     let mut job = Job::new(
         display_input,
         req.sim_type.clone(),
@@ -53,11 +66,13 @@ pub(super) async fn create_sim(
         req.options.target_error,
     );
     job.batch_id = req.options.batch_id.clone();
+    job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();
     if let Err(e) = repo.insert(&job).await {
         return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
     }
+    // Quick Sim has no combo_metadata, so no table write needed.
 
     let repo_clone = repo.get_ref().clone();
     let simc = match simc_bins.resolve(&req.options.simc_branch) {

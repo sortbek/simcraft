@@ -7,9 +7,33 @@ use uuid::Uuid;
 pub enum JobStatus {
     Pending,
     Running,
+    Paused,
     Done,
     Failed,
     Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SimcInputMode {
+    #[default]
+    Inline,
+    Streamed,
+}
+
+impl SimcInputMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Inline => "inline",
+            Self::Streamed => "streamed",
+        }
+    }
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "streamed" => Self::Streamed,
+            _ => Self::Inline,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +57,10 @@ pub struct Job {
     pub html_report: Option<String>,
     pub text_output: Option<String>,
     pub batch_id: Option<String>,
+    pub request_json: Option<String>,
+    pub simc_input_mode: SimcInputMode,
+    pub checkpoint: Option<String>,
+    pub pause_requested: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +174,10 @@ impl Job {
             html_report: None,
             text_output: None,
             batch_id: None,
+            request_json: None,
+            simc_input_mode: SimcInputMode::Inline,
+            checkpoint: None,
+            pause_requested: false,
         }
     }
 }

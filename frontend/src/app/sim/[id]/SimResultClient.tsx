@@ -11,7 +11,7 @@ import StatWeightsTable from '../../components/results/StatWeightsTable';
 import TalentTree from '../../components/talents/TalentTree';
 import TopGearResults from '../../components/gear/TopGearResults';
 
-import { API_URL } from '../../lib/api';
+import { API_URL, fetchSimInputPreview, type SimInputPreview } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import {
   getScenarioSiblings,
@@ -50,6 +50,10 @@ export default function SimResultClient() {
   const [showLogs, setShowLogs] = useState(true);
   const logCursorRef = useRef(0);
   const [siblings, setSiblings] = useState<ScenarioSibling[] | null>(null);
+  const [inputPreview, setInputPreview] = useState<SimInputPreview | null>(null);
+  const [inputPreviewError, setInputPreviewError] = useState('');
+  const [showInputPreview, setShowInputPreview] = useState(false);
+  const inputPreviewFetchedRef = useRef(false);
 
   useEffect(() => {
     setSiblings(getScenarioSiblings());
@@ -111,6 +115,21 @@ export default function SimResultClient() {
   }, [showLogs, id, job?.status]);
 
   const handleToggleLogs = useCallback(() => setShowLogs((v) => !v), []);
+
+  const handleToggleInputPreview = useCallback(() => {
+    setShowInputPreview((v) => {
+      const next = !v;
+      if (next && !inputPreviewFetchedRef.current) {
+        inputPreviewFetchedRef.current = true;
+        fetchSimInputPreview(id)
+          .then((data) => setInputPreview(data))
+          .catch((err) =>
+            setInputPreviewError(err instanceof Error ? err.message : 'Failed to load input'),
+          );
+      }
+      return next;
+    });
+  }, [id]);
 
   if (fetchError) {
     return (
@@ -345,6 +364,63 @@ export default function SimResultClient() {
           />
         </>
       )}
+
+      {/* Input preview (lazy-loaded on demand) */}
+      <div className="overflow-hidden rounded-xl border border-outline-variant/10">
+        <button
+          onClick={handleToggleInputPreview}
+          className="flex w-full items-center justify-between bg-surface-container-high px-4 py-2 text-left transition-colors hover:bg-surface-container-highest"
+        >
+          <span className="text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
+            SimC Input
+          </span>
+          <svg
+            className={`h-3.5 w-3.5 text-on-surface-variant/40 transition-transform ${showInputPreview ? 'rotate-180' : ''}`}
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 6l4 4 4-4" />
+          </svg>
+        </button>
+        {showInputPreview && (
+          <div className="bg-surface-container-low p-4">
+            {inputPreviewError ? (
+              <p className="text-[13px] text-red-400/70">{inputPreviewError}</p>
+            ) : !inputPreview ? (
+              <p className="text-[13px] text-on-surface-variant/40">Loading…</p>
+            ) : inputPreview.mode === 'inline' ? (
+              <pre className="max-h-[400px] overflow-y-auto whitespace-pre-wrap break-all font-mono text-[13px] leading-[1.7] text-on-surface-variant/60">
+                {inputPreview.input}
+              </pre>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant/40">
+                    Base Profile
+                  </p>
+                  <pre className="max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all font-mono text-[13px] leading-[1.7] text-on-surface-variant/60">
+                    {inputPreview.base_profile}
+                  </pre>
+                </div>
+                <div>
+                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant/40">
+                    Profilesets (preview of {inputPreview.preview_profilesets.length} of{' '}
+                    {inputPreview.survivor_count})
+                  </p>
+                  <pre className="max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all font-mono text-[13px] leading-[1.7] text-on-surface-variant/60">
+                    {inputPreview.preview_profilesets.join('\n')}
+                  </pre>
+                </div>
+                <p className="text-[12px] text-on-surface-variant/40">{inputPreview.note}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Footer links */}
       <div className="flex items-center justify-center gap-3 pb-4 text-[10px] uppercase tracking-wider text-on-surface-variant/40">
