@@ -144,7 +144,7 @@ export default function DpsHeroCard({
           {dpsError != null && dpsError > 0 && (
             <HeroMetaStat
               label={t('results.error')}
-              value={`Â± ${Math.round(dpsError).toLocaleString()}${
+              value={`± ${Math.round(dpsError).toLocaleString()}${
                 dpsErrorPct != null ? ` (${dpsErrorPct}%)` : ''
               }`}
               note={targetError != null && targetError > 0 ? `target: ${targetError}%` : undefined}
