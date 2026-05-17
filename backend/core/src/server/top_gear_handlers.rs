@@ -252,7 +252,7 @@ pub(super) async fn create_top_gear_sim(
         log_buffer.get_ref().clone(),
         10, // inline/eager path: staged pipeline spans 10-95%
         SimcInputMode::Inline,
-        0,
+        crate::simc_runner::StagedResumeState::default(),
         crate::profileset_generator::triage::TriageConstants::default(),
     );
 
@@ -468,24 +468,19 @@ async fn handoff_to_staged(
     let id_set: std::collections::HashSet<i64> =
         survivor_combo_ids.iter().copied().collect();
 
-    // Build profileset simc from survivors, renaming sequentially so the staged
-    // pipeline's combo_count is accurate.
-    let mut survivor_simc_lines: Vec<String> = Vec::new();
-    let mut combo_number = 2usize; // Combo 1 is always the base actor
-    for row in rows.iter().filter(|r| id_set.contains(&r.combo_id)) {
-        // Row's profileset_simc uses the triage-assigned name (e.g. "Combo 42").
-        // Re-number sequentially starting from 2 for the staged run.
-        let renamed = row
-            .profileset_simc
-            .replace(
-                &format!("Combo {}", row.combo_id),
-                &format!("Combo {}", combo_number),
-            );
-        survivor_simc_lines.push(renamed);
-        combo_number += 1;
-    }
+    // Use survivor profileset_simc fragments as-is. Earlier versions renamed
+    // these sequentially ("Combo 42" → "Combo 2") but that broke metadata
+    // lookup in result_parser (the combo_metadata table stays keyed by the
+    // original triage-assigned name) AND staged-pipeline resume (parse_combo_id
+    // on a renamed survivor returns the sequential index, not the real
+    // combo_id). Keeping the original names everywhere preserves the chain.
+    let survivor_simc_lines: Vec<&str> = rows
+        .iter()
+        .filter(|r| id_set.contains(&r.combo_id))
+        .map(|r| r.profileset_simc.as_str())
+        .collect();
 
-    let combo_count = combo_number - 2; // number of survivor profilesets
+    let combo_count = survivor_simc_lines.len();
 
     if combo_count == 0 {
         let _ = repo
@@ -511,7 +506,7 @@ async fn handoff_to_staged(
         log_buffer.clone(),
         50, // streamed path: Triage consumed 5-50%, staged pipeline spans 50-95%
         crate::models::SimcInputMode::Streamed,
-        0,
+        crate::simc_runner::StagedResumeState::default(),
         crate::profileset_generator::triage::TriageConstants::default(),
     );
 }

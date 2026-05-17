@@ -1,7 +1,7 @@
 ﻿//! Streaming Triage stage. Pulls candidates from a ProfilesetIterator in
 //! adaptive batches, runs cheap simc on each batch, and keeps survivors
 //! via a statistical CI-window retention with a global survivor budget.
-//! See spec Â§2 (transaction lifecycle) and Â§3 (Triage stage) for design.
+//! See spec §2 (transaction lifecycle) and §3 (Triage stage) for design.
 
 use std::collections::HashSet;
 use serde_json::Value;
@@ -15,7 +15,7 @@ use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, Triag
 
 // Defaults locked from calibration. Treat as initial values.
 // Batch size targets keep individual batches small enough that a pause mid-Triage
-// only loses a small unit of work on replay (spec Â§5 pause/resume). At ~1.4KB per
+// only loses a small unit of work on replay (spec §5 pause/resume). At ~1.4KB per
 // profileset, 1.5 MiB â‰ˆ 1100 profilesets per batch.
 // BENCHMARK TEST A: small batches (500). Pinning MIN=MAX forces every
 // batch to land exactly at 500 regardless of byte size, isolating the
@@ -160,7 +160,7 @@ impl<'a> BatchDriver<'a> {
         // If the process crashes between this commit and commit_survivors, the next
         // combo_id values are lost. Phase 2 resume must reconstruct next_combo_id from
         // MAX(combo_id) over committed-but-not-completed batches' accepted_count, or
-        // from the dedup rows. See review Important #7 and spec Â§5 resume flow.
+        // from the dedup rows. See review Important #7 and spec §5 resume flow.
         let mut accepted: Vec<AcceptedCandidate> = Vec::new();
         for (cand, key) in pending.into_iter().zip(candidate_keys.iter()) {
             if !existing.contains(key) {
@@ -307,8 +307,6 @@ fn env_usize(key: &str, fallback: usize) -> usize {
 fn env_u32(key: &str, fallback: u32) -> u32 {
     std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
 }
-
-// â”€â”€ Adaptive batch sizing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Compute the next batch's target candidate count from observed avg bytes-per-profileset.
 /// Uses module-level constants (production path).
@@ -887,6 +885,8 @@ pub async fn run_triage_with_constants(
             next_stage_idx: 0,
             next_stage_name: "Probe".to_string(),
             survivor_combo_ids: all_survivors.clone(),
+            next_batch_idx: 0,
+            batch_results: Vec::new(),
         }),
         constants,
     };

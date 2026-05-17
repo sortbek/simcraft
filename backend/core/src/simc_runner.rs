@@ -1,7 +1,7 @@
 use crate::types::RotationMode;
 use regex::Regex;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 use tempfile::TempDir;
@@ -129,20 +129,28 @@ const EXPANSION_OPTIONS: &[&str] = &[
 struct Stage {
     name: &'static str,
     target_error: f64,
+    /// Iteration cap simc receives for this stage. Tight enough that simc's
+    /// per-profileset auto-tuner stops near `target_error` rather than
+    /// overshooting toward final-pass precision. `None` means "use the user's
+    /// full iteration budget" (only the Final stage).
+    iteration_cap: Option<u32>,
 }
 
-/// Coarse-to-fine candidate target_errors used to construct the adaptive schedule.
+/// Coarse-to-fine candidate stages used to construct the adaptive schedule.
 /// Each entry produces an intermediate stage when its target_error is strictly
 /// looser than the user's requested precision. Names are paired by position so
 /// log output stays consistent across runs at different user precisions.
-const STAGE_CANDIDATES: &[(f64, &str)] = &[
-    (2.0,  "Probe"),
-    (1.0,  "Coarse"),
-    (0.5,  "Refine"),
-    (0.2,  "Medium"),
-    (0.1,  "Fine"),
-    (0.05, "Trace"),
-    (0.02, "Ultra"),
+///
+/// The third field is the iteration cap simc receives at that stage — keeping
+/// it co-located with the target_error prevents the two from drifting apart.
+const STAGE_CANDIDATES: &[(f64, &str, u32)] = &[
+    (2.0,  "Probe",  50),
+    (1.0,  "Coarse", 125),
+    (0.5,  "Refine", 500),
+    (0.2,  "Medium", 3_000),
+    (0.1,  "Fine",   12_000),
+    (0.05, "Trace",  50_000),
+    (0.02, "Ultra",  200_000),
 ];
 
 /// Build the staged schedule for the user's requested `target_error`.
@@ -159,15 +167,17 @@ const STAGE_CANDIDATES: &[(f64, &str)] = &[
 fn build_stage_schedule(user_target_error: f64) -> Vec<Stage> {
     let mut schedule: Vec<Stage> = STAGE_CANDIDATES
         .iter()
-        .filter(|(te, _)| *te > user_target_error)
-        .map(|(te, name)| Stage {
+        .filter(|(te, _, _)| *te > user_target_error)
+        .map(|(te, name, cap)| Stage {
             name,
             target_error: *te,
+            iteration_cap: Some(*cap),
         })
         .collect();
     schedule.push(Stage {
         name: "Final",
         target_error: user_target_error,
+        iteration_cap: None,
     });
     schedule
 }
@@ -177,6 +187,58 @@ fn build_stage_schedule(user_target_error: f64) -> Vec<Stage> {
 /// startup cost — for small jobs a single full-precision pass is faster.
 const STAGED_THRESHOLD: usize = 20;
 
+/// Profileset count per simc invocation for intermediate staged stages. Final
+/// stage is not batched (HTML report and result merging assume one invocation).
+/// Overridable via the `STAGED_BATCH_PROFILESETS` env var.
+pub const STAGED_BATCH_PROFILESETS: usize = 500;
+
+fn staged_batch_size() -> usize {
+    std::env::var("STAGED_BATCH_PROFILESETS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|n: &usize| *n > 0)
+        .unwrap_or(STAGED_BATCH_PROFILESETS)
+}
+
+/// Resume state for `run_simc_staged`. Built from a `StagedCheckpoint` by
+/// `resume_staged`, or `default()` for a fresh start.
+#[derive(Debug, Clone)]
+pub struct StagedResumeState {
+    pub start_stage_idx: usize,
+    /// Batch index to resume the start_stage_idx stage from. `0` = start the
+    /// stage fresh (all batches still need to run).
+    pub start_batch_idx: usize,
+    /// Profileset results accumulated from batches already completed in the
+    /// stage being resumed.
+    pub resumed_batch_results: Vec<Value>,
+}
+
+impl Default for StagedResumeState {
+    fn default() -> Self {
+        Self {
+            start_stage_idx: 0,
+            start_batch_idx: 0,
+            resumed_batch_results: Vec::new(),
+        }
+    }
+}
+
+/// Extract profileset names ("Combo N") from a simc input string in iteration
+/// order. Used to chunk an intermediate stage's input into batches.
+fn list_profileset_names(simc_input: &str) -> Vec<String> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut names: Vec<String> = Vec::new();
+    for line in simc_input.split('\n') {
+        if let Some(caps) = PROFILESET_NAME_RE.captures(line) {
+            let name = caps[1].to_string();
+            if seen.insert(name.clone()) {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
 /// Min survivors retained at any pruning step. Acts as a floor inside
 /// `select_kept_profilesets` so a tight distribution still advances ≥ this many.
 const STAGE_MIN_KEEP: usize = 5;
@@ -185,42 +247,18 @@ const STAGE_MIN_KEEP: usize = 5;
 /// final precision stage instead of walking the remaining intermediate stages.
 const SKIP_TO_FINAL_THRESHOLD: usize = 5;
 
-/// Iteration count cap for stage `idx` of `total` stages. simc treats
-/// `iterations=N` as a hard ceiling; setting it loosely lets simc overshoot
-/// a stage's `target_error` toward final-pass precision (e.g. a Probe stage
-/// at 2.0% target_error empirically hitting ~0.5% because simc kept running).
+/// Iteration count simc receives for `stage`. simc treats `iterations=N` as a
+/// hard ceiling; setting it loosely lets simc's auto-tuner overshoot a stage's
+/// `target_error` toward final-pass precision (e.g. a Probe stage at 2.0%
+/// target_error empirically hitting ~0.5% because simc kept running).
 ///
-/// We cap pruning stages at roughly what simc needs to reach the stage's
-/// target_error band, so simc stops near the intended precision. Final
-/// stage always runs at the user-requested iteration count.
-fn iterations_for_stage(
-    stage_idx: usize,
-    total_stages: usize,
-    user_iters: u32,
-    target_error_pct: f64,
-) -> u32 {
-    if stage_idx + 1 >= total_stages {
-        return user_iters;
+/// Pruning stages return their pinned cap from `STAGE_CANDIDATES`; the Final
+/// stage returns the user's full iteration budget.
+fn iterations_for_stage(stage: &Stage, user_iters: u32) -> u32 {
+    match stage.iteration_cap {
+        Some(cap) => std::cmp::min(cap, user_iters),
+        None => user_iters,
     }
-    // Hard caps by target_error band. simc's per-profileset auto-tuner picks
-    // an iteration count based on observed variance; these caps keep that
-    // count from drifting much past the stage's stated precision target.
-    let cap: u32 = if target_error_pct >= 2.0 {
-        50 // Probe
-    } else if target_error_pct >= 1.0 {
-        125 // Coarse
-    } else if target_error_pct >= 0.5 {
-        500 // Refine
-    } else if target_error_pct >= 0.2 {
-        3_000 // Medium
-    } else if target_error_pct >= 0.1 {
-        12_000 // Fine
-    } else if target_error_pct >= 0.05 {
-        50_000 // Trace
-    } else {
-        user_iters
-    };
-    std::cmp::min(cap, user_iters)
 }
 
 /// Progress-bar range `(start_pct, end_pct)` allocated to stage `idx` of `total`.
@@ -994,6 +1032,41 @@ fn parse_combo_id(name: &str) -> Option<i64> {
 /// already-completed stages. The `simc_input` must already contain only the
 /// survivor profilesets for the resumed stage.
 #[allow(clippy::too_many_arguments)]
+/// Persist a Staged checkpoint and check whether a pause has been requested.
+/// No-op for non-Streamed jobs or when no pool is configured.
+///
+/// Returns `Err(StagedRunError::Paused)` if a pause request was honored —
+/// caller should propagate to abort the staged pipeline cleanly.
+async fn write_staged_checkpoint_and_check_pause(
+    pool: &Option<sqlx::AnyPool>,
+    job_id: &str,
+    simc_input_mode: crate::models::SimcInputMode,
+    checkpoint: crate::profileset_generator::checkpoint::Checkpoint,
+) -> Result<(), StagedRunError> {
+    if simc_input_mode != crate::models::SimcInputMode::Streamed {
+        return Ok(());
+    }
+    let Some(p) = pool else {
+        return Ok(());
+    };
+    if let Ok(json) = checkpoint.to_json_string() {
+        let _ = sqlx::query("UPDATE jobs SET checkpoint = $1 WHERE id = $2")
+            .bind(&json)
+            .bind(job_id)
+            .execute(p)
+            .await;
+    }
+    let pause_repo = crate::db::JobRepo::new(p.clone());
+    if let Ok(true) = pause_repo.get_pause_requested(job_id).await {
+        let _ = pause_repo.set_pause_requested(job_id, false).await;
+        let _ = pause_repo
+            .update_status(job_id, crate::models::JobStatus::Paused)
+            .await;
+        return Err(StagedRunError::Paused);
+    }
+    Ok(())
+}
+
 pub async fn run_simc_staged(
     simc_path: &Path,
     job_id: &str,
@@ -1003,7 +1076,7 @@ pub async fn run_simc_staged(
     base_start: u8,
     simc_input_mode: crate::models::SimcInputMode,
     pool: Option<sqlx::AnyPool>,
-    start_stage_idx: usize,
+    resume_state: StagedResumeState,
     constants: crate::profileset_generator::triage::TriageConstants,
     on_progress: impl Fn(u8, &str, &str),
     on_stage_complete: impl Fn(&str),
@@ -1086,14 +1159,24 @@ pub async fn run_simc_staged(
     // Clamp start_stage_idx to a valid range. If it's past the last stage the
     // while loop body never executes and we fall through to the "no result"
     // error — the caller (resume_staged) guards against this case upstream.
-    let mut stage_idx = start_stage_idx.min(total_stages);
+    let mut stage_idx = resume_state.start_stage_idx.min(total_stages);
+
+    // Carry-through state for resuming mid-stage: the batch index to start
+    // from on the current stage, and any profileset results accumulated from
+    // batches that already completed before the pause. Both are consumed by
+    // the first iteration of the stage loop and reset to defaults after.
+    let mut next_batch_idx_on_entry = resume_state.start_batch_idx;
+    let mut resumed_batch_results = resume_state.resumed_batch_results;
+
+    let batch_size = staged_batch_size();
 
     while stage_idx < total_stages {
         let stage = &stages[stage_idx];
         let is_final = stage_idx == final_idx;
         let (range_start, range_end) = progress_range_for_stage(stage_idx, total_stages, base_start);
-        let stage_iters =
-            iterations_for_stage(stage_idx, total_stages, user_iterations, stage.target_error);
+        let stage_iters = iterations_for_stage(stage, user_iterations);
+        let stage_label = stage.name.to_lowercase();
+        let stage_name_for_progress = stage.name;
 
         on_progress(
             range_start,
@@ -1106,186 +1189,243 @@ pub async fn run_simc_staged(
             job_id, stage.name, remaining, stage.target_error, stage_iters
         );
 
-        let stage_label = stage.name.to_lowercase();
-        let stage_name_for_progress = stage.name;
-        let stage_result = run_simc_subprocess(
-            simc_path,
-            false, // not raw
-            job_id,
-            &current_input,
-            options,
-            fight_style,
-            stage.target_error,
-            stage_iters,
-            threads,
-            desired_targets,
-            max_time,
-            false,
-            single_actor_batch,
-            &stage_label,
-            false, // skip HTML for staged sims
-            |current, total| {
-                let pct = range_start
-                    + ((current as f64 / total as f64) * (range_end - range_start) as f64) as u8;
-                on_progress(
-                    pct,
-                    &format!("Stage {} of {}", stage_idx + 1, total_stages),
-                    &format!(
-                        "{}/{} profilesets · {} precision",
-                        current, total, stage_name_for_progress
-                    ),
-                );
-            },
-            on_log.clone(),
-        )
-        .await?;
-
-        result = Some(stage_result);
-
+        // ── Final stage: single simc invocation, no batching ────────────────
+        // The Final stage produces the HTML / text report and the result we
+        // return to the caller; batching it would fragment the report and
+        // complicate result merging. Survivors at this point are bounded by
+        // SKIP_TO_FINAL_THRESHOLD or earlier pruning, so a single run is
+        // tractable in practice.
         if is_final {
+            let stage_result = run_simc_subprocess(
+                simc_path,
+                false,
+                job_id,
+                &current_input,
+                options,
+                fight_style,
+                stage.target_error,
+                stage_iters,
+                threads,
+                desired_targets,
+                max_time,
+                false,
+                single_actor_batch,
+                &stage_label,
+                false,
+                |current, total| {
+                    let pct = range_start
+                        + ((current as f64 / total as f64) * (range_end - range_start) as f64) as u8;
+                    on_progress(
+                        pct,
+                        &format!("Stage {} of {}", stage_idx + 1, total_stages),
+                        &format!(
+                            "{}/{} profilesets · {} precision",
+                            current, total, stage_name_for_progress
+                        ),
+                    );
+                },
+                on_log.clone(),
+            )
+            .await?;
+            result = Some(stage_result);
             on_stage_complete(&format!("{} · {} combos · done", stage.name, remaining));
             break;
         }
 
-        let stage_json = &result.as_ref().unwrap().json;
-        let profilesets = get_profileset_results(stage_json);
-        if profilesets.is_empty() {
+        // ── Intermediate stage: batched ──────────────────────────────────────
+        let stage_names = list_profileset_names(&current_input);
+        let total_batches = (stage_names.len() + batch_size - 1) / batch_size;
+        let batches: Vec<&[String]> = stage_names.chunks(batch_size).collect();
+
+        let mut all_results: Vec<Value> = std::mem::take(&mut resumed_batch_results);
+        let mut last_batch_json: Option<Value> = None;
+
+        // On entry to the resumed stage, start at the saved batch idx. On
+        // subsequent stages, start from 0.
+        let batch_start = std::mem::replace(&mut next_batch_idx_on_entry, 0);
+        let batch_start = batch_start.min(total_batches);
+
+        for batch_idx in batch_start..total_batches {
+            let batch_names_set: HashSet<String> =
+                batches[batch_idx].iter().cloned().collect();
+            let batch_input = filter_simc_input(&current_input, &batch_names_set);
+
+            // Per-batch progress mapping: each batch occupies an equal slice
+            // of the stage's progress range. Within a batch we further sub-
+            // divide via simc's own profileset counter.
+            let batch_pct_start = range_start as f64
+                + (batch_idx as f64 / total_batches as f64)
+                    * (range_end - range_start) as f64;
+            let batch_pct_end = range_start as f64
+                + ((batch_idx + 1) as f64 / total_batches as f64)
+                    * (range_end - range_start) as f64;
+            let cumulative_done = batch_idx * batch_size;
+            let total_for_display = stage_names.len();
+
+            let batch_start_instant = std::time::Instant::now();
+            let batch_result = run_simc_subprocess(
+                simc_path,
+                false,
+                job_id,
+                &batch_input,
+                options,
+                fight_style,
+                stage.target_error,
+                stage_iters,
+                threads,
+                desired_targets,
+                max_time,
+                false,
+                single_actor_batch,
+                &stage_label,
+                false,
+                |current, total| {
+                    let span = batch_pct_end - batch_pct_start;
+                    let pct = (batch_pct_start
+                        + (current as f64 / total as f64) * span)
+                        as u8;
+                    on_progress(
+                        pct,
+                        &format!("Stage {} of {}", stage_idx + 1, total_stages),
+                        &format!(
+                            "batch {}/{} · {}/{} profilesets · {} precision",
+                            batch_idx + 1,
+                            total_batches,
+                            cumulative_done + current as usize,
+                            total_for_display,
+                            stage_name_for_progress
+                        ),
+                    );
+                },
+                on_log.clone(),
+            )
+            .await?;
+            let batch_secs = batch_start_instant.elapsed().as_secs_f64();
+            let batch_ps_count = batches[batch_idx].len();
+            println!(
+                "[{}] Stage {} batch {}/{}: {:.1}s on {} profilesets ({:.1} ms/profileset)",
+                job_id,
+                stage.name,
+                batch_idx + 1,
+                total_batches,
+                batch_secs,
+                batch_ps_count,
+                if batch_ps_count > 0 {
+                    batch_secs * 1000.0 / batch_ps_count as f64
+                } else {
+                    0.0
+                },
+            );
+
+            let batch_profilesets = get_profileset_results(&batch_result.json);
+            all_results.extend(batch_profilesets.iter().cloned());
+            last_batch_json = Some(batch_result.json);
+
+            // Mid-stage checkpoint + pause check after every batch. survivor_combo_ids
+            // stays as the input to this stage (unchanged mid-stage); next_batch_idx
+            // advances; batch_results holds accumulated profileset results so we can
+            // skip already-completed batches on resume.
+            let survivor_combo_ids: Vec<i64> =
+                stage_names.iter().filter_map(|n| parse_combo_id(n)).collect();
+            let checkpoint = crate::profileset_generator::checkpoint::Checkpoint {
+                phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
+                    crate::profileset_generator::checkpoint::StagedCheckpoint {
+                        next_stage_idx: stage_idx,
+                        next_stage_name: stage.name.to_string(),
+                        survivor_combo_ids,
+                        next_batch_idx: batch_idx + 1,
+                        batch_results: all_results.clone(),
+                    },
+                ),
+                constants,
+            };
+            write_staged_checkpoint_and_check_pause(
+                &pool,
+                job_id,
+                simc_input_mode,
+                checkpoint,
+            )
+            .await?;
+        }
+
+        // ── End of stage: prune from accumulated batch results ──────────────
+        if all_results.is_empty() {
             on_stage_complete(&format!("{} · no results", stage.name));
             break;
         }
 
-        let baseline_mean = baseline_mean_for_pruning(stage_json, profilesets);
+        let last_json = last_batch_json
+            .as_ref()
+            .expect("at least one batch must have produced a json result");
+        let all_results_slice: &[Value] = &all_results;
+        let baseline_mean = baseline_mean_for_pruning(last_json, all_results_slice);
         let keep_combos = select_kept_profilesets(
-            profilesets,
+            all_results_slice,
             stage.target_error,
             STAGE_MIN_KEEP,
             baseline_mean,
         );
 
-        if keep_combos.len() >= profilesets.len() {
+        if keep_combos.len() < all_results.len() {
+            for ps in &all_results {
+                let name = ps.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                if !name.is_empty() && !keep_combos.contains(name) {
+                    eliminated.insert(name.to_string(), ps.clone());
+                }
+            }
+            on_stage_complete(&format!(
+                "{} · {} → {} combos",
+                stage.name,
+                all_results.len(),
+                keep_combos.len()
+            ));
+            println!(
+                "Job {}: Stage {} complete — keeping {}/{} combos",
+                job_id,
+                stage.name,
+                keep_combos.len(),
+                all_results.len()
+            );
+            current_input = filter_simc_input(&current_input, &keep_combos);
+            remaining = keep_combos.len();
+        } else {
             on_stage_complete(&format!(
                 "{} · kept all {} combos",
                 stage.name,
-                profilesets.len()
+                all_results.len()
             ));
-
-            if simc_input_mode == crate::models::SimcInputMode::Streamed {
-                if let Some(ref p) = pool {
-                    let next_idx = stage_idx + 1;
-                    let next_name = stages
-                        .get(next_idx)
-                        .map(|s| s.name.to_string())
-                        .unwrap_or_else(|| "Done".to_string());
-                    // All profilesets survived — collect their combo_ids.
-                    // combo_name format is "Combo N" where N is the combo_id,
-                    // so parse the integer directly instead of DB round-trips.
-                    let survivor_combo_ids: Vec<i64> =
-                        keep_combos.iter().filter_map(|n| parse_combo_id(n)).collect();
-                    let checkpoint =
-                        crate::profileset_generator::checkpoint::Checkpoint {
-                            phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
-                                crate::profileset_generator::checkpoint::StagedCheckpoint {
-                                    next_stage_idx: next_idx,
-                                    next_stage_name: next_name,
-                                    survivor_combo_ids,
-                                },
-                            ),
-                            constants,
-                        };
-                    if let Ok(json) = checkpoint.to_json_string() {
-                        let _ = sqlx::query(
-                            "UPDATE jobs SET checkpoint = $1 WHERE id = $2",
-                        )
-                        .bind(&json)
-                        .bind(job_id)
-                        .execute(p)
-                        .await;
-                    }
-                    // Poll pause_requested.
-                    let pause_repo = crate::db::JobRepo::new(p.clone());
-                    if let Ok(true) = pause_repo.get_pause_requested(job_id).await {
-                        let _ = pause_repo.set_pause_requested(job_id, false).await;
-                        let _ = pause_repo
-                            .update_status(job_id, crate::models::JobStatus::Paused)
-                            .await;
-                        return Err(StagedRunError::Paused);
-                    }
-                }
-            }
-
-            stage_idx += 1;
-            continue;
+            // Don't filter — keep current_input intact, but `remaining`
+            // shrinks to the survivor count (which equals all_results.len()
+            // when none were pruned).
         }
 
-        // Save eliminated combos' DPS from this stage (for the final result merge).
-        // Only clones the subset we actually drop — full kept set stays as borrow.
-        for ps in profilesets {
-            let name = ps.get("name").and_then(|n| n.as_str()).unwrap_or("");
-            if !name.is_empty() && !keep_combos.contains(name) {
-                eliminated.insert(name.to_string(), ps.clone());
-            }
-        }
-
-        on_stage_complete(&format!(
-            "{} · {} → {} combos",
-            stage.name,
-            profilesets.len(),
-            keep_combos.len()
-        ));
-
-        println!(
-            "Job {}: Stage {} complete — keeping {}/{} combos",
+        // End-of-stage checkpoint: reset batch state to 0, survivors carry to next stage.
+        let next_idx = stage_idx + 1;
+        let next_name = stages
+            .get(next_idx)
+            .map(|s| s.name.to_string())
+            .unwrap_or_else(|| "Done".to_string());
+        let survivor_combo_ids: Vec<i64> =
+            keep_combos.iter().filter_map(|n| parse_combo_id(n)).collect();
+        let checkpoint = crate::profileset_generator::checkpoint::Checkpoint {
+            phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
+                crate::profileset_generator::checkpoint::StagedCheckpoint {
+                    next_stage_idx: next_idx,
+                    next_stage_name: next_name,
+                    survivor_combo_ids,
+                    next_batch_idx: 0,
+                    batch_results: Vec::new(),
+                },
+            ),
+            constants,
+        };
+        write_staged_checkpoint_and_check_pause(
+            &pool,
             job_id,
-            stage.name,
-            keep_combos.len(),
-            profilesets.len()
-        );
-
-        if simc_input_mode == crate::models::SimcInputMode::Streamed {
-            if let Some(ref p) = pool {
-                let next_idx = stage_idx + 1;
-                let next_name = stages
-                    .get(next_idx)
-                    .map(|s| s.name.to_string())
-                    .unwrap_or_else(|| "Done".to_string());
-                // combo_name format is "Combo N" where N is the combo_id,
-                // so parse the integer directly instead of DB round-trips.
-                let survivor_combo_ids: Vec<i64> =
-                    keep_combos.iter().filter_map(|n| parse_combo_id(n)).collect();
-                let checkpoint =
-                    crate::profileset_generator::checkpoint::Checkpoint {
-                        phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
-                            crate::profileset_generator::checkpoint::StagedCheckpoint {
-                                next_stage_idx: next_idx,
-                                next_stage_name: next_name,
-                                survivor_combo_ids,
-                            },
-                        ),
-                        constants,
-                    };
-                if let Ok(json) = checkpoint.to_json_string() {
-                    let _ = sqlx::query(
-                        "UPDATE jobs SET checkpoint = $1 WHERE id = $2",
-                    )
-                    .bind(&json)
-                    .bind(job_id)
-                    .execute(p)
-                    .await;
-                }
-                // Poll pause_requested.
-                let pause_repo = crate::db::JobRepo::new(p.clone());
-                if let Ok(true) = pause_repo.get_pause_requested(job_id).await {
-                    let _ = pause_repo.set_pause_requested(job_id, false).await;
-                    let _ = pause_repo
-                        .update_status(job_id, crate::models::JobStatus::Paused)
-                        .await;
-                    return Err(StagedRunError::Paused);
-                }
-            }
-        }
-
-        current_input = filter_simc_input(&current_input, &keep_combos);
-        remaining = keep_combos.len();
+            simc_input_mode,
+            checkpoint,
+        )
+        .await?;
 
         // Skip intermediate stages once survivors are few enough — jump to final precision.
         if remaining <= SKIP_TO_FINAL_THRESHOLD {
@@ -1454,6 +1594,28 @@ mod tests {
         let out = filter_simc_input(input, &keep_set(&[]));
         assert!(!out.contains("profileset."));
         assert!(out.contains("head=base"));
+    }
+
+    #[test]
+    fn list_profileset_names_in_iteration_order_no_duplicates() {
+        // Each combo declares multiple profileset.* lines (gear + talents) —
+        // list_profileset_names should emit each combo once, in first-seen
+        // order, regardless of how many times each name appears.
+        let input = "# Base Actor\nhead=base\n\
+            profileset.\"Combo 5\"+=head=a\n\
+            profileset.\"Combo 5\"+=talents=x\n\
+            profileset.\"Combo 2\"+=head=b\n\
+            profileset.\"Combo 5\"+=neck=c\n\
+            profileset.\"Combo 9\"+=head=d\n\
+            profileset.\"Combo 2\"+=talents=y";
+        let names = list_profileset_names(input);
+        assert_eq!(names, vec!["Combo 5", "Combo 2", "Combo 9"]);
+    }
+
+    #[test]
+    fn list_profileset_names_empty_when_no_profilesets() {
+        assert!(list_profileset_names("# Base Actor\nhead=base\n").is_empty());
+        assert!(list_profileset_names("").is_empty());
     }
 
     #[test]
@@ -1650,29 +1812,45 @@ mod tests {
 
     // ---- iterations_for_stage ----
 
+    fn pruning_stage(target_error: f64, cap: u32) -> Stage {
+        Stage { name: "test", target_error, iteration_cap: Some(cap) }
+    }
+
+    fn final_stage(target_error: f64) -> Stage {
+        Stage { name: "Final", target_error, iteration_cap: None }
+    }
+
     #[test]
     fn iterations_final_stage_uses_user_iters() {
-        // Last stage always returns user_iters regardless of target_error.
-        assert_eq!(iterations_for_stage(5, 6, 1000, 0.5), 1000);
-        assert_eq!(iterations_for_stage(0, 1, 1000, 0.5), 1000);
+        assert_eq!(iterations_for_stage(&final_stage(0.5), 1000), 1000);
+        assert_eq!(iterations_for_stage(&final_stage(0.01), 100_000), 100_000);
     }
 
     #[test]
-    fn iterations_caps_by_target_error_band() {
-        // High user_iters: cap is dominated by target_error.
-        assert_eq!(iterations_for_stage(0, 4, 100_000, 2.0), 50); // Probe
-        assert_eq!(iterations_for_stage(0, 4, 100_000, 1.0), 125); // Coarse
-        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.5), 500); // Refine
-        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.2), 3_000); // Medium
-        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.1), 12_000); // Fine
-        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.05), 50_000); // Trace
+    fn iterations_pruning_stage_uses_its_cap() {
+        // High user_iters: cap dominates.
+        assert_eq!(iterations_for_stage(&pruning_stage(2.0, 50), 100_000), 50);
+        assert_eq!(iterations_for_stage(&pruning_stage(1.0, 125), 100_000), 125);
+        assert_eq!(iterations_for_stage(&pruning_stage(0.5, 500), 100_000), 500);
+        assert_eq!(iterations_for_stage(&pruning_stage(0.02, 200_000), 1_000_000), 200_000);
     }
 
     #[test]
-    fn iterations_user_iters_caps_below_band_cap() {
-        // user_iters below the band's cap → user_iters wins.
-        assert_eq!(iterations_for_stage(0, 4, 30, 2.0), 30); // Probe band=50, user=30
-        assert_eq!(iterations_for_stage(0, 4, 100, 1.0), 100); // Coarse band=125, user=100
+    fn iterations_user_iters_caps_below_stage_cap() {
+        // user_iters below the stage's cap → user_iters wins.
+        assert_eq!(iterations_for_stage(&pruning_stage(2.0, 50), 30), 30);
+        assert_eq!(iterations_for_stage(&pruning_stage(1.0, 125), 100), 100);
+    }
+
+    #[test]
+    fn stage_candidates_caps_align_with_target_errors() {
+        // Caps should monotonically grow as target_error tightens. Drift check:
+        // catches accidentally putting a smaller cap on a tighter stage.
+        let mut prev_cap = 0u32;
+        for (te, _, cap) in STAGE_CANDIDATES {
+            assert!(*cap > prev_cap, "cap for te={} should exceed previous cap", te);
+            prev_cap = *cap;
+        }
     }
 
     // ---- progress_range_for_stage ----

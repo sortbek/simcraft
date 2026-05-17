@@ -139,7 +139,7 @@ pub(super) async fn create_enchant_gem_sim(
         log_buffer.get_ref().clone(),
         10, // inline/eager path: staged pipeline spans 10-95%
         crate::models::SimcInputMode::Inline,
-        0,
+        crate::simc_runner::StagedResumeState::default(),
         crate::profileset_generator::triage::TriageConstants::default(),
     );
 

@@ -302,9 +302,16 @@ async fn resume_staged(
         .resolve(simc_branch_from_payload(payload))
         .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
 
-    // 4. Spawn the staged pipeline at the saved next_stage_idx.
+    // 4. Spawn the staged pipeline at the saved next_stage_idx + next_batch_idx.
     //    base_start=50 because Triage already ran (5-50% covered); staged
-    //    pipeline uses 50-95%.
+    //    pipeline uses 50-95%. If the checkpoint captured mid-stage batch
+    //    state, resumed_batch_results gets seeded so completed batches don't
+    //    re-run.
+    let resume_state = crate::simc_runner::StagedResumeState {
+        start_stage_idx: staged_cp.next_stage_idx,
+        start_batch_idx: staged_cp.next_batch_idx,
+        resumed_batch_results: staged_cp.batch_results.clone(),
+    };
     crate::server::helpers::spawn_staged_sim(
         inputs.repo.clone(),
         simc_bin,
@@ -315,7 +322,7 @@ async fn resume_staged(
         inputs.log_buffer.clone(),
         50, // base_start: Triage consumed 5-50%
         SimcInputMode::Streamed,
-        staged_cp.next_stage_idx,
+        resume_state,
         checkpoint.constants,
     );
 

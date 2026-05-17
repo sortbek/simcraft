@@ -3,6 +3,7 @@
 //! staged-pipeline stage boundary. See spec §5.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::triage::TriageConstants;
 
@@ -42,6 +43,12 @@ pub struct TriageCheckpoint {
 }
 
 /// Staged-phase resume data: which stage to run next and which combos to feed it.
+///
+/// Intermediate stages run in profileset batches. A mid-stage pause records the
+/// next batch index and the accumulated profileset results from completed
+/// batches, so resume can continue without re-running them. `next_batch_idx ==
+/// 0` and `batch_results` empty means the stage starts fresh — which is the
+/// only state writable for a stage boundary checkpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StagedCheckpoint {
     /// 0-based index of the next pipeline stage (Probe=0, Coarse=1, ..., Final=last).
@@ -51,6 +58,16 @@ pub struct StagedCheckpoint {
     /// combo_ids of the survivors that should feed into next_stage_idx. Resume
     /// loads their profileset_simc fragments from combo_metadata.
     pub survivor_combo_ids: Vec<i64>,
+    /// 0-based index of the next batch to run within the current stage. `0`
+    /// means "start the stage from batch 0" (i.e. a clean stage boundary).
+    /// Older checkpoints without this field default to 0.
+    #[serde(default)]
+    pub next_batch_idx: usize,
+    /// Profileset results accumulated from batches already completed in the
+    /// current stage. Combined with results from the remaining batches to
+    /// drive end-of-stage pruning.
+    #[serde(default)]
+    pub batch_results: Vec<Value>,
 }
 
 impl Checkpoint {
@@ -102,6 +119,8 @@ mod tests {
                 next_stage_idx: 2,
                 next_stage_name: "Refine".to_string(),
                 survivor_combo_ids: vec![1842, 1843, 2914],
+                next_batch_idx: 0,
+                batch_results: Vec::new(),
             }),
             constants: TriageConstants::default(),
         };
@@ -112,6 +131,57 @@ mod tests {
                 assert_eq!(sc.next_stage_idx, 2);
                 assert_eq!(sc.next_stage_name, "Refine");
                 assert_eq!(sc.survivor_combo_ids, vec![1842, 1843, 2914]);
+                assert_eq!(sc.next_batch_idx, 0);
+                assert!(sc.batch_results.is_empty());
+            }
+            _ => panic!("expected Staged phase"),
+        }
+    }
+
+    #[test]
+    fn round_trip_staged_mid_batch() {
+        let cp = Checkpoint {
+            phase: CheckpointPhase::Staged(StagedCheckpoint {
+                next_stage_idx: 1,
+                next_stage_name: "Coarse".to_string(),
+                survivor_combo_ids: vec![1, 2, 3],
+                next_batch_idx: 5,
+                batch_results: vec![
+                    serde_json::json!({ "name": "Combo 1", "mean": 1000.0 }),
+                    serde_json::json!({ "name": "Combo 2", "mean": 950.0 }),
+                ],
+            }),
+            constants: TriageConstants::default(),
+        };
+        let json = cp.to_json_string().unwrap();
+        let parsed = Checkpoint::from_json_str(&json).unwrap();
+        match parsed.phase {
+            CheckpointPhase::Staged(sc) => {
+                assert_eq!(sc.next_batch_idx, 5);
+                assert_eq!(sc.batch_results.len(), 2);
+            }
+            _ => panic!("expected Staged phase"),
+        }
+    }
+
+    /// Old checkpoints written before mid-stage batching shouldn't fail to
+    /// deserialize. The on-disk shape is `{"phase": {"phase":"staged", ...},
+    /// "constants": ...}` because CheckpointPhase uses internal tagging.
+    #[test]
+    fn legacy_staged_checkpoint_deserializes_with_defaults() {
+        let constants_json = serde_json::to_string(&TriageConstants::default()).unwrap();
+        let legacy = format!(
+            r#"{{"phase":{{"phase":"staged","next_stage_idx":0,"next_stage_name":"Probe","survivor_combo_ids":[1,2,3]}},"constants":{}}}"#,
+            constants_json
+        );
+        let parsed = Checkpoint::from_json_str(&legacy).unwrap();
+        match parsed.phase {
+            CheckpointPhase::Staged(sc) => {
+                assert_eq!(sc.next_stage_idx, 0);
+                assert_eq!(sc.next_stage_name, "Probe");
+                assert_eq!(sc.survivor_combo_ids, vec![1, 2, 3]);
+                assert_eq!(sc.next_batch_idx, 0);
+                assert!(sc.batch_results.is_empty());
             }
             _ => panic!("expected Staged phase"),
         }

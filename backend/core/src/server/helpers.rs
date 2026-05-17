@@ -320,7 +320,7 @@ pub(crate) fn spawn_staged_sim(
     log_buffer: Arc<LogBuffer>,
     base_start: u8,
     simc_input_mode: SimcInputMode,
-    start_stage_idx: usize,
+    resume_state: crate::simc_runner::StagedResumeState,
     constants: crate::profileset_generator::triage::TriageConstants,
 ) {
     tokio::spawn(async move {
@@ -369,7 +369,7 @@ pub(crate) fn spawn_staged_sim(
             base_start,
             simc_input_mode,
             pool_opt,
-            start_stage_idx,
+            resume_state,
             constants,
             move |pct, stage, detail| {
                 enqueue_job_update(
