@@ -928,11 +928,18 @@ pub async fn run_simc(
     .await
 }
 
+/// Sentinel returned by `run_simc_staged` when the job is paused mid-pipeline.
+/// `spawn_staged_sim` checks for this exact string and exits without setting an error.
+pub const PAUSED_SENTINEL: &str = "paused_by_user";
+
 /// Run a multi-stage simulation for Top Gear.
 ///
 /// `base_start` is the lower bound of the progress-bar range allocated to the
 /// staged pipeline (10 for inline/eager jobs, 50 for streamed jobs that ran
 /// Triage first and already consumed 5-50%).
+///
+/// `pool` is required for Streamed-mode jobs (checkpoint writes + pause polling).
+/// Inline-mode jobs pass `None` and skip those paths entirely.
 #[allow(clippy::too_many_arguments)]
 pub async fn run_simc_staged(
     simc_path: &Path,
@@ -941,6 +948,8 @@ pub async fn run_simc_staged(
     options: &Value,
     combo_count: usize,
     base_start: u8,
+    simc_input_mode: crate::models::SimcInputMode,
+    pool: Option<sqlx::AnyPool>,
     on_progress: impl Fn(u8, &str, &str),
     on_stage_complete: impl Fn(&str),
     on_log: impl Fn(&str) + Clone,
@@ -1099,6 +1108,55 @@ pub async fn run_simc_staged(
                 stage.name,
                 profilesets.len()
             ));
+
+            // Streamed-mode: write checkpoint + poll pause after each stage.
+            if simc_input_mode == crate::models::SimcInputMode::Streamed {
+                if let Some(ref p) = pool {
+                    let next_idx = stage_idx + 1;
+                    let next_name = stages
+                        .get(next_idx)
+                        .map(|s| s.name.to_string())
+                        .unwrap_or_else(|| "Done".to_string());
+                    // All profilesets survived — collect their combo_ids.
+                    let meta_repo = crate::db::ComboMetadataRepo::new(p.clone());
+                    let mut survivor_combo_ids: Vec<i64> = Vec::new();
+                    for name in &keep_combos {
+                        if let Ok(Some(row)) = meta_repo.get_by_name(job_id, name).await {
+                            survivor_combo_ids.push(row.combo_id);
+                        }
+                    }
+                    let checkpoint =
+                        crate::profileset_generator::checkpoint::Checkpoint {
+                            phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
+                                crate::profileset_generator::checkpoint::StagedCheckpoint {
+                                    next_stage_idx: next_idx,
+                                    next_stage_name: next_name,
+                                    survivor_combo_ids,
+                                },
+                            ),
+                            constants: crate::profileset_generator::triage::TriageConstants::default(),
+                        };
+                    if let Ok(json) = checkpoint.to_json_string() {
+                        let _ = sqlx::query(
+                            "UPDATE jobs SET checkpoint = $1 WHERE id = $2",
+                        )
+                        .bind(&json)
+                        .bind(job_id)
+                        .execute(p)
+                        .await;
+                    }
+                    // Poll pause_requested.
+                    let pause_repo = crate::db::JobRepo::new(p.clone());
+                    if let Ok(true) = pause_repo.get_pause_requested(job_id).await {
+                        let _ = pause_repo.set_pause_requested(job_id, false).await;
+                        let _ = pause_repo
+                            .update_status(job_id, crate::models::JobStatus::Paused)
+                            .await;
+                        return Err(PAUSED_SENTINEL.to_string());
+                    }
+                }
+            }
+
             stage_idx += 1;
             continue;
         }
@@ -1126,6 +1184,53 @@ pub async fn run_simc_staged(
             keep_combos.len(),
             profilesets.len()
         );
+
+        // Streamed-mode: write checkpoint + poll pause after each stage.
+        if simc_input_mode == crate::models::SimcInputMode::Streamed {
+            if let Some(ref p) = pool {
+                let next_idx = stage_idx + 1;
+                let next_name = stages
+                    .get(next_idx)
+                    .map(|s| s.name.to_string())
+                    .unwrap_or_else(|| "Done".to_string());
+                let meta_repo = crate::db::ComboMetadataRepo::new(p.clone());
+                let mut survivor_combo_ids: Vec<i64> = Vec::new();
+                for name in &keep_combos {
+                    if let Ok(Some(row)) = meta_repo.get_by_name(job_id, name).await {
+                        survivor_combo_ids.push(row.combo_id);
+                    }
+                }
+                let checkpoint =
+                    crate::profileset_generator::checkpoint::Checkpoint {
+                        phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
+                            crate::profileset_generator::checkpoint::StagedCheckpoint {
+                                next_stage_idx: next_idx,
+                                next_stage_name: next_name,
+                                survivor_combo_ids,
+                            },
+                        ),
+                        constants: crate::profileset_generator::triage::TriageConstants::default(),
+                    };
+                if let Ok(json) = checkpoint.to_json_string() {
+                    let _ = sqlx::query(
+                        "UPDATE jobs SET checkpoint = $1 WHERE id = $2",
+                    )
+                    .bind(&json)
+                    .bind(job_id)
+                    .execute(p)
+                    .await;
+                }
+                // Poll pause_requested.
+                let pause_repo = crate::db::JobRepo::new(p.clone());
+                if let Ok(true) = pause_repo.get_pause_requested(job_id).await {
+                    let _ = pause_repo.set_pause_requested(job_id, false).await;
+                    let _ = pause_repo
+                        .update_status(job_id, crate::models::JobStatus::Paused)
+                        .await;
+                    return Err(PAUSED_SENTINEL.to_string());
+                }
+            }
+        }
 
         current_input = filter_simc_input(&current_input, &keep_combos);
         remaining = keep_combos.len();

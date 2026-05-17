@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::types::SimOptions;
 use crate::db::{self, ComboMetadataInsert, ComboMetadataRepo, JobRepo};
 use crate::log_buffer::LogBuffer;
-use crate::models::JobStatus;
+use crate::models::{JobStatus, SimcInputMode};
 use crate::result_parser;
 use crate::simc_runner;
 use crate::types::ResolveGearResponse;
@@ -302,6 +302,9 @@ fn enqueue_job_update(
 /// `base_start` is the lower bound of the progress-bar range for the staged
 /// pipeline: 10 for inline/eager jobs (progress spans 10-95%), 50 for streamed
 /// jobs that ran Triage first (Triage consumed 5-50%, staged pipeline uses 50-95%).
+///
+/// `simc_input_mode` controls whether checkpoint writes and pause polling are
+/// active. Inline-mode jobs skip those paths; only Streamed-mode jobs support pause/resume.
 pub(super) fn spawn_staged_sim(
     repo: JobRepo,
     simc: PathBuf,
@@ -311,6 +314,7 @@ pub(super) fn spawn_staged_sim(
     combo_count: usize,
     log_buffer: Arc<LogBuffer>,
     base_start: u8,
+    simc_input_mode: SimcInputMode,
 ) {
     tokio::spawn(async move {
         if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
@@ -347,6 +351,7 @@ pub(super) fn spawn_staged_sim(
         let stages_log_jid = job_id.clone();
         let logs = log_buffer.clone();
         let jid_logs = job_id.clone();
+        let pool_opt = repo.pool().cloned();
 
         let result = simc_runner::run_simc_staged(
             &simc,
@@ -355,6 +360,8 @@ pub(super) fn spawn_staged_sim(
             &options,
             combo_count,
             base_start,
+            simc_input_mode,
+            pool_opt,
             move |pct, stage, detail| {
                 enqueue_job_update(
                     &tx_progress,
@@ -428,6 +435,10 @@ pub(super) fn spawn_staged_sim(
                 {
                     eprintln!("[{}] Failed to set report files: {}", job_id, e);
                 }
+            }
+            Err(e) if e == simc_runner::PAUSED_SENTINEL => {
+                // Job was paused mid-pipeline. Status is already set to Paused
+                // inside run_simc_staged — nothing more to do here.
             }
             Err(e) => {
                 let is_cancelled = repo

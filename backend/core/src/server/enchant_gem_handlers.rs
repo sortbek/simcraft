@@ -145,6 +145,7 @@ pub(super) async fn create_enchant_gem_sim(
         combo_count,
         log_buffer.get_ref().clone(),
         10, // inline/eager path: staged pipeline spans 10-95%
+        crate::models::SimcInputMode::Inline,
     );
 
     HttpResponse::Ok().json(SimResponse {

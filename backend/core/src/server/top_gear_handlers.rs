@@ -258,6 +258,7 @@ pub(super) async fn create_top_gear_sim(
         combo_count,
         log_buffer.get_ref().clone(),
         10, // inline/eager path: staged pipeline spans 10-95%
+        SimcInputMode::Inline,
     );
 
     HttpResponse::Ok().json(SimResponse {
@@ -513,6 +514,7 @@ async fn handoff_to_staged(
         combo_count,
         log_buffer.clone(),
         50, // streamed path: Triage consumed 5-50%, staged pipeline spans 50-95%
+        crate::models::SimcInputMode::Streamed,
     );
 }
 
