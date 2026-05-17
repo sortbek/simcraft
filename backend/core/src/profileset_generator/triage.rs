@@ -17,9 +17,14 @@ use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, Triag
 // Batch size targets keep individual batches small enough that a pause mid-Triage
 // only loses a small unit of work on replay (spec Â§5 pause/resume). At ~1.4KB per
 // profileset, 1.5 MiB â‰ˆ 1100 profilesets per batch.
-pub const TARGET_BATCH_INPUT_BYTES: usize = 1_572_864; // 1.5 MiB
-pub const MIN_BATCH_PROFILESETS: usize = 500;
-pub const MAX_BATCH_PROFILESETS: usize = 5_000;
+// simc init cost is ~5s constant (game data load) + ~10ms per profileset
+// (gear resolve + APL build). Smaller batches pay the constant cost more
+// often, so bigger batches dramatically reduce total init overhead even
+// though per-profileset cost is unavoidable. 16 MiB targets ~12K profilesets
+// at typical 1.4 KB each. Worst-case pause replay loses ~30K profilesets.
+pub const TARGET_BATCH_INPUT_BYTES: usize = 16 * 1024 * 1024; // 16 MiB
+pub const MIN_BATCH_PROFILESETS: usize = 5_000;
+pub const MAX_BATCH_PROFILESETS: usize = 30_000;
 pub const TRIAGE_ITERATIONS: u32 = 50;
 pub const TRIAGE_CUTOFF_MULTIPLIER: f64 = 3.0;
 pub const MIN_TRIAGE_TARGET_ERROR_FALLBACK: f64 = 1.0;
