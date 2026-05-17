@@ -85,6 +85,8 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             "/api/jobs/active",
             web::get().to(job_handlers::list_active_jobs),
         )
+        .route("/api/jobs", web::get().to(job_handlers::list_jobs))
+        .route("/api/jobs/{id}", web::delete().to(job_handlers::delete_job))
         .route(
             "/api/sim/{id}/input",
             web::get().to(job_handlers::get_sim_input),
@@ -212,17 +214,15 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
 
     #[cfg(feature = "desktop")]
     {
-        cfg.route("/api/sims", web::get().to(job_handlers::list_sims))
-            .route(
-                "/api/system-stats",
-                web::get().to(system_handlers::system_stats),
-            );
+        cfg.route(
+            "/api/system-stats",
+            web::get().to(system_handlers::system_stats),
+        );
     }
 
     #[cfg(not(feature = "desktop"))]
     {
-        cfg.route("/api/sims", web::get().to(job_handlers::list_sims_filtered))
-            .route("/api/admin/login", web::post().to(admin_handlers::login))
+        cfg.route("/api/admin/login", web::post().to(admin_handlers::login))
             .route(
                 "/api/admin/auth/check",
                 web::get().to(admin_handlers::check_auth),

@@ -76,23 +76,6 @@ pub struct Job {
     pub pause_requested: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobSummary {
-    pub id: String,
-    pub status: JobStatus,
-    pub sim_type: String,
-    pub created_at: String,
-    pub fight_style: String,
-    pub iterations: u32,
-    pub error_message: Option<String>,
-    pub player_name: Option<String>,
-    pub player_class: Option<String>,
-    pub realm: Option<String>,
-    pub region: Option<String>,
-    pub dps: Option<f64>,
-    pub batch_id: Option<String>,
-}
-
 /// Slim view of a Job row used by the status polling endpoint.
 /// Excludes large columns (raw_json, html_report, text_output, request_json,
 /// simc_input) that are unnecessary for a 2-second poll.
@@ -128,6 +111,13 @@ pub struct JobActiveSummary {
     pub simc_input_mode: SimcInputMode,
     pub pause_requested: bool,
     pub error_message: Option<String>,
+    // Fields needed by the unified /sims overview (stats + batch grouping).
+    // Optional so the active-list code path can omit them cheaply.
+    pub iterations: u32,
+    pub realm: Option<String>,
+    pub region: Option<String>,
+    pub dps: Option<f64>,
+    pub batch_id: Option<String>,
 }
 
 pub struct ResultSummary {

@@ -9,34 +9,81 @@ use crate::models::{JobStatus, SimcInputMode};
 use crate::simc_runner;
 use std::sync::Arc;
 
-#[cfg(feature = "desktop")]
-pub(super) async fn list_sims(repo: web::Data<JobRepo>) -> HttpResponse {
-    match repo.list_recent(20, None, None).await {
-        Ok(summaries) => HttpResponse::Ok().json(summaries),
-        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
-    }
-}
-
-#[cfg(not(feature = "desktop"))]
-pub(super) async fn list_sims_filtered(
-    query: web::Query<ListSimsQuery>,
-    repo: web::Data<JobRepo>,
-) -> HttpResponse {
-    if query.player.is_empty() || query.realm.is_empty() {
-        return HttpResponse::BadRequest().json(json!({"detail": "player and realm are required"}));
-    }
-    match repo
-        .list_recent(20, Some(&query.player), Some(&query.realm))
-        .await
-    {
-        Ok(summaries) => HttpResponse::Ok().json(summaries),
-        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
-    }
-}
-
 /// Cap on terminal-state jobs included in the active-sims overview alongside
 /// any in-flight jobs. Tracked by `fetchActiveJobs` docs on the frontend.
 const RECENT_TERMINAL_LIMIT: usize = 20;
+
+#[derive(serde::Deserialize, Default)]
+pub(super) struct ListJobsQuery {
+    /// `active` (default), `all`, or `terminal`.
+    pub status: Option<String>,
+    pub player: Option<String>,
+    pub realm: Option<String>,
+    pub limit: Option<usize>,
+}
+
+/// Unified job listing for the /sims overview page (stats + batch grouping +
+/// view-mode filter). Supports `?status=active|all|terminal` and optional
+/// player/realm scoping. With `status=active` the response is identical to
+/// the legacy `/api/jobs/active` (active jobs + RECENT_TERMINAL_LIMIT recent
+/// terminal); other modes load up to `limit` rows (default 200).
+pub(super) async fn list_jobs(
+    query: web::Query<ListJobsQuery>,
+    repo: web::Data<JobRepo>,
+) -> HttpResponse {
+    let status_str = query.status.as_deref().unwrap_or("active");
+    let result = match status_str {
+        "active" => repo.list_active(RECENT_TERMINAL_LIMIT).await,
+        other => {
+            let status = match other {
+                "all" => crate::db::JobStatusFilter::All,
+                "terminal" => crate::db::JobStatusFilter::Terminal,
+                _ => {
+                    return HttpResponse::BadRequest().json(json!({
+                        "detail": format!("Unknown status filter: {}", other),
+                    }))
+                }
+            };
+            let filter = crate::db::ListJobsFilter {
+                status,
+                player: query.player.as_deref().filter(|s| !s.is_empty()),
+                realm: query.realm.as_deref().filter(|s| !s.is_empty()),
+                limit: query.limit,
+            };
+            repo.list_jobs(filter).await
+        }
+    };
+    match result {
+        Ok(summaries) => HttpResponse::Ok().json(summaries),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
+}
+
+pub(super) async fn delete_job(
+    path: web::Path<String>,
+    repo: web::Data<JobRepo>,
+) -> HttpResponse {
+    let job_id = path.into_inner();
+    let job = match repo.get(&job_id).await {
+        Ok(Some(j)) => j,
+        Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
+    };
+    match job.status {
+        JobStatus::Done | JobStatus::Failed | JobStatus::Cancelled => {}
+        _ => {
+            return HttpResponse::BadRequest().json(json!({
+                "detail": "Only terminal-state jobs can be deleted. Cancel an active job first."
+            }))
+        }
+    }
+    match repo.delete_job(&job_id).await {
+        Ok(_) => HttpResponse::Ok().json(json!({"ok": true})),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
+}
 
 /// List active sims (Pending / Running / Paused) plus the N most recent
 /// terminal jobs. Powers the /sims overview page and the header indicator.

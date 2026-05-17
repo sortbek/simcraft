@@ -239,15 +239,6 @@ pub(super) struct VoidForgeConvertRequest {
     pub item: crate::types::ResolvedItem,
 }
 
-#[cfg(not(feature = "desktop"))]
-#[derive(Debug, Deserialize)]
-pub(super) struct ListSimsQuery {
-    #[serde(default)]
-    pub player: String,
-    #[serde(default)]
-    pub realm: String,
-}
-
 #[derive(Deserialize)]
 pub(super) struct LogsQuery {
     #[serde(default)]

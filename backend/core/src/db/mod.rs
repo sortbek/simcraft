@@ -9,7 +9,7 @@ pub mod triage_batches_repo;
 pub use character_repo::CharacterRepo;
 pub use combo_dedup_repo::ComboDedupRepo;
 pub use combo_metadata_repo::{ComboMetadataInsert, ComboMetadataRepo, ComboMetadataRow};
-pub use job_repo::JobRepo;
+pub use job_repo::{JobRepo, JobStatusFilter, ListJobsFilter};
 pub use route_repo::RouteRepo;
 pub use settings_repo::SettingsRepo;
 pub use triage_batches_repo::{TriageBatchRow, TriageBatchesRepo};

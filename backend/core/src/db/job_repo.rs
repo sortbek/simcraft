@@ -1,4 +1,4 @@
-use crate::models::{extract_result_summary, Job, JobStatus, JobStatusSummary, JobSummary, SimcInputMode};
+use crate::models::{extract_result_summary, Job, JobStatus, JobStatusSummary, SimcInputMode};
 use sqlx::{AnyPool, Row};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -12,6 +12,105 @@ pub struct JobRepo {
 enum JobBackend {
     Database(AnyPool),
     Memory(Arc<Mutex<Vec<Job>>>),
+}
+
+/// Filter passed to `list_jobs`. Powers the unified /sims overview page.
+#[derive(Debug, Clone, Copy)]
+pub struct ListJobsFilter<'a> {
+    pub status: JobStatusFilter,
+    pub player: Option<&'a str>,
+    pub realm: Option<&'a str>,
+    pub limit: Option<usize>,
+}
+
+impl<'a> Default for ListJobsFilter<'a> {
+    fn default() -> Self {
+        Self {
+            status: JobStatusFilter::All,
+            player: None,
+            realm: None,
+            limit: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum JobStatusFilter {
+    All,
+    Active,   // pending/running/paused
+    Terminal, // done/failed/cancelled
+}
+
+impl JobStatusFilter {
+    fn sql_where(self) -> &'static str {
+        match self {
+            JobStatusFilter::All => {
+                "status IN ('pending','running','paused','done','failed','cancelled')"
+            }
+            JobStatusFilter::Active => "status IN ('pending','running','paused')",
+            JobStatusFilter::Terminal => "status IN ('done','failed','cancelled')",
+        }
+    }
+    fn includes(self, status: &JobStatus) -> bool {
+        use JobStatus as JS;
+        match self {
+            JobStatusFilter::All => true,
+            JobStatusFilter::Active => matches!(status, JS::Pending | JS::Running | JS::Paused),
+            JobStatusFilter::Terminal => {
+                matches!(status, JS::Done | JS::Failed | JS::Cancelled)
+            }
+        }
+    }
+}
+
+fn str_to_status(s: &str) -> JobStatus {
+    match s {
+        "running" => JobStatus::Running,
+        "paused" => JobStatus::Paused,
+        "done" => JobStatus::Done,
+        "failed" => JobStatus::Failed,
+        "cancelled" => JobStatus::Cancelled,
+        _ => JobStatus::Pending,
+    }
+}
+
+/// Convert a `jobs` row (with `simc_input_head` populated via SUBSTR and
+/// optionally `result_json`) into a `JobActiveSummary`. Used by both
+/// `list_active` and `list_jobs` so the field-mapping logic lives in one place.
+fn row_to_overview_summary(r: &sqlx::any::AnyRow, has_result_json: bool) -> crate::models::JobActiveSummary {
+    let status_str: String = r.get("status");
+    let progress_pct: i32 = r.get("progress_pct");
+    let simc_input: String = r.get("simc_input_head");
+    let result_json: Option<String> = if has_result_json {
+        r.try_get("result_json").ok().flatten()
+    } else {
+        None
+    };
+    let summary = extract_result_summary(&result_json, &simc_input);
+    let iterations: i32 = r.try_get("iterations").unwrap_or(0);
+    crate::models::JobActiveSummary {
+        id: r.get("id"),
+        status: str_to_status(&status_str),
+        sim_type: r.get("sim_type"),
+        created_at: r.get("created_at"),
+        progress_pct: progress_pct.clamp(0, 100) as u8,
+        progress_stage: r.get("progress_stage"),
+        progress_detail: r.get("progress_detail"),
+        player_name: summary.player_name,
+        player_class: summary.player_class,
+        fight_style: r.get("fight_style"),
+        simc_input_mode: SimcInputMode::from_str(
+            &r.try_get::<String, _>("simc_input_mode")
+                .unwrap_or_else(|_| "inline".to_string()),
+        ),
+        pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
+        error_message: r.get("error_message"),
+        iterations: iterations as u32,
+        realm: summary.realm,
+        region: summary.region,
+        dps: summary.dps,
+        batch_id: r.try_get("batch_id").ok().flatten(),
+    }
 }
 
 impl JobRepo {
@@ -48,14 +147,7 @@ impl JobRepo {
     }
 
     fn str_to_status(s: &str) -> JobStatus {
-        match s {
-            "running" => JobStatus::Running,
-            "paused" => JobStatus::Paused,
-            "done" => JobStatus::Done,
-            "failed" => JobStatus::Failed,
-            "cancelled" => JobStatus::Cancelled,
-            _ => JobStatus::Pending,
-        }
+        str_to_status(s)
     }
 
     fn gc_memory_jobs(jobs: &mut Vec<Job>) {
@@ -171,128 +263,6 @@ impl JobRepo {
                 .iter()
                 .find(|job| job.id == id)
                 .cloned()),
-        }
-    }
-
-    pub async fn list_recent(
-        &self,
-        limit: usize,
-        player: Option<&str>,
-        realm: Option<&str>,
-    ) -> Result<Vec<JobSummary>, sqlx::Error> {
-        match &self.backend {
-            JobBackend::Database(pool) => {
-                let fetch_limit = if player.is_some() || realm.is_some() {
-                    200i32
-                } else {
-                    limit as i32
-                };
-
-                let rows = sqlx::query(
-                    "SELECT id, status, sim_type, created_at, fight_style, iterations, error_message, result_json, simc_input, batch_id
-                     FROM jobs ORDER BY created_at DESC LIMIT $1",
-                )
-                .bind(fetch_limit)
-                .fetch_all(pool)
-                .await?;
-
-                let all: Vec<JobSummary> = rows
-                    .iter()
-                    .map(|r| {
-                        let status_str: String = r.get("status");
-                        let result_json: Option<String> = r.get("result_json");
-                        let simc_input: String = r.get("simc_input");
-                        let iterations: i32 = r.get("iterations");
-                        let s = extract_result_summary(&result_json, &simc_input);
-                        JobSummary {
-                            id: r.get("id"),
-                            status: Self::str_to_status(&status_str),
-                            sim_type: r.get("sim_type"),
-                            created_at: r.get("created_at"),
-                            fight_style: r.get("fight_style"),
-                            iterations: iterations as u32,
-                            error_message: r.get("error_message"),
-                            player_name: s.player_name,
-                            player_class: s.player_class,
-                            realm: s.realm,
-                            region: s.region,
-                            dps: s.dps,
-                            batch_id: r.get("batch_id"),
-                        }
-                    })
-                    .collect();
-
-                if player.is_none() && realm.is_none() {
-                    return Ok(all);
-                }
-
-                Ok(all
-                    .into_iter()
-                    .filter(|j| {
-                        if let Some(p) = player {
-                            if j.player_name.as_deref() != Some(p) {
-                                return false;
-                            }
-                        }
-                        if let Some(r) = realm {
-                            if j.realm.as_deref() != Some(r) {
-                                return false;
-                            }
-                        }
-                        true
-                    })
-                    .take(limit)
-                    .collect())
-            }
-            JobBackend::Memory(jobs) => {
-                let mut all: Vec<JobSummary> = jobs
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .map(|job| {
-                        let summary = extract_result_summary(&job.result_json, &job.simc_input);
-                        JobSummary {
-                            id: job.id.clone(),
-                            status: job.status.clone(),
-                            sim_type: job.sim_type.clone(),
-                            created_at: job.created_at.clone(),
-                            fight_style: job.fight_style.clone(),
-                            iterations: job.iterations,
-                            error_message: job.error_message.clone(),
-                            player_name: summary.player_name,
-                            player_class: summary.player_class,
-                            realm: summary.realm,
-                            region: summary.region,
-                            dps: summary.dps,
-                            batch_id: job.batch_id.clone(),
-                        }
-                    })
-                    .collect();
-                all.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-                if player.is_none() && realm.is_none() {
-                    all.truncate(limit);
-                    return Ok(all);
-                }
-
-                Ok(all
-                    .into_iter()
-                    .filter(|job| {
-                        if let Some(p) = player {
-                            if job.player_name.as_deref() != Some(p) {
-                                return false;
-                            }
-                        }
-                        if let Some(r) = realm {
-                            if job.realm.as_deref() != Some(r) {
-                                return false;
-                            }
-                        }
-                        true
-                    })
-                    .take(limit)
-                    .collect())
-            }
         }
     }
 
@@ -555,6 +525,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
+                            iterations, batch_id, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('pending', 'running', 'paused') \
@@ -567,6 +538,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
+                            iterations, batch_id, result_json, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('done', 'failed', 'cancelled') \
@@ -578,32 +550,11 @@ impl JobRepo {
 
                 let mut out: Vec<JobActiveSummary> =
                     Vec::with_capacity(active_rows.len() + terminal_rows.len());
-                for r in active_rows.iter().chain(terminal_rows.iter()) {
-                    let status_str: String = r.get("status");
-                    let progress_pct: i32 = r.get("progress_pct");
-                    let simc_input: String = r.get("simc_input_head");
-                    let summary = extract_result_summary(&None, &simc_input);
-                    out.push(JobActiveSummary {
-                        id: r.get("id"),
-                        status: Self::str_to_status(&status_str),
-                        sim_type: r.get("sim_type"),
-                        created_at: r.get("created_at"),
-                        progress_pct: progress_pct.clamp(0, 100) as u8,
-                        progress_stage: r.get("progress_stage"),
-                        progress_detail: r.get("progress_detail"),
-                        player_name: summary.player_name,
-                        player_class: summary.player_class,
-                        fight_style: r.get("fight_style"),
-                        simc_input_mode: SimcInputMode::from_str(
-                            &r.try_get::<String, _>("simc_input_mode")
-                                .unwrap_or_else(|_| "inline".to_string()),
-                        ),
-                        pause_requested: r
-                            .try_get::<i32, _>("pause_requested")
-                            .unwrap_or(0)
-                            != 0,
-                        error_message: r.get("error_message"),
-                    });
+                for r in active_rows.iter() {
+                    out.push(row_to_overview_summary(r, false));
+                }
+                for r in terminal_rows.iter() {
+                    out.push(row_to_overview_summary(r, true));
                 }
                 Ok(out)
             }
@@ -627,6 +578,11 @@ impl JobRepo {
                         simc_input_mode: j.simc_input_mode,
                         pause_requested: j.pause_requested,
                         error_message: j.error_message.clone(),
+                        iterations: j.iterations,
+                        realm: s.realm,
+                        region: s.region,
+                        dps: s.dps,
+                        batch_id: j.batch_id.clone(),
                     };
                     match j.status {
                         JS::Pending | JS::Running | JS::Paused => active.push(summary),
@@ -638,6 +594,151 @@ impl JobRepo {
                 terminal.truncate(limit_recent);
                 active.extend(terminal);
                 Ok(active)
+            }
+        }
+    }
+
+    /// Unified job listing for the /sims overview page (combined Active/All view
+    /// + stats panel + batch grouping). Returns a single ordered list filtered
+    /// by the requested status set, with optional player/realm scoping.
+    pub async fn list_jobs(
+        &self,
+        filter: ListJobsFilter<'_>,
+    ) -> Result<Vec<crate::models::JobActiveSummary>, sqlx::Error> {
+        use crate::models::JobActiveSummary;
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                let status_clause = filter.status.sql_where();
+                let mut sql = format!(
+                    "SELECT id, status, sim_type, created_at, fight_style, \
+                            progress_pct, progress_stage, progress_detail, \
+                            simc_input_mode, pause_requested, error_message, \
+                            iterations, batch_id, result_json, \
+                            SUBSTR(simc_input, 1, 4096) AS simc_input_head \
+                     FROM jobs \
+                     WHERE {status_clause} \
+                     ORDER BY created_at DESC LIMIT $1"
+                );
+                if filter.player.is_some() || filter.realm.is_some() {
+                    // Filtering happens in Rust after the SUBSTR head is parsed,
+                    // since neither field is a column. Widen the SQL limit so the
+                    // post-filter result still has a reasonable cap.
+                    sql = sql.replace("LIMIT $1", "LIMIT 1000");
+                }
+                let limit = filter.limit.unwrap_or(200) as i32;
+                let rows = if sql.contains("LIMIT 1000") {
+                    sqlx::query(&sql).fetch_all(pool).await?
+                } else {
+                    sqlx::query(&sql).bind(limit).fetch_all(pool).await?
+                };
+
+                let mut all: Vec<JobActiveSummary> = rows
+                    .iter()
+                    .map(|r| row_to_overview_summary(r, true))
+                    .collect();
+
+                if filter.player.is_some() || filter.realm.is_some() {
+                    all.retain(|j| {
+                        if let Some(p) = filter.player {
+                            if j.player_name.as_deref() != Some(p) {
+                                return false;
+                            }
+                        }
+                        if let Some(r) = filter.realm {
+                            if j.realm.as_deref() != Some(r) {
+                                return false;
+                            }
+                        }
+                        true
+                    });
+                    all.truncate(limit as usize);
+                }
+                Ok(all)
+            }
+            JobBackend::Memory(jobs) => {
+                let guard = jobs.lock().unwrap();
+                let mut all: Vec<JobActiveSummary> = guard
+                    .iter()
+                    .filter(|j| filter.status.includes(&j.status))
+                    .filter(|j| {
+                        filter
+                            .player
+                            .map(|p| {
+                                extract_result_summary(&j.result_json, &j.simc_input)
+                                    .player_name
+                                    .as_deref()
+                                    == Some(p)
+                            })
+                            .unwrap_or(true)
+                    })
+                    .filter(|j| {
+                        filter
+                            .realm
+                            .map(|r| {
+                                extract_result_summary(&j.result_json, &j.simc_input)
+                                    .realm
+                                    .as_deref()
+                                    == Some(r)
+                            })
+                            .unwrap_or(true)
+                    })
+                    .map(|j| {
+                        let s = extract_result_summary(&j.result_json, &j.simc_input);
+                        JobActiveSummary {
+                            id: j.id.clone(),
+                            status: j.status.clone(),
+                            sim_type: j.sim_type.clone(),
+                            created_at: j.created_at.clone(),
+                            progress_pct: j.progress_pct,
+                            progress_stage: j.progress_stage.clone(),
+                            progress_detail: j.progress_detail.clone(),
+                            player_name: s.player_name,
+                            player_class: s.player_class,
+                            fight_style: j.fight_style.clone(),
+                            simc_input_mode: j.simc_input_mode,
+                            pause_requested: j.pause_requested,
+                            error_message: j.error_message.clone(),
+                            iterations: j.iterations,
+                            realm: s.realm,
+                            region: s.region,
+                            dps: s.dps,
+                            batch_id: j.batch_id.clone(),
+                        }
+                    })
+                    .collect();
+                all.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                all.truncate(filter.limit.unwrap_or(200));
+                Ok(all)
+            }
+        }
+    }
+
+    /// Delete a terminal-state job and its associated rows in dedup / metadata /
+    /// triage_batches tables. Returns an error if the job is still active.
+    pub async fn delete_job(&self, id: &str) -> Result<(), sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                let _ = sqlx::query("DELETE FROM combo_dedup WHERE job_id = $1")
+                    .bind(id)
+                    .execute(pool)
+                    .await;
+                let _ = sqlx::query("DELETE FROM combo_metadata WHERE job_id = $1")
+                    .bind(id)
+                    .execute(pool)
+                    .await;
+                let _ = sqlx::query("DELETE FROM triage_batches WHERE job_id = $1")
+                    .bind(id)
+                    .execute(pool)
+                    .await;
+                sqlx::query("DELETE FROM jobs WHERE id = $1")
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+                Ok(())
+            }
+            JobBackend::Memory(jobs) => {
+                jobs.lock().unwrap().retain(|j| j.id != id);
+                Ok(())
             }
         }
     }
