@@ -1127,11 +1127,14 @@ pub async fn run_simc_staged(
                         .map(|s| s.name.to_string())
                         .unwrap_or_else(|| "Done".to_string());
                     // All profilesets survived — collect their combo_ids.
-                    let meta_repo = crate::db::ComboMetadataRepo::new(p.clone());
-                    let mut survivor_combo_ids: Vec<i64> = Vec::new();
+                    // combo_name format is "Combo N" where N is the combo_id,
+                    // so parse the integer directly instead of DB round-trips.
+                    let mut survivor_combo_ids: Vec<i64> = Vec::with_capacity(keep_combos.len());
                     for name in &keep_combos {
-                        if let Ok(Some(row)) = meta_repo.get_by_name(job_id, name).await {
-                            survivor_combo_ids.push(row.combo_id);
+                        if let Some(suffix) = name.strip_prefix("Combo ") {
+                            if let Ok(id) = suffix.trim().parse::<i64>() {
+                                survivor_combo_ids.push(id);
+                            }
                         }
                     }
                     let checkpoint =
@@ -1202,11 +1205,14 @@ pub async fn run_simc_staged(
                     .get(next_idx)
                     .map(|s| s.name.to_string())
                     .unwrap_or_else(|| "Done".to_string());
-                let meta_repo = crate::db::ComboMetadataRepo::new(p.clone());
-                let mut survivor_combo_ids: Vec<i64> = Vec::new();
+                // combo_name format is "Combo N" where N is the combo_id,
+                // so parse the integer directly instead of DB round-trips.
+                let mut survivor_combo_ids: Vec<i64> = Vec::with_capacity(keep_combos.len());
                 for name in &keep_combos {
-                    if let Ok(Some(row)) = meta_repo.get_by_name(job_id, name).await {
-                        survivor_combo_ids.push(row.combo_id);
+                    if let Some(suffix) = name.strip_prefix("Combo ") {
+                        if let Ok(id) = suffix.trim().parse::<i64>() {
+                            survivor_combo_ids.push(id);
+                        }
                     }
                 }
                 let checkpoint =
