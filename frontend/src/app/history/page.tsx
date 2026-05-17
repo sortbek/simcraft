@@ -346,9 +346,9 @@ export default function HistoryPage() {
     if (isDesktop !== true) return;
     setLoading(true);
     fetch(`${API_URL}/api/sims`)
-      .then((r) => r.json())
-      .then((data) => setSims(data))
-      .catch(() => {})
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setSims(Array.isArray(data) ? data : []))
+      .catch(() => setSims([]))
       .finally(() => setLoading(false));
   }, [isDesktop]);
 
@@ -371,7 +371,7 @@ export default function HistoryPage() {
       `${API_URL}/api/sims?player=${encodeURIComponent(char.name)}&realm=${encodeURIComponent(char.realm)}`
     )
       .then((r) => (r.ok ? r.json() : []))
-      .then((data) => setSims(data))
+      .then((data) => setSims(Array.isArray(data) ? data : []))
       .catch(() => setSims([]))
       .finally(() => setLoading(false));
   }, [isDesktop, simcInput]);
