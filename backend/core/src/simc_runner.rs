@@ -185,17 +185,42 @@ const STAGE_MIN_KEEP: usize = 5;
 /// final precision stage instead of walking the remaining intermediate stages.
 const SKIP_TO_FINAL_THRESHOLD: usize = 5;
 
-/// Iteration count for stage `idx` of `total` stages. Final stage runs at the
-/// user-requested iteration count; earlier stages scale down geometrically (×2
-/// per step) with a floor of 50 iterations.
-fn iterations_for_stage(stage_idx: usize, total_stages: usize, user_iters: u32) -> u32 {
+/// Iteration count cap for stage `idx` of `total` stages. simc treats
+/// `iterations=N` as a hard ceiling; setting it loosely lets simc overshoot
+/// a stage's `target_error` toward final-pass precision (e.g. a Probe stage
+/// at 2.0% target_error empirically hitting ~0.5% because simc kept running).
+///
+/// We cap pruning stages at roughly what simc needs to reach the stage's
+/// target_error band, so simc stops near the intended precision. Final
+/// stage always runs at the user-requested iteration count.
+fn iterations_for_stage(
+    stage_idx: usize,
+    total_stages: usize,
+    user_iters: u32,
+    target_error_pct: f64,
+) -> u32 {
     if stage_idx + 1 >= total_stages {
         return user_iters;
     }
-    let from_end = (total_stages - 1 - stage_idx) as i32;
-    let divisor = 2f64.powi(from_end);
-    let scaled = (user_iters as f64 / divisor) as u32;
-    std::cmp::max(50, scaled)
+    // Hard caps by target_error band. simc's per-profileset auto-tuner picks
+    // an iteration count based on observed variance; these caps keep that
+    // count from drifting much past the stage's stated precision target.
+    let cap: u32 = if target_error_pct >= 2.0 {
+        50 // Probe
+    } else if target_error_pct >= 1.0 {
+        125 // Coarse
+    } else if target_error_pct >= 0.5 {
+        500 // Refine
+    } else if target_error_pct >= 0.2 {
+        3_000 // Medium
+    } else if target_error_pct >= 0.1 {
+        12_000 // Fine
+    } else if target_error_pct >= 0.05 {
+        50_000 // Trace
+    } else {
+        user_iters
+    };
+    std::cmp::min(cap, user_iters)
 }
 
 /// Progress-bar range `(start_pct, end_pct)` allocated to stage `idx` of `total`.
@@ -821,44 +846,34 @@ fn get_profileset_results(raw: &Value) -> &[Value] {
         .unwrap_or(&[])
 }
 
+// Matches a profileset declaration like `profileset."Combo 42"+=...` and
+// captures the combo name. Quotes are required: the streamed-mode iterator
+// always emits the form `profileset."Combo N"+=...`, and the legacy top-gear
+// path uses the same quoted form.
+static PROFILESET_NAME_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"^\s*profileset\."(Combo \d+)""#).unwrap());
+static COMBO_HEADER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^###\s+(Combo \d+)").unwrap());
+
 pub fn filter_simc_input(
     simc_input: &str,
     keep_combos: &std::collections::HashSet<String>,
 ) -> String {
-    let header_re = Regex::new(r"^###\s+(Combo \d+)").unwrap();
-    let lines: Vec<&str> = simc_input.split('\n').collect();
     let mut output: Vec<&str> = Vec::new();
-    let mut current_combo: Option<String> = None;
-    let mut in_kept_combo = true;
 
-    for line in &lines {
-        if let Some(caps) = header_re.captures(line) {
-            let combo_name = caps[1].to_string();
-            in_kept_combo = keep_combos.contains(&combo_name);
-            current_combo = Some(combo_name);
-            if in_kept_combo {
+    for line in simc_input.split('\n') {
+        if let Some(caps) = COMBO_HEADER_RE.captures(line) {
+            if keep_combos.contains(&caps[1]) {
                 output.push(line);
             }
             continue;
         }
-
-        if line.trim().starts_with("profileset.") {
-            if in_kept_combo {
+        if let Some(caps) = PROFILESET_NAME_RE.captures(line) {
+            if keep_combos.contains(&caps[1]) {
                 output.push(line);
             }
             continue;
         }
-
-        if current_combo.is_some() && line.trim().starts_with('#') {
-            if in_kept_combo {
-                output.push(line);
-            }
-            continue;
-        }
-
         output.push(line);
-        current_combo = None;
-        in_kept_combo = true;
     }
 
     output.join("\n")
@@ -1077,7 +1092,8 @@ pub async fn run_simc_staged(
         let stage = &stages[stage_idx];
         let is_final = stage_idx == final_idx;
         let (range_start, range_end) = progress_range_for_stage(stage_idx, total_stages, base_start);
-        let stage_iters = iterations_for_stage(stage_idx, total_stages, user_iterations);
+        let stage_iters =
+            iterations_for_stage(stage_idx, total_stages, user_iterations, stage.target_error);
 
         on_progress(
             range_start,
@@ -1388,9 +1404,56 @@ pub async fn run_simc_triage_batch(
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::HashSet;
 
     fn ps(name: &str, mean: f64) -> Value {
         json!({ "name": name, "mean": mean })
+    }
+
+    fn keep_set(names: &[&str]) -> HashSet<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn filter_simc_input_keeps_only_named_combos_inline_format() {
+        // Legacy top_gear path: each combo prefixed by `### Combo N`.
+        let input = "# Base Actor\nhead=base\n\
+            ### Combo 1\nprofileset.\"Combo 1\"+=head=a\n\
+            ### Combo 2\nprofileset.\"Combo 2\"+=head=b\n\
+            ### Combo 3\nprofileset.\"Combo 3\"+=head=c";
+        let out = filter_simc_input(input, &keep_set(&["Combo 2"]));
+        assert!(out.contains("### Combo 2"));
+        assert!(out.contains("profileset.\"Combo 2\""));
+        assert!(!out.contains("### Combo 1"));
+        assert!(!out.contains("profileset.\"Combo 1\""));
+        assert!(!out.contains("### Combo 3"));
+        assert!(!out.contains("profileset.\"Combo 3\""));
+        assert!(out.contains("head=base"));
+    }
+
+    #[test]
+    fn filter_simc_input_keeps_only_named_combos_streamed_format() {
+        // Streamed handoff path: profileset.* lines only, no `### Combo` headers.
+        // Regression test for the bug where staged-pipeline pruning silently
+        // no-op'd because the filter relied on headers that don't exist here.
+        let input = "# Base Actor\nhead=base\n\
+            profileset.\"Combo 2\"+=head=a\n\
+            profileset.\"Combo 2\"+=talents=x\n\
+            profileset.\"Combo 3\"+=head=b\n\
+            profileset.\"Combo 4\"+=head=c";
+        let out = filter_simc_input(input, &keep_set(&["Combo 3"]));
+        assert!(out.contains("profileset.\"Combo 3\"+=head=b"));
+        assert!(!out.contains("profileset.\"Combo 2\""));
+        assert!(!out.contains("profileset.\"Combo 4\""));
+        assert!(out.contains("head=base"));
+    }
+
+    #[test]
+    fn filter_simc_input_empty_keep_set_drops_all_profilesets() {
+        let input = "# Base Actor\nhead=base\nprofileset.\"Combo 2\"+=head=a";
+        let out = filter_simc_input(input, &keep_set(&[]));
+        assert!(!out.contains("profileset."));
+        assert!(out.contains("head=base"));
     }
 
     #[test]
@@ -1589,32 +1652,27 @@ mod tests {
 
     #[test]
     fn iterations_final_stage_uses_user_iters() {
-        assert_eq!(iterations_for_stage(5, 6, 1000), 1000);
-        assert_eq!(iterations_for_stage(0, 1, 1000), 1000);
+        // Last stage always returns user_iters regardless of target_error.
+        assert_eq!(iterations_for_stage(5, 6, 1000, 0.5), 1000);
+        assert_eq!(iterations_for_stage(0, 1, 1000, 0.5), 1000);
     }
 
     #[test]
-    fn iterations_earlier_stages_scale_geometrically() {
-        // 6 stages, user_iters = 1000:
-        // stage 5 (final) = 1000, stage 4 = 500, stage 3 = 250, stage 2 = 125,
-        // stage 1 = 62, stage 0 = 50 (floor).
-        assert_eq!(iterations_for_stage(0, 6, 1000), 50);
-        assert_eq!(iterations_for_stage(1, 6, 1000), 62);
-        assert_eq!(iterations_for_stage(2, 6, 1000), 125);
-        assert_eq!(iterations_for_stage(3, 6, 1000), 250);
-        assert_eq!(iterations_for_stage(4, 6, 1000), 500);
-        assert_eq!(iterations_for_stage(5, 6, 1000), 1000);
+    fn iterations_caps_by_target_error_band() {
+        // High user_iters: cap is dominated by target_error.
+        assert_eq!(iterations_for_stage(0, 4, 100_000, 2.0), 50); // Probe
+        assert_eq!(iterations_for_stage(0, 4, 100_000, 1.0), 125); // Coarse
+        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.5), 500); // Refine
+        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.2), 3_000); // Medium
+        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.1), 12_000); // Fine
+        assert_eq!(iterations_for_stage(0, 4, 100_000, 0.05), 50_000); // Trace
     }
 
     #[test]
-    fn iterations_floor_50_kicks_in_for_low_user_iters() {
-        // user_iters = 100, 6 stages → early stages would compute < 50, get floored.
-        assert_eq!(iterations_for_stage(0, 6, 100), 50);
-        assert_eq!(iterations_for_stage(1, 6, 100), 50); // 100/16 = 6, floored
-        assert_eq!(iterations_for_stage(2, 6, 100), 50); // 100/8 = 12, floored
-        assert_eq!(iterations_for_stage(3, 6, 100), 50); // 100/4 = 25, floored
-        assert_eq!(iterations_for_stage(4, 6, 100), 50); // 100/2 = 50
-        assert_eq!(iterations_for_stage(5, 6, 100), 100);
+    fn iterations_user_iters_caps_below_band_cap() {
+        // user_iters below the band's cap → user_iters wins.
+        assert_eq!(iterations_for_stage(0, 4, 30, 2.0), 30); // Probe band=50, user=30
+        assert_eq!(iterations_for_stage(0, 4, 100, 1.0), 100); // Coarse band=125, user=100
     }
 
     // ---- progress_range_for_stage ----
