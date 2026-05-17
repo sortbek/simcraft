@@ -34,10 +34,14 @@ pub(super) async fn list_sims_filtered(
     }
 }
 
+/// Cap on terminal-state jobs included in the active-sims overview alongside
+/// any in-flight jobs. Tracked by `fetchActiveJobs` docs on the frontend.
+const RECENT_TERMINAL_LIMIT: usize = 20;
+
 /// List active sims (Pending / Running / Paused) plus the N most recent
 /// terminal jobs. Powers the /sims overview page and the header indicator.
 pub(super) async fn list_active_jobs(repo: web::Data<JobRepo>) -> HttpResponse {
-    match repo.list_active(20).await {
+    match repo.list_active(RECENT_TERMINAL_LIMIT).await {
         Ok(summaries) => HttpResponse::Ok().json(summaries),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
