@@ -6,7 +6,7 @@ mod droptimizer_handlers;
 mod enchant_gem_handlers;
 mod frontend;
 mod game_data_handlers;
-mod helpers;
+pub(crate) mod helpers;
 mod job_handlers;
 pub mod request_json;
 mod route_handlers;

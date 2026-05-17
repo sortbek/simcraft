@@ -940,6 +940,11 @@ pub const PAUSED_SENTINEL: &str = "paused_by_user";
 ///
 /// `pool` is required for Streamed-mode jobs (checkpoint writes + pause polling).
 /// Inline-mode jobs pass `None` and skip those paths entirely.
+///
+/// `start_stage_idx` controls which stage to begin at. Pass `0` for a fresh run.
+/// Resume calls pass the `next_stage_idx` from the Staged checkpoint to skip
+/// already-completed stages. The `simc_input` must already contain only the
+/// survivor profilesets for the resumed stage.
 #[allow(clippy::too_many_arguments)]
 pub async fn run_simc_staged(
     simc_path: &Path,
@@ -950,6 +955,7 @@ pub async fn run_simc_staged(
     base_start: u8,
     simc_input_mode: crate::models::SimcInputMode,
     pool: Option<sqlx::AnyPool>,
+    start_stage_idx: usize,
     on_progress: impl Fn(u8, &str, &str),
     on_stage_complete: impl Fn(&str),
     on_log: impl Fn(&str) + Clone,
@@ -1027,7 +1033,10 @@ pub async fn run_simc_staged(
     let stages = build_stage_schedule(user_target_error);
     let total_stages = stages.len();
     let final_idx = total_stages - 1;
-    let mut stage_idx = 0;
+    // Clamp start_stage_idx to a valid range. If it's past the last stage the
+    // while loop body never executes and we fall through to the "no result"
+    // error — the caller (resume_staged) guards against this case upstream.
+    let mut stage_idx = start_stage_idx.min(total_stages);
 
     while stage_idx < total_stages {
         let stage = &stages[stage_idx];

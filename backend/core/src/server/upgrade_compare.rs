@@ -464,6 +464,7 @@ pub(super) async fn create_upgrade_compare_sim(
         log_buffer.get_ref().clone(),
         10, // inline/eager path: staged pipeline spans 10-95%
         crate::models::SimcInputMode::Inline,
+        0,
     );
 
     HttpResponse::Ok().json(SimResponse {

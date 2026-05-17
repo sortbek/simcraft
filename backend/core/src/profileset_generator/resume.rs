@@ -211,15 +211,88 @@ async fn resume_triage(
     Ok(())
 }
 
-/// Staged-phase resume. Task 8 fills this in.
+/// Staged-phase resume. Loads survivor profileset_simc fragments from
+/// combo_metadata for the combo_ids saved in the Staged checkpoint, builds the
+/// combined simc input (base profile + survivors), and spawns
+/// `spawn_staged_sim` starting at the saved `next_stage_idx`.
 async fn resume_staged(
-    _job_id: &str,
-    _job: &Job,
+    job_id: &str,
+    job: &Job,
     _request_json: &str,
-    _checkpoint: &Checkpoint,
-    _inputs: ResumeInputs,
+    checkpoint: &Checkpoint,
+    inputs: ResumeInputs,
 ) -> Result<(), String> {
-    Err("resume_staged not yet implemented (Phase 2 Task 8)".to_string())
+    let staged_cp = match &checkpoint.phase {
+        CheckpointPhase::Staged(sc) => sc,
+        _ => return Err("resume_staged called with non-Staged checkpoint".to_string()),
+    };
+
+    // 1. Load survivor profileset_simc fragments for the saved combo_ids.
+    let metadata_repo = crate::db::ComboMetadataRepo::new(inputs.pool.clone());
+    let rows = metadata_repo
+        .list_for_job(job_id, None)
+        .await
+        .map_err(|e| format!("Failed to load survivors: {}", e))?;
+    let id_set: std::collections::HashSet<i64> =
+        staged_cp.survivor_combo_ids.iter().copied().collect();
+    let survivor_simc: String = rows
+        .iter()
+        .filter(|r| id_set.contains(&r.combo_id))
+        .map(|r| r.profileset_simc.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if survivor_simc.is_empty() {
+        return Err("No survivor profileset_simc fragments to resume with".to_string());
+    }
+
+    let combined = format!("{}\n{}", job.simc_input, survivor_simc);
+    let combo_count = id_set.len();
+
+    // 2. Reconstruct a minimal options Value for run_simc_staged. The function
+    // reads fight_style, target_error, iterations (and a few others with sane
+    // defaults) from the Value. All of these are persisted on the Job row.
+    let options = serde_json::json!({
+        "iterations": job.iterations,
+        "target_error": job.target_error,
+        "fight_style": job.fight_style,
+    });
+
+    // 3. Flip status back to Running and clear pause_requested.
+    inputs
+        .repo
+        .set_pause_requested(job_id, false)
+        .await
+        .map_err(|e| format!("Failed to clear pause_requested: {}", e))?;
+    inputs
+        .repo
+        .update_status(job_id, crate::models::JobStatus::Running)
+        .await
+        .map_err(|e| format!("Failed to set Running: {}", e))?;
+
+    // 4. Resolve the simc binary.
+    let simc_bin = inputs
+        .simc_bins
+        .resolve("")
+        .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
+
+    // 5. Spawn the staged pipeline at the saved next_stage_idx.
+    //    base_start=50 because Triage already ran (5-50% covered); staged
+    //    pipeline uses 50-95%.
+    crate::server::helpers::spawn_staged_sim(
+        inputs.repo.clone(),
+        simc_bin,
+        options,
+        job_id.to_string(),
+        combined,
+        combo_count,
+        inputs.log_buffer.clone(),
+        50, // base_start: Triage consumed 5-50%
+        SimcInputMode::Streamed,
+        staged_cp.next_stage_idx,
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
