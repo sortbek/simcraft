@@ -14,6 +14,13 @@ enum JobBackend {
     Memory(Arc<Mutex<Vec<Job>>>),
 }
 
+/// Default cap when the caller doesn't pass a limit.
+const DEFAULT_LIST_LIMIT: usize = 200;
+/// When post-filtering by player/realm, fetch this many rows from the DB
+/// before retaining only matches. The retained set is then truncated to the
+/// caller-requested limit.
+const FILTER_PREFETCH_LIMIT: usize = 1000;
+
 /// Filter passed to `list_jobs`. Powers the unified /sims overview page.
 #[derive(Debug, Clone, Copy)]
 pub struct ListJobsFilter<'a> {
@@ -74,10 +81,40 @@ fn str_to_status(s: &str) -> JobStatus {
     }
 }
 
+/// Build an overview summary from an in-memory `Job` plus a precomputed
+/// `ResultSummary`. The Memory backend computes the `ResultSummary` once and
+/// reuses it for filtering, so this helper takes it as a parameter rather
+/// than re-deriving it from the job's columns.
+fn job_to_overview_summary(
+    j: &Job,
+    s: crate::models::ResultSummary,
+) -> crate::models::JobOverviewSummary {
+    crate::models::JobOverviewSummary {
+        id: j.id.clone(),
+        status: j.status.clone(),
+        sim_type: j.sim_type.clone(),
+        created_at: j.created_at.clone(),
+        progress_pct: j.progress_pct,
+        progress_stage: j.progress_stage.clone(),
+        progress_detail: j.progress_detail.clone(),
+        player_name: s.player_name,
+        player_class: s.player_class,
+        fight_style: j.fight_style.clone(),
+        simc_input_mode: j.simc_input_mode,
+        pause_requested: j.pause_requested,
+        error_message: j.error_message.clone(),
+        iterations: j.iterations,
+        realm: s.realm,
+        region: s.region,
+        dps: s.dps,
+        batch_id: j.batch_id.clone(),
+    }
+}
+
 /// Convert a `jobs` row (with `simc_input_head` populated via SUBSTR and
-/// optionally `result_json`) into a `JobActiveSummary`. Used by both
+/// optionally `result_json`) into a `JobOverviewSummary`. Used by both
 /// `list_active` and `list_jobs` so the field-mapping logic lives in one place.
-fn row_to_overview_summary(r: &sqlx::any::AnyRow, has_result_json: bool) -> crate::models::JobActiveSummary {
+fn row_to_overview_summary(r: &sqlx::any::AnyRow, has_result_json: bool) -> crate::models::JobOverviewSummary {
     let status_str: String = r.get("status");
     let progress_pct: i32 = r.get("progress_pct");
     let simc_input: String = r.get("simc_input_head");
@@ -88,7 +125,7 @@ fn row_to_overview_summary(r: &sqlx::any::AnyRow, has_result_json: bool) -> crat
     };
     let summary = extract_result_summary(&result_json, &simc_input);
     let iterations: i32 = r.try_get("iterations").unwrap_or(0);
-    crate::models::JobActiveSummary {
+    crate::models::JobOverviewSummary {
         id: r.get("id"),
         status: str_to_status(&status_str),
         sim_type: r.get("sim_type"),
@@ -144,10 +181,6 @@ impl JobRepo {
             JobStatus::Failed => "failed",
             JobStatus::Cancelled => "cancelled",
         }
-    }
-
-    fn str_to_status(s: &str) -> JobStatus {
-        str_to_status(s)
     }
 
     fn gc_memory_jobs(jobs: &mut Vec<Job>) {
@@ -230,7 +263,7 @@ impl JobRepo {
                     let iterations: i32 = r.get("iterations");
                     Job {
                         id: r.get("id"),
-                        status: Self::str_to_status(&status_str),
+                        status: str_to_status(&status_str),
                         sim_type: r.get("sim_type"),
                         simc_input: r.get("simc_input"),
                         result_json: r.get("result_json"),
@@ -509,7 +542,7 @@ impl JobRepo {
     /// Return all active (Pending / Running / Paused) jobs plus the most
     /// recent `limit_recent` terminal jobs. Used by the sims overview page.
     ///
-    /// Returns a slim `JobActiveSummary` (no full simc_input / result_json
+    /// Returns a slim `JobOverviewSummary` (no full simc_input / result_json
     /// bodies). The Database backend reads only the head of `simc_input`
     /// (4 KB) to extract player_name/class via regex, keeping per-poll I/O
     /// cheap even with many jobs. The header where the player= line lives
@@ -517,8 +550,8 @@ impl JobRepo {
     pub async fn list_active(
         &self,
         limit_recent: usize,
-    ) -> Result<Vec<crate::models::JobActiveSummary>, sqlx::Error> {
-        use crate::models::{JobActiveSummary, JobStatus as JS};
+    ) -> Result<Vec<crate::models::JobOverviewSummary>, sqlx::Error> {
+        use crate::models::{JobOverviewSummary, JobStatus as JS};
         match &self.backend {
             JobBackend::Database(pool) => {
                 let active_rows = sqlx::query(
@@ -548,7 +581,7 @@ impl JobRepo {
                 .fetch_all(pool)
                 .await?;
 
-                let mut out: Vec<JobActiveSummary> =
+                let mut out: Vec<JobOverviewSummary> =
                     Vec::with_capacity(active_rows.len() + terminal_rows.len());
                 for r in active_rows.iter() {
                     out.push(row_to_overview_summary(r, false));
@@ -560,30 +593,11 @@ impl JobRepo {
             }
             JobBackend::Memory(jobs) => {
                 let guard = jobs.lock().unwrap();
-                let mut active: Vec<JobActiveSummary> = Vec::new();
-                let mut terminal: Vec<JobActiveSummary> = Vec::new();
+                let mut active: Vec<JobOverviewSummary> = Vec::new();
+                let mut terminal: Vec<JobOverviewSummary> = Vec::new();
                 for j in guard.iter() {
                     let s = extract_result_summary(&j.result_json, &j.simc_input);
-                    let summary = JobActiveSummary {
-                        id: j.id.clone(),
-                        status: j.status.clone(),
-                        sim_type: j.sim_type.clone(),
-                        created_at: j.created_at.clone(),
-                        progress_pct: j.progress_pct,
-                        progress_stage: j.progress_stage.clone(),
-                        progress_detail: j.progress_detail.clone(),
-                        player_name: s.player_name,
-                        player_class: s.player_class,
-                        fight_style: j.fight_style.clone(),
-                        simc_input_mode: j.simc_input_mode,
-                        pause_requested: j.pause_requested,
-                        error_message: j.error_message.clone(),
-                        iterations: j.iterations,
-                        realm: s.realm,
-                        region: s.region,
-                        dps: s.dps,
-                        batch_id: j.batch_id.clone(),
-                    };
+                    let summary = job_to_overview_summary(j, s);
                     match j.status {
                         JS::Pending | JS::Running | JS::Paused => active.push(summary),
                         _ => terminal.push(summary),
@@ -604,12 +618,22 @@ impl JobRepo {
     pub async fn list_jobs(
         &self,
         filter: ListJobsFilter<'_>,
-    ) -> Result<Vec<crate::models::JobActiveSummary>, sqlx::Error> {
-        use crate::models::JobActiveSummary;
+    ) -> Result<Vec<crate::models::JobOverviewSummary>, sqlx::Error> {
+        use crate::models::JobOverviewSummary;
+        let final_limit = filter.limit.unwrap_or(DEFAULT_LIST_LIMIT);
+        let has_post_filter = filter.player.is_some() || filter.realm.is_some();
+        // Post-filtering (player/realm) happens in Rust because neither field is a
+        // column. Widen the DB-side limit so the trimmed result still has a
+        // reasonable cap.
+        let db_limit = if has_post_filter {
+            FILTER_PREFETCH_LIMIT
+        } else {
+            final_limit
+        };
         match &self.backend {
             JobBackend::Database(pool) => {
                 let status_clause = filter.status.sql_where();
-                let mut sql = format!(
+                let sql = format!(
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
@@ -619,95 +643,48 @@ impl JobRepo {
                      WHERE {status_clause} \
                      ORDER BY created_at DESC LIMIT $1"
                 );
-                if filter.player.is_some() || filter.realm.is_some() {
-                    // Filtering happens in Rust after the SUBSTR head is parsed,
-                    // since neither field is a column. Widen the SQL limit so the
-                    // post-filter result still has a reasonable cap.
-                    sql = sql.replace("LIMIT $1", "LIMIT 1000");
-                }
-                let limit = filter.limit.unwrap_or(200) as i32;
-                let rows = if sql.contains("LIMIT 1000") {
-                    sqlx::query(&sql).fetch_all(pool).await?
-                } else {
-                    sqlx::query(&sql).bind(limit).fetch_all(pool).await?
-                };
-
-                let mut all: Vec<JobActiveSummary> = rows
+                let rows = sqlx::query(&sql)
+                    .bind(db_limit as i32)
+                    .fetch_all(pool)
+                    .await?;
+                let mut all: Vec<JobOverviewSummary> = rows
                     .iter()
                     .map(|r| row_to_overview_summary(r, true))
                     .collect();
-
-                if filter.player.is_some() || filter.realm.is_some() {
+                if has_post_filter {
                     all.retain(|j| {
-                        if let Some(p) = filter.player {
-                            if j.player_name.as_deref() != Some(p) {
-                                return false;
-                            }
-                        }
-                        if let Some(r) = filter.realm {
-                            if j.realm.as_deref() != Some(r) {
-                                return false;
-                            }
-                        }
-                        true
+                        filter.player.map(|p| j.player_name.as_deref() == Some(p)).unwrap_or(true)
+                            && filter.realm.map(|r| j.realm.as_deref() == Some(r)).unwrap_or(true)
                     });
-                    all.truncate(limit as usize);
+                    all.truncate(final_limit);
                 }
                 Ok(all)
             }
             JobBackend::Memory(jobs) => {
                 let guard = jobs.lock().unwrap();
-                let mut all: Vec<JobActiveSummary> = guard
+                // Compute the result summary once per job — it parses JSON and
+                // scans the simc input; doing it inside the filter+map chain
+                // would re-parse three times per row.
+                let mut all: Vec<JobOverviewSummary> = guard
                     .iter()
                     .filter(|j| filter.status.includes(&j.status))
-                    .filter(|j| {
-                        filter
-                            .player
-                            .map(|p| {
-                                extract_result_summary(&j.result_json, &j.simc_input)
-                                    .player_name
-                                    .as_deref()
-                                    == Some(p)
-                            })
-                            .unwrap_or(true)
-                    })
-                    .filter(|j| {
-                        filter
-                            .realm
-                            .map(|r| {
-                                extract_result_summary(&j.result_json, &j.simc_input)
-                                    .realm
-                                    .as_deref()
-                                    == Some(r)
-                            })
-                            .unwrap_or(true)
-                    })
-                    .map(|j| {
+                    .filter_map(|j| {
                         let s = extract_result_summary(&j.result_json, &j.simc_input);
-                        JobActiveSummary {
-                            id: j.id.clone(),
-                            status: j.status.clone(),
-                            sim_type: j.sim_type.clone(),
-                            created_at: j.created_at.clone(),
-                            progress_pct: j.progress_pct,
-                            progress_stage: j.progress_stage.clone(),
-                            progress_detail: j.progress_detail.clone(),
-                            player_name: s.player_name,
-                            player_class: s.player_class,
-                            fight_style: j.fight_style.clone(),
-                            simc_input_mode: j.simc_input_mode,
-                            pause_requested: j.pause_requested,
-                            error_message: j.error_message.clone(),
-                            iterations: j.iterations,
-                            realm: s.realm,
-                            region: s.region,
-                            dps: s.dps,
-                            batch_id: j.batch_id.clone(),
+                        if let Some(p) = filter.player {
+                            if s.player_name.as_deref() != Some(p) {
+                                return None;
+                            }
                         }
+                        if let Some(r) = filter.realm {
+                            if s.realm.as_deref() != Some(r) {
+                                return None;
+                            }
+                        }
+                        Some(job_to_overview_summary(j, s))
                     })
                     .collect();
                 all.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-                all.truncate(filter.limit.unwrap_or(200));
+                all.truncate(final_limit);
                 Ok(all)
             }
         }
@@ -718,23 +695,16 @@ impl JobRepo {
     pub async fn delete_job(&self, id: &str) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
-                let _ = sqlx::query("DELETE FROM combo_dedup WHERE job_id = $1")
-                    .bind(id)
-                    .execute(pool)
-                    .await;
-                let _ = sqlx::query("DELETE FROM combo_metadata WHERE job_id = $1")
-                    .bind(id)
-                    .execute(pool)
-                    .await;
-                let _ = sqlx::query("DELETE FROM triage_batches WHERE job_id = $1")
-                    .bind(id)
-                    .execute(pool)
-                    .await;
+                let mut tx = pool.begin().await?;
+                for table in ["combo_dedup", "combo_metadata", "triage_batches"] {
+                    let sql = format!("DELETE FROM {table} WHERE job_id = $1");
+                    sqlx::query(&sql).bind(id).execute(&mut *tx).await?;
+                }
                 sqlx::query("DELETE FROM jobs WHERE id = $1")
                     .bind(id)
-                    .execute(pool)
+                    .execute(&mut *tx)
                     .await?;
-                Ok(())
+                tx.commit().await
             }
             JobBackend::Memory(jobs) => {
                 jobs.lock().unwrap().retain(|j| j.id != id);
@@ -767,7 +737,7 @@ impl JobRepo {
                     let stages: Vec<String> =
                         serde_json::from_str(&stages_str).unwrap_or_default();
                     let status_str: String = r.get("status");
-                    let status = Self::str_to_status(&status_str);
+                    let status = str_to_status(&status_str);
                     let pct: i32 = r.get("progress_pct");
                     // Only return result_json when the job is done.
                     let result_json: Option<String> = if status == JobStatus::Done {

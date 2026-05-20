@@ -10,7 +10,6 @@
   "nav.discord": "Discord",
   "nav.github": "GitHub",
   "nav.website": "Сайт",
-
   "layout.simhammer": "SimHammer",
   "layout.character": "Персонаж",
   "layout.pasteSimcExport": "Вставь экспорт аддона SimC...",
@@ -28,7 +27,6 @@
   "layout.later": "Позже",
   "layout.updateFailed": "Обновление не удалось",
   "layout.language": "Язык",
-
   "common.save": "Сохранить",
   "common.cancel": "Отмена",
   "common.clear": "Очистить",
@@ -42,10 +40,8 @@
   "common.options": "Параметры",
   "common.selectAll": "Выбрать всё",
   "common.deselect": "Снять выбор",
-  "common.showLess": "Показать меньше",
   "common.settings": "Настройки",
   "common.error": "Ошибка",
-
   "settings.cpuThreads": "Потоки CPU",
   "settings.balanced": "Сбалансированный",
   "settings.performance": "Производительность",
@@ -54,7 +50,6 @@
   "settings.clipboardSyncDesc": "Скопируй /simc в WoW, переключись на SimHammer — экипировка импортируется автоматически. Буфер обмена проверяется только при фокусе.",
   "settings.maxGearCombos": "Макс. комбинаций экипировки",
   "settings.threads": "потоков",
-
   "config.simulationOptions": "Параметры симуляции",
   "config.resetToDefaults": "Сбросить настройки",
   "config.fightStyle": "Стиль боя",
@@ -101,7 +96,6 @@
   "config.scenarioHelp": "Запусти несколько конфигураций боя с одним и тем же сетапом",
   "config.running": "Выполняется…",
   "config.talents": "Таланты",
-
   "fightStyle.patchwerk": "Patchwerk",
   "fightStyle.castingPatchwerk": "Casting Patchwerk",
   "fightStyle.hecticAddCleave": "Hectic Add Cleave",
@@ -111,14 +105,12 @@
   "fightStyle.dungeonSlice": "Dungeon Slice",
   "fightStyle.dungeonRoute": "Dungeon Route",
   "fightStyle.helterSkelter": "Helter Skelter",
-
   "track.Explorer": "Первопроходец",
   "track.Adventurer": "Искатель приключений",
   "track.Veteran": "Ветеран",
   "track.Champion": "Защитник",
   "track.Hero": "Герой",
   "track.Myth": "Миф",
-
   "slot.head": "Голова",
   "slot.neck": "Шея",
   "slot.shoulder": "Плечи",
@@ -135,7 +127,6 @@
   "slot.offHand": "Левая рука",
   "slot.ring1": "Кольцо 1",
   "slot.ring2": "Кольцо 2",
-
   "gear.equippedGear": "Надетая экипировка",
   "gear.bestGear": "Лучшая экипировка",
   "gear.selectedGear": "Выбранная экипировка",
@@ -163,12 +154,10 @@
   "gear.upgrade": "Улучшить",
   "gear.downgrade": "Понизить",
   "gear.resultsCount": "{count} результатов",
-  "gear.showAllResults": "Показать все {count} результатов (+{more} ещё)",
   "gear.itemsCount": "{count} предметов",
   "gear.expectedUpgrade": "Ожидаемое: ",
   "gear.bestUpgrade": "Лучшее: ",
   "gear.upgradeText": "улучшение",
-
   "stat.intellect": "Интеллект",
   "stat.strength": "Сила",
   "stat.agility": "Ловкость",
@@ -178,7 +167,6 @@
   "stat.mastery": "Искусность",
   "stat.versatility": "Универсальность",
   "stat.weaponDps": "DPS оружия",
-
   "results.statWeights": "Веса характеристик",
   "results.dps": "DPS",
   "results.error": "Ошибка (Δ)",
@@ -208,7 +196,6 @@
   "results.unknownError": "Неизвестная ошибка",
   "results.noResultData": "Нет данных о результатах.",
   "results.backToTopGear": "Вернуться к Top Gear",
-
   "loot.raids": "Рейды",
   "loot.byInstance": "По подземелью",
   "loot.bySlot": "По слоту",
@@ -216,7 +203,6 @@
   "loot.allRaids": "Все рейды",
   "loot.allCrafted": "Все созданные",
   "loot.allDungeons": "Все подземелья",
-
   "talent.equipped": "(надето)",
   "talent.equippedShort": "(над)",
   "talent.compare": "Сравнить",
@@ -227,7 +213,6 @@
   "talent.invalidString": "Неверная строка талантов. Вставь строку экспорта талантов WoW.",
   "talent.selectBuildsCompare": "Выбери билды для сравнения",
   "talent.buildsGearCombos": "{count} билдов × комбо экипировки",
-
   "page.quickSim": "Быстрая симуляция",
   "page.quickSimDesc": "DPS, разбивка способностей и веса характеристик.",
   "page.topGear": "Top Gear",
@@ -242,17 +227,12 @@
   "page.enchantGemDesc": "Найдите лучшие чары и камни.",
   "page.history": "История",
   "page.historyDesc": "Просмотр результатов последних симуляций.",
-
   "nav.advanced": "РАСШИРЕННЫЙ",
-
   "advanced.title": "Прямой ввод SimC",
   "advanced.description": "Вставьте или напишите прямой ввод SimulationCraft. Он будет отправлен напрямую в SimC без обработки.",
   "advanced.placeholder": "Вставьте ваш прямой ввод SimC здесь...\n\nПример:\nwarrior=\"Воин\"\nlevel=80\nrace=human\nspec=fury\n...",
-
   "home.selectSimType": "Выбери тип симуляции выше, чтобы начать.",
-
   "footer.disclaimer": "SimHammer — это хобби-проект, который держится на кофе, скотче и молитвах богам ГСЧ. Баги — это не фичи, но они могут насимить больше, чем твоя экипировка. Используй на свой страх и риск. Не связан с Blizzard, Raidbots или кем-либо, кто знает, что делает.",
-
   "button.runSimulation": "Запустить симуляцию",
   "button.findTopGear": "Найти Top Gear",
   "button.findUpgrades": "Найти улучшения ({count} предметов)",
@@ -261,7 +241,6 @@
   "button.runScenarios": "Запустить {count} сценариев",
   "button.findBestEnchants": "Найти лучшие чары ({count} комбо)",
   "button.findBestEnchantsDefault": "Найти лучшие чары и камни",
-
   "enchantGem.enchants": "Чары",
   "enchantGem.gems": "Камни",
   "enchantGem.selectEnchants": "Выбрать чары",
@@ -288,10 +267,8 @@
   "enchantGem.selectGemsTooltip": "Заполняет только пустые гнёзда. Включи 'Заменить текущие камни', чтобы также поменять уже вставленные камни.",
   "enchantGem.alwaysUse": "Всегда использовать",
   "enchantGem.onlyMaxColors": "Только максимальные цвета",
-
   "quickSim.lastSim": "Последняя сим",
   "quickSim.pasteExport": "Вставь экспорт аддона SimC, чтобы увидеть историю симуляций персонажа.",
-
   "topGear.resolvingGear": "Разбор экипировки...",
   "topGear.pasteExport": "Вставь экспорт аддона SimC, чтобы увидеть варианты экипировки.",
   "topGear.copyEnchants": "Скопировать чары",
@@ -303,7 +280,6 @@
   "topGear.charges": "зарядов",
   "topGear.chargesTooltip": "Сколько предметов катализатора можно носить одновременно в одном наборе экипировки.",
   "topGear.voidForge": "Оружие и аксессуары Void Forge",
-
   "dropFinder.source": "Источник",
   "dropFinder.selectRaid": "Выбрать рейд",
   "dropFinder.selectDungeon": "Выбрать подземелье",
@@ -329,7 +305,6 @@
   "dropFinder.spec": "Спец.",
   "dropFinder.selectAll": "Выбрать всё",
   "dropFinder.deselectAll": "Снять выделение",
-
   "upgradeCompare.pasteExport": "Вставь экспорт аддона SimC выше, чтобы начать.",
   "upgradeCompare.explainer": "Найди лучший способ потратить валюту улучшений Герба Рассвета. Выбери, какие надетые предметы рассмотреть, и SimHammer протестирует каждую допустимую комбинацию улучшений в рамках бюджета, чтобы найти ту, что даёт больше всего DPS.",
   "upgradeCompare.budget": "Бюджет",
@@ -339,7 +314,6 @@
   "upgradeCompare.noCurrencies": "Валюта улучшений не найдена",
   "upgradeCompare.selectItemsButton": "Выбрать предметы для улучшения",
   "upgradeCompare.unknownCurrency": "Валюта {id}",
-
   "history.title": "История симуляций",
   "history.subtitle": "Просматривай и сравнивай прошлые симуляции. Нажми на строку, чтобы увидеть подробные результаты.",
   "history.clearHistory": "Очистить историю",
@@ -361,22 +335,18 @@
   "history.noCharacterSims": "Симуляции для {name} на {realm} не найдены.",
   "history.pasteExportWeb": "Вставь экспорт аддона SimC, чтобы увидеть историю симуляций персонажа.",
   "history.loading": "Загрузка истории...",
-
   "status.completed": "Завершено",
   "status.running": "Выполняется",
   "status.failed": "Ошибка",
   "status.pending": "Ожидание",
   "status.cancelled": "Отменено",
-
   "simType.quickSim": "Быстрая сим",
   "simType.topGear": "Top Gear",
   "simType.dropFinder": "Drop Finder",
-
   "time.justNow": "только что",
   "time.minutesAgo": "{m}м назад",
   "time.hoursAgo": "{h}ч назад",
   "time.daysAgo": "{d}д назад",
-
   "validation.simcTooShort": "Ввод SimC слишком короткий. Вставь полный экспорт аддона.",
   "validation.checksumInvalid": "Контрольная сумма SimC не совпадает — ввод может быть неполным. Скопируй заново из /simc.",
   "validation.checksumWarning": "Изменено",

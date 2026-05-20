@@ -10,27 +10,7 @@ import {
   type SavedCharacter,
 } from '../../lib/saved-characters';
 import { useLanguage } from '../../lib/i18n';
-
-function parseCharacterInfo(input: string) {
-  if (!input) return null;
-  const nameMatch = input.match(/^(\w+)="(.+)"$/m);
-  const specMatch = input.match(/^spec=(\w+)/m);
-  if (!nameMatch) return null;
-  const realmMatch = input.match(/^server=(.+)$/m);
-  if (nameMatch[2] && realmMatch?.[1]) {
-    try {
-      localStorage.setItem(
-        'simhammer_last_character',
-        JSON.stringify({ name: nameMatch[2], realm: realmMatch[1] })
-      );
-    } catch {}
-  }
-  return {
-    className: nameMatch[1],
-    name: nameMatch[2],
-    spec: specMatch?.[1] || 'unknown',
-  };
-}
+import { parseCharacterInfo } from '../../lib/character';
 
 export default function SidebarCharacter() {
   const { t } = useLanguage();

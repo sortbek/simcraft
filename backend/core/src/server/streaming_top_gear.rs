@@ -121,6 +121,16 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     let log_buffer_owned = log_buffer.get_ref().clone();
 
     tokio::spawn(async move {
+        // Flip status to Running so the UI shows the Pause affordance and the
+        // pause endpoint accepts requests during Triage. Without this the job
+        // sits at Pending throughout triage and pause is unreachable.
+        if let Err(e) = repo_for_task
+            .update_status(&job_id_task, crate::models::JobStatus::Running)
+            .await
+        {
+            eprintln!("[{}] Failed to set Running status: {}", job_id_task, e);
+        }
+
         let repo_progress = repo_for_task.clone();
         let jid_progress = job_id_task.clone();
 

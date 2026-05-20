@@ -60,7 +60,7 @@ export async function simRow(sourceJobId: string, comboId: number): Promise<stri
   return data.id;
 }
 
-export type JobActiveStatus =
+export type JobStatus =
   | 'pending'
   | 'running'
   | 'paused'
@@ -68,9 +68,9 @@ export type JobActiveStatus =
   | 'failed'
   | 'cancelled';
 
-export interface JobActiveSummary {
+export interface JobOverviewSummary {
   id: string;
-  status: JobActiveStatus;
+  status: JobStatus;
   sim_type: string;
   created_at: string;
   progress_pct: number;
@@ -90,8 +90,8 @@ export interface JobActiveSummary {
 }
 
 /** Active sims (pending/running/paused) + up to 20 most recent terminal jobs. */
-export async function fetchActiveJobs(): Promise<JobActiveSummary[]> {
-  return fetchJson<JobActiveSummary[]>(`${API_URL}/api/jobs/active`);
+export async function fetchActiveJobs(): Promise<JobOverviewSummary[]> {
+  return fetchJson<JobOverviewSummary[]>(`${API_URL}/api/jobs?status=active`);
 }
 
 /** Full job list for the /sims overview's All / By-character views.
@@ -100,12 +100,12 @@ export async function fetchAllJobs(opts?: {
   player?: string;
   realm?: string;
   limit?: number;
-}): Promise<JobActiveSummary[]> {
+}): Promise<JobOverviewSummary[]> {
   const params = new URLSearchParams({ status: 'all' });
   if (opts?.player) params.set('player', opts.player);
   if (opts?.realm) params.set('realm', opts.realm);
   if (opts?.limit) params.set('limit', String(opts.limit));
-  return fetchJson<JobActiveSummary[]>(`${API_URL}/api/jobs?${params}`);
+  return fetchJson<JobOverviewSummary[]>(`${API_URL}/api/jobs?${params}`);
 }
 
 /** Delete a terminal-state job (Done/Failed/Cancelled). Active jobs must

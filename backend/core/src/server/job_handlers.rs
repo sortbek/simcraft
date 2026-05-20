@@ -13,10 +13,19 @@ use std::sync::Arc;
 /// any in-flight jobs. Tracked by `fetchActiveJobs` docs on the frontend.
 const RECENT_TERMINAL_LIMIT: usize = 20;
 
+#[derive(serde::Deserialize, Default, Copy, Clone)]
+#[serde(rename_all = "lowercase")]
+pub(super) enum StatusFilter {
+    #[default]
+    Active,
+    All,
+    Terminal,
+}
+
 #[derive(serde::Deserialize, Default)]
 pub(super) struct ListJobsQuery {
-    /// `active` (default), `all`, or `terminal`.
-    pub status: Option<String>,
+    #[serde(default)]
+    pub status: StatusFilter,
     pub player: Option<String>,
     pub realm: Option<String>,
     pub limit: Option<usize>,
@@ -24,25 +33,20 @@ pub(super) struct ListJobsQuery {
 
 /// Unified job listing for the /sims overview page (stats + batch grouping +
 /// view-mode filter). Supports `?status=active|all|terminal` and optional
-/// player/realm scoping. With `status=active` the response is identical to
-/// the legacy `/api/jobs/active` (active jobs + RECENT_TERMINAL_LIMIT recent
-/// terminal); other modes load up to `limit` rows (default 200).
+/// player/realm scoping. With `status=active` returns active jobs plus
+/// RECENT_TERMINAL_LIMIT most recent terminal jobs (used by the polling loop);
+/// other modes load up to `limit` rows (default 200).
 pub(super) async fn list_jobs(
     query: web::Query<ListJobsQuery>,
     repo: web::Data<JobRepo>,
 ) -> HttpResponse {
-    let status_str = query.status.as_deref().unwrap_or("active");
-    let result = match status_str {
-        "active" => repo.list_active(RECENT_TERMINAL_LIMIT).await,
+    let result = match query.status {
+        StatusFilter::Active => repo.list_active(RECENT_TERMINAL_LIMIT).await,
         other => {
             let status = match other {
-                "all" => crate::db::JobStatusFilter::All,
-                "terminal" => crate::db::JobStatusFilter::Terminal,
-                _ => {
-                    return HttpResponse::BadRequest().json(json!({
-                        "detail": format!("Unknown status filter: {}", other),
-                    }))
-                }
+                StatusFilter::All => crate::db::JobStatusFilter::All,
+                StatusFilter::Terminal => crate::db::JobStatusFilter::Terminal,
+                StatusFilter::Active => unreachable!(),
             };
             let filter = crate::db::ListJobsFilter {
                 status,
@@ -81,15 +85,6 @@ pub(super) async fn delete_job(
     }
     match repo.delete_job(&job_id).await {
         Ok(_) => HttpResponse::Ok().json(json!({"ok": true})),
-        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
-    }
-}
-
-/// List active sims (Pending / Running / Paused) plus the N most recent
-/// terminal jobs. Powers the /sims overview page and the header indicator.
-pub(super) async fn list_active_jobs(repo: web::Data<JobRepo>) -> HttpResponse {
-    match repo.list_active(RECENT_TERMINAL_LIMIT).await {
-        Ok(summaries) => HttpResponse::Ok().json(summaries),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
 }

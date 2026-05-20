@@ -9,22 +9,22 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { fetchActiveJobs, type JobActiveStatus, type JobActiveSummary } from './api';
+import { fetchActiveJobs, type JobStatus, type JobOverviewSummary } from './api';
 
 const POLL_INTERVAL_MS = 2500;
 
 /** Job statuses that count as "in flight" — used to gate UI affordances and
  * to compute the header chip's count. Pending/Running consume the CPU;
  * Paused is dormant but still incomplete. */
-export const ACTIVE_STATUSES: readonly JobActiveStatus[] = ['pending', 'running', 'paused'];
-const ACTIVE_STATUS_SET: ReadonlySet<JobActiveStatus> = new Set(ACTIVE_STATUSES);
+export const ACTIVE_STATUSES: readonly JobStatus[] = ['pending', 'running', 'paused'];
+const ACTIVE_STATUS_SET: ReadonlySet<JobStatus> = new Set(ACTIVE_STATUSES);
 
-export function isActiveStatus(status: JobActiveStatus): boolean {
+export function isActiveStatus(status: JobStatus): boolean {
   return ACTIVE_STATUS_SET.has(status);
 }
 
 interface UseActiveSimsResult {
-  jobs: JobActiveSummary[];
+  jobs: JobOverviewSummary[];
   activeCount: number;
   loading: boolean;
   error: string | null;
@@ -34,7 +34,7 @@ interface UseActiveSimsResult {
 /** Compare two summaries for the fields the UI actually rerenders on.
  * Returns true if they're effectively identical, so the polling loop can skip
  * the setState and avoid a 2.5s re-render cascade across every page. */
-function summariesEqual(a: JobActiveSummary, b: JobActiveSummary): boolean {
+function summariesEqual(a: JobOverviewSummary, b: JobOverviewSummary): boolean {
   return (
     a.id === b.id &&
     a.status === b.status &&
@@ -46,7 +46,7 @@ function summariesEqual(a: JobActiveSummary, b: JobActiveSummary): boolean {
   );
 }
 
-function jobListsEqual(a: JobActiveSummary[], b: JobActiveSummary[]): boolean {
+function jobListsEqual(a: JobOverviewSummary[], b: JobOverviewSummary[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (!summariesEqual(a[i], b[i])) return false;
@@ -56,7 +56,7 @@ function jobListsEqual(a: JobActiveSummary[], b: JobActiveSummary[]): boolean {
 
 /** Internal: the actual polling loop. Mounted once by ActiveSimsProvider. */
 function usePolledActiveSims(): UseActiveSimsResult {
-  const [jobs, setJobs] = useState<JobActiveSummary[]>([]);
+  const [jobs, setJobs] = useState<JobOverviewSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);

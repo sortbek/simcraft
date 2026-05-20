@@ -1,6 +1,17 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+/// Class declarations in a SimC profile look like `deathknight="MyChar"`.
+/// Compiled once and reused so per-row stats over a 200-job history don't pay
+/// the regex compilation cost (50-500 µs per call) on every row.
+static SIMC_PLAYER_NAME_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"^(?:warrior|paladin|hunter|rogue|priest|death_knight|deathknight|shaman|mage|warlock|monk|druid|demon_hunter|demonhunter|evoker)\s*=\s*"(.+)""#,
+    )
+    .unwrap()
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -97,7 +108,7 @@ pub struct JobStatusSummary {
 /// (simc_input, request_json, result_json, raw_json, html_report, text_output)
 /// so the list endpoint stays cheap even when 50+ jobs are returned.
 #[derive(Debug, Clone, Serialize)]
-pub struct JobActiveSummary {
+pub struct JobOverviewSummary {
     pub id: String,
     pub status: JobStatus,
     pub sim_type: String,
@@ -172,11 +183,8 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
 
     // If player_name not in result yet, extract from simc input (e.g. deathknight="Simpydk")
     if summary.player_name.is_none() {
-        let re = Regex::new(
-            r#"^(?:warrior|paladin|hunter|rogue|priest|death_knight|deathknight|shaman|mage|warlock|monk|druid|demon_hunter|demonhunter|evoker)\s*=\s*"(.+)""#
-        ).unwrap();
         for line in simc_input.lines() {
-            if let Some(caps) = re.captures(line.trim()) {
+            if let Some(caps) = SIMC_PLAYER_NAME_RE.captures(line.trim()) {
                 summary.player_name = Some(caps[1].to_string());
                 break;
             }

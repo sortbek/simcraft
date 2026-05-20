@@ -10,7 +10,6 @@
   "nav.discord": "Discord",
   "nav.github": "GitHub",
   "nav.website": "Sitio web",
-
   "layout.simhammer": "SimHammer",
   "layout.character": "Personaje",
   "layout.pasteSimcExport": "Pega la exportación del addon SimC...",
@@ -28,7 +27,6 @@
   "layout.later": "Más tarde",
   "layout.updateFailed": "Error en la actualización",
   "layout.language": "Idioma",
-
   "common.save": "Guardar",
   "common.cancel": "Cancelar",
   "common.clear": "Limpiar",
@@ -42,10 +40,8 @@
   "common.options": "Opciones",
   "common.selectAll": "Seleccionar todo",
   "common.deselect": "Deseleccionar",
-  "common.showLess": "Mostrar menos",
   "common.settings": "Ajustes",
   "common.error": "Error",
-
   "settings.cpuThreads": "Hilos de CPU",
   "settings.balanced": "Equilibrado",
   "settings.performance": "Rendimiento",
@@ -54,7 +50,6 @@
   "settings.clipboardSyncDesc": "Copia /simc en WoW, cambia a SimHammer y tu equipo se importa automáticamente. Solo revisa el portapapeles al enfocar la app.",
   "settings.maxGearCombos": "Máx. combinaciones de equipo",
   "settings.threads": "hilos",
-
   "config.simulationOptions": "Opciones de simulación",
   "config.resetToDefaults": "Restablecer valores",
   "config.fightStyle": "Estilo de combate",
@@ -101,7 +96,6 @@
   "config.scenarioHelp": "Ejecuta múltiples configuraciones de combate con la misma configuración",
   "config.running": "Ejecutando…",
   "config.talents": "Talentos",
-
   "fightStyle.patchwerk": "Patchwerk",
   "fightStyle.castingPatchwerk": "Casting Patchwerk",
   "fightStyle.hecticAddCleave": "Hectic Add Cleave",
@@ -111,14 +105,12 @@
   "fightStyle.dungeonSlice": "Dungeon Slice",
   "fightStyle.dungeonRoute": "Dungeon Route",
   "fightStyle.helterSkelter": "Helter Skelter",
-
   "track.Explorer": "Explorador",
   "track.Adventurer": "Aventurero",
   "track.Veteran": "Veterano",
   "track.Champion": "Campeón",
   "track.Hero": "Héroe",
   "track.Myth": "Mito",
-
   "slot.head": "Cabeza",
   "slot.neck": "Cuello",
   "slot.shoulder": "Hombro",
@@ -135,7 +127,6 @@
   "slot.offHand": "Mano secundaria",
   "slot.ring1": "Anillo 1",
   "slot.ring2": "Anillo 2",
-
   "gear.equippedGear": "Equipo actual",
   "gear.bestGear": "Mejor equipo",
   "gear.selectedGear": "Equipo seleccionado",
@@ -163,12 +154,10 @@
   "gear.upgrade": "Mejorar",
   "gear.downgrade": "Degradar",
   "gear.resultsCount": "{count} resultados",
-  "gear.showAllResults": "Mostrar todos los {count} resultados (+{more} más)",
   "gear.itemsCount": "{count} objetos",
   "gear.expectedUpgrade": "Esperado: ",
   "gear.bestUpgrade": "Mejor: ",
   "gear.upgradeText": "mejora",
-
   "stat.intellect": "Intelecto",
   "stat.strength": "Fuerza",
   "stat.agility": "Agilidad",
@@ -178,7 +167,6 @@
   "stat.mastery": "Maestría",
   "stat.versatility": "Versatilidad",
   "stat.weaponDps": "DPS de arma",
-
   "results.statWeights": "Pesos de estadísticas",
   "results.dps": "DPS",
   "results.error": "Error (Δ)",
@@ -208,7 +196,6 @@
   "results.unknownError": "Error desconocido",
   "results.noResultData": "No hay datos de resultados disponibles.",
   "results.backToTopGear": "Volver a Mejor Equipo",
-
   "loot.raids": "Bandas",
   "loot.byInstance": "Por instancia",
   "loot.bySlot": "Por ranura",
@@ -216,7 +203,6 @@
   "loot.allRaids": "Todas las bandas",
   "loot.allCrafted": "Todos los fabricados",
   "loot.allDungeons": "Todas las mazmorras",
-
   "talent.equipped": "(equipado)",
   "talent.equippedShort": "(eq)",
   "talent.compare": "Comparar",
@@ -227,7 +213,6 @@
   "talent.invalidString": "Cadena de talentos no válida. Pega una cadena de exportación de talentos de WoW.",
   "talent.selectBuildsCompare": "Selecciona builds para comparar",
   "talent.buildsGearCombos": "{count} builds × combinaciones de equipo",
-
   "page.quickSim": "Sim rápida",
   "page.quickSimDesc": "DPS, desglose de habilidades y pesos de estadísticas.",
   "page.topGear": "Mejor equipo",
@@ -242,17 +227,12 @@
   "page.enchantGemDesc": "Encuentra los mejores encantamientos y gemas.",
   "page.history": "Historial",
   "page.historyDesc": "Revisa los resultados de simulaciones recientes.",
-
   "nav.advanced": "AVANZADO",
-
   "advanced.title": "Entrada SimC sin procesar",
   "advanced.description": "Pega o escribe entrada de SimulationCraft sin procesar. Se enviará directamente a SimC sin ningún procesamiento.",
   "advanced.placeholder": "Pega tu entrada SimC sin procesar aquí...\n\nEjemplo:\nwarrior=\"Guerrero\"\nlevel=80\nrace=human\nspec=fury\n...",
-
   "home.selectSimType": "Selecciona un tipo de simulación arriba para empezar.",
-
   "footer.disclaimer": "SimHammer es un proyecto personal sostenido con café, cinta adhesiva y plegarias a los dioses del RNG. Los bugs no son features — pero puede que simen más que tu equipo. Úsalo bajo tu propia responsabilidad. No afiliado con Blizzard, Raidbots ni nadie que sepa lo que hace.",
-
   "button.runSimulation": "Ejecutar simulación",
   "button.findTopGear": "Buscar mejor equipo",
   "button.findUpgrades": "Buscar mejoras ({count} objetos)",
@@ -261,7 +241,6 @@
   "button.runScenarios": "Ejecutar {count} escenarios",
   "button.findBestEnchants": "Encontrar mejores encantamientos ({count} combos)",
   "button.findBestEnchantsDefault": "Encontrar mejores encantamientos y gemas",
-
   "enchantGem.enchants": "Encantamientos",
   "enchantGem.gems": "Gemas",
   "enchantGem.selectEnchants": "Seleccionar encantamientos",
@@ -288,10 +267,8 @@
   "enchantGem.selectGemsTooltip": "Solo llena engastes vacíos. Activa 'Reemplazar gemas actuales' para también cambiar las gemas existentes.",
   "enchantGem.alwaysUse": "Usar siempre",
   "enchantGem.onlyMaxColors": "Solo colores máximos",
-
   "quickSim.lastSim": "Última sim",
   "quickSim.pasteExport": "Pega la exportación de tu addon SimC para ver el historial de sims de tu personaje.",
-
   "topGear.resolvingGear": "Resolviendo equipo...",
   "topGear.pasteExport": "Pega la exportación de tu addon SimC para ver las opciones de equipo.",
   "topGear.copyEnchants": "Copiar encantamientos",
@@ -303,7 +280,6 @@
   "topGear.charges": "cargas",
   "topGear.chargesTooltip": "Cuántas piezas de catalizador se pueden llevar al mismo tiempo en un mismo conjunto de equipo.",
   "topGear.voidForge": "Armas y abalorios Void Forge",
-
   "dropFinder.source": "Fuente",
   "dropFinder.selectRaid": "Seleccionar banda",
   "dropFinder.selectDungeon": "Seleccionar mazmorra",
@@ -329,7 +305,6 @@
   "dropFinder.spec": "Esp.",
   "dropFinder.selectAll": "Seleccionar todo",
   "dropFinder.deselectAll": "Deseleccionar todo",
-
   "upgradeCompare.pasteExport": "Pega la exportación de tu addon SimC arriba para empezar.",
   "upgradeCompare.explainer": "Encuentra la mejor forma de gastar tus monedas de mejora de Crestaalba. Selecciona qué objetos equipados considerar, y SimHammer probará todas las combinaciones de mejora válidas dentro de tu presupuesto para encontrar cuál da más DPS.",
   "upgradeCompare.budget": "Presupuesto",
@@ -339,7 +314,6 @@
   "upgradeCompare.noCurrencies": "No se encontraron monedas de mejora",
   "upgradeCompare.selectItemsButton": "Seleccionar objetos a mejorar",
   "upgradeCompare.unknownCurrency": "Moneda {id}",
-
   "history.title": "Historial de simulaciones",
   "history.subtitle": "Revisa y compara simulaciones pasadas. Haz clic en cualquier fila para ver los resultados detallados.",
   "history.clearHistory": "Borrar historial",
@@ -361,22 +335,18 @@
   "history.noCharacterSims": "No se encontraron simulaciones para {name} en {realm}.",
   "history.pasteExportWeb": "Pega la exportación de tu addon SimC para ver el historial de sims de tu personaje.",
   "history.loading": "Cargando historial...",
-
   "status.completed": "Completado",
   "status.running": "En ejecución",
   "status.failed": "Fallido",
   "status.pending": "Pendiente",
   "status.cancelled": "Cancelado",
-
   "simType.quickSim": "Sim rápida",
   "simType.topGear": "Mejor equipo",
   "simType.dropFinder": "Buscador de botín",
-
   "time.justNow": "ahora mismo",
   "time.minutesAgo": "hace {m}m",
   "time.hoursAgo": "hace {h}h",
   "time.daysAgo": "hace {d}d",
-
   "validation.simcTooShort": "La entrada SimC es demasiado corta. Pega tu exportación completa del addon.",
   "validation.checksumInvalid": "La suma de verificación de SimC no coincide — la entrada puede estar incompleta. Vuelve a copiar desde /simc.",
   "validation.checksumWarning": "Modificado",

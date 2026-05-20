@@ -10,7 +10,6 @@
   "nav.discord": "Discord",
   "nav.github": "GitHub",
   "nav.website": "Site",
-
   "layout.simhammer": "SimHammer",
   "layout.character": "Personagem",
   "layout.pasteSimcExport": "Cole a exportação do addon SimC...",
@@ -28,7 +27,6 @@
   "layout.later": "Depois",
   "layout.updateFailed": "Atualização falhou",
   "layout.language": "Idioma",
-
   "common.save": "Salvar",
   "common.cancel": "Cancelar",
   "common.clear": "Limpar",
@@ -42,10 +40,8 @@
   "common.options": "Opções",
   "common.selectAll": "Selecionar tudo",
   "common.deselect": "Desmarcar",
-  "common.showLess": "Mostrar menos",
   "common.settings": "Configurações",
   "common.error": "Erro",
-
   "settings.cpuThreads": "Threads de CPU",
   "settings.balanced": "Equilibrado",
   "settings.performance": "Desempenho",
@@ -54,7 +50,6 @@
   "settings.clipboardSyncDesc": "Copie /simc no WoW, mude para o SimHammer e seu equipamento é importado automaticamente. Só verifica a área de transferência ao focar o app.",
   "settings.maxGearCombos": "Máx. Combos de Equip.",
   "settings.threads": "threads",
-
   "config.simulationOptions": "Opções de Simulação",
   "config.resetToDefaults": "Restaurar padrões",
   "config.fightStyle": "Estilo de luta",
@@ -101,7 +96,6 @@
   "config.scenarioHelp": "Execute múltiplas configurações de luta com o mesmo setup",
   "config.running": "Executando…",
   "config.talents": "Talentos",
-
   "fightStyle.patchwerk": "Patchwerk",
   "fightStyle.castingPatchwerk": "Casting Patchwerk",
   "fightStyle.hecticAddCleave": "Hectic Add Cleave",
@@ -111,14 +105,12 @@
   "fightStyle.dungeonSlice": "Dungeon Slice",
   "fightStyle.dungeonRoute": "Dungeon Route",
   "fightStyle.helterSkelter": "Helter Skelter",
-
   "track.Explorer": "Explorador",
   "track.Adventurer": "Aventureiro",
   "track.Veteran": "Veterano",
   "track.Champion": "Campeão",
   "track.Hero": "Herói",
   "track.Myth": "Mito",
-
   "slot.head": "Cabeça",
   "slot.neck": "Pescoço",
   "slot.shoulder": "Ombros",
@@ -135,7 +127,6 @@
   "slot.offHand": "Mão secundária",
   "slot.ring1": "Anel 1",
   "slot.ring2": "Anel 2",
-
   "gear.equippedGear": "Equipamento equipado",
   "gear.bestGear": "Melhor equipamento",
   "gear.selectedGear": "Equipamento selecionado",
@@ -163,12 +154,10 @@
   "gear.upgrade": "Melhorar",
   "gear.downgrade": "Rebaixar",
   "gear.resultsCount": "{count} resultados",
-  "gear.showAllResults": "Mostrar todos os {count} resultados (+{more} mais)",
   "gear.itemsCount": "{count} itens",
   "gear.expectedUpgrade": "Esperado: ",
   "gear.bestUpgrade": "Melhor: ",
   "gear.upgradeText": "melhoria",
-
   "stat.intellect": "Intelecto",
   "stat.strength": "Força",
   "stat.agility": "Agilidade",
@@ -178,7 +167,6 @@
   "stat.mastery": "Maestria",
   "stat.versatility": "Versatilidade",
   "stat.weaponDps": "DPS da Arma",
-
   "results.statWeights": "Pesos de Atributos",
   "results.dps": "DPS",
   "results.error": "Erro (Δ)",
@@ -208,7 +196,6 @@
   "results.unknownError": "Erro desconhecido",
   "results.noResultData": "Nenhum dado de resultado disponível.",
   "results.backToTopGear": "Voltar ao Top Gear",
-
   "loot.raids": "Raides",
   "loot.byInstance": "Por Instância",
   "loot.bySlot": "Por Slot",
@@ -216,7 +203,6 @@
   "loot.allRaids": "Todas as Raides",
   "loot.allCrafted": "Todos os fabricados",
   "loot.allDungeons": "Todas as Masmorras",
-
   "talent.equipped": "(equipado)",
   "talent.equippedShort": "(eq)",
   "talent.compare": "Comparar",
@@ -227,7 +213,6 @@
   "talent.invalidString": "String de talentos inválida. Cole uma string de exportação de talentos do WoW.",
   "talent.selectBuildsCompare": "Selecione builds para comparar",
   "talent.buildsGearCombos": "{count} builds × combos de equip.",
-
   "page.quickSim": "Sim Rápida",
   "page.quickSimDesc": "DPS, detalhamento de habilidades e pesos de atributos.",
   "page.topGear": "Top Gear",
@@ -242,17 +227,12 @@
   "page.enchantGemDesc": "Encontre os melhores encantamentos e gemas.",
   "page.history": "Histórico",
   "page.historyDesc": "Veja resultados de simulações recentes.",
-
   "nav.advanced": "AVANÇADO",
-
   "advanced.title": "Entrada SimC bruta",
   "advanced.description": "Cole ou escreva entrada SimulationCraft bruta. Será enviada diretamente ao SimC sem nenhum processamento.",
   "advanced.placeholder": "Cole sua entrada SimC bruta aqui...\n\nExemplo:\nwarrior=\"Guerreiro\"\nlevel=80\nrace=human\nspec=fury\n...",
-
   "home.selectSimType": "Selecione um tipo de simulação acima para começar.",
-
   "footer.disclaimer": "SimHammer é um projeto pessoal mantido junto com café, fita adesiva e preces aos deuses do RNG. Bugs não são features — mas podem simar mais alto que seu equipamento. Use por sua conta e risco. Sem afiliação com Blizzard, Raidbots ou qualquer um que saiba o que está fazendo.",
-
   "button.runSimulation": "Rodar Simulação",
   "button.findTopGear": "Encontrar Top Gear",
   "button.findUpgrades": "Encontrar Melhorias ({count} itens)",
@@ -261,7 +241,6 @@
   "button.runScenarios": "Rodar {count} Cenários",
   "button.findBestEnchants": "Encontrar melhores encantamentos ({count} combos)",
   "button.findBestEnchantsDefault": "Encontrar melhores encantamentos e gemas",
-
   "enchantGem.enchants": "Encantamentos",
   "enchantGem.gems": "Gemas",
   "enchantGem.selectEnchants": "Selecionar encantamentos",
@@ -288,10 +267,8 @@
   "enchantGem.selectGemsTooltip": "Preenche apenas engastes vazios. Ative 'Substituir gemas atuais' para também trocar as gemas existentes.",
   "enchantGem.alwaysUse": "Sempre usar",
   "enchantGem.onlyMaxColors": "Apenas cores máximas",
-
   "quickSim.lastSim": "Última Sim",
   "quickSim.pasteExport": "Cole sua exportação do addon SimC para ver o histórico de sims do seu personagem.",
-
   "topGear.resolvingGear": "Resolvendo equipamento...",
   "topGear.pasteExport": "Cole sua exportação do addon SimC para ver as opções de equipamento.",
   "topGear.copyEnchants": "Copiar Encantamentos",
@@ -303,7 +280,6 @@
   "topGear.charges": "cargas",
   "topGear.chargesTooltip": "Quantas peças do catalisador podem ser usadas ao mesmo tempo em um único conjunto de equipamento.",
   "topGear.voidForge": "Armas e berloques Void Forge",
-
   "dropFinder.source": "Fonte",
   "dropFinder.selectRaid": "Selecionar Raide",
   "dropFinder.selectDungeon": "Selecionar Masmorra",
@@ -329,7 +305,6 @@
   "dropFinder.spec": "Esp.",
   "dropFinder.selectAll": "Selecionar tudo",
   "dropFinder.deselectAll": "Desmarcar tudo",
-
   "upgradeCompare.pasteExport": "Cole sua exportação do addon SimC acima para começar.",
   "upgradeCompare.explainer": "Encontre a melhor forma de gastar suas moedas de melhoria de Brasão da Aurora. Selecione quais itens equipados considerar e SimHammer testará cada combinação válida de melhoria dentro do seu orçamento para encontrar a que dá mais DPS.",
   "upgradeCompare.budget": "Orçamento",
@@ -339,7 +314,6 @@
   "upgradeCompare.noCurrencies": "Nenhuma moeda de melhoria encontrada",
   "upgradeCompare.selectItemsButton": "Selecionar itens para melhorar",
   "upgradeCompare.unknownCurrency": "Moeda {id}",
-
   "history.title": "Histórico de Simulações",
   "history.subtitle": "Revise e compare simulações anteriores. Clique em uma linha para ver resultados detalhados.",
   "history.clearHistory": "Limpar Histórico",
@@ -361,22 +335,18 @@
   "history.noCharacterSims": "Nenhuma simulação encontrada para {name} em {realm}.",
   "history.pasteExportWeb": "Cole sua exportação do addon SimC para ver o histórico de sims do seu personagem.",
   "history.loading": "Carregando histórico...",
-
   "status.completed": "Concluído",
   "status.running": "Executando",
   "status.failed": "Falhou",
   "status.pending": "Pendente",
   "status.cancelled": "Cancelado",
-
   "simType.quickSim": "Sim Rápida",
   "simType.topGear": "Top Gear",
   "simType.dropFinder": "Drop Finder",
-
   "time.justNow": "agora",
   "time.minutesAgo": "{m}m atrás",
   "time.hoursAgo": "{h}h atrás",
   "time.daysAgo": "{d}d atrás",
-
   "validation.simcTooShort": "Input SimC muito curto. Cole sua exportação completa do addon.",
   "validation.checksumInvalid": "Checksum do SimC não corresponde — a entrada pode estar incompleta. Copie novamente do /simc.",
   "validation.checksumWarning": "Modificado",

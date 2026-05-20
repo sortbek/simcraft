@@ -40,7 +40,11 @@ function precisionTone(pct: number): string {
   return 'text-red-400/80';
 }
 
-const INITIAL_VISIBLE = 8;
+/** The result page only ever surfaces the top N rows — past ~10 the deltas
+ * dwindle into noise of the per-row CI and adding more clutters the UI
+ * without changing decisions. Grouped views (by slot/boss) are naturally
+ * bounded by group size so they don't apply this cap. */
+const MAX_VISIBLE = 10;
 
 interface TopGearRankingsProps {
   results: TopGearResult[];
@@ -212,10 +216,7 @@ function RankedResults({
   onSelectResult: (name: string) => void;
   sourceJobId?: string;
 }) {
-  const { t } = useLanguage();
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? results : results.slice(0, INITIAL_VISIBLE);
-  const hasMore = results.length > INITIAL_VISIBLE;
+  const visible = results.slice(0, MAX_VISIBLE);
 
   return (
     <div className="space-y-1">
@@ -235,19 +236,6 @@ function RankedResults({
           sourceJobId={sourceJobId}
         />
       ))}
-      {hasMore && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="mt-2 w-full rounded-lg bg-surface-container-high py-2 text-xs text-on-surface-variant transition-all hover:bg-surface-container-highest hover:text-on-surface"
-        >
-          {expanded
-            ? t('common.showLess')
-            : t('gear.showAllResults', {
-                count: results.length,
-                more: results.length - INITIAL_VISIBLE,
-              })}
-        </button>
-      )}
     </div>
   );
 }

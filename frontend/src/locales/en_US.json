@@ -10,7 +10,6 @@
   "nav.discord": "Discord",
   "nav.github": "GitHub",
   "nav.website": "Website",
-
   "layout.simhammer": "SimHammer",
   "layout.character": "Character",
   "layout.pasteSimcExport": "Paste SimC addon export...",
@@ -28,7 +27,6 @@
   "layout.later": "Later",
   "layout.updateFailed": "Update failed",
   "layout.language": "Language",
-
   "common.save": "Save",
   "common.cancel": "Cancel",
   "common.clear": "Clear",
@@ -42,10 +40,8 @@
   "common.options": "Options",
   "common.selectAll": "Select all",
   "common.deselect": "Deselect",
-  "common.showLess": "Show less",
   "common.settings": "Settings",
   "common.error": "Error",
-
   "settings.cpuThreads": "CPU Threads",
   "settings.balanced": "Balanced",
   "settings.performance": "Performance",
@@ -54,7 +50,6 @@
   "settings.clipboardSyncDesc": "Copy /simc in WoW, switch to SimHammer, and your gear imports automatically. Only checks clipboard when you focus the app.",
   "settings.maxGearCombos": "Max Gear Combos",
   "settings.threads": "threads",
-
   "config.simulationOptions": "Simulation Options",
   "config.resetToDefaults": "Reset to Defaults",
   "config.fightStyle": "Fight Style",
@@ -99,9 +94,8 @@
   "config.scenarios": "Scenarios",
   "config.addCurrentConfig": "+ Add current config",
   "config.scenarioHelp": "Run multiple fight configurations with the same setup",
-  "config.running": "Running\u2026",
+  "config.running": "Running…",
   "config.talents": "Talents",
-
   "fightStyle.patchwerk": "Patchwerk",
   "fightStyle.castingPatchwerk": "Casting Patchwerk",
   "fightStyle.hecticAddCleave": "Hectic Add Cleave",
@@ -111,14 +105,12 @@
   "fightStyle.dungeonSlice": "Dungeon Slice",
   "fightStyle.dungeonRoute": "Dungeon Route",
   "fightStyle.helterSkelter": "Helter Skelter",
-
   "track.Explorer": "Explorer",
   "track.Adventurer": "Adventurer",
   "track.Veteran": "Veteran",
   "track.Champion": "Champion",
   "track.Hero": "Hero",
   "track.Myth": "Myth",
-
   "slot.head": "Head",
   "slot.neck": "Neck",
   "slot.shoulder": "Shoulder",
@@ -135,7 +127,6 @@
   "slot.offHand": "Off Hand",
   "slot.ring1": "Ring 1",
   "slot.ring2": "Ring 2",
-
   "gear.equippedGear": "Equipped Gear",
   "gear.bestGear": "Best Gear",
   "gear.selectedGear": "Selected Gear",
@@ -163,12 +154,10 @@
   "gear.upgrade": "Upgrade",
   "gear.downgrade": "Downgrade",
   "gear.resultsCount": "{count} results",
-  "gear.showAllResults": "Show all {count} results (+{more} more)",
   "gear.itemsCount": "{count} items",
   "gear.expectedUpgrade": "Expected: ",
   "gear.bestUpgrade": "Best: ",
   "gear.upgradeText": "upgrade",
-
   "stat.intellect": "Intellect",
   "stat.strength": "Strength",
   "stat.agility": "Agility",
@@ -178,10 +167,9 @@
   "stat.mastery": "Mastery",
   "stat.versatility": "Versatility",
   "stat.weaponDps": "Weapon DPS",
-
   "results.statWeights": "Stat Weights",
   "results.dps": "DPS",
-  "results.error": "Error (\u0394)",
+  "results.error": "Error (Δ)",
   "results.fightLength": "Fight Length",
   "results.targets": "Targets",
   "results.iterations": "Iterations",
@@ -208,7 +196,6 @@
   "results.unknownError": "Unknown error",
   "results.noResultData": "No result data available.",
   "results.backToTopGear": "Back to Top Gear",
-
   "loot.raids": "Raids",
   "loot.byInstance": "By Instance",
   "loot.bySlot": "By Slot",
@@ -216,7 +203,6 @@
   "loot.allRaids": "All Raids",
   "loot.allCrafted": "All Epic Profession",
   "loot.allDungeons": "All Dungeons",
-
   "talent.equipped": "(equipped)",
   "talent.equippedShort": "(eq)",
   "talent.compare": "Compare",
@@ -226,8 +212,7 @@
   "talent.pasteExportPlaceholder": "Paste talent export string or Wowhead URL...",
   "talent.invalidString": "Invalid talent string. Paste a WoW talent export string.",
   "talent.selectBuildsCompare": "Select builds to compare",
-  "talent.buildsGearCombos": "{count} builds \u00d7 gear combos",
-
+  "talent.buildsGearCombos": "{count} builds × gear combos",
   "page.quickSim": "Quick Sim",
   "page.quickSimDesc": "DPS, ability breakdown, and stat weights.",
   "page.topGear": "Top Gear",
@@ -242,17 +227,12 @@
   "page.enchantGemDesc": "Find the best enchants and gems.",
   "page.history": "History",
   "page.historyDesc": "View recent simulation results.",
-
   "nav.advanced": "ADVANCED",
-
   "advanced.title": "Raw SimC Input",
   "advanced.description": "Paste or write raw SimulationCraft input. This will be sent directly to SimC without any processing.",
   "advanced.placeholder": "Paste your raw SimC input here...\n\nExample:\nwarrior=\"Warrior\"\nlevel=80\nrace=human\nspec=fury\n...",
-
   "home.selectSimType": "Select a simulation type above to get started.",
-
-  "footer.disclaimer": "SimHammer is a pet project held together by coffee, duct tape, and prayers to the RNG gods. Bugs are not features \u2014 but they might sim higher than your gear. Use at your own risk. Not affiliated with Blizzard, Raidbots, or anyone who knows what they\u2019re doing.",
-
+  "footer.disclaimer": "SimHammer is a pet project held together by coffee, duct tape, and prayers to the RNG gods. Bugs are not features — but they might sim higher than your gear. Use at your own risk. Not affiliated with Blizzard, Raidbots, or anyone who knows what they’re doing.",
   "button.runSimulation": "Run Simulation",
   "button.findTopGear": "Find Top Gear",
   "button.findUpgrades": "Find Upgrades ({count} items)",
@@ -261,7 +241,6 @@
   "button.runScenarios": "Run {count} Scenarios",
   "button.findBestEnchants": "Find Best Enchants ({count} combos)",
   "button.findBestEnchantsDefault": "Find Best Enchants & Gems",
-
   "enchantGem.enchants": "Enchants",
   "enchantGem.gems": "Gems",
   "enchantGem.selectEnchants": "Select Enchants",
@@ -288,10 +267,8 @@
   "enchantGem.selectGemsTooltip": "Only fills empty sockets. Turn on 'Replace current gems' to also swap out your existing gems.",
   "enchantGem.alwaysUse": "Always Use",
   "enchantGem.onlyMaxColors": "Only Max Colors",
-
   "quickSim.lastSim": "Last Sim",
   "quickSim.pasteExport": "Paste your SimC addon export to see your character's sim history.",
-
   "topGear.resolvingGear": "Resolving gear...",
   "topGear.pasteExport": "Paste your SimC addon export to see gear options.",
   "topGear.copyEnchants": "Copy Enchants",
@@ -303,7 +280,6 @@
   "topGear.charges": "charges",
   "topGear.chargesTooltip": "How many catalyst pieces can be worn at the same time in a single gear set.",
   "topGear.voidForge": "Void Forge weapons & trinkets",
-
   "dropFinder.source": "Source",
   "dropFinder.selectRaid": "Select Raid",
   "dropFinder.selectDungeon": "Select Dungeon",
@@ -329,7 +305,6 @@
   "dropFinder.spec": "Spec",
   "dropFinder.selectAll": "Select all",
   "dropFinder.deselectAll": "Deselect all",
-
   "upgradeCompare.pasteExport": "Paste your SimC addon export above to begin.",
   "upgradeCompare.explainer": "Find the best way to spend your Dawncrest upgrade currencies. Select which equipped items to consider, and SimHammer will test every valid upgrade combination within your budget to find which gives the most DPS.",
   "upgradeCompare.budget": "Budget",
@@ -339,13 +314,12 @@
   "upgradeCompare.noCurrencies": "No upgrade currencies found",
   "upgradeCompare.selectItemsButton": "Select items to upgrade",
   "upgradeCompare.unknownCurrency": "Currency {id}",
-
   "history.title": "Simulation History",
   "history.subtitle": "Review and compare past simulations. Click any row to view detailed results.",
   "history.clearHistory": "Clear History",
   "history.exportCsv": "Export CSV",
   "history.totalSims": "Total Sims",
-  "history.completionRate": "{count} completed \u00b7 {pct}% success",
+  "history.completionRate": "{count} completed · {pct}% success",
   "history.characters": "Characters",
   "history.uniqueCharacters": "Unique characters simmed",
   "history.bestDps": "Best DPS",
@@ -361,22 +335,18 @@
   "history.noCharacterSims": "No simulations found for {name} on {realm}.",
   "history.pasteExportWeb": "Paste your SimC addon export to see your character's sim history.",
   "history.loading": "Loading history...",
-
   "status.completed": "Completed",
   "status.running": "Running",
   "status.failed": "Failed",
   "status.pending": "Pending",
   "status.cancelled": "Cancelled",
-
   "simType.quickSim": "Quick Sim",
   "simType.topGear": "Top Gear",
   "simType.dropFinder": "Drop Finder",
-
   "time.justNow": "just now",
   "time.minutesAgo": "{m}m ago",
   "time.hoursAgo": "{h}h ago",
   "time.daysAgo": "{d}d ago",
-
   "validation.simcTooShort": "SimC input is too short. Paste your full addon export.",
   "validation.checksumInvalid": "SimC checksum mismatch — the input may be incomplete or modified. Re-copy from /simc.",
   "validation.checksumWarning": "Modified",
