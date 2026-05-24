@@ -9,6 +9,7 @@ import {
   localizedEnchantName,
   localizedGemName,
   localizedItemName,
+  toGemIdList,
   useItemNames,
 } from '../../lib/useItemInfo';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
@@ -57,7 +58,8 @@ export default function GearSlotRow({
 
   const info = itemInfoMap[item.item_id];
   const enchant = item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined;
-  const gem = item.gem_id ? gemInfoMap[item.gem_id] : undefined;
+  const gemIdList = toGemIdList(item);
+  const gems = gemIdList.map((id) => gemInfoMap[id]).filter((g): g is GemInfo => !!g);
   const qualityColor = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
   const name = localizedItemName(
     item.item_id,
@@ -67,7 +69,7 @@ export default function GearSlotRow({
   const icon = info?.icon || 'inv_misc_questionmark';
   const wowheadData =
     item.item_id > 0
-      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id)
+      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, gemIdList)
       : undefined;
   const fadeDir = rtl ? 'to left' : 'to right';
 
@@ -151,8 +153,11 @@ export default function GearSlotRow({
           {SLOT_LABELS[slot] || slot}
           {item.ilevel > 0 && ` · ${item.ilevel}`}
           {info?.tag && ` · ${info.tag}`}
-          {gem?.name ? (
-            <span className="text-sky-400/70"> · {localizedGemName(gem, locale)}</span>
+          {gems.length > 0 ? (
+            <span className="text-sky-400/70">
+              {' '}
+              · {gems.map((g) => localizedGemName(g, locale)).join(', ')}
+            </span>
           ) : (
             (info?.sockets ?? 0) > 0 && (
               <span className="text-sky-400/70">

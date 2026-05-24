@@ -203,7 +203,7 @@ pub(super) async fn create_top_gear_sim(
     let display_input = simc_runner::build_simc_input_from_options(&generated_input, &options_json);
     let job = Job::new(
         display_input,
-        "top_gear".to_string(),
+        crate::models::SimMode::TopGear.as_wire().to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
@@ -233,6 +233,13 @@ pub(super) async fn create_top_gear_sim(
         }),
     );
 
+    // Resolve simc BEFORE insert — invalid branch must not create an orphan
+    // Pending row.
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(path) => path,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+
     let mut job = job;
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = req.options.batch_id.clone();
@@ -242,11 +249,6 @@ pub(super) async fn create_top_gear_sim(
 
     // Best-effort write of per-combo metadata rows to the combo_metadata table.
     write_combo_metadata_table(repo.get_ref(), &job_id, &combo_metadata).await;
-
-    let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(path) => path,
-        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
-    };
 
     spawn_staged_sim(
         repo.get_ref().clone(),
@@ -319,13 +321,13 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
     ) {
         Ok(count) => HttpResponse::Ok().json(json!({ "combo_count": count })),
         Err(e) => {
-            let count: usize = e
-                .split('(')
-                .nth(1)
-                .and_then(|s| s.split(')').next())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            HttpResponse::Ok().json(json!({ "combo_count": count, "error": e }))
+            // Use the typed error classifier so we don't re-parse "(N)" out
+            // of the raw error message inside the handler.
+            let (count, message) = match profileset_generator::classify_generator_error(&e) {
+                profileset_generator::GeneratorError::TooMany { count, .. } => (count, e),
+                other => (0, other.to_message()),
+            };
+            HttpResponse::Ok().json(json!({ "combo_count": count, "error": message }))
         }
     }
 }

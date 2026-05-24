@@ -47,7 +47,7 @@ pub(super) async fn create_droptimizer_sim(
         simc_runner::build_simc_input_from_options(&generated_input, &options_json_drop);
     let job = Job::new(
         display_input_drop,
-        "droptimizer".to_string(),
+        crate::models::SimMode::Droptimizer.as_wire().to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
@@ -65,6 +65,13 @@ pub(super) async fn create_droptimizer_sim(
         }),
     );
 
+    // Resolve simc BEFORE insert — invalid branch must not create an orphan
+    // Pending row.
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(path) => path,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+
     let mut job = job;
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = req.options.batch_id.clone();
@@ -74,11 +81,6 @@ pub(super) async fn create_droptimizer_sim(
 
     // Best-effort write of per-combo metadata rows to the combo_metadata table.
     write_combo_metadata_table_value(repo.get_ref(), &job_id, &combo_metadata).await;
-
-    let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(path) => path,
-        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
-    };
 
     spawn_staged_sim(
         repo.get_ref().clone(),

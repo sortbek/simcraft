@@ -30,9 +30,74 @@ use once_cell::sync::Lazy;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
+use crate::db::MAX_COMBINATIONS;
+
+/// Typed result for every profileset generator. Replaces an ad-hoc tuple +
+/// stringly error pair so handlers stop parsing "(N)" out of error messages
+/// to recover the limit-exceeded count for the UI.
+pub struct GeneratedProfilesets {
+    pub input: String,
+    pub combo_count: usize,
+    pub metadata: HashMap<String, Vec<Value>>,
+}
+
+/// Typed generator failure. Carries enough structured context that callers
+/// don't need to inspect error message text. `Other` is a catch-all for the
+/// older raw-string failure paths inside the per-generator modules that we
+/// haven't migrated yet — those should be tightened over time.
+#[derive(Debug, Clone)]
+pub enum GeneratorError {
+    /// User selection produced 0 valid combos. The UI may want to show a
+    /// targeted message ("nothing to sim — pick more items") rather than a
+    /// generic error.
+    NoValidCombinations,
+    /// Selection produced too many combos for the configured limit. The UI
+    /// uses `count` to show "you've selected N — the cap is M" without
+    /// having to parse it out of a string.
+    TooMany { count: usize, limit: usize },
+    /// Any other generator-time failure.
+    Other(String),
+}
+
+impl GeneratorError {
+    pub fn to_message(&self) -> String {
+        match self {
+            GeneratorError::NoValidCombinations => "No valid combinations to simulate".to_string(),
+            GeneratorError::TooMany { count, limit } => format!(
+                "Too many combinations ({count}). Maximum is {limit}. Please deselect some items."
+            ),
+            GeneratorError::Other(msg) => msg.clone(),
+        }
+    }
+}
+
+/// Internal-only legacy type alias, kept while we migrate generator modules
+/// to return `Result<GeneratedProfilesets, GeneratorError>` directly. Public
+/// callers should use the typed entry points below.
 type ProfilesetResult = Result<(String, usize, HashMap<String, Vec<Value>>), String>;
 
-use crate::db::MAX_COMBINATIONS;
+/// Try to parse a generator's stringly error into the typed variant. Until
+/// every per-generator module returns typed errors, this is the seam that
+/// keeps handlers from re-implementing the regex of the message text.
+pub(crate) fn classify_generator_error(msg: &str) -> GeneratorError {
+    if let Some(rest) = msg.strip_prefix("Too many combinations (") {
+        if let Some(count_str) = rest.split(')').next() {
+            if let Ok(count) = count_str.parse::<usize>() {
+                let limit = msg
+                    .split("Maximum is ")
+                    .nth(1)
+                    .and_then(|s| s.split('.').next())
+                    .and_then(|s| s.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                return GeneratorError::TooMany { count, limit };
+            }
+        }
+    }
+    if msg.to_lowercase().contains("no valid") || msg.contains("no combinations") {
+        return GeneratorError::NoValidCombinations;
+    }
+    GeneratorError::Other(msg.to_string())
+}
 
 /// Gem and enchant variation options bundled together. Six related args that
 /// always travel as a unit in the top-gear and count entry points.
@@ -160,6 +225,41 @@ pub fn generate_enchant_gem_input(
 }
 
 #[cfg(test)]
+mod classifier_tests {
+    use super::{classify_generator_error, GeneratorError};
+
+    #[test]
+    fn parses_too_many_with_count_and_limit() {
+        let msg = "Too many combinations (12345). Maximum is 5000. Please deselect some items.";
+        match classify_generator_error(msg) {
+            GeneratorError::TooMany { count, limit } => {
+                assert_eq!(count, 12345);
+                assert_eq!(limit, 5000);
+            }
+            other => panic!("expected TooMany, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_no_valid_combinations() {
+        let msg = "No valid combinations to simulate after filtering";
+        assert!(matches!(
+            classify_generator_error(msg),
+            GeneratorError::NoValidCombinations
+        ));
+    }
+
+    #[test]
+    fn falls_back_to_other() {
+        let msg = "Some unexpected internal error";
+        match classify_generator_error(msg) {
+            GeneratorError::Other(s) => assert_eq!(s, msg),
+            other => panic!("expected Other, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::{
         count_top_gear_combos_with_talents, generate_droptimizer_input,
@@ -224,6 +324,9 @@ main_hand=,id=200\n";
 
     #[test]
     fn droptimizer_ring_drop_inherits_gem_and_enchant() {
+        // Drop carries bonus 13534 (= +1 socket per fixture), so gem
+        // inheritance from the equipped finger is allowed for both slots.
+        crate::test_support::ensure_game_data_loaded();
         let base_profile = "\
 mage=test\n\
 spec=frost\n\
@@ -237,22 +340,22 @@ main_hand=,id=200\n";
             "name": "Test Ring",
             "encounter": "Unit Test",
             "inventory_type": 11,
-            "bonus_ids": [123],
-            "slot_inherits": [
-                { "slot": "finger1", "enchant_id": 7437, "gem_id": 213743 },
-                { "slot": "finger2", "enchant_id": 7438, "gem_id": 213744 }
-            ]
+            "bonus_ids": [13534],
         })];
 
         let (input, combo_count, metadata) = generate_droptimizer_input(base_profile, &drop_items);
 
         assert_eq!(combo_count, 2);
         assert!(
-            input.contains("finger1=,id=555,ilevel=671,bonus_id=123,enchant_id=7437,gem_id=213743"),
+            input.contains(
+                "finger1=,id=555,ilevel=671,bonus_id=13534,enchant_id=7437,gem_id=213743"
+            ),
             "expected finger1 profileset with inherited enchant + gem; got:\n{input}"
         );
         assert!(
-            input.contains("finger2=,id=555,ilevel=671,bonus_id=123,enchant_id=7438,gem_id=213744"),
+            input.contains(
+                "finger2=,id=555,ilevel=671,bonus_id=13534,enchant_id=7438,gem_id=213744"
+            ),
             "expected finger2 profileset with inherited enchant + gem; got:\n{input}"
         );
 
@@ -394,6 +497,108 @@ finger1=,id=102,gem_id=213453\n";
         }
     }
 
+    // Multi-socket support: a 2-socket equipped item with N gem options should
+    // produce N + C(N,2) = N*(N+1)/2 multiset combos for that slot (e.g. 3 gems
+    // → 6 combos: AA, AB, AC, BB, BC, CC). Mirror combos (A,B) and (B,A) collapse
+    // because gems give character-wide stats — slot ordering doesn't affect DPS.
+    // The simc line is emitted as `gem_id=A/B` (slash-separated).
+    #[test]
+    fn top_gear_multi_socket_emits_multiset_combos() {
+        ensure_game_data_loaded();
+        // Bonus 8781 adds 2 sockets in one shot (per data/bonuses.json).
+        // Using a single 2-socket bonus keeps the simc-string view consistent
+        // with the alt item's `sockets: 2` metadata.
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+neck=,id=400\n\
+main_hand=,id=200\n";
+
+        let alt_neck_2sock = json!({
+            "slot": "neck",
+            "simc_string": ",id=500,bonus_id=8781",
+            "is_equipped": false,
+            "origin": "bags",
+            "item_id": 500,
+            "ilevel": 0,
+            "name": "Alt Neck 2-socket",
+            "bonus_ids": [8781],
+            "enchant_id": 0,
+            "gem_id": 0,
+            "sockets": 2,
+        });
+        let equipped_neck = json!({
+            "slot": "neck",
+            "simc_string": ",id=400",
+            "is_equipped": true,
+            "origin": "equipped",
+            "item_id": 400,
+            "ilevel": 0,
+            "name": "Equipped Neck",
+            "bonus_ids": [],
+            "enchant_id": 0,
+            "gem_id": 0,
+            "sockets": 0,
+        });
+
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("neck".to_string(), vec![equipped_neck, alt_neck_2sock]);
+
+        let mut selected = HashMap::new();
+        selected.insert("neck".to_string(), vec!["500:8781:bags:neck".to_string()]);
+
+        // 3 gems, 2 sockets → 6 multisets: AA, AB, AC, BB, BC, CC.
+        let gems = [213453_u64, 213454_u64, 213455_u64];
+        let sockets = HashSet::from([500_u64]);
+        let (input, combo_count, _) = generate_top_gear_input_with_talents(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions {
+                gem_options: &gems,
+                socketed_item_ids: Some(&sockets),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            combo_count, 6,
+            "expected 6 multiset combos (3 gems × 2 sockets), got {combo_count}:\n{input}"
+        );
+
+        // Skip the header block and the base actor; every later block is a
+        // profileset. Collect the alt neck's gem multiset from each one.
+        let neck_gem_lists: Vec<Vec<u64>> = input
+            .split("### ")
+            .skip(2)
+            .filter_map(|block| block.lines().find(|l| l.contains("neck=,id=500")))
+            .map(crate::simc_string::extract_gem_ids)
+            .collect();
+
+        for gems in &neck_gem_lists {
+            assert_eq!(
+                gems.len(),
+                2,
+                "expected 2-socket neck to emit 2 slash-separated gem_ids, got {gems:?}"
+            );
+        }
+
+        // No mirror combos: dedup on the sorted multiset must match the raw count.
+        let mut seen: HashSet<Vec<u64>> = HashSet::new();
+        for gems in &neck_gem_lists {
+            let mut sorted = gems.clone();
+            sorted.sort();
+            assert!(
+                seen.insert(sorted.clone()),
+                "mirror combo emitted: {gems:?} (sorted {sorted:?})"
+            );
+        }
+    }
+
     // Regression: alt item with a socket-adding bonus (no gem yet) must be eligible
     // for gem assignment. Was broken when `resolved_item_to_value` dropped the
     // `sockets` field, leaving `alt_has_socket` permanently false.
@@ -465,6 +670,61 @@ main_hand=,id=200\n";
             assert!(
                 input.contains(&format!("wrist=,id=300,gem_id={gid},bonus_id=13534")),
                 "missing wrist+gem {gid} in output:\n{input}"
+            );
+        }
+    }
+
+    // Regression: an equipped 2-socket neck with two existing gems must produce
+    // gem-combo metadata with TWO entries for the neck (one per socket), not one.
+    // Reported by Jeffrey: result page showed only 1 gem on the neck even after
+    // the simc_socket_count fix correctly placed 2 gems in the simc string.
+    #[test]
+    fn top_gear_multi_socket_neck_metadata_has_two_gem_entries() {
+        ensure_game_data_loaded();
+        // Equipped neck has 2 gems already (`gem_id=240908/240908`) but only
+        // one socket-adding bonus (13668). simc_socket_count's max() between
+        // bonus-count and gem-count yields 2; gem_combo[neck] must have 2 ids,
+        // and build_gem_meta must emit 2 metadata entries.
+        let base_profile = "\
+hunter=test\n\
+spec=beast_mastery\n\
+neck=,id=250247,gem_id=240908/240908,bonus_id=13668\n\
+main_hand=,id=200\n";
+
+        let gems = [240900_u64, 240890_u64, 240892_u64];
+        let sockets = HashSet::from([250247_u64]);
+        let (_input, _combo_count, metadata) = generate_top_gear_input_with_talents(
+            base_profile,
+            &HashMap::new(),
+            &HashMap::new(),
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions {
+                gem_options: &gems,
+                socketed_item_ids: Some(&sockets),
+                replace_gems: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // Every emitted combo's metadata should have two `type:gem, slot:neck`
+        // entries — one per socket. (Excluding the baseline "Currently Equipped".)
+        for (combo_name, items) in &metadata {
+            if combo_name.starts_with("Currently Equipped") {
+                continue;
+            }
+            let neck_gem_entries = items
+                .iter()
+                .filter(|v| {
+                    v.get("type").and_then(|t| t.as_str()) == Some("gem")
+                        && v.get("slot").and_then(|s| s.as_str()) == Some("neck")
+                })
+                .count();
+            assert_eq!(
+                neck_gem_entries, 2,
+                "{combo_name} must carry 2 gem metadata entries for the neck (got {neck_gem_entries}): {items:?}"
             );
         }
     }

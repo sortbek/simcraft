@@ -5,24 +5,79 @@ use std::sync::Arc;
 use super::base_profile::{item_meta, parse_base_profile};
 
 use super::constraints::{
-    gear_set_identity_key, main_hand_is_two_hand, validate_catalyst_constraint,
-    validate_item_limits, validate_unique_equipped, validate_vault_constraint,
-    validate_weapon_constraint,
+    gear_set_identity_key, is_legal_gear_set, main_hand_is_two_hand, GearSetContext,
 };
 use super::selection::build_slot_candidates;
 use super::simc::{
-    extract_enchant_id, extract_gem_id, extract_item_id,
-    extract_spec_id_from_talent_string, is_diamond, set_enchant_id, set_gem_id,
-    simc_has_socket,
+    combinations, extract_enchant_id, extract_gem_id, extract_gem_ids, extract_item_id,
+    extract_spec_id_from_talent_string, gem_color, is_diamond, set_enchant_id, set_gem_ids,
+    simc_has_socket, simc_socket_count,
 };
 use super::{GemEnchantOptions, ProfilesetResult, MAX_COMBINATIONS};
 use crate::game_data;
 use crate::types::class_data::{self, GEAR_SLOTS};
 
-struct EnchantGemAxis {
+struct EnchantAxis {
     slot: String,
-    kind: &'static str,
     options: Vec<u64>,
+}
+
+/// One gem-combo entry: per slot, the list of gem ids (length = socket count
+/// for that slot). Order inside the Vec doesn't matter for dedup — `gem_id=A/B`
+/// and `gem_id=B/A` are equivalent in SimC and we collapse them. Used by the
+/// eager `generate_top_gear_input_with_talents`; the streaming iterator path
+/// in `build_iterator_config` below still uses single-gem-per-slot until the
+/// iterator gains multi-socket support.
+type GemCombo = HashMap<String, Vec<u64>>;
+
+/// All k-element multisets (combinations with repetition) of `items`.
+/// e.g. `multisets(&[A,B,C], 2)` -> AA, AB, AC, BB, BC, CC.
+fn multisets<T: Clone>(items: &[T], k: usize) -> Vec<Vec<T>> {
+    if k == 0 {
+        return vec![vec![]];
+    }
+    if items.is_empty() {
+        return vec![];
+    }
+    let mut result = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        // Repetition allowed → restart slice at `i` (not `i+1`) so the same
+        // item can be picked again, while the index-based recursion still
+        // pins the *order* and prevents emitting both `A,B` and `B,A`.
+        for mut sub in multisets(&items[i..], k - 1) {
+            sub.insert(0, item.clone());
+            result.push(sub);
+        }
+    }
+    result
+}
+
+fn dedupe_gem_assignments(combos: Vec<GemCombo>, max_diamonds: usize) -> Vec<GemCombo> {
+    let mut seen: HashSet<Vec<u64>> = HashSet::new();
+    let mut result = Vec::new();
+
+    for combo in combos {
+        let diamond_count = combo
+            .values()
+            .flat_map(|gids| gids.iter())
+            .filter(|&&gid| is_diamond(gid))
+            .count();
+        if diamond_count > max_diamonds {
+            continue;
+        }
+
+        // Gems are character-wide stats — placing a diamond in head vs neck
+        // (or A,B vs B,A in a 2-socket item) yields identical DPS. Dedup on
+        // the flat sorted gem list across all slots so we don't waste sim
+        // budget on permutation duplicates.
+        let mut key: Vec<u64> = combo.values().flat_map(|gids| gids.iter().copied()).collect();
+        key.sort();
+        if seen.insert(key) {
+            result.push(combo);
+        }
+    }
+
+    result
 }
 
 /// Build a [`ProfilesetIteratorConfig`] for the streaming/triage path.
@@ -269,10 +324,10 @@ pub fn generate_top_gear_input_with_talents(
     let mut varying_slots = varying_slots;
     varying_slots.sort();
 
-    let has_enchant_gem_input =
+    let has_enchant_axes_input =
         enchant_selections.values().any(|v| !v.is_empty()) || !gem_options.is_empty();
 
-    if varying_slots.is_empty() && talent_builds.len() <= 1 && !has_enchant_gem_input {
+    if varying_slots.is_empty() && talent_builds.len() <= 1 && !has_enchant_axes_input {
         return Ok((base_profile.to_string(), 0, HashMap::new()));
     }
 
@@ -331,30 +386,13 @@ pub fn generate_top_gear_input_with_talents(
             gear_set.remove("off_hand");
         }
 
-        // Validate unique-equipped constraints
-        if !validate_unique_equipped(&gear_set) {
-            continue;
-        }
-
-        // Vault constraint: only one vault item can be picked
-        if !validate_vault_constraint(&gear_set) {
-            continue;
-        }
-
-        // Weapon constraint: two-hander in main_hand cannot pair with off_hand
-        if !validate_weapon_constraint(&gear_set, &spec) {
-            continue;
-        }
-
-        // Catalyst constraint: max N catalyst items per combination
-        if let Some(charges) = catalyst_charges {
-            if !validate_catalyst_constraint(&gear_set, charges) {
-                continue;
-            }
-        }
-
-        // Item limit categories (e.g. max 2 embellished items)
-        if !validate_item_limits(&gear_set) {
+        if !is_legal_gear_set(
+            &gear_set,
+            &GearSetContext {
+                spec: &spec,
+                max_catalyst_charges: catalyst_charges,
+            },
+        ) {
             continue;
         }
 
@@ -380,9 +418,9 @@ pub fn generate_top_gear_input_with_talents(
 
     let gear_combo_count = valid_combos.len(); // excludes baseline
 
-    // Build enchant/gem variation axes.
-    // Each axis = (slot, kind, options) where options includes the equipped value.
-    let mut eg_axes: Vec<EnchantGemAxis> = Vec::new();
+    // Build enchant variation axes. Each axis = (slot, options) where options
+    // includes the equipped value at index 0.
+    let mut enchant_axes: Vec<EnchantAxis> = Vec::new();
     for (slot, ids) in enchant_selections {
         if ids.is_empty() {
             continue;
@@ -404,48 +442,65 @@ pub fn generate_top_gear_input_with_talents(
         if options.len() <= 1 {
             continue;
         }
-        eg_axes.push(EnchantGemAxis {
+        enchant_axes.push(EnchantAxis {
             slot: slot.clone(),
-            kind: "enchant",
             options,
         });
     }
-    eg_axes.sort_by(|a, b| a.slot.cmp(&b.slot).then_with(|| a.kind.cmp(b.kind)));
+    enchant_axes.sort_by(|a, b| a.slot.cmp(&b.slot));
 
     // Build gem combinations as a list of per-socket assignments.
-    // Each entry: HashMap<slot, gem_item_id> representing one gem combo.
-    let gem_combos: Vec<HashMap<String, u64>> = if !gem_options.is_empty() {
-        // Determine which slots CAN have gems — look at ALL items (equipped + alternatives)
-        // so that items with added sockets are included.
-        let mut gem_slots: Vec<String> = Vec::new();
+    // Each entry: HashMap<slot, Vec<gem_item_id>> — one gem id per socket on
+    // that slot's item. A 2-socket neck contributes a length-2 Vec.
+    let gem_combos: Vec<GemCombo> = if !gem_options.is_empty() {
+        // For each slot, compute (slot, socket_count). The count is the max
+        // number of sockets across the equipped item and any selected alts —
+        // a slot with a 1-socket alt and a 2-socket alt is generated as size
+        // 2; at apply time the per-item simc line is truncated to its real
+        // socket count so the smaller item still gets a valid `gem_id=A`.
+        let mut gem_slots: Vec<(String, usize)> = Vec::new();
         for slot in crate::types::class_data::GEAR_SLOTS {
             let slot_str = slot.to_string();
-            // Check equipped item
-            let equipped_has_socket = equipped_gear
+            // Equipped item contribution
+            let equipped_count = equipped_gear
                 .get(&slot_str)
                 .map(|simc| {
                     let item_id = extract_item_id(simc);
-                    socketed_item_ids.contains(&item_id)
-                        && (replace_gems || extract_gem_id(simc) == 0)
+                    if !socketed_item_ids.contains(&item_id) {
+                        return 0;
+                    }
+                    if !replace_gems && extract_gem_id(simc) != 0 {
+                        return 0; // Already gemmed; preserve as-is.
+                    }
+                    simc_socket_count(simc)
                 })
-                .unwrap_or(false);
-            // Check alternatives for any item with sockets. When replace_gems is
-            // off, only items with empty sockets count — already-gemmed items
-            // should keep their gem.
-            let alt_has_socket = items_by_slot
+                .unwrap_or(0);
+            // Alternatives contribution
+            let alt_count = items_by_slot
                 .get(&slot_str)
                 .map(|items| {
-                    items.iter().any(|item| {
-                        let has_sockets =
-                            item.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0) > 0;
-                        let has_gem =
-                            item.get("gem_id").and_then(|g| g.as_u64()).unwrap_or(0) > 0;
-                        has_sockets && (replace_gems || !has_gem)
-                    })
+                    items
+                        .iter()
+                        .filter_map(|item| {
+                            let has_gem = item
+                                .get("gem_id")
+                                .and_then(|g| g.as_u64())
+                                .unwrap_or(0)
+                                > 0;
+                            if !replace_gems && has_gem {
+                                return None;
+                            }
+                            item.get("sockets")
+                                .and_then(|s| s.as_u64())
+                                .map(|n| n as usize)
+                        })
+                        .max()
+                        .unwrap_or(0)
                 })
-                .unwrap_or(false);
-            if equipped_has_socket || alt_has_socket {
-                gem_slots.push(slot_str);
+                .unwrap_or(0);
+            let socket_count = equipped_count.max(alt_count);
+            if socket_count > 0 {
+                gem_slots.push((slot_str, socket_count));
             }
         }
 
@@ -460,10 +515,12 @@ pub fn generate_top_gear_input_with_talents(
         // If not replacing gems, check if a diamond is already equipped.
         // Diamonds are unique-equipped (max 1), so don't add more.
         if !replace_gems {
-            let has_equipped_diamond = equipped_gear.values().any(|simc| {
-                let gid = extract_gem_id(simc);
-                gid > 0 && is_diamond(gid)
-            });
+            // Scan every socket on every equipped item — a 2-socket neck can
+            // hide a diamond at index 1, which single-gem extract would miss.
+            let has_equipped_diamond = equipped_gear
+                .values()
+                .flat_map(|simc| extract_gem_ids(simc))
+                .any(is_diamond);
             if has_equipped_diamond {
                 gems.retain(|g| !is_diamond(*g));
             }
@@ -474,24 +531,143 @@ pub fn generate_top_gear_input_with_talents(
         let diamond_ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();
         gems.retain(|g| !is_diamond(*g));
 
-        let builder = crate::profileset_generator::gem_combos::GemCombosBuilder {
-            gem_options: &gems,
-            gem_slots: &gem_slots,
-            diamond_ids: &diamond_ids,
-            diamond_always_use,
-            max_colors,
+        // Helper: generate colored gem combos for a set of (slot, socket_count)
+        // entries. In max_colors mode each *slot* picks a single color shared
+        // across all of its sockets, and distinct slots pick distinct colors.
+        // Within a slot, the K sockets become a K-multiset of that slot's color.
+        let gen_color_combos = |slots: &[(String, usize)],
+                                gems: &[u64],
+                                max_colors: bool|
+         -> Vec<GemCombo> {
+            if slots.is_empty() {
+                return vec![HashMap::new()];
+            }
+            if gems.is_empty() {
+                return vec![HashMap::new()];
+            }
+            if max_colors {
+                let mut by_color: HashMap<String, Vec<u64>> = HashMap::new();
+                for &gid in gems {
+                    let color = gem_color(gid).unwrap_or_else(|| "other".to_string());
+                    by_color.entry(color).or_default().push(gid);
+                }
+                let colors: Vec<String> = by_color.keys().cloned().collect();
+                let n_colors = colors.len().min(slots.len());
+
+                // Precompute per-(color, socket_count) multisets so we don't
+                // regenerate the same list inside the slot loop below.
+                let mut multisets_cache: HashMap<(String, usize), Vec<Vec<u64>>> = HashMap::new();
+                for (color, gems_for_color) in &by_color {
+                    for (_, socket_count) in slots {
+                        multisets_cache
+                            .entry((color.clone(), *socket_count))
+                            .or_insert_with(|| multisets(gems_for_color, *socket_count));
+                    }
+                }
+
+                let mut result: Vec<GemCombo> = Vec::new();
+                for color_set in combinations(&colors, n_colors) {
+                    let mut current: Vec<GemCombo> = vec![HashMap::new()];
+                    for (slot_idx, (slot, socket_count)) in slots.iter().enumerate() {
+                        let color = &color_set[slot_idx % color_set.len()];
+                        let slot_multisets = &multisets_cache[&(color.clone(), *socket_count)];
+                        let mut next = Vec::new();
+                        for combo in &current {
+                            for ms in slot_multisets {
+                                let mut c = combo.clone();
+                                c.insert(slot.clone(), ms.clone());
+                                next.push(c);
+                            }
+                        }
+                        current = next;
+                    }
+                    result.extend(current);
+                }
+                dedupe_gem_assignments(result, 0)
+            } else {
+                let mut result: Vec<GemCombo> = vec![HashMap::new()];
+                for (slot, socket_count) in slots {
+                    let slot_multisets = multisets(gems, *socket_count);
+                    let mut next = Vec::new();
+                    for combo in &result {
+                        for ms in &slot_multisets {
+                            let mut c = combo.clone();
+                            c.insert(slot.clone(), ms.clone());
+                            next.push(c);
+                        }
+                    }
+                    result = next;
+                }
+                dedupe_gem_assignments(result, 0)
+            }
         };
-        crate::profileset_generator::gem_combos::enumerate_all(&builder)
+
+        let build_diamond_placements = |gem_slots: &[(String, usize)],
+                                         gems: &[u64],
+                                         diamond_ids: &[u64],
+                                         max_colors: bool|
+         -> Vec<GemCombo> {
+            let mut result: Vec<GemCombo> = Vec::new();
+            for (d_slot_idx, (d_slot, d_socket_count)) in gem_slots.iter().enumerate() {
+                let remaining: Vec<(String, usize)> = gem_slots
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != d_slot_idx)
+                    .map(|(_, sw)| sw.clone())
+                    .collect();
+                let other_combos = gen_color_combos(&remaining, gems, max_colors);
+
+                let other_socket_count = d_socket_count.saturating_sub(1);
+                let same_slot_fillers: Vec<Vec<u64>> = if other_socket_count == 0 || gems.is_empty()
+                {
+                    vec![vec![]]
+                } else {
+                    multisets(gems, other_socket_count)
+                };
+
+                for &did in diamond_ids {
+                    for base in &other_combos {
+                        for filler in &same_slot_fillers {
+                            let mut combo = base.clone();
+                            let mut slot_gems = vec![did];
+                            slot_gems.extend(filler.iter().copied());
+                            combo.insert(d_slot.clone(), slot_gems);
+                            result.push(combo);
+                        }
+                    }
+                }
+            }
+            result
+        };
+
+        if gems.is_empty() && diamond_ids.is_empty() {
+            Vec::new()
+        } else if !diamond_ids.is_empty() && diamond_always_use {
+            let placements = build_diamond_placements(&gem_slots, &gems, &diamond_ids, max_colors);
+            dedupe_gem_assignments(placements, 1)
+        } else if !diamond_ids.is_empty() {
+            let mut result = if gems.is_empty() {
+                Vec::new()
+            } else {
+                gen_color_combos(&gem_slots, &gems, max_colors)
+            };
+            result.extend(build_diamond_placements(
+                &gem_slots, &gems, &diamond_ids, max_colors,
+            ));
+            dedupe_gem_assignments(result, 1)
+        } else {
+            gen_color_combos(&gem_slots, &gems, max_colors)
+        }
     } else {
         Vec::new()
     };
     let has_gem_combos = !gem_combos.is_empty();
 
-    // Generate enchant/gem combos via cartesian product (excluding baseline)
-    let has_enchant_gem = !eg_axes.is_empty();
-    let eg_combos: Vec<Vec<usize>> = if has_enchant_gem {
+    // Cartesian product of enchant axes (excluding the all-equipped baseline).
+    let has_enchant_axes = !enchant_axes.is_empty();
+    let enchant_combos: Vec<Vec<usize>> = if has_enchant_axes {
         let mut all: Vec<Vec<usize>> = vec![vec![]];
-        for axis in &eg_axes {
+        for axis in &enchant_axes {
             let mut next = Vec::new();
             for combo in &all {
                 for i in 0..axis.options.len() {
@@ -502,12 +678,12 @@ pub fn generate_top_gear_input_with_talents(
             }
             all = next;
         }
-        let baseline_eg: Vec<usize> = vec![0; eg_axes.len()];
-        all.into_iter().filter(|c| *c != baseline_eg).collect()
+        let baseline: Vec<usize> = vec![0; enchant_axes.len()];
+        all.into_iter().filter(|c| *c != baseline).collect()
     } else {
         Vec::new()
     };
-    let eg_combo_count = eg_combos.len(); // excludes baseline (enchant-only combos)
+    let enchant_combo_count = enchant_combos.len();
 
     // Resolve talent builds
     let effective_talents: Vec<(String, String)> = if talent_builds.is_empty() {
@@ -526,7 +702,7 @@ pub fn generate_top_gear_input_with_talents(
     // plus 1 gem-only combo per gem_combo for baseline gear.
     // None of the gem combos IS the base actor, so no -1 for them.
     let gear_plus_baseline = gear_combo_count + 1;
-    let enchant_plus_baseline = eg_combo_count + 1;
+    let enchant_plus_baseline = enchant_combo_count + 1;
     let talent_count = effective_talents.len();
     let non_gem_combos = gear_plus_baseline * enchant_plus_baseline * talent_count - 1;
     let total_combo_count = if has_gem_combos {
@@ -544,7 +720,7 @@ pub fn generate_top_gear_input_with_talents(
         ));
     }
 
-    if gear_combo_count == 0 && !has_talent_variants && eg_combo_count == 0 && !has_gem_combos {
+    if gear_combo_count == 0 && !has_talent_variants && enchant_combo_count == 0 && !has_gem_combos {
         return Ok((base_profile.to_string(), 0, HashMap::new()));
     }
 
@@ -622,39 +798,32 @@ pub fn generate_top_gear_input_with_talents(
 
     let mut combo_number = 2usize;
 
-    // Build the list of enchant/gem combos including the baseline (index 0 per axis = equipped).
-    // eg_all_combos includes baseline; eg_combos excludes it.
-    let eg_baseline: Vec<usize> = vec![0; eg_axes.len()];
-    let eg_all_combos: Vec<Vec<usize>> = if has_enchant_gem {
-        let mut v = vec![eg_baseline.clone()];
-        v.extend(eg_combos.iter().cloned());
+    // Enchant combo list including the baseline (index 0 per axis = equipped).
+    // `enchant_combos` excludes baseline; this list includes it as the first entry.
+    let enchant_baseline: Vec<usize> = vec![0; enchant_axes.len()];
+    let enchant_all_combos: Vec<Vec<usize>> = if has_enchant_axes {
+        let mut v = vec![enchant_baseline.clone()];
+        v.extend(enchant_combos.iter().cloned());
         v
     } else {
         vec![vec![]]
     };
 
-    // Helper: apply an enchant/gem combo to a simc string for a given slot.
-    // Returns the modified simc string, or None if no change for this slot.
-    let apply_eg_combo = |slot: &str, simc: &str, eg_indices: &[usize]| -> Option<String> {
+    // Apply an enchant combo to a simc string for a given slot. Returns the
+    // modified string, or None if this combo doesn't touch this slot.
+    let apply_enchant_combo = |slot: &str,
+                               simc: &str,
+                               indices: &[usize]|
+     -> Option<String> {
         let mut result = simc.to_string();
         let mut changed = false;
-        for (axis_idx, &option_idx) in eg_indices.iter().enumerate() {
-            let axis = &eg_axes[axis_idx];
-            match axis.kind {
-                "enchant" => {
-                    if option_idx == 0 || axis.slot != slot {
-                        continue; // Enchant baseline (index 0 = equipped) or wrong slot
-                    }
-                    result = set_enchant_id(&result, axis.options[option_idx]);
-                    changed = true;
-                }
-                // Per-slot gem handling (legacy, not used with new gem_combos)
-                "gem" if axis.slot == slot => {
-                    result = set_gem_id(&result, axis.options[option_idx]);
-                    changed = true;
-                }
-                _ => {}
+        for (axis_idx, &option_idx) in indices.iter().enumerate() {
+            let axis = &enchant_axes[axis_idx];
+            if option_idx == 0 || axis.slot != slot {
+                continue; // Baseline (equipped enchant) or wrong slot.
             }
+            result = set_enchant_id(&result, axis.options[option_idx]);
+            changed = true;
         }
         if changed {
             Some(result)
@@ -663,99 +832,85 @@ pub fn generate_top_gear_input_with_talents(
         }
     };
 
-    // Helper: build enchant/gem metadata entries for an eg combo
-    let build_eg_meta = |eg_indices: &[usize]| -> Vec<Value> {
+    let build_enchant_meta = |indices: &[usize]| -> Vec<Value> {
         let mut meta = Vec::new();
-        for (axis_idx, &option_idx) in eg_indices.iter().enumerate() {
-            let axis = &eg_axes[axis_idx];
+        for (axis_idx, &option_idx) in indices.iter().enumerate() {
+            if option_idx == 0 {
+                continue; // Baseline enchant = equipped, no metadata change.
+            }
+            let axis = &enchant_axes[axis_idx];
             let new_val = axis.options[option_idx];
-            match axis.kind {
-                "enchant" => {
-                    if option_idx == 0 {
-                        continue; // Enchant baseline = equipped, no change
-                    }
-                    let info = crate::item_db::get_enchant_info(new_val);
-                    let name = info
-                        .as_ref()
-                        .and_then(|v| v.get("name"))
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("");
-                    meta.push(json!({
-                        "slot": axis.slot,
-                        "type": "enchant",
-                        "enchant_id": new_val,
-                        "name": name,
-                    }));
-                }
-                "gem" => {
-                    let info = crate::item_db::get_gem_info(new_val);
-                    let name = info
-                        .as_ref()
-                        .and_then(|v| v.get("name"))
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("");
-                    meta.push(json!({
-                        "slot": "gems",
-                        "type": "gem",
-                        "gem_id": new_val,
-                        "name": name,
-                    }));
-                }
-                _ => {}
-            }
-        }
-        meta
-    };
-
-    // Helper: apply a gem combo assignment to a simc string for a slot.
-    // Only writes a gem when the socket is empty, or when replace_gems is on.
-    let apply_gem = |slot: &str, simc: &str, gem_combo: &HashMap<String, u64>| -> String {
-        let has_socket = simc_has_socket(simc);
-        let already_gemmed = extract_gem_id(simc) > 0;
-
-        let mut result = if replace_gems && has_socket {
-            crate::simc_string::strip_gem_id(simc)
-        } else {
-            simc.to_string()
-        };
-        if let Some(&gid) = gem_combo.get(slot) {
-            if has_socket && (replace_gems || !already_gemmed) {
-                result = set_gem_id(&result, gid);
-            }
-        }
-        result
-    };
-
-    // Helper: build gem metadata for a gem combo, filtered to only slots that
-    // actually have a socket. If socketed_slots is None, include all gems.
-    let build_gem_meta = |gem_combo: &HashMap<String, u64>,
-                          socketed_slots: Option<&HashSet<String>>|
-     -> Vec<Value> {
-        let mut meta = Vec::new();
-        for (slot, &gid) in gem_combo {
-            if let Some(valid) = socketed_slots {
-                if !valid.contains(slot) {
-                    continue;
-                }
-            }
-            let info = crate::item_db::get_gem_info(gid);
+            let info = crate::item_db::get_enchant_info(new_val);
             let name = info
                 .as_ref()
                 .and_then(|v| v.get("name"))
                 .and_then(|n| n.as_str())
                 .unwrap_or("");
             meta.push(json!({
-                "slot": slot,
-                "type": "gem",
-                "gem_id": gid,
+                "slot": axis.slot,
+                "type": "enchant",
+                "enchant_id": new_val,
                 "name": name,
             }));
         }
         meta
     };
 
+    // Helper: apply a gem combo assignment to a simc string for a slot.
+    // Only writes gems when the socket is empty, or when replace_gems is on.
+    // Truncates the gem list to the item's actual socket count so a 2-gem
+    // combo applied to a 1-socket alternative emits a valid single-id line.
+    let apply_gem = |slot: &str, simc: &str, gem_combo: &GemCombo| -> String {
+        let socket_count = simc_socket_count(simc);
+        if socket_count == 0 {
+            return simc.to_string();
+        }
+        let already_gemmed = extract_gem_id(simc) > 0;
+        if !replace_gems && already_gemmed {
+            return simc.to_string();
+        }
+        match gem_combo.get(slot) {
+            Some(gids) => {
+                let take = gids.len().min(socket_count);
+                set_gem_ids(simc, &gids[..take])
+            }
+            None => simc.to_string(),
+        }
+    };
+
+    // Helper: build gem metadata for a gem combo, filtered to only slots that
+    // actually have a socket. If socketed_slots is None, include all gems.
+    // Emits one entry per socket so a 2-socket neck produces two metadata rows.
+    let build_gem_meta = |gem_combo: &GemCombo,
+                          socketed_slots: Option<&HashSet<String>>|
+     -> Vec<Value> {
+        let mut meta = Vec::new();
+        for (slot, gids) in gem_combo {
+            if let Some(valid) = socketed_slots {
+                if !valid.contains(slot) {
+                    continue;
+                }
+            }
+            for &gid in gids {
+                let info = crate::item_db::get_gem_info(gid);
+                let name = info
+                    .as_ref()
+                    .and_then(|v| v.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("");
+                meta.push(json!({
+                    "slot": slot,
+                    "type": "gem",
+                    "gem_id": gid,
+                    "name": name,
+                }));
+            }
+        }
+        meta
+    };
+
     // Build gem combo list including baseline (empty = no gem changes)
-    let gem_iter: Vec<Option<&HashMap<String, u64>>> = if has_gem_combos {
+    let gem_iter: Vec<Option<&GemCombo>> = if has_gem_combos {
         // No baseline for gem combos — gems always get applied
         gem_combos.iter().map(Some).collect()
     } else {
@@ -765,7 +920,7 @@ pub fn generate_top_gear_input_with_talents(
     // For each gem combo × talent × gear × enchant, generate a profileset
     let empty_gear_set: HashMap<String, Arc<Value>> = HashMap::new();
 
-    // Cache socketed-slot sets keyed by (gear_set pointer, eg_idx). The set
+    // Cache socketed-slot sets keyed by (gear_set pointer, enchant_idx). The set
     // depends only on gear+eg, not on the current gem combo, so once computed
     // it's reused across all gem_iter passes.
     let mut socketed_cache: HashMap<(usize, Vec<usize>), HashSet<String>> = HashMap::new();
@@ -835,15 +990,14 @@ pub fn generate_top_gear_input_with_talents(
                 }
             }
 
-            // For the first talent + baseline gear, we still need enchant/gem-only combos
-            if talent_idx == 0 && has_enchant_gem {
-                // Baseline gear + non-baseline enchant/gem combos
-                for eg_idx in &eg_combos {
+            // For the first talent + baseline gear, emit enchant-only combos.
+            if talent_idx == 0 && has_enchant_axes {
+                for enchant_idx in &enchant_combos {
                     // Check if this eg combo actually changes any equipped slot
                     let any_change = GEAR_SLOTS.iter().any(|slot| {
                         equipped_gear
                             .get(*slot)
-                            .and_then(|gear_val| apply_eg_combo(slot, gear_val, eg_idx))
+                            .and_then(|gear_val| apply_enchant_combo(slot, gear_val, enchant_idx))
                             .is_some()
                     });
                     if !any_change {
@@ -856,7 +1010,7 @@ pub fn generate_top_gear_input_with_talents(
 
                         for slot in GEAR_SLOTS {
                             if let Some(gear_val) = equipped_gear.get(*slot) {
-                                let modified = apply_eg_combo(slot, gear_val, eg_idx);
+                                let modified = apply_enchant_combo(slot, gear_val, enchant_idx);
                                 let val = gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
                                 lines.push(format!(
                                     "profileset.\"{}\"+={}={}",
@@ -868,14 +1022,14 @@ pub fn generate_top_gear_input_with_talents(
                         }
                         lines.push(String::new());
 
-                        let mut combo_items: Vec<Value> = build_eg_meta(eg_idx);
+                        let mut combo_items: Vec<Value> = build_enchant_meta(enchant_idx);
                         if let Some(gc) = gem_combo_opt {
                             let socketed: HashSet<String> = GEAR_SLOTS
                                 .iter()
                                 .filter(|s| {
                                     let slot_str = s.to_string();
                                     equipped_gear.get(&slot_str).is_some_and(|v| {
-                                        let modified = apply_eg_combo(&slot_str, v, eg_idx);
+                                        let modified = apply_enchant_combo(&slot_str, v, enchant_idx);
                                         simc_has_socket(modified.as_deref().unwrap_or(v))
                                     })
                                 })
@@ -900,11 +1054,11 @@ pub fn generate_top_gear_input_with_talents(
 
             for (is_equipped_with_new_talent, gear_set) in &gear_iter {
                 // For each gear combo, iterate over all enchant/gem combos (including baseline)
-                let eg_iter: &[Vec<usize>] = if *is_equipped_with_new_talent && !has_enchant_gem {
+                let enchant_iter: &[Vec<usize>] = if *is_equipped_with_new_talent && !has_enchant_axes {
                     // Only baseline enchants with new talent + equipped gear
-                    &eg_all_combos[..1]
+                    &enchant_all_combos[..1]
                 } else {
-                    &eg_all_combos
+                    &enchant_all_combos
                 };
 
                 // Resolve the simc string for `slot` in this gear combo: prefer the
@@ -921,20 +1075,20 @@ pub fn generate_top_gear_input_with_talents(
                     }
                 };
 
-                for eg_idx in eg_iter {
-                    let is_eg_baseline = !has_enchant_gem || *eg_idx == eg_baseline;
+                for enchant_idx in enchant_iter {
+                    let is_enchant_baseline = !has_enchant_axes || *enchant_idx == enchant_baseline;
 
                     // Skip: first talent + equipped gear + baseline enchants (that's the base actor)
-                    if talent_idx == 0 && *is_equipped_with_new_talent && is_eg_baseline {
+                    if talent_idx == 0 && *is_equipped_with_new_talent && is_enchant_baseline {
                         continue;
                     }
 
                     // For non-baseline gem combos, check if the gem actually applies to any
                     // item in this gear set. If no item has an empty socket, skip.
-                    if !is_eg_baseline {
+                    if !is_enchant_baseline {
                         let any_change = GEAR_SLOTS.iter().any(|slot| {
                             simc_for_slot(slot)
-                                .and_then(|s| apply_eg_combo(slot, s, eg_idx))
+                                .and_then(|s| apply_enchant_combo(slot, s, enchant_idx))
                                 .is_some()
                         });
                         if !any_change {
@@ -954,7 +1108,7 @@ pub fn generate_top_gear_input_with_talents(
                         // Same gear as base actor (possibly with enchant/gem overrides)
                         for slot in GEAR_SLOTS {
                             if let Some(gear_val) = equipped_gear.get(*slot) {
-                                let modified = apply_eg_combo(slot, gear_val, eg_idx);
+                                let modified = apply_enchant_combo(slot, gear_val, enchant_idx);
                                 let val = gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
                                 lines.push(format!(
                                     "profileset.\"{}\"+={}={}",
@@ -986,7 +1140,7 @@ pub fn generate_top_gear_input_with_talents(
                                         .get("simc_string")
                                         .and_then(|s| s.as_str())
                                         .unwrap_or("");
-                                    let modified = apply_eg_combo(slot, simc_str, eg_idx);
+                                    let modified = apply_enchant_combo(slot, simc_str, enchant_idx);
                                     let val =
                                         gem_simc(slot, modified.as_deref().unwrap_or(simc_str));
                                     lines.push(format!(
@@ -1063,22 +1217,22 @@ pub fn generate_top_gear_input_with_talents(
                     }
 
                     // Add enchant/gem change metadata
-                    if !is_eg_baseline {
-                        combo_items.extend(build_eg_meta(eg_idx));
+                    if !is_enchant_baseline {
+                        combo_items.extend(build_enchant_meta(enchant_idx));
                     }
                     if let Some(gc) = gem_combo_opt {
-                        // Cache key: (gear_set ptr, eg_idx). Valid because every
+                        // Cache key: (gear_set ptr, enchant_idx). Valid because every
                         // gear_set in gear_iter references either empty_gear_set
                         // (stack-stable within this fn) or a valid_combos entry
                         // (heap-stable for the function's lifetime).
                         let cache_key =
-                            (*gear_set as *const _ as usize, eg_idx.clone());
+                            (*gear_set as *const _ as usize, enchant_idx.clone());
                         let socketed = socketed_cache.entry(cache_key).or_insert_with(|| {
                             GEAR_SLOTS
                                 .iter()
                                 .filter(|slot| {
                                     simc_for_slot(slot).is_some_and(|v| {
-                                        let modified = apply_eg_combo(slot, v, eg_idx);
+                                        let modified = apply_enchant_combo(slot, v, enchant_idx);
                                         simc_has_socket(modified.as_deref().unwrap_or(v))
                                     })
                                 })

@@ -33,7 +33,7 @@ import {
   type Instance,
   type UpgradeTracks,
 } from '../components/loot/types';
-import { parseEquippedGear, resolveInherits, type EquippedGear } from '../lib/inheritedGear';
+import { parseEquippedGear, type EquippedGear } from '../lib/inheritedGear';
 
 const SLOT_ORDER = [
   'Main Hand',
@@ -567,13 +567,14 @@ export default function DropFinderContent() {
             upgradeLevel,
             upgradeTracks
           );
-          const slotInherits = resolveInherits(item.inventory_type, specName ?? '', equippedGear);
+          // No `slot_inherits` in the submission payload — the backend
+          // derives enchant/gem inheritance from the equipped profile so
+          // the frontend isn't computing simulation semantics.
           dropItems.push({
             ...item,
             ilevel: resolved.ilvl,
             quality: resolved.quality,
             bonus_ids: resolved.bonus_id ? [resolved.bonus_id] : [],
-            slot_inherits: slotInherits,
           });
         }
       }
@@ -587,8 +588,6 @@ export default function DropFinderContent() {
     dungeonDiff,
     upgradeLevel,
     upgradeTracks,
-    equippedGear,
-    specName,
   ]);
 
   const validate = useCallback(() => {

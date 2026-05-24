@@ -635,6 +635,7 @@ async fn run_simc_subprocess(
     generate_html: bool,
     on_profileset_progress: impl Fn(usize, usize),
     on_log: impl Fn(&str),
+    cancel: Option<crate::cancel::CancelToken>,
 ) -> Result<SimcOutput, String> {
     let suffix = if stage_name.is_empty() {
         String::new()
@@ -722,6 +723,20 @@ async fn run_simc_subprocess(
         register_process(job_id, pid);
         #[cfg(windows)]
         set_process_affinity(pid, threads);
+    }
+
+    // Post-spawn cancel gate. Closes the spawn-to-register window where a
+    // cancel can arrive before the PID is in the registry — kill_job would
+    // find nothing and the freshly spawned subprocess would run to completion.
+    // Once we're past register_process, kill_job *could* find the PID, but a
+    // cancel between the boundary check and this point would still race; this
+    // explicit kill makes it deterministic.
+    if let Some(tok) = cancel.as_ref() {
+        if tok.is_cancelled().await {
+            let _ = child.kill().await;
+            unregister_process(job_id);
+            return Err(CANCEL_ERR.to_string());
+        }
     }
 
     // Multiplex stdout + stderr through a single channel for unified log streaming.
@@ -917,13 +932,17 @@ pub fn filter_simc_input(
     output.join("\n")
 }
 
-/// Run simc and return parsed JSON output.
+/// Run simc and return parsed JSON output. Pass `cancel = Some(token)` so a
+/// cancel between job spawn and subprocess startup actually stops the work —
+/// without a token Quick Sim has the same orphan-spawn race the staged path
+/// closes at its stage boundaries.
 pub async fn run_simc(
     simc_path: &Path,
     job_id: &str,
     simc_input: &str,
     options: &Value,
     on_log: impl Fn(&str),
+    cancel: Option<crate::cancel::CancelToken>,
 ) -> Result<SimcOutput, String> {
     let fight_style = options
         .get("fight_style")
@@ -977,16 +996,23 @@ pub async fn run_simc(
         true,      // generate HTML for quick sims
         |_, _| {}, // Quick sim has no profilesets to track
         on_log,
+        cancel,
     )
     .await
 }
+
+/// Sentinel error returned when staged execution aborts due to user cancel.
+/// Wrapped into `StagedRunError::Other(CANCEL_ERR.into())`; `set_error`'s
+/// terminal-state invariant suppresses the write either way, but the
+/// explicit sentinel makes intent visible in logs.
+pub const CANCEL_ERR: &str = "__cancelled_by_user__";
 
 /// Error type returned by `run_simc_staged`.
 #[derive(Debug)]
 pub enum StagedRunError {
     /// The user paused mid-run; status has already been set to Paused.
     Paused,
-    /// Any other error.
+    /// Any other error (including the user-cancel sentinel `CANCEL_ERR`).
     Other(String),
 }
 
@@ -1018,7 +1044,8 @@ fn parse_combo_id(name: &str) -> Option<i64> {
         .and_then(|s| s.trim().parse::<i64>().ok())
 }
 
-/// Run a multi-stage simulation for Top Gear.
+/// Run a multi-stage simulation for Top Gear. Pass `cancel = Some(token)` to
+/// abort cleanly at stage boundaries when the job is cancelled.
 ///
 /// `base_start` is the lower bound of the progress-bar range allocated to the
 /// staged pipeline (10 for inline/eager jobs, 50 for streamed jobs that ran
@@ -1082,6 +1109,7 @@ pub async fn run_simc_staged(
     on_progress: impl Fn(u8, &str, &str),
     on_stage_complete: impl Fn(&str),
     on_log: impl Fn(&str) + Clone,
+    cancel: Option<crate::cancel::CancelToken>,
 ) -> Result<SimcOutput, StagedRunError> {
     let fight_style = options
         .get("fight_style")
@@ -1106,6 +1134,11 @@ pub async fn run_simc_staged(
         .unwrap_or(true);
 
     if combo_count < STAGED_THRESHOLD {
+        if let Some(tok) = cancel.as_ref() {
+            if tok.is_cancelled().await {
+                return Err(StagedRunError::Other(CANCEL_ERR.to_string()));
+            }
+        }
         on_progress(5, "Simulating", &format!("{} combos", combo_count));
         let target_error = options
             .get("target_error")
@@ -1137,6 +1170,7 @@ pub async fn run_simc_staged(
                 );
             },
             on_log,
+            cancel.clone(),
         )
         .await
         .map_err(Into::into);
@@ -1172,6 +1206,16 @@ pub async fn run_simc_staged(
     let batch_size = staged_batch_size();
 
     while stage_idx < total_stages {
+        // Cancellation gate at every stage boundary. Closes the race where a
+        // cancel landed while the previous subprocess was exiting — without
+        // this, a new subprocess would spawn and could complete successfully
+        // before the cancel was honored.
+        if let Some(tok) = cancel.as_ref() {
+            if tok.is_cancelled().await {
+                return Err(StagedRunError::Other(CANCEL_ERR.to_string()));
+            }
+        }
+
         let stage = &stages[stage_idx];
         let is_final = stage_idx == final_idx;
         let (range_start, range_end) = progress_range_for_stage(stage_idx, total_stages, base_start);
@@ -1226,8 +1270,10 @@ pub async fn run_simc_staged(
                     );
                 },
                 on_log.clone(),
+                cancel.clone(),
             )
-            .await?;
+            .await
+            .map_err(StagedRunError::from)?;
             result = Some(stage_result);
             on_stage_complete(&format!("{} · {} combos · done", stage.name, remaining));
             break;
@@ -1302,8 +1348,10 @@ pub async fn run_simc_staged(
                     );
                 },
                 on_log.clone(),
+                cancel.clone(),
             )
-            .await?;
+            .await
+            .map_err(StagedRunError::from)?;
             let batch_secs = batch_start_instant.elapsed().as_secs_f64();
             let batch_ps_count = batches[batch_idx].len();
             println!(
@@ -1437,32 +1485,39 @@ pub async fn run_simc_staged(
         }
     }
 
-    // Inject eliminated combos into the final result so all combos appear in output.
-    if !eliminated.is_empty() {
-        if let Some(ref mut output) = result {
-            if let Some(results_arr) = output
-                .json
-                .pointer_mut("/sim/profilesets/results")
-                .and_then(|v| v.as_array_mut())
-            {
-                let final_names: std::collections::HashSet<String> = results_arr
-                    .iter()
-                    .filter_map(|ps| {
-                        ps.get("name")
-                            .and_then(|n| n.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .collect();
-                for (name, ps) in &eliminated {
-                    if !final_names.contains(name) {
-                        results_arr.push(ps.clone());
-                    }
-                }
-            }
+    if let Some(ref mut output) = result {
+        merge_eliminated_into_final(&mut output.json, &eliminated);
+    }
+    return result.ok_or_else(|| StagedRunError::Other("No simulation result produced".to_string()));
+}
+
+/// Splice combos that were dropped at intermediate stages back into the final
+/// profileset result array, so the UI can show their last-known DPS instead of
+/// dropping them silently. Skip any name that already appears (the final stage
+/// re-ran some combos at higher precision; those win).
+fn merge_eliminated_into_final(json: &mut Value, eliminated: &HashMap<String, Value>) {
+    if eliminated.is_empty() {
+        return;
+    }
+    let Some(results_arr) = json
+        .pointer_mut("/sim/profilesets/results")
+        .and_then(|v| v.as_array_mut())
+    else {
+        return;
+    };
+    let final_names: std::collections::HashSet<String> = results_arr
+        .iter()
+        .filter_map(|ps| {
+            ps.get("name")
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string())
+        })
+        .collect();
+    for (name, ps) in eliminated {
+        if !final_names.contains(name) {
+            results_arr.push(ps.clone());
         }
     }
-
-    result.ok_or_else(|| StagedRunError::Other("No simulation result produced".to_string()))
 }
 
 /// Run simc on a single Triage batch's profileset input.
@@ -1527,6 +1582,7 @@ pub async fn run_simc_triage_batch(
         false, // generate_html
         |_, _| {}, // no per-profileset progress callbacks needed
         move |line| logs.push_line(&log_jid, line.to_string()),
+        None, // triage batches don't carry a cancel token — caller serializes batches
     )
     .await?;
 
@@ -1624,6 +1680,60 @@ mod tests {
     fn empty_input_returns_empty() {
         let kept = select_kept_profilesets(&[], 1.0, 5, None);
         assert!(kept.is_empty());
+    }
+
+    #[test]
+    fn merge_eliminated_skips_duplicate_names() {
+        // Final stage re-ran Combo A at high precision. The intermediate
+        // result for A must not get re-injected over the final one.
+        let mut final_json = json!({
+            "sim": { "profilesets": { "results": [
+                {"name": "A", "mean": 1000.0, "iter": "final"}
+            ]}}
+        });
+        let mut eliminated: HashMap<String, Value> = HashMap::new();
+        eliminated.insert("A".to_string(), json!({"name":"A","mean": 980.0,"iter":"intermediate"}));
+        eliminated.insert("B".to_string(), json!({"name":"B","mean": 970.0}));
+
+        merge_eliminated_into_final(&mut final_json, &eliminated);
+
+        let arr = final_json
+            .pointer("/sim/profilesets/results")
+            .and_then(|v| v.as_array())
+            .unwrap();
+        // A from the final stage is preserved (mean 1000), B from intermediate is appended.
+        let a = arr
+            .iter()
+            .find(|p| p.get("name").and_then(|n| n.as_str()) == Some("A"))
+            .unwrap();
+        assert_eq!(a.get("iter").and_then(|v| v.as_str()), Some("final"));
+        assert!(arr
+            .iter()
+            .any(|p| p.get("name").and_then(|n| n.as_str()) == Some("B")));
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn merge_eliminated_is_noop_when_empty() {
+        let mut json =
+            json!({"sim":{"profilesets":{"results":[{"name":"X","mean":1.0}]}}});
+        merge_eliminated_into_final(&mut json, &HashMap::new());
+        let arr = json
+            .pointer("/sim/profilesets/results")
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn merge_eliminated_tolerates_missing_results_array() {
+        // Defensive: if the simc output didn't include a results array,
+        // the merge must not panic.
+        let mut json = json!({"sim":{"profilesets":{}}});
+        let mut eliminated = HashMap::new();
+        eliminated.insert("A".to_string(), json!({"name":"A","mean":1.0}));
+        merge_eliminated_into_final(&mut json, &eliminated);
+        assert!(json.pointer("/sim/profilesets/results").is_none());
     }
 
     #[test]

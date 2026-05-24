@@ -299,17 +299,70 @@ impl JobRepo {
         }
     }
 
+    /// Atomic cancellation: transition to Cancelled only when the current
+    /// status is Pending, Running, or Paused. Returns true when the
+    /// transition happened.
+    ///
+    /// This closes the read-then-write race in the cancel handler: a separate
+    /// `get` followed by `update_status(Cancelled)` lets a Done write between
+    /// them get clobbered. Doing the predicate in the same statement preserves
+    /// terminal Done/Failed outcomes.
+    pub async fn cancel_if_active(&self, id: &str) -> Result<bool, sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                let r = sqlx::query(
+                    "UPDATE jobs SET status = 'cancelled' \
+                     WHERE id = $1 AND status IN ('pending', 'running', 'paused')",
+                )
+                .bind(id)
+                .execute(pool)
+                .await?;
+                Ok(r.rows_affected() > 0)
+            }
+            JobBackend::Memory(jobs) => {
+                if let Some(job) = jobs.lock().unwrap().iter_mut().find(|job| job.id == id) {
+                    if matches!(
+                        job.status,
+                        JobStatus::Pending | JobStatus::Running | JobStatus::Paused
+                    ) {
+                        job.status = JobStatus::Cancelled;
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+        }
+    }
+
+    /// Update job status with the terminal-state invariant: Cancelled is sticky.
+    /// No transition out of Cancelled is allowed via this method; cancel cancel
+    /// is idempotent. Callers that need to record a cancellation should call
+    /// this with `JobStatus::Cancelled` directly — it'll always succeed.
     pub async fn update_status(&self, id: &str, status: JobStatus) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
-                sqlx::query("UPDATE jobs SET status = $1 WHERE id = $2")
+                if status == JobStatus::Cancelled {
+                    // Cancellation is always allowed (idempotent).
+                    sqlx::query("UPDATE jobs SET status = $1 WHERE id = $2")
+                        .bind(Self::status_to_str(&status))
+                        .bind(id)
+                        .execute(pool)
+                        .await?;
+                } else {
+                    sqlx::query(
+                        "UPDATE jobs SET status = $1 WHERE id = $2 AND status != 'cancelled'",
+                    )
                     .bind(Self::status_to_str(&status))
                     .bind(id)
                     .execute(pool)
                     .await?;
+                }
             }
             JobBackend::Memory(jobs) => {
                 if let Some(job) = jobs.lock().unwrap().iter_mut().find(|job| job.id == id) {
+                    if status != JobStatus::Cancelled && job.status == JobStatus::Cancelled {
+                        return Ok(());
+                    }
                     job.status = status;
                 }
             }
@@ -386,6 +439,10 @@ impl JobRepo {
         Ok(())
     }
 
+    /// Terminal-state invariant: once a job is Cancelled, neither a successful
+    /// result write nor a failure write can resurrect it. Cancellation is
+    /// sticky. Without this, a cancel that arrives while results are being
+    /// persisted gets silently overwritten by `set_result`.
     pub async fn set_result(
         &self,
         id: &str,
@@ -394,15 +451,22 @@ impl JobRepo {
     ) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
-                sqlx::query("UPDATE jobs SET result_json = $1, raw_json = $2, status = 'done', progress_pct = 100 WHERE id = $3")
-                    .bind(result)
-                    .bind(raw_json)
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
+                // SQL guard: only overwrite when status is not already terminal-cancelled.
+                sqlx::query(
+                    "UPDATE jobs SET result_json = $1, raw_json = $2, status = 'done', \
+                     progress_pct = 100 WHERE id = $3 AND status != 'cancelled'",
+                )
+                .bind(result)
+                .bind(raw_json)
+                .bind(id)
+                .execute(pool)
+                .await?;
             }
             JobBackend::Memory(jobs) => {
                 if let Some(job) = jobs.lock().unwrap().iter_mut().find(|job| job.id == id) {
+                    if job.status == JobStatus::Cancelled {
+                        return Ok(());
+                    }
                     job.result_json = Some(result.to_string());
                     job.raw_json = raw_json.map(ToString::to_string);
                     job.status = JobStatus::Done;
@@ -416,14 +480,20 @@ impl JobRepo {
     pub async fn set_error(&self, id: &str, error: &str) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
-                sqlx::query("UPDATE jobs SET error_message = $1, status = 'failed' WHERE id = $2")
-                    .bind(error)
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
+                sqlx::query(
+                    "UPDATE jobs SET error_message = $1, status = 'failed' \
+                     WHERE id = $2 AND status != 'cancelled'",
+                )
+                .bind(error)
+                .bind(id)
+                .execute(pool)
+                .await?;
             }
             JobBackend::Memory(jobs) => {
                 if let Some(job) = jobs.lock().unwrap().iter_mut().find(|job| job.id == id) {
+                    if job.status == JobStatus::Cancelled {
+                        return Ok(());
+                    }
                     job.error_message = Some(error.to_string());
                     job.status = JobStatus::Failed;
                 }
@@ -432,6 +502,10 @@ impl JobRepo {
         Ok(())
     }
 
+    /// Terminal-state invariant: cancelled jobs must not get report artifacts.
+    /// Reports are served from the same row regardless of status, so writing
+    /// them after `set_result` was suppressed would expose simulation output
+    /// the user explicitly aborted.
     pub async fn set_report_files(
         &self,
         id: &str,
@@ -440,15 +514,21 @@ impl JobRepo {
     ) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
-                sqlx::query("UPDATE jobs SET html_report = $1, text_output = $2 WHERE id = $3")
-                    .bind(html)
-                    .bind(text)
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
+                sqlx::query(
+                    "UPDATE jobs SET html_report = $1, text_output = $2 \
+                     WHERE id = $3 AND status != 'cancelled'",
+                )
+                .bind(html)
+                .bind(text)
+                .bind(id)
+                .execute(pool)
+                .await?;
             }
             JobBackend::Memory(jobs) => {
                 if let Some(job) = jobs.lock().unwrap().iter_mut().find(|job| job.id == id) {
+                    if job.status == JobStatus::Cancelled {
+                        return Ok(());
+                    }
                     job.html_report = html.map(ToString::to_string);
                     job.text_output = text.map(ToString::to_string);
                 }
@@ -971,5 +1051,160 @@ mod tests {
         assert_eq!(ids[0], "chatty-1");
         let chatty_summary = summaries.iter().find(|s| s.id == "chatty-1").unwrap();
         assert_eq!(chatty_summary.player_name.as_deref(), Some("Tester"));
+    }
+}
+
+#[cfg(test)]
+mod terminal_state_tests {
+    use super::*;
+    use crate::models::Job;
+
+    fn fresh_job() -> Job {
+        Job::new(
+            String::new(),
+            "quick".to_string(),
+            100,
+            "Patchwerk".to_string(),
+            0.1,
+        )
+    }
+
+    async fn make_repo_with_job(initial: JobStatus) -> (JobRepo, String) {
+        let repo = JobRepo::new_memory();
+        let mut job = fresh_job();
+        job.status = initial.clone();
+        let id = job.id.clone();
+        repo.insert(&job).await.unwrap();
+        // Ensure the post-insert status matches what the caller asked for.
+        repo.update_status(&id, initial).await.unwrap();
+        (repo, id)
+    }
+
+    #[tokio::test]
+    async fn set_result_does_not_overwrite_cancelled() {
+        let (repo, id) = make_repo_with_job(JobStatus::Cancelled).await;
+        repo.set_result(&id, r#"{"dps":12345}"#, None).await.unwrap();
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(
+            after.status,
+            JobStatus::Cancelled,
+            "cancellation must be terminal; set_result must not flip back to Done"
+        );
+        assert!(
+            after.result_json.is_none(),
+            "result_json must not be written when job is already cancelled"
+        );
+    }
+
+    #[tokio::test]
+    async fn set_error_does_not_overwrite_cancelled() {
+        let (repo, id) = make_repo_with_job(JobStatus::Cancelled).await;
+        repo.set_error(&id, "subprocess died").await.unwrap();
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Cancelled);
+        assert!(after.error_message.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_status_does_not_overwrite_cancelled() {
+        // The staged spawn task does `update_status(Running)` at the top —
+        // this must be a no-op if the job was cancelled between create and spawn.
+        let (repo, id) = make_repo_with_job(JobStatus::Cancelled).await;
+        repo.update_status(&id, JobStatus::Running).await.unwrap();
+        repo.update_status(&id, JobStatus::Done).await.unwrap();
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn update_status_cancellation_is_idempotent_from_any_state() {
+        // Cancellation always wins, even mid-run.
+        let (repo, id) = make_repo_with_job(JobStatus::Running).await;
+        repo.update_status(&id, JobStatus::Cancelled).await.unwrap();
+        // And cancel-after-cancel is still cancelled.
+        repo.update_status(&id, JobStatus::Cancelled).await.unwrap();
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn set_result_on_running_works_normally() {
+        // Sanity: the invariant only blocks Cancelled → Done, not Running → Done.
+        let (repo, id) = make_repo_with_job(JobStatus::Running).await;
+        repo.set_result(&id, r#"{"dps":42}"#, None).await.unwrap();
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Done);
+        assert_eq!(after.progress_pct, 100);
+        assert_eq!(after.result_json.as_deref(), Some(r#"{"dps":42}"#));
+    }
+
+    #[tokio::test]
+    async fn cancel_if_active_transitions_running_to_cancelled() {
+        let (repo, id) = make_repo_with_job(JobStatus::Running).await;
+        let transitioned = repo.cancel_if_active(&id).await.unwrap();
+        assert!(transitioned, "Running → Cancelled must report a transition");
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn cancel_if_active_transitions_pending_to_cancelled() {
+        let (repo, id) = make_repo_with_job(JobStatus::Pending).await;
+        let transitioned = repo.cancel_if_active(&id).await.unwrap();
+        assert!(transitioned);
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn cancel_if_active_does_not_clobber_done() {
+        // The race the atomic predicate exists to close: a separate get-then-
+        // update could overwrite a Done that landed between the two calls.
+        let (repo, id) = make_repo_with_job(JobStatus::Done).await;
+        let transitioned = repo.cancel_if_active(&id).await.unwrap();
+        assert!(!transitioned, "Done must not be clobbered by cancel");
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Done);
+    }
+
+    #[tokio::test]
+    async fn cancel_if_active_does_not_clobber_failed() {
+        let (repo, id) = make_repo_with_job(JobStatus::Failed).await;
+        let transitioned = repo.cancel_if_active(&id).await.unwrap();
+        assert!(!transitioned);
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.status, JobStatus::Failed);
+    }
+
+    #[tokio::test]
+    async fn cancel_if_active_is_noop_when_already_cancelled() {
+        let (repo, id) = make_repo_with_job(JobStatus::Cancelled).await;
+        let transitioned = repo.cancel_if_active(&id).await.unwrap();
+        assert!(!transitioned, "second cancel of cancelled job is not a transition");
+    }
+
+    #[tokio::test]
+    async fn set_report_files_skips_cancelled_jobs() {
+        // A cancelled job must not receive downloadable HTML/text artifacts.
+        // The user aborted intentionally; serving partial reports later would
+        // expose simulation output we said we threw away.
+        let (repo, id) = make_repo_with_job(JobStatus::Cancelled).await;
+        repo.set_report_files(&id, Some("<html/>"), Some("text"))
+            .await
+            .unwrap();
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert!(after.html_report.is_none());
+        assert!(after.text_output.is_none());
+    }
+
+    #[tokio::test]
+    async fn set_report_files_writes_for_done_jobs() {
+        let (repo, id) = make_repo_with_job(JobStatus::Done).await;
+        repo.set_report_files(&id, Some("<html/>"), Some("text"))
+            .await
+            .unwrap();
+        let after = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(after.html_report.as_deref(), Some("<html/>"));
+        assert_eq!(after.text_output.as_deref(), Some("text"));
     }
 }

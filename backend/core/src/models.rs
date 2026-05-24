@@ -13,6 +13,73 @@ static SIMC_PLAYER_NAME_RE: Lazy<Regex> = Lazy::new(|| {
     .unwrap()
 });
 
+/// User-facing sim category. Preserves source-mode identity for history,
+/// analytics, and UI labelling regardless of how the result is rendered.
+///
+/// Distinct from `ResultKind` below: a Crest Upgrade sim is `SimMode::UpgradeCompare`
+/// even though its payload renders as `ResultKind::GearComparison`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SimMode {
+    Quick,
+    StatWeights,
+    TopGear,
+    Droptimizer,
+    EnchantGem,
+    UpgradeCompare,
+}
+
+impl SimMode {
+    /// Wire string. Matches what handlers and stored Job rows use today, so
+    /// migration is a no-op at the protocol boundary.
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            SimMode::Quick => "quick",
+            SimMode::StatWeights => "stat_weights",
+            SimMode::TopGear => "top_gear",
+            SimMode::Droptimizer => "droptimizer",
+            SimMode::EnchantGem => "enchant_gem",
+            SimMode::UpgradeCompare => "upgrade_compare",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "quick" => Some(SimMode::Quick),
+            "stat_weights" => Some(SimMode::StatWeights),
+            "top_gear" => Some(SimMode::TopGear),
+            "droptimizer" => Some(SimMode::Droptimizer),
+            "enchant_gem" => Some(SimMode::EnchantGem),
+            "upgrade_compare" => Some(SimMode::UpgradeCompare),
+            _ => None,
+        }
+    }
+
+    /// Whether this mode emits a gear-comparison payload (top-level `base_dps`
+    /// + per-combo `results`) or a single-actor payload (top-level `dps`).
+    /// Lets summary/extractor code branch on intent rather than re-detecting
+    /// from the JSON shape.
+    pub fn result_kind(self) -> ResultKind {
+        match self {
+            SimMode::Quick | SimMode::StatWeights => ResultKind::SingleActor,
+            SimMode::TopGear
+            | SimMode::Droptimizer
+            | SimMode::EnchantGem
+            | SimMode::UpgradeCompare => ResultKind::GearComparison,
+        }
+    }
+}
+
+/// Shape of the response payload, independent of which `SimMode` produced it.
+/// Multiple modes share a result kind — e.g. Drop Finder, Top Gear, and Crest
+/// Upgrades all render via the gear-comparison view.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResultKind {
+    SingleActor,
+    GearComparison,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum JobStatus {
@@ -148,7 +215,14 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
         region: None,
     };
 
-    // Extract DPS, player name, class from parsed result
+    // Extract DPS, player name, class from parsed result.
+    //
+    // Two payload shapes are supported:
+    //   - Single-actor (Quick Sim, Stat Weights): top-level `dps`.
+    //   - Gear comparison (Top Gear, Drop Finder, Enchant/Gem, Crest Upgrades):
+    //     top-level `base_dps` + a `results` array of `{name, dps, ...}`. The
+    //     history "best DPS" should be the highest DPS the sim found —
+    //     baseline or any improved combo — so we take the max.
     if let Some(json_str) = result_json {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
             summary.player_name = v
@@ -159,7 +233,24 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
                 .get("player_class")
                 .and_then(|c| c.as_str())
                 .map(String::from);
-            summary.dps = v.get("dps").and_then(|d| d.as_f64());
+            summary.dps = v.get("dps").and_then(|d| d.as_f64()).or_else(|| {
+                let base = v.get("base_dps").and_then(|d| d.as_f64()).unwrap_or(0.0);
+                let best_result = v
+                    .get("results")
+                    .and_then(|r| r.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|entry| entry.get("dps").and_then(|d| d.as_f64()))
+                            .fold(0.0_f64, f64::max)
+                    })
+                    .unwrap_or(0.0);
+                let best = base.max(best_result);
+                if best > 0.0 {
+                    Some(best)
+                } else {
+                    None
+                }
+            });
         }
     }
 
@@ -226,5 +317,88 @@ impl Job {
             checkpoint: None,
             pause_requested: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod sim_mode_tests {
+    use super::*;
+
+    #[test]
+    fn round_trip_wire() {
+        for m in [
+            SimMode::Quick,
+            SimMode::StatWeights,
+            SimMode::TopGear,
+            SimMode::Droptimizer,
+            SimMode::EnchantGem,
+            SimMode::UpgradeCompare,
+        ] {
+            assert_eq!(SimMode::from_wire(m.as_wire()), Some(m));
+        }
+    }
+
+    #[test]
+    fn unknown_wire_returns_none() {
+        assert_eq!(SimMode::from_wire("definitely_not_a_mode"), None);
+    }
+
+    #[test]
+    fn result_kind_splits_modes_correctly() {
+        assert_eq!(SimMode::Quick.result_kind(), ResultKind::SingleActor);
+        assert_eq!(SimMode::StatWeights.result_kind(), ResultKind::SingleActor);
+        assert_eq!(SimMode::TopGear.result_kind(), ResultKind::GearComparison);
+        assert_eq!(SimMode::Droptimizer.result_kind(), ResultKind::GearComparison);
+        assert_eq!(SimMode::EnchantGem.result_kind(), ResultKind::GearComparison);
+        // Critical: Crest Upgrades is its own mode that *renders* as
+        // gear-comparison. Previously this was lying about its identity
+        // by storing sim_type = "top_gear" to share the parser.
+        assert_eq!(
+            SimMode::UpgradeCompare.result_kind(),
+            ResultKind::GearComparison
+        );
+    }
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use super::*;
+
+    #[test]
+    fn single_actor_result_uses_top_level_dps() {
+        let json = r#"{"player_name":"Alice","dps":12345.0}"#;
+        let s = extract_result_summary(&Some(json.to_string()), "");
+        assert_eq!(s.dps, Some(12345.0));
+    }
+
+    #[test]
+    fn gear_comparison_uses_best_of_base_and_results() {
+        // Top Gear / Drop Finder / Enchant Gem / Crest Upgrades all emit this
+        // shape — no top-level `dps`, just `base_dps` + per-combo `results`.
+        // History must still surface a DPS so the row doesn't read "—".
+        let json = r#"{
+            "type":"top_gear",
+            "base_dps": 50000.0,
+            "results": [
+                {"name":"Combo 1","dps": 53210.0},
+                {"name":"Combo 2","dps": 51000.0}
+            ]
+        }"#;
+        let s = extract_result_summary(&Some(json.to_string()), "");
+        assert_eq!(s.dps, Some(53210.0));
+    }
+
+    #[test]
+    fn gear_comparison_falls_back_to_base_when_results_empty() {
+        let json = r#"{"type":"top_gear","base_dps": 48000.0,"results":[]}"#;
+        let s = extract_result_summary(&Some(json.to_string()), "");
+        assert_eq!(s.dps, Some(48000.0));
+    }
+
+    #[test]
+    fn gear_comparison_with_zero_base_and_empty_results_is_none() {
+        let json = r#"{"type":"top_gear","base_dps": 0.0,"results":[]}"#;
+        let s = extract_result_summary(&Some(json.to_string()), "");
+        assert_eq!(s.dps, None);
     }
 }

@@ -363,11 +363,7 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
         None => return HashMap::new(),
     };
 
-    let id_re = Regex::new(r"id=(\d+)").unwrap();
     let ilvl_re = Regex::new(r"ilevel=(\d+)").unwrap();
-    let bonus_re = Regex::new(r"bonus_id=([0-9/:]+)").unwrap();
-    let enchant_re = Regex::new(r"enchant_id=(\d+)").unwrap();
-    let gem_re = Regex::new(r"gem_id=(\d+)").unwrap();
 
     let mut baseline: HashMap<String, Value> = HashMap::new();
 
@@ -384,10 +380,7 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
             .and_then(|e| e.as_str())
             .unwrap_or("");
 
-        let item_id: u64 = id_re
-            .captures(encoded)
-            .and_then(|c| c[1].parse().ok())
-            .unwrap_or(0);
+        let item_id = crate::simc_string::extract_item_id(encoded);
 
         let mut ilevel: u64 = ilvl_re
             .captures(encoded)
@@ -398,24 +391,13 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
             ilevel = data.get("ilevel").and_then(|i| i.as_u64()).unwrap_or(0);
         }
 
-        let bonus_ids: Vec<u64> = bonus_re
-            .captures(encoded)
-            .map(|c| {
-                c[1].split(&['/', ':'][..])
-                    .filter_map(|s| s.parse().ok())
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let enchant_id: u64 = enchant_re
-            .captures(encoded)
-            .and_then(|c| c[1].parse().ok())
-            .unwrap_or(0);
-
-        let gem_id: u64 = gem_re
-            .captures(encoded)
-            .and_then(|c| c[1].parse().ok())
-            .unwrap_or(0);
+        let bonus_ids = crate::simc_string::extract_bonus_ids(encoded);
+        let enchant_id = crate::simc_string::extract_enchant_id(encoded);
+        let gem_ids: Vec<u64> = crate::simc_string::extract_gem_ids(encoded)
+            .into_iter()
+            .filter(|&id| id > 0)
+            .collect();
+        let gem_id: u64 = gem_ids.first().copied().unwrap_or(0);
 
         let name = data
             .get("name")
@@ -438,6 +420,7 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
                 "bonus_ids": bonus_ids,
                 "enchant_id": enchant_id,
                 "gem_id": gem_id,
+                "gem_ids": gem_ids,
                 "sockets": sockets,
                 "is_kept": true,
             }),

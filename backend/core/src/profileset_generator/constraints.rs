@@ -5,6 +5,49 @@ use std::collections::{HashMap, HashSet};
 use crate::game_data;
 use crate::types::class_data::{GEAR_SLOTS, UNIQUE_SLOT_PAIRS};
 
+/// Optional context required by spec- or budget-dependent constraints.
+/// Plain gear-set checks (unique-equipped, item limits, vault) need none of
+/// these and run unconditionally inside `is_legal_gear_set`.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct GearSetContext<'a> {
+    /// Class spec from the base profile — used by the weapon-pairing rule
+    /// (Fury is the only spec that can wield two two-handers).
+    pub spec: &'a str,
+    /// Catalyst budget. `None` = the generator doesn't deal in catalyst at
+    /// all (Drop Finder, Crest Upgrades), so the check is skipped rather
+    /// than vacuously failed on an unrelated profile.
+    pub max_catalyst_charges: Option<u32>,
+}
+
+/// Single entry point every profileset generator must call before emitting a
+/// candidate gear set. Aggregates the unique-equipped, item-limit-category,
+/// vault, weapon-pairing, and catalyst constraints so adding a new constraint
+/// (or tightening an existing one) is a single-edit change — generators don't
+/// re-implement validation per feature. See `feedback_gear_validation_unified`.
+pub(super) fn is_legal_gear_set<V: Borrow<Value>>(
+    gear_set: &HashMap<String, V>,
+    ctx: &GearSetContext<'_>,
+) -> bool {
+    if !validate_unique_equipped(gear_set) {
+        return false;
+    }
+    if !validate_item_limits(gear_set) {
+        return false;
+    }
+    if !validate_vault_constraint(gear_set) {
+        return false;
+    }
+    if !validate_weapon_constraint(gear_set, ctx.spec) {
+        return false;
+    }
+    if let Some(charges) = ctx.max_catalyst_charges {
+        if !validate_catalyst_constraint(gear_set, charges) {
+            return false;
+        }
+    }
+    true
+}
+
 pub(super) fn validate_vault_constraint<V: Borrow<Value>>(
     gear_set: &HashMap<String, V>,
 ) -> bool {

@@ -111,10 +111,16 @@ export function buildBestGearSet(
     }
   }
 
+  // Multi-socket items emit one `type:gem` entry per socket; collect them
+  // per slot so consumers can render every gem, not just the last assigned.
+  const gemsBySlot: Record<string, number[]> = {};
   for (const item of selectedResult.items) {
     if (item.type === 'gem' && item.gem_id && item.slot && gearSet[item.slot]) {
-      gearSet[item.slot] = { ...gearSet[item.slot], gem_id: item.gem_id };
+      (gemsBySlot[item.slot] ??= []).push(item.gem_id);
     }
+  }
+  for (const [slot, gemIds] of Object.entries(gemsBySlot)) {
+    gearSet[slot] = { ...gearSet[slot], gem_id: gemIds[0], gem_ids: gemIds };
   }
 
   return gearSet;

@@ -336,9 +336,12 @@ pub(super) async fn get_upgrade_compare_prepare(req: web::Json<serde_json::Value
 pub(super) async fn get_upgrade_compare_combo_count(
     req: web::Json<UpgradeCompareRequest>,
 ) -> HttpResponse {
-    let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(
-        &req.simc_input,
-        &req.options.talents,
+    // Apply both talent AND spec override, matching every other sim handler.
+    // Without the spec_override pass, a cross-spec talent build would sim
+    // the wrong profile silently.
+    let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_spec_override(
+        &apply_talent_override(&req.simc_input, &req.options.talents),
+        &req.options.spec_override,
     ));
 
     let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
@@ -354,13 +357,11 @@ pub(super) async fn get_upgrade_compare_combo_count(
     ) {
         Ok((_, count, _)) => HttpResponse::Ok().json(json!({ "combo_count": count })),
         Err(e) => {
-            let count: usize = e
-                .split('(')
-                .nth(1)
-                .and_then(|s| s.split(')').next())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            HttpResponse::Ok().json(json!({ "combo_count": count, "error": e }))
+            let (count, message) = match profileset_generator::classify_generator_error(&e) {
+                profileset_generator::GeneratorError::TooMany { count, .. } => (count, e),
+                other => (0, other.to_message()),
+            };
+            HttpResponse::Ok().json(json!({ "combo_count": count, "error": message }))
         }
     }
 }
@@ -371,9 +372,9 @@ pub(super) async fn create_upgrade_compare_sim(
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
 ) -> HttpResponse {
-    let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_talent_override(
-        &req.simc_input,
-        &req.options.talents,
+    let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_spec_override(
+        &apply_talent_override(&req.simc_input, &req.options.talents),
+        &req.options.spec_override,
     ));
 
     let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
@@ -409,9 +410,13 @@ pub(super) async fn create_upgrade_compare_sim(
     let options_json_uc = req.options.to_json();
     let display_input_uc =
         crate::simc_runner::build_simc_input_from_options(&generated_input, &options_json_uc);
+    // Preserve mode identity: a Crest Upgrade sim is `upgrade_compare`, not
+    // `top_gear`. The staged finalize parses every staged result through the
+    // gear-comparison path regardless of sim_type (see helpers.rs), so this
+    // no longer needs to lie about what it is.
     let job = Job::new(
         display_input_uc,
-        "top_gear".to_string(), // Reuse top_gear result format
+        crate::models::SimMode::UpgradeCompare.as_wire().to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
@@ -432,6 +437,13 @@ pub(super) async fn create_upgrade_compare_sim(
         }),
     );
 
+    // Resolve simc BEFORE insert — invalid branch must not create an orphan
+    // Pending row.
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(path) => path,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+    };
+
     let mut job = job;
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = req.options.batch_id.clone();
@@ -441,11 +453,6 @@ pub(super) async fn create_upgrade_compare_sim(
 
     // Best-effort write of per-combo metadata rows to the combo_metadata table.
     write_combo_metadata_table(repo.get_ref(), &job_id, &combo_metadata).await;
-
-    let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(path) => path,
-        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
-    };
 
     spawn_staged_sim(
         repo.get_ref().clone(),

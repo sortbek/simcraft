@@ -325,11 +325,21 @@ export function getWowheadUrl(itemId: number, locale?: string): string {
   return `https://${domain}/item=${itemId}`;
 }
 
+/**
+ * Normalize the two gem-id shapes (single `gem_id` legacy field, full
+ * `gem_ids` array) into a single filtered list. Use this whenever you
+ * need to render or query Wowhead with the gems on a slot.
+ */
+export function toGemIdList(opts: { gem_id?: number; gem_ids?: number[] }): number[] {
+  const raw = opts.gem_ids?.length ? opts.gem_ids : opts.gem_id ? [opts.gem_id] : [];
+  return raw.filter((g) => g > 0);
+}
+
 export function getWowheadData(
   bonusIds?: number[],
   ilevel?: number,
   enchantId?: number,
-  gemId?: number
+  gemIds?: number[]
 ): string {
   const parts: string[] = [];
   if (bonusIds && bonusIds.length > 0) {
@@ -341,8 +351,8 @@ export function getWowheadData(
   if (enchantId && enchantId > 0) {
     parts.push(`ench=${enchantId}`);
   }
-  if (gemId && gemId > 0) {
-    parts.push(`gems=${gemId}`);
+  if (gemIds && gemIds.length > 0) {
+    parts.push(`gems=${gemIds.join(':')}`);
   }
   return parts.join('&');
 }

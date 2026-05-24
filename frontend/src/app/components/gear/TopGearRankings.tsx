@@ -11,6 +11,7 @@ import {
   getWowheadUrl,
   localizedEnchantName,
   localizedItemName,
+  toGemIdList,
   useItemNames,
 } from '../../lib/useItemInfo';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
@@ -465,7 +466,7 @@ function ItemTag({
   const icon = info?.icon || 'inv_misc_questionmark';
   const wowheadData =
     item.item_id > 0
-      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, item.gem_id)
+      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, toGemIdList(item))
       : undefined;
   const slotName = SLOT_LABELS[item.slot] || item.slot;
 

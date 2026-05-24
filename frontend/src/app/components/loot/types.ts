@@ -49,13 +49,14 @@ export interface DropItem {
 
 /**
  * Drop item shape sent to the backend in the droptimizer request payload.
- * Extends `DropItem` with the resolved upgrade fields and per-slot inheritance.
+ * Extends `DropItem` with the resolved upgrade fields. Inheritance (enchant
+ * and gem) is no longer in the payload — the backend derives it from the
+ * equipped profile, so the browser doesn't compute simulation semantics.
  */
 export interface DropItemPayload extends DropItem {
   ilevel: number;
   quality: number;
   bonus_ids: number[];
-  slot_inherits: SlotInherit[];
 }
 
 export const QUALITY_COLORS: Record<number, string> = {

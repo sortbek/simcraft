@@ -833,7 +833,8 @@ pub(crate) fn resolve_bonuses(bonus_ids: &[u64]) -> BonusResolved {
                 result.tag = Some(tag.to_string());
             }
             if let Some(socket) = bonus.get("socket").and_then(|s| s.as_u64()) {
-                result.sockets = Some(socket);
+                // Crafted items stack multiple socket-adding bonuses, so accumulate.
+                result.sockets = Some(result.sockets.unwrap_or(0) + socket);
             }
             if let Some(upgrade) = bonus.get("upgrade") {
                 if let Some(full_name) = upgrade.get("fullName").and_then(|f| f.as_str()) {
@@ -869,7 +870,11 @@ pub(crate) fn resolve_bonuses(bonus_ids: &[u64]) -> BonusResolved {
 
 /// Get the raw JSON entry for an item from the DB.
 pub(crate) fn get_raw_item(item_id: u64) -> Option<&'static Value> {
-    items().get(&item_id)
+    // Use the cell directly rather than `items()` so unit tests that don't
+    // exercise item lookups (and therefore don't load game data) can still
+    // exercise validators / generators without panicking on incidental
+    // inventory-type queries. Production paths always load data at startup.
+    ITEMS.get()?.get(&item_id)
 }
 
 /// For a set of bonus IDs, return the item limit categories they belong to.
@@ -1652,6 +1657,16 @@ mod tests {
         ensure_game_data_loaded();
         let resolved = resolve_bonuses(&[13534]);
         assert_eq!(resolved.sockets, Some(1));
+    }
+
+    #[test]
+    fn resolve_bonuses_accumulates_socket_count_across_bonuses() {
+        // Crafted items can carry two separate `+1 socket` bonuses to reach
+        // 2 sockets. Overwriting on each iteration drops one and Top Gear
+        // proposes one fewer gem than the item actually holds.
+        ensure_game_data_loaded();
+        let resolved = resolve_bonuses(&[13534, 13534]);
+        assert_eq!(resolved.sockets, Some(2));
     }
 
     #[test]

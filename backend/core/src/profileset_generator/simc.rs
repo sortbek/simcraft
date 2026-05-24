@@ -1,6 +1,6 @@
 pub(super) use crate::simc_string::{
-    extract_bonus_ids, extract_enchant_id, extract_gem_id, extract_item_id, set_enchant_id,
-    set_gem_id,
+    extract_bonus_ids, extract_enchant_id, extract_gem_id, extract_gem_ids, extract_item_id,
+    set_enchant_id, set_gem_id, set_gem_ids,
 };
 
 const BASE64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -47,12 +47,19 @@ pub(super) fn combinations<T: Clone>(items: &[T], k: usize) -> Vec<Vec<T>> {
 }
 
 pub(super) fn simc_has_socket(simc: &str) -> bool {
-    if extract_gem_id(simc) > 0 {
-        return true;
-    }
+    simc_socket_count(simc) > 0
+}
+
+/// Number of gem sockets on an equipped simc line. Returns the max of the
+/// bonus-resolved count and the existing gem-list length: some sockets come
+/// from inherent item data we don't have in the bonus DB, and crafted items
+/// can carry more gems than their bonus IDs encode.
+pub(super) fn simc_socket_count(simc: &str) -> usize {
     let bonus_ids = extract_bonus_ids(simc);
     let resolved = crate::item_db::resolve_bonuses(&bonus_ids);
-    resolved.sockets.unwrap_or(0) > 0
+    let from_bonus = resolved.sockets.unwrap_or(0) as usize;
+    let from_gems = extract_gem_ids(simc).len();
+    from_bonus.max(from_gems)
 }
 
 pub(super) fn is_diamond(gem_item_id: u64) -> bool {
@@ -143,6 +150,24 @@ mod tests {
         ensure_game_data_loaded();
         assert!(!simc_has_socket(",id=100"));
         assert!(!simc_has_socket(",id=100,bonus_id=13440")); // 13440 is a tag bonus, no socket
+    }
+
+    #[test]
+    fn simc_socket_count_uses_max_of_bonus_and_existing_gems() {
+        // Regression: a neck with bonus 13668 (+1 socket) plus two equipped
+        // gems (`gem_id=A/B`) actually has 2 sockets — the base item has an
+        // inherent socket and the bonus adds another. Trusting just the bonus
+        // count made Top Gear overwrite the second gem with a single new one.
+        ensure_game_data_loaded();
+        assert_eq!(
+            simc_socket_count(",id=250247,gem_id=240908/240908,bonus_id=13668"),
+            2,
+            "must report 2 sockets when 2 gems are already present"
+        );
+        // No bonus socket either; gem count alone is the signal.
+        assert_eq!(simc_socket_count(",id=100,gem_id=1/2"), 2);
+        // Bonus says 1 socket, no gems → still 1.
+        assert_eq!(simc_socket_count(",id=100,bonus_id=13534"), 1);
     }
 
     #[test]

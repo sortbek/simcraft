@@ -11,6 +11,57 @@ use crate::result_parser;
 use crate::simc_runner;
 use crate::types::ResolveGearResponse;
 
+/// Write the terminal state for a simulation job (success or failure).
+///
+/// One place owns: parsing the simc result into the user-facing shape,
+/// stamping the realm onto it, persisting result/raw/report rows, and
+/// suppressing the error write when the job was already cancelled. Use
+/// this from every code path that drives a job to completion so the
+/// finalize semantics can't drift across handlers.
+///
+/// `parse` lets callers pick the result-shape parser their sim mode emits
+/// (single-actor `parse_simc_result` vs gear-comparison `parse_top_gear_result`
+/// + metadata). Both shapes go through the same terminal-state guard.
+pub(super) async fn finalize_job_outcome(
+    repo: &JobRepo,
+    job_id: &str,
+    simc_input: &str,
+    result: Result<simc_runner::SimcOutput, String>,
+    parse: impl FnOnce(&Value) -> Value,
+) {
+    match result {
+        Ok(output) => {
+            let mut parsed = parse(&output.json);
+            inject_realm(&mut parsed, simc_input);
+            let result_str = serde_json::to_string(&parsed).unwrap_or_default();
+            let raw_str = serde_json::to_string(&output.json).ok();
+            if let Err(e) = repo.set_result(job_id, &result_str, raw_str.as_deref()).await {
+                eprintln!("[{}] Failed to set result: {}", job_id, e);
+            }
+            if let Err(e) = repo
+                .set_report_files(
+                    job_id,
+                    output.html_report.as_deref(),
+                    output.text_output.as_deref(),
+                )
+                .await
+            {
+                eprintln!("[{}] Failed to set report files: {}", job_id, e);
+            }
+        }
+        Err(e) => {
+            // CANCEL_ERR is the explicit cancellation marker. set_error also
+            // refuses to overwrite a Cancelled job (terminal-state invariant)
+            // but skipping the call keeps the eprintln from firing.
+            if e != simc_runner::CANCEL_ERR {
+                if let Err(db_err) = repo.set_error(job_id, &e).await {
+                    eprintln!("[{}] Failed to set error: {}", job_id, db_err);
+                }
+            }
+        }
+    }
+}
+
 /// Sanitize user-provided custom SimC input by stripping dangerous directives.
 pub(super) fn sanitize_custom_simc(input: &str) -> String {
     let blocked = regex::Regex::new(r"(?mi)^\s*(output|html|json2?|xml)\s*=").unwrap();
@@ -324,9 +375,13 @@ pub(crate) fn spawn_staged_sim(
     constants: crate::profileset_generator::triage::TriageConstants,
 ) {
     tokio::spawn(async move {
+        // update_status now honors the terminal-state invariant: if the job
+        // was cancelled between create and spawn, this is a no-op and the
+        // staged loop will hit its first cancellation gate and abort cleanly.
         if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
             eprintln!("[{}] Failed to set Running status: {}", job_id, e);
         }
+        let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
 
         // Channel for ordered progress/stage writes
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<JobUpdate>();
@@ -394,6 +449,7 @@ pub(crate) fn spawn_staged_sim(
             move |line| {
                 logs.push_line(&jid_logs, line.to_string());
             },
+            Some(cancel_token),
         )
         .await;
 
@@ -403,7 +459,10 @@ pub(crate) fn spawn_staged_sim(
             eprintln!("[{}] Job update writer task failed: {}", job_id, e);
         }
 
-        // Terminal writes — after all progress is flushed
+        // Terminal writes — after all progress is flushed. The branch's
+        // staged runner returns StagedRunError::Paused for mid-pipeline
+        // pauses, which finalize_job_outcome (single-error) can't model,
+        // so the per-variant match stays inline here.
         match result {
             Ok(output) => {
                 let job_snap = repo.get(&job_id).await.ok().flatten();
@@ -421,6 +480,9 @@ pub(crate) fn spawn_staged_sim(
                 }
                 let result_str = serde_json::to_string(&parsed).unwrap_or_default();
                 let raw_str = serde_json::to_string(&output.json).ok();
+                // set_result/set_report_files both honor the terminal-state
+                // invariant: writes are skipped when the job is already
+                // cancelled, so a late-arriving result can't resurrect it.
                 if let Err(e) = repo
                     .set_result(&job_id, &result_str, raw_str.as_deref())
                     .await

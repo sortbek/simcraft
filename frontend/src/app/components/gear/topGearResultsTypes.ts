@@ -1,17 +1,8 @@
 import type { ReactNode } from 'react';
+import type { GearItem } from './gearOverviewTypes';
 
-export interface ResultItem {
-  slot: string;
-  item_id: number;
-  ilevel: number;
-  name: string;
-  bonus_ids?: number[];
-  enchant_id?: number;
-  gem_id?: number;
-  is_kept?: boolean;
+export interface ResultItem extends GearItem {
   encounter?: string;
-  origin?: string;
-  upgrade_levels?: number;
   type?: 'enchant' | 'gem';
 }
 

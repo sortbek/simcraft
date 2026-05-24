@@ -3,7 +3,59 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use super::base_profile::parse_base_profile;
+use super::constraints::{is_legal_gear_set, GearSetContext};
+use crate::simc_string::{extract_bonus_ids, extract_item_id};
 use crate::types::class_data::{self, GEAR_SLOTS};
+
+/// Validate that placing `drop_item_id` (with `drop_bonus_ids`) in `target_slot`
+/// — while every other slot keeps its equipped item — yields a legal gear set
+/// under the shared `is_legal_gear_set` rules. False = skip the combo; the
+/// user can still see the comparison via the combo for the slot that holds
+/// the conflicting copy (which gets replaced, not duplicated).
+///
+/// Mirrors the profileset-emission normalization where a 2H drop in main_hand
+/// for non-Fury clears the off_hand — the candidate gear set must match the
+/// gear set simc actually receives, or the weapon-pairing check would flag a
+/// state that doesn't exist in the emitted profileset.
+fn drop_combo_is_valid(
+    equipped: &HashMap<String, String>,
+    target_slot: &str,
+    drop_item_id: u64,
+    drop_bonus_ids: &[u64],
+    drop_inv_type: u64,
+    spec: &str,
+) -> bool {
+    let mut candidate: HashMap<String, Value> = HashMap::with_capacity(GEAR_SLOTS.len());
+    for slot in GEAR_SLOTS {
+        if *slot == target_slot {
+            candidate.insert(
+                slot.to_string(),
+                json!({
+                    "item_id": drop_item_id,
+                    "bonus_ids": drop_bonus_ids,
+                }),
+            );
+        } else if let Some(eq) = equipped.get(*slot) {
+            candidate.insert(
+                slot.to_string(),
+                json!({
+                    "item_id": extract_item_id(eq),
+                    "bonus_ids": extract_bonus_ids(eq),
+                }),
+            );
+        }
+    }
+    if target_slot == "main_hand" && drop_inv_type == 17 && spec != "fury" {
+        candidate.remove("off_hand");
+    }
+    is_legal_gear_set(
+        &candidate,
+        &GearSetContext {
+            spec,
+            max_catalyst_charges: None,
+        },
+    )
+}
 
 pub(super) fn generate_droptimizer_input(
     base_profile: &str,
@@ -34,10 +86,15 @@ pub(super) fn generate_droptimizer_input(
         oh.is_none() || oh == Some("") || oh == Some(",")
     };
 
-    // Legacy fallback: regex-copy enchant_id from equipped slot when the drop item
-    // does not provide slot_inherits. Keeps direct API consumers working while
-    // the frontend rolls out. Remove in a follow-up release.
+    // Backend is the single source of truth for inheritance: copy enchant_id
+    // and gem_id from the equipped item in the drop's target slot. The
+    // frontend used to send a precomputed `slot_inherits` array; that field
+    // is now ignored (and removed from the frontend payload) because the
+    // browser shouldn't be calculating simulation semantics. SimC is
+    // tolerant of `gem_id=` on items without sockets (treated as no-op), so
+    // unconditional inheritance is safe.
     let legacy_enchant_re = Regex::new(r"enchant_id=(\d+)").unwrap();
+    let legacy_gem_re = Regex::new(r"gem_id=([\d/]+)").unwrap();
 
     let mut combo_idx = 2usize;
     for item in drop_items {
@@ -62,8 +119,8 @@ pub(super) fn generate_droptimizer_input(
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
-        let slot_inherits = item.get("slot_inherits").and_then(|v| v.as_array());
-
+        // `slot_inherits` is intentionally ignored; kept in the type for
+        // backwards-compatible API requests but no longer authoritative.
         let mut slots = class_data::inv_type_to_slots(inv_type, &spec);
 
         if has_two_hand_equipped && !(spec == "fury" && inv_type == 17) {
@@ -85,34 +142,65 @@ pub(super) fn generate_droptimizer_input(
         }
 
         for slot in &slots {
+            // Validate the gear set this combo would produce against the same
+            // unique-equipped + item-limit-category rules Top Gear enforces.
+            // Two checks fall out:
+            //   - Same item_id in both paired slots (rings/trinkets) → drop
+            //     in the unequipped slot would duplicate the equipped copy.
+            //   - A bonus-id item-limit category exceeded → e.g. "max 1 of
+            //     this trinket type" hit because the equipped slot we're
+            //     *not* replacing already holds one. The combo for the slot
+            //     that holds the conflicting copy still emits — that's the
+            //     "would replacing this slot be better" sim.
+            if !drop_combo_is_valid(&equipped_gear, slot, item_id, &bonus_ids, inv_type, &spec) {
+                continue;
+            }
+
             let mut simc_str = base_simc_str.clone();
             let mut applied_enchant: u64 = 0;
             let mut applied_gem: u64 = 0;
 
-            let inherit = slot_inherits.and_then(|arr| {
-                arr.iter()
-                    .find(|entry| entry.get("slot").and_then(|v| v.as_str()) == Some(*slot))
-            });
-
-            if let Some(entry) = inherit {
-                if let Some(eid) = entry.get("enchant_id").and_then(|v| v.as_u64()) {
-                    if eid > 0 {
-                        simc_str.push_str(&format!(",enchant_id={}", eid));
-                        applied_enchant = eid;
-                    }
-                }
-                if let Some(gid) = entry.get("gem_id").and_then(|v| v.as_u64()) {
-                    if gid > 0 {
-                        simc_str.push_str(&format!(",gem_id={}", gid));
-                        applied_gem = gid;
-                    }
-                }
-            } else if let Some(equipped) = equipped_gear.get(*slot) {
+            // Derive enchant + gem inheritance from the equipped item in the
+            // target slot. The browser used to compute this and send it as
+            // `slot_inherits`; that responsibility now lives entirely here.
+            if let Some(equipped) = equipped_gear.get(*slot) {
                 if let Some(caps) = legacy_enchant_re.captures(equipped) {
                     if let Ok(eid) = caps[1].parse::<u64>() {
                         if eid > 0 {
                             simc_str.push_str(&format!(",enchant_id={}", eid));
                             applied_enchant = eid;
+                        }
+                    }
+                }
+                // Only inherit a gem when the DROP item actually has a socket.
+                // The equipped item may have a socket-adding bonus (e.g. neck/
+                // ring sockets, or socket-added wrist/head/waist crafted items)
+                // that the drop does not — copying the equipped gem onto a
+                // socketless drop simulates gear that can't exist.
+                //
+                // Sockets in current-expansion data come exclusively from
+                // bonus IDs, so empty bonus_ids ⇒ 0 sockets without needing
+                // to hit the bonus DB (also keeps unit tests that don't load
+                // game data working).
+                let drop_sockets = if bonus_ids.is_empty() {
+                    0
+                } else {
+                    crate::item_db::resolve_bonuses(&bonus_ids)
+                        .sockets
+                        .unwrap_or(0)
+                };
+                if drop_sockets > 0 {
+                    if let Some(caps) = legacy_gem_re.captures(equipped) {
+                        // Inherit the first equipped gem id. Multi-gem drops
+                        // are rare in the Drop Finder flow; Top Gear / Enchant
+                        // Gem handle full multi-socket coverage.
+                        if let Some(first) = caps[1].split('/').next() {
+                            if let Ok(gid) = first.parse::<u64>() {
+                                if gid > 0 {
+                                    simc_str.push_str(&format!(",gem_id={}", gid));
+                                    applied_gem = gid;
+                                }
+                            }
                         }
                     }
                 }
@@ -214,16 +302,80 @@ off_hand=,id=201\n";
     }
 
     #[test]
-    fn drop_inherits_enchant_from_equipped_slot_legacy_fallback() {
+    fn drop_inherits_enchant_from_equipped_slot() {
         let profile = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7777\n";
-        let drops = vec![drop(999, 1, vec![])]; // head drop, no slot_inherits
+        let drops = vec![drop(999, 1, vec![])];
         let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
         assert!(
             input.contains(",enchant_id=7777"),
-            "expected legacy enchant inheritance:\n{input}"
+            "expected enchant inheritance from equipped slot:\n{input}"
         );
         let combo = metadata.get("Combo 2").expect("missing combo");
         assert_eq!(combo[0]["enchant_id"], 7777);
+    }
+
+    #[test]
+    fn drop_inherits_gem_from_equipped_slot_when_drop_has_socket() {
+        // Gem inheritance moved from frontend slot_inherits to backend
+        // derivation. Equipped neck has a gem; the drop also has a socket
+        // (via bonus 13534, +1 socket per fixture data), so the drop should
+        // pick up that gem id without any per-drop `slot_inherits`.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nneck=,id=100,gem_id=213453\n";
+        let drops = vec![drop(999, 2, vec![13534])]; // inv_type 2 = neck
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
+        assert!(
+            input.contains(",gem_id=213453"),
+            "expected gem inheritance from equipped neck:\n{input}"
+        );
+        let combo = metadata.get("Combo 2").expect("missing combo");
+        assert_eq!(combo[0]["gem_id"], 213453);
+    }
+
+    #[test]
+    fn drop_does_not_inherit_gem_when_drop_has_no_socket() {
+        // The equipped wrist has a socket-added bonus (e.g. crafted/embellished
+        // wrist) and carries a gem. A plain non-crafted wrist drop has no
+        // sockets — copying the equipped gem onto it would simulate gear that
+        // can't exist. Inheritance must be gated on the *drop's* socket count.
+        let profile = "mage=test\nspec=frost\nwrist=,id=100,gem_id=213453\n";
+        let drops = vec![drop(999, 9, vec![])]; // inv_type 9 = wrist, no sockets
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
+        let combo2_line = input
+            .lines()
+            .find(|l| l.contains("Combo 2") && l.contains("wrist=,id=999"))
+            .expect("missing wrist drop combo");
+        assert!(
+            !combo2_line.contains("gem_id="),
+            "drop without sockets must NOT inherit the equipped gem: {combo2_line}"
+        );
+        let combo = metadata.get("Combo 2").expect("missing combo");
+        assert_eq!(combo[0]["gem_id"], 0);
+    }
+
+    #[test]
+    fn drop_ignores_slot_inherits_field_in_request() {
+        // The frontend used to send a precomputed `slot_inherits` array. That
+        // field is now ignored — backend derives from equipped. A request
+        // that still includes it should be tolerated but treated as if
+        // absent (no override of the equipped-derived values).
+        let profile = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7777\n";
+        let drops = vec![json!({
+            "item_id": 999,
+            "ilevel": 600,
+            "name": "Drop",
+            "encounter": "Boss",
+            "inventory_type": 1,
+            "bonus_ids": [],
+            // Stale frontend payload — backend should ignore this and still
+            // pick up enchant_id 7777 from the equipped head.
+            "slot_inherits": [{ "slot": "head", "enchant_id": 0, "gem_id": 0 }]
+        })];
+        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        assert!(
+            input.contains(",enchant_id=7777"),
+            "slot_inherits=0 should NOT suppress equipped-derived enchant:\n{input}"
+        );
     }
 
     #[test]
@@ -240,34 +392,6 @@ main_hand=,id=200\n";
     }
 
     #[test]
-    fn slot_inherits_with_zero_enchant_id_does_not_apply() {
-        // slot_inherits explicitly says enchant_id=0 (no enchant on origin slot).
-        let profile = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7777\n";
-        let drops = vec![json!({
-            "item_id": 999,
-            "ilevel": 600,
-            "name": "Drop",
-            "encounter": "Boss",
-            "inventory_type": 1,
-            "bonus_ids": [],
-            "slot_inherits": [{ "slot": "head", "enchant_id": 0, "gem_id": 0 }]
-        })];
-        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
-        // When slot_inherits has 0, no enchant should be added
-        // (legacy fallback is bypassed since slot_inherits is present)
-        let combo_line = input
-            .lines()
-            .find(|l| l.contains("Combo 2") && l.contains("id=999"))
-            .expect("missing combo");
-        assert!(
-            !combo_line.contains("enchant_id="),
-            "unexpected enchant: {combo_line}"
-        );
-        let combo = metadata.get("Combo 2").expect("missing combo");
-        assert_eq!(combo[0]["enchant_id"], 0);
-    }
-
-    #[test]
     fn drop_carries_talents_when_present() {
         let profile = "mage=test\nspec=frost\nhead=,id=100\ntalents=ABCDEF\n";
         let drops = vec![drop(999, 1, vec![])];
@@ -277,6 +401,10 @@ main_hand=,id=200\n";
 
     #[test]
     fn drop_with_multiple_bonus_ids_joined_with_slash() {
+        // Non-empty bonus_ids triggers a socket-resolution lookup, so the
+        // bonus DB must be loaded even though this assertion is just about
+        // string formatting.
+        crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![drop(999, 1, vec![10, 20, 30])];
         let (input, _, _) = generate_droptimizer_input(profile, &drops);
@@ -292,6 +420,37 @@ main_hand=,id=200\n";
         assert_eq!(count, 2);
         assert!(input.contains("profileset.\"Combo 2\"+=finger1=,id=999"));
         assert!(input.contains("profileset.\"Combo 3\"+=finger2=,id=999"));
+    }
+
+    #[test]
+    fn ring_drop_same_as_equipped_only_emits_replacement_combo() {
+        // Equipped finger1 = item 500. Drop is another copy of item 500.
+        // Putting it in finger2 would mean wearing two of the same ring
+        // (unique-equipped violation). Only the finger1-replacement combo
+        // should be emitted.
+        let profile = "mage=test\nspec=frost\nfinger1=,id=500\nfinger2=,id=101\n";
+        let drops = vec![drop(500, 11, vec![])];
+        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        assert_eq!(count, 1, "expected only 1 combo (finger1 replacement):\n{input}");
+        assert!(
+            input.contains("profileset.\"Combo 2\"+=finger1=,id=500"),
+            "expected finger1 replacement combo:\n{input}"
+        );
+        assert!(
+            !input.contains("finger2=,id=500"),
+            "finger2 should not get a duplicate copy:\n{input}"
+        );
+    }
+
+    #[test]
+    fn trinket_drop_same_as_equipped_only_emits_replacement_combo() {
+        // Same unique-equipped rule for trinkets.
+        let profile = "mage=test\nspec=frost\ntrinket1=,id=900\ntrinket2=,id=901\n";
+        let drops = vec![drop(900, 12, vec![])];
+        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        assert_eq!(count, 1);
+        assert!(input.contains("trinket1=,id=900"));
+        assert!(!input.contains("trinket2=,id=900"));
     }
 
     #[test]
@@ -340,35 +499,31 @@ main_hand=,id=200\n";
     }
 
     #[test]
-    fn slot_inherits_with_mismatched_slot_does_not_apply() {
-        // slot_inherits provides only finger1 entry, but inv_type 11 puts the drop
-        // in both finger1 and finger2. Only finger1 should inherit.
+    fn ring_drop_inherits_per_target_finger() {
+        // Each finger slot inherits from *its own* equipped item, not from a
+        // shared payload. finger1 has enchant+gem; finger2 has neither.
+        // Drop has bonus 13534 = +1 socket, so gem inheritance is allowed.
+        crate::test_support::ensure_game_data_loaded();
         let profile = "\
 mage=test\n\
 spec=frost\n\
 finger1=,id=100,enchant_id=7000,gem_id=5000\n\
 finger2=,id=101\n";
-        let drops = vec![json!({
-            "item_id": 999,
-            "ilevel": 600,
-            "name": "Ring",
-            "encounter": "Boss",
-            "inventory_type": 11,
-            "bonus_ids": [],
-            "slot_inherits": [
-                { "slot": "finger1", "enchant_id": 7000, "gem_id": 5000 }
-            ]
-        })];
+        let drops = vec![drop(999, 11, vec![13534])];
         let (input, count, _) = generate_droptimizer_input(profile, &drops);
         assert_eq!(count, 2);
-        assert!(input.contains("finger1=,id=999,ilevel=600,enchant_id=7000,gem_id=5000"));
-        // finger2 has no slot_inherits entry → falls back to legacy regex from equipped finger2
-        // finger2 has no enchant, so no enchant should appear on the finger2 combo.
+        assert!(
+            input.contains("finger1=,id=999,ilevel=600,bonus_id=13534,enchant_id=7000,gem_id=5000"),
+            "expected finger1 to inherit from equipped finger1:\n{input}"
+        );
         let f2_line = input
             .lines()
             .find(|l| l.contains("Combo 3") && l.contains("finger2=,id=999"))
             .expect("missing finger2 line");
-        assert!(!f2_line.contains("enchant_id="), "unexpected enchant: {f2_line}");
+        assert!(
+            !f2_line.contains("enchant_id="),
+            "finger2 has no equipped enchant; drop must not invent one: {f2_line}"
+        );
     }
 
     #[test]

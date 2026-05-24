@@ -61,6 +61,13 @@ pub(super) async fn create_sim(
         }),
     );
 
+    // Resolve the simc binary BEFORE inserting the job — otherwise an invalid
+    // branch produces an orphan Pending row that nothing will ever finish.
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(path) => path,
+        Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
+    };
+
     let mut job = Job::new(
         display_input,
         req.sim_type.clone(),
@@ -78,10 +85,6 @@ pub(super) async fn create_sim(
     // Quick Sim has no combo_metadata, so no table write needed.
 
     let repo_clone = repo.get_ref().clone();
-    let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(path) => path,
-        Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
-    };
     let mut options = req.options.to_json_with_sim_type(&req.sim_type);
     if req.raw {
         options["raw"] = serde_json::json!(true);
@@ -93,6 +96,10 @@ pub(super) async fn create_sim(
     let created_at_for_task = created_at.clone();
 
     tokio::spawn(async move {
+        // update_status honors the terminal-state invariant: if the job was
+        // cancelled between create and spawn, this is a no-op. The token
+        // below gives run_simc a cooperative cancel signal at subprocess
+        // launch so we don't burn cycles on a sim the user already aborted.
         if let Err(e) = repo_clone
             .update_status(&job_id_clone, JobStatus::Running)
             .await
@@ -105,51 +112,30 @@ pub(super) async fn create_sim(
         {
             eprintln!("[{}] Failed to update progress: {}", job_id_clone, e);
         }
+        let cancel_token = crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
-        match simc_runner::run_simc(&simc, &job_id_clone, &simc_input, &options, move |line| {
-            logs_cb.push_line(&jid_cb, line.to_string());
-        })
-        .await
-        {
-            Ok(output) => {
-                let mut parsed = result_parser::parse_simc_result(&output.json);
-                inject_realm(&mut parsed, &simc_input);
+        let result = simc_runner::run_simc(
+            &simc,
+            &job_id_clone,
+            &simc_input,
+            &options,
+            move |line| logs_cb.push_line(&jid_cb, line.to_string()),
+            Some(cancel_token),
+        )
+        .await;
+        super::helpers::finalize_job_outcome(
+            &repo_clone,
+            &job_id_clone,
+            &simc_input,
+            result,
+            |json| {
+                let mut parsed = result_parser::parse_simc_result(json);
                 inject_total_elapsed(&mut parsed, &created_at_for_task);
-                let result_str = serde_json::to_string(&parsed).unwrap_or_default();
-                let raw_str = serde_json::to_string(&output.json).ok();
-                if let Err(e) = repo_clone
-                    .set_result(&job_id_clone, &result_str, raw_str.as_deref())
-                    .await
-                {
-                    eprintln!("[{}] Failed to set result: {}", job_id_clone, e);
-                }
-                if let Err(e) = repo_clone
-                    .set_report_files(
-                        &job_id_clone,
-                        output.html_report.as_deref(),
-                        output.text_output.as_deref(),
-                    )
-                    .await
-                {
-                    eprintln!("[{}] Failed to set report files: {}", job_id_clone, e);
-                }
-            }
-            Err(e) => {
-                let is_cancelled = repo_clone
-                    .get(&job_id_clone)
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|j| j.status == JobStatus::Cancelled)
-                    .unwrap_or(false);
-                if !is_cancelled {
-                    if let Err(db_err) = repo_clone.set_error(&job_id_clone, &e).await {
-                        eprintln!("[{}] Failed to set error: {}", job_id_clone, db_err);
-                    }
-                }
-            }
-        }
+                parsed
+            },
+        )
+        .await;
         logs.remove(&jid_logs);
     });
 
@@ -364,6 +350,7 @@ pub(super) async fn sim_row(
         }
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
+        let cancel_token = crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
         match simc_runner::run_simc(
             &simc,
             &job_id_clone,
@@ -372,6 +359,7 @@ pub(super) async fn sim_row(
             move |line| {
                 logs_cb.push_line(&jid_cb, line.to_string());
             },
+            Some(cancel_token),
         )
         .await
         {
