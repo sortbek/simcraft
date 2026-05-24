@@ -155,12 +155,30 @@ async fn resume_triage(
         .list_combo_ids_for_job(job_id)
         .await
         .map_err(|e| format!("Failed to load survivors: {}", e))?;
+    let survivors_so_far = already_collected_survivors.len();
 
     // 3. Rebuild the iterator config from request_json. Also parse the
     // envelope once so step 6 can read options.simc_branch without re-parsing.
     let iter_cfg = super::iterator_from_request::build_iterator_from_request_json(request_json)?;
     let envelope: crate::server::request_json::NormalizedRequest =
         serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
+    let payload = &envelope.payload;
+    let base_profile_owned = payload
+        .get("base_profile")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "request_json missing base_profile".to_string())?
+        .to_string();
+    let options_for_task = payload.get("options").cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "iterations": job.iterations,
+            "target_error": job.target_error,
+            "fight_style": job.fight_style,
+        })
+    });
+    let estimate = payload
+        .get("estimate")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "request_json missing estimate for triage resume".to_string())?;
 
     // 4. Restore TriageState from the checkpoint.
     let restored_state = super::triage::TriageState {
@@ -172,7 +190,7 @@ async fn resume_triage(
             .as_ref()
             .map(|r| r.next_batch_idx)
             .unwrap_or(triage_cp.next_batch_idx),
-        survivors_so_far: triage_cp.survivors_so_far,
+        survivors_so_far,
         avg_bytes_per_profileset: triage_cp.avg_bytes_per_profileset,
         estimated_total_batches: triage_cp.estimated_total_batches,
     };
@@ -210,9 +228,7 @@ async fn resume_triage(
     let job_id_owned = job_id.to_string();
     let fight_style = job.fight_style.clone();
     let target_error = job.target_error;
-    let base_profile_owned = job.simc_input.clone();
     let constants_for_task = checkpoint.constants;
-    let estimate = constants_for_task.global_survivor_target as u64;
 
     tokio::spawn(async move {
         let on_progress = {
@@ -236,7 +252,7 @@ async fn resume_triage(
             fight_style: &fight_style,
             target_error,
             base_profile: &base_profile_owned,
-            log_buffer: log_buffer_for_task,
+            log_buffer: log_buffer_for_task.clone(),
             on_progress: Box::new(on_progress),
         };
 
@@ -249,11 +265,20 @@ async fn resume_triage(
         )
         .await
         {
-            Ok(_result) => {
-                // Triage finished. The final Staged checkpoint was written by
-                // run_triage_with_constants. The user can click Resume again to
-                // continue from the staged path.
+            Ok(super::triage::TriageRunOutcome::Completed(result)) => {
+                crate::server::helpers::handoff_streamed_top_gear_to_staged(
+                    &pool_for_task,
+                    &repo_for_task,
+                    &simc_bin_path,
+                    &job_id_owned,
+                    &base_profile_owned,
+                    &options_for_task,
+                    &result.survivor_combo_ids,
+                    &log_buffer_for_task,
+                    constants_for_task,
+                ).await;
             }
+            Ok(super::triage::TriageRunOutcome::Paused) => {}
             Err(e) => {
                 let _ = repo_for_task
                     .set_error(&job_id_owned, &format!("Triage resume failed: {}", e))

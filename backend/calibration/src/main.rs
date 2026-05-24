@@ -2,7 +2,7 @@
 //!
 //! Reads a captured Top Gear scenario JSON (a `NormalizedRequest` envelope —
 //! exactly the shape stored in `jobs.request_json`), runs Triage across a
-//! 3-axis grid (batch_size, iterations, cutoff_multiplier), measures
+//! 3-axis grid (profilesets_per_batch, iterations, cutoff_multiplier), measures
 //! per-grid-point wall time and survivor-recall vs a reference baseline,
 //! writes the results to a companion JSON file.
 //!
@@ -22,7 +22,7 @@ use simhammer_core::db::{ComboMetadataRepo, Database};
 use simhammer_core::log_buffer::LogBuffer;
 use simhammer_core::profileset_generator::{
     build_iterator_from_request_json,
-    triage::{run_triage_with_constants, TriageConstants, TriageRunInputs},
+    triage::{run_triage_with_constants, TriageConstants, TriageRunInputs, TriageRunOutcome},
 };
 
 #[derive(Parser, Debug)]
@@ -44,14 +44,22 @@ struct Args {
     /// Where to write the grid results JSON. Default: <scenario>.calibration.json.
     #[arg(long)]
     out: Option<PathBuf>,
+
+    /// Comma-separated Triage batch sizes, in profilesets per SimC invocation.
+    /// Each value pins min/max count for a direct overhead comparison.
+    #[arg(long, value_delimiter = ',', default_value = "100,250,500,1000")]
+    batch_profilesets: Vec<usize>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct GridPoint {
-    batch_size_target_bytes: usize,
+    batch_profilesets: usize,
     triage_iterations: u32,
     triage_cutoff_multiplier: f64,
     end_to_end_seconds: f64,
+    average_batch_seconds: f64,
+    profilesets_per_second: f64,
+    seconds_per_1000_profilesets: f64,
     triage_survivors: usize,
     total_batches: usize,
     total_candidates: usize,
@@ -84,9 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|v| v.as_str())
         .ok_or("payload missing `base_profile`")?
         .to_string();
-    let options = payload
-        .get("options")
-        .ok_or("payload missing `options`")?;
+    let options = payload.get("options").ok_or("payload missing `options`")?;
     let fight_style = options
         .get("fight_style")
         .and_then(|v| v.as_str())
@@ -96,6 +102,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get("target_error")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.05);
+    let estimated_total_combos = payload
+        .get("estimate")
+        .and_then(|v| v.as_u64())
+        .ok_or(
+            "payload missing `estimate` - capture a streamed Top Gear request so survivor budgeting matches production",
+        )?;
 
     let baseline_top: Option<Vec<String>> = if let Some(p) = &args.baseline {
         let text = std::fs::read_to_string(p)?;
@@ -119,19 +131,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Grid axes per spec §3.
-    let batch_sizes: Vec<usize> = vec![
-        1 * 1024 * 1024,
-        4 * 1024 * 1024,
-        16 * 1024 * 1024,
-        32 * 1024 * 1024,
-        64 * 1024 * 1024,
-    ];
+    let batch_sizes = args.batch_profilesets;
+    if batch_sizes.is_empty() || batch_sizes.iter().any(|n| *n == 0) {
+        return Err("--batch-profilesets values must be positive".into());
+    }
     let iterations: Vec<u32> = vec![25, 50, 100];
     let cutoff_mults: Vec<f64> = vec![2.0, 3.0, 4.0];
 
     let total_points = batch_sizes.len() * iterations.len() * cutoff_mults.len();
     println!(
-        "Running {} grid points ({} batch_sizes x {} iterations x {} cutoff_mults)",
+        "Running {} grid points ({} profileset batch sizes x {} iterations x {} cutoff_mults)",
         total_points,
         batch_sizes.len(),
         iterations.len(),
@@ -146,7 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for &cutoff in &cutoff_mults {
                 grid_idx += 1;
                 println!(
-                    "[grid {:>2}/{}] batch_bytes={}, iters={}, cutoff={}",
+                    "[grid {:>2}/{}] batch_profilesets={}, iters={}, cutoff={}",
                     grid_idx, total_points, bsize, iters, cutoff
                 );
 
@@ -160,6 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bsize,
                     iters,
                     cutoff,
+                    estimated_total_combos,
                     baseline_top.as_deref(),
                 )
                 .await;
@@ -169,10 +179,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(e) => {
                         eprintln!("[grid {}] FAILED: {}", grid_idx, e);
                         results.push(GridPoint {
-                            batch_size_target_bytes: bsize,
+                            batch_profilesets: bsize,
                             triage_iterations: iters,
                             triage_cutoff_multiplier: cutoff,
                             end_to_end_seconds: 0.0,
+                            average_batch_seconds: 0.0,
+                            profilesets_per_second: 0.0,
+                            seconds_per_1000_profilesets: 0.0,
                             triage_survivors: 0,
                             total_batches: 0,
                             total_candidates: 0,
@@ -204,9 +217,10 @@ async fn run_one_grid_point(
     target_error: f64,
     simc_bin: &std::path::Path,
     grid_idx: usize,
-    bsize: usize,
+    batch_profilesets: usize,
     iters: u32,
     cutoff: f64,
+    estimated_total_combos: u64,
     baseline_top: Option<&[String]>,
 ) -> Result<GridPoint, String> {
     let job_id = format!("calibration-{}", grid_idx);
@@ -221,14 +235,9 @@ async fn run_one_grid_point(
     // Iterator config from the captured envelope.
     let iter_cfg = build_iterator_from_request_json(scenario_json)?;
 
-    // Conservative upper-bound estimate. Triage uses this only for progress
-    // reporting; we don't have the unpacked payload fields here, and it's not
-    // worth the parsing duplication. The harness already prints its own grid
-    // progress.
-    let estimated_total_combos: u64 = u64::MAX;
-
     let constants = TriageConstants {
-        target_batch_input_bytes: bsize,
+        min_batch_profilesets: batch_profilesets,
+        max_batch_profilesets: batch_profilesets,
         triage_iterations: iters,
         triage_cutoff_multiplier: cutoff,
         ..TriageConstants::default()
@@ -251,9 +260,16 @@ async fn run_one_grid_point(
     };
 
     let start = Instant::now();
-    let result = run_triage_with_constants(iter_cfg, inputs, estimated_total_combos, constants, None)
-        .await
-        .map_err(|e| format!("Triage run failed: {}", e))?;
+    let outcome =
+        run_triage_with_constants(iter_cfg, inputs, estimated_total_combos, constants, None)
+            .await
+            .map_err(|e| format!("Triage run failed: {}", e))?;
+    let result = match outcome {
+        TriageRunOutcome::Completed(result) => result,
+        TriageRunOutcome::Paused => {
+            return Err("Triage paused unexpectedly during calibration".to_string())
+        }
+    };
     let elapsed = start.elapsed().as_secs_f64();
 
     // Pull survivor combo_names for winner-loss matching.
@@ -271,12 +287,30 @@ async fn run_one_grid_point(
             .filter(|name| !survivor_names.contains(name.as_str()))
             .count()
     });
+    let average_batch_seconds = if result.total_batches > 0 {
+        elapsed / result.total_batches as f64
+    } else {
+        0.0
+    };
+    let profilesets_per_second = if elapsed > 0.0 {
+        result.total_accepted as f64 / elapsed
+    } else {
+        0.0
+    };
+    let seconds_per_1000_profilesets = if result.total_accepted > 0 {
+        elapsed * 1000.0 / result.total_accepted as f64
+    } else {
+        0.0
+    };
 
     Ok(GridPoint {
-        batch_size_target_bytes: bsize,
+        batch_profilesets,
         triage_iterations: iters,
         triage_cutoff_multiplier: cutoff,
         end_to_end_seconds: elapsed,
+        average_batch_seconds,
+        profilesets_per_second,
+        seconds_per_1000_profilesets,
         triage_survivors: result.survivor_combo_ids.len(),
         total_batches: result.total_batches,
         total_candidates: result.total_candidates,

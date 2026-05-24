@@ -19,7 +19,12 @@ import { StatsOverview } from './_components/StatsOverview';
 type ViewMode = 'active' | 'all';
 
 export default function SimsPage() {
-  const { jobs: activeSnapshot, error: pollError, refresh: refreshActive } = useActiveSims();
+  const {
+    jobs: activeSnapshot,
+    error: pollError,
+    refresh: refreshActive,
+    setPauseRequested,
+  } = useActiveSims();
   const { simcInput } = useSimContext();
   const [allJobs, setAllJobs] = useState<JobOverviewSummary[]>([]);
   const [allLoading, setAllLoading] = useState(true);
@@ -111,8 +116,21 @@ export default function SimsPage() {
   );
 
   const handlePause = useCallback(
-    (id: string) => wrapAction(id, () => pauseSim(id), 'Failed to pause sim'),
-    [wrapAction],
+    async (id: string) => {
+      setPauseRequested(id, true);
+      setBusy(id);
+      setActionError(null);
+      try {
+        await pauseSim(id);
+        refreshAll();
+      } catch (e: unknown) {
+        setPauseRequested(id, false);
+        setActionError(e instanceof Error ? e.message : 'Failed to pause sim');
+      } finally {
+        setBusy(null);
+      }
+    },
+    [refreshAll, setPauseRequested],
   );
   const handleResume = useCallback(
     (id: string) => wrapAction(id, () => resumeSim(id), 'Failed to resume sim'),

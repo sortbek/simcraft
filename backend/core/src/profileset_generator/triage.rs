@@ -241,6 +241,7 @@ impl<'a> BatchDriver<'a> {
         accepted: &[AcceptedCandidate],
         survivors_combo_ids: &[i64],
         batch_idx: i64,
+        checkpoint: &Checkpoint,
     ) -> Result<(), sqlx::Error> {
         let survivor_set: HashSet<i64> = survivors_combo_ids.iter().copied().collect();
 
@@ -276,6 +277,7 @@ impl<'a> BatchDriver<'a> {
         let mut tx = self.pool.begin().await?;
         self.metadata_repo.insert_batch(&mut *tx, self.job_id, &inserts).await?;
         self.triage_repo.mark_completed(&mut *tx, self.job_id, batch_idx, inserts.len() as i64).await?;
+        write_checkpoint_in_tx(&mut *tx, self.job_id, checkpoint).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -680,6 +682,11 @@ pub struct TriageRunResult {
     pub total_accepted: usize,
 }
 
+pub enum TriageRunOutcome {
+    Completed(TriageRunResult),
+    Paused,
+}
+
 pub struct TriageRunInputs<'a> {
     pub pool: &'a AnyPool,
     pub job_id: &'a str,
@@ -709,7 +716,7 @@ pub async fn run_triage(
     iter_cfg: ProfilesetIteratorConfig,
     inputs: TriageRunInputs<'_>,
     estimated_total_combos: u64,
-) -> Result<TriageRunResult, String> {
+) -> Result<TriageRunOutcome, String> {
     run_triage_with_constants(iter_cfg, inputs, estimated_total_combos, TriageConstants::default(), None).await
 }
 
@@ -721,7 +728,7 @@ pub async fn run_triage_with_constants(
     estimated_total_combos: u64,
     constants: TriageConstants,
     resume: Option<TriageResumeState>,  // None = fresh run; Some = resumed from checkpoint
-) -> Result<TriageRunResult, String> {
+) -> Result<TriageRunOutcome, String> {
     // Shadow module-level consts with values from the constants struct so all
     // helper call-sites below read from the struct without needing extra parameters.
     let target_batch_input_bytes     = constants.target_batch_input_bytes;
@@ -851,14 +858,6 @@ pub async fn run_triage_with_constants(
             Some(n) => survivors.into_iter().take(n).collect::<Vec<_>>(),
         };
 
-        (inputs.on_progress)(
-            ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0).min(100.0) as u8,
-            format!("Recording survivors for batch {}", pre.batch_idx + 1),
-        );
-
-        driver.commit_survivors(&pre.accepted, &survivors, pre.batch_idx).await
-            .map_err(|e| format!("Triage post-simc DB phase failed: {}", e))?;
-
         state.survivors_so_far += survivors.len();
 
         let batch_total_bytes: usize = pre.accepted.iter().map(|ac| ac.candidate.profileset_simc.len()).sum();
@@ -879,6 +878,26 @@ pub async fn run_triage_with_constants(
             state.estimated_total_batches = ((estimated_total_combos as usize) / per_batch.max(1)).max(1);
         }
 
+        let completed_checkpoint = Checkpoint {
+            phase: CheckpointPhase::Triage(TriageCheckpoint {
+                next_cursor: serde_json::from_str(&pre.end_cursor_json).unwrap_or_default(),
+                next_batch_idx: state.next_batch_idx,
+                next_combo_id: state.next_combo_id,
+                estimated_total_batches: state.estimated_total_batches,
+                survivors_so_far: state.survivors_so_far,
+                avg_bytes_per_profileset: state.avg_bytes_per_profileset,
+            }),
+            constants,
+        };
+
+        (inputs.on_progress)(
+            ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0).min(100.0) as u8,
+            format!("Recording survivors for batch {}", pre.batch_idx + 1),
+        );
+
+        driver.commit_survivors(&pre.accepted, &survivors, pre.batch_idx, &completed_checkpoint).await
+            .map_err(|e| format!("Triage post-simc DB phase failed: {}", e))?;
+
         all_survivors.extend(survivors);
 
         // Pause boundary: honor a pending pause request at the cleanest possible point —
@@ -894,12 +913,7 @@ pub async fn run_triage_with_constants(
                 let _ = pause_check_repo
                     .update_status(inputs.job_id, crate::models::JobStatus::Paused)
                     .await;
-                return Ok(TriageRunResult {
-                    survivor_combo_ids: all_survivors,
-                    total_batches: state.next_batch_idx as usize,
-                    total_candidates,
-                    total_accepted,
-                });
+                return Ok(TriageRunOutcome::Paused);
             }
             Ok(false) => {}
             Err(e) => {
@@ -949,10 +963,10 @@ pub async fn run_triage_with_constants(
         inputs.job_id, elapsed, batches, total_candidates, total_accepted, per_ps_ms,
     );
 
-    Ok(TriageRunResult {
+    Ok(TriageRunOutcome::Completed(TriageRunResult {
         survivor_combo_ids: all_survivors,
         total_batches: state.next_batch_idx as usize,
         total_candidates,
         total_accepted,
-    })
+    }))
 }

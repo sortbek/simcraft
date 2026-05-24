@@ -147,6 +147,24 @@ export default function SimResultClient() {
 
   const handleToggleLogs = useCallback(() => setShowLogs((v) => !v), []);
 
+  const handlePause = useCallback(async () => {
+    setJob((current) =>
+      current && current.id === id
+        ? { ...current, pause_requested: true }
+        : current,
+    );
+    try {
+      await pauseSim(id);
+    } catch (e) {
+      setJob((current) =>
+        current && current.id === id
+          ? { ...current, pause_requested: false }
+          : current,
+      );
+      console.error('Pause failed:', e);
+    }
+  }, [id]);
+
   const handleToggleInputPreview = useCallback(() => {
     setShowInputPreview((v) => {
       const next = !v;
@@ -265,33 +283,13 @@ export default function SimResultClient() {
             stagesCompleted={job.stages_completed}
             jobId={id}
             onCancelled={() => setJob({ ...job, status: 'cancelled' })}
+            canPause={job.status === 'running' && job.simc_input_mode === 'streamed'}
+            pauseRequested={!!job.pause_requested}
+            onPause={handlePause}
             logLines={logLines}
             showLogs={showLogs}
             onToggleLogs={handleToggleLogs}
           />
-        )}
-        {job.status === 'running' && job.simc_input_mode === 'streamed' && !job.pause_requested && (
-          <div className="flex justify-center">
-            <button
-              onClick={async () => {
-                try {
-                  await pauseSim(id);
-                } catch (e) {
-                  console.error('Pause failed:', e);
-                }
-              }}
-              className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-400 transition-colors hover:border-amber-500/50 hover:bg-amber-500/20"
-            >
-              Pause
-            </button>
-          </div>
-        )}
-        {job.status === 'running' && job.pause_requested && (
-          <div className="flex justify-center">
-            <span className="text-sm italic text-on-surface-variant">
-              Pausing at next checkpoint…
-            </span>
-          </div>
         )}
         <div className="flex items-center justify-center text-[10px] uppercase tracking-wider text-on-surface-variant/40">
           <a

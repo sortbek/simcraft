@@ -13,6 +13,9 @@ interface SimStatusProps {
   stagesCompleted?: string[];
   jobId?: string;
   onCancelled?: () => void;
+  canPause?: boolean;
+  pauseRequested?: boolean;
+  onPause?: () => void;
   logLines?: string[];
   showLogs?: boolean;
   onToggleLogs?: () => void;
@@ -66,6 +69,9 @@ export default function SimStatus({
   stagesCompleted,
   jobId,
   onCancelled,
+  canPause = false,
+  pauseRequested = false,
+  onPause,
   logLines,
   showLogs,
   onToggleLogs,
@@ -136,6 +142,15 @@ export default function SimStatus({
           >
             {cancelling ? t('results.cancelling') : t('results.cancelSim')}
           </button>
+          {canPause && onPause && (
+            <button
+              onClick={onPause}
+              disabled={pauseRequested}
+              className="rounded-lg px-3 py-1 text-[14px] text-amber-400 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
+            >
+              {pauseRequested ? 'Pausing at next checkpoint...' : 'Pause Sim'}
+            </button>
+          )}
           {onToggleLogs && (
             <button
               onClick={onToggleLogs}

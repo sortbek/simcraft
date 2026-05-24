@@ -4,10 +4,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::helpers::{spawn_staged_sim, validate_batch};
+use super::helpers::{handoff_streamed_top_gear_to_staged, validate_batch};
 use super::request_json::NormalizedRequest;
 use super::types::TopGearRequest;
-use crate::db::{ComboMetadataRepo, JobRepo};
+use crate::db::JobRepo;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, SimcInputMode};
 use crate::profileset_generator;
@@ -162,7 +162,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         };
 
         match crate::profileset_generator::triage::run_triage(iter_cfg, inputs, estimate).await {
-            Ok(result) => {
+            Ok(crate::profileset_generator::triage::TriageRunOutcome::Completed(result)) => {
                 let _ = repo_for_task
                     .update_progress(
                         &job_id_task,
@@ -172,7 +172,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
                     )
                     .await;
 
-                handoff_to_staged(
+                handoff_streamed_top_gear_to_staged(
                     &pool,
                     &repo_for_task,
                     &simc_bin_for_task,
@@ -181,9 +181,11 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
                     &options_for_task,
                     &result.survivor_combo_ids,
                     &log_buffer_owned,
+                    crate::profileset_generator::triage::TriageConstants::default(),
                 )
                 .await;
             }
+            Ok(crate::profileset_generator::triage::TriageRunOutcome::Paused) => {}
             Err(e) => {
                 let _ = repo_for_task.set_error(&job_id_task, &e).await;
                 log_buffer_owned.remove(&job_id_task);
@@ -197,72 +199,4 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         "created_at": created_at,
         "estimate": estimate,
     }))
-}
-
-async fn handoff_to_staged(
-    pool: &sqlx::AnyPool,
-    repo: &JobRepo,
-    simc_bin: &std::path::Path,
-    job_id: &str,
-    base_profile: &str,
-    options: &Value,
-    survivor_combo_ids: &[i64],
-    log_buffer: &Arc<LogBuffer>,
-) {
-    if survivor_combo_ids.is_empty() {
-        let _ = repo
-            .set_error(
-                job_id,
-                "Triage eliminated all candidates; no survivors to sim.",
-            )
-            .await;
-        log_buffer.remove(job_id);
-        return;
-    }
-
-    let metadata_repo = ComboMetadataRepo::new(pool.clone());
-    let rows = match metadata_repo
-        .list_for_combo_ids(job_id, survivor_combo_ids)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = repo
-                .set_error(
-                    job_id,
-                    &format!("Handoff: failed to read combo metadata: {}", e),
-                )
-                .await;
-            log_buffer.remove(job_id);
-            return;
-        }
-    };
-
-    let survivor_simc_lines: Vec<&str> = rows.iter().map(|r| r.profileset_simc.as_str()).collect();
-    let combo_count = survivor_simc_lines.len();
-
-    if combo_count == 0 {
-        let _ = repo
-            .set_error(job_id, "Triage produced no survivor profilesets to sim.")
-            .await;
-        log_buffer.remove(job_id);
-        return;
-    }
-
-    let profileset_block = survivor_simc_lines.join("\n");
-    let combined_input = format!("# Base Actor\n{}\n{}", base_profile, profileset_block);
-
-    spawn_staged_sim(
-        repo.clone(),
-        simc_bin.to_path_buf(),
-        options.clone(),
-        job_id.to_string(),
-        combined_input,
-        combo_count,
-        log_buffer.clone(),
-        50,
-        SimcInputMode::Streamed,
-        crate::simc_runner::StagedResumeState::default(),
-        crate::profileset_generator::triage::TriageConstants::default(),
-    );
 }

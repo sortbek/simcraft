@@ -13,11 +13,11 @@ import { fetchActiveJobs, type JobStatus, type JobOverviewSummary } from './api'
 
 const POLL_INTERVAL_MS = 2500;
 
-/** Job statuses that count as "in flight" — used to gate UI affordances and
- * to compute the header chip's count. Pending/Running consume the CPU;
- * Paused is dormant but still incomplete. */
+/** Job statuses that belong in the Active view and expose management actions.
+ * Paused is dormant but still incomplete, so it stays visible there. */
 export const ACTIVE_STATUSES: readonly JobStatus[] = ['pending', 'running', 'paused'];
 const ACTIVE_STATUS_SET: ReadonlySet<JobStatus> = new Set(ACTIVE_STATUSES);
+const RUNNING_STATUS_SET: ReadonlySet<JobStatus> = new Set(['pending', 'running']);
 
 export function isActiveStatus(status: JobStatus): boolean {
   return ACTIVE_STATUS_SET.has(status);
@@ -26,9 +26,11 @@ export function isActiveStatus(status: JobStatus): boolean {
 interface UseActiveSimsResult {
   jobs: JobOverviewSummary[];
   activeCount: number;
+  runningCount: number;
   loading: boolean;
   error: string | null;
   refresh: () => void;
+  setPauseRequested: (jobId: string, requested: boolean) => void;
 }
 
 /** Compare two summaries for the fields the UI actually rerenders on.
@@ -107,18 +109,30 @@ function usePolledActiveSims(): UseActiveSimsResult {
     () => jobs.filter((j) => ACTIVE_STATUS_SET.has(j.status)).length,
     [jobs],
   );
+  const runningCount = useMemo(
+    () => jobs.filter((j) => RUNNING_STATUS_SET.has(j.status)).length,
+    [jobs],
+  );
 
   return useMemo(
     () => ({
       jobs,
       activeCount,
+      runningCount,
       loading,
       error,
       refresh: () => {
         void pollRef.current();
       },
+      setPauseRequested: (jobId: string, requested: boolean) => {
+        setJobs((prev) =>
+          prev.map((job) =>
+            job.id === jobId ? { ...job, pause_requested: requested } : job,
+          ),
+        );
+      },
     }),
-    [jobs, activeCount, loading, error],
+    [jobs, activeCount, runningCount, loading, error],
   );
 }
 

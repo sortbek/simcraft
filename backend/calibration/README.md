@@ -1,10 +1,16 @@
 # SimHammer Triage Calibration Harness
 
 The calibration harness runs the Triage stage across a 3-axis grid of parameters
-(batch size in bytes, simc iterations, retention cutoff multiplier) against a
+(profilesets per SimC invocation, simc iterations, retention cutoff multiplier) against a
 captured Top Gear scenario, and records winner-loss rates vs a reference
 full-precision baseline. The chosen defaults are then locked into
 `backend/core/src/profileset_generator/triage.rs`.
+
+This harness measures Triage only. Intermediate staged evaluation uses the
+separate `STAGED_BATCH_PROFILESETS` setting and should be measured with
+end-to-end application runs after choosing Triage defaults. The final
+precision stage is unbatched, so neither batch knob improves pause latency
+while a job is in Final.
 
 ## Process
 
@@ -61,11 +67,22 @@ cd backend
 cargo run --release -p simhammer-calibration -- `
   calibration/scenarios/topgear-mistweaver-5m.json `
   --baseline calibration/scenarios/topgear-mistweaver-5m.baseline.json `
-  --simc-bin path/to/simc.exe
+  --simc-bin path/to/simc.exe `
+  --batch-profilesets 100,250,500,1000
 ```
 
-This runs Triage 45 times (5 batch sizes x 3 iterations x 3 cutoffs) and writes
+This runs Triage 36 times (4 batch sizes x 3 iterations x 3 cutoffs) and writes
 `topgear-mistweaver-5m.calibration.json`.
+
+Each batch-size value pins both Triage min/max profilesets for a direct
+comparison; the initial 100-profile probe remains unchanged. Key result
+fields are:
+
+- `end_to_end_seconds`: total Triage time for the grid point.
+- `average_batch_seconds`: mean interval at which Triage can observe a pause request; actual worst case is the longest individual batch.
+- `profilesets_per_second` and `seconds_per_1000_profilesets`: overhead comparison between batch sizes.
+- `total_batches` and `triage_survivors`: invocation count and downstream-work impact.
+- `winner_loss_count`: retained winner correctness against the supplied baseline.
 
 ### 4. Lock the defaults
 
@@ -96,8 +113,12 @@ Confirm the result's top-10 matches the baseline's top-10.
   (`sqlite::memory:`) so combo_metadata / combo_dedup / triage_batches don't
   leak between points.
 - `TriageConstants` in `triage.rs` exposes all tunable parameters. The three
-  grid axes are `target_batch_input_bytes`, `triage_iterations`, and
+  grid axes are pinned `min_batch_profilesets == max_batch_profilesets`,
+  `triage_iterations`, and
   `triage_cutoff_multiplier`; the rest stay at `Default` during grid search.
+- The captured request must include `payload.estimate`; Triage uses it for
+  survivor budgeting, so substituting an arbitrary estimate invalidates the
+  comparison.
 - **Winner-loss matching limitation:** combos are matched by name across the
   baseline and the survivors. The streaming iterator assigns names in its own
   order, so identical *content* may appear under different names across runs
