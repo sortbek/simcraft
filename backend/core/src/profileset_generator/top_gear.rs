@@ -152,66 +152,89 @@ pub(crate) fn build_iterator_config(
     }
     enchant_axes.sort_by(|a, b| a.slot.cmp(&b.slot));
 
-    // Build gem combos (mirrors top_gear.rs lines ~262-332)
-    let gem_combos: Vec<std::collections::HashMap<String, u64>> = if !gem_options.is_empty() {
-        let mut gem_slots: Vec<String> = Vec::new();
-        for slot in crate::types::class_data::GEAR_SLOTS {
-            let slot_str = slot.to_string();
-            let equipped_has_socket = equipped_gear
-                .get(&slot_str)
-                .map(|simc| {
-                    let item_id = extract_item_id(simc);
-                    socketed_item_ids.contains(&item_id)
-                        && (replace_gems || extract_gem_id(simc) == 0)
-                })
-                .unwrap_or(false);
-            let alt_has_socket = items_by_slot
-                .get(&slot_str)
-                .map(|items| {
-                    items.iter().any(|item| {
-                        let has_sockets =
-                            item.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0) > 0;
-                        let has_gem =
-                            item.get("gem_id").and_then(|g| g.as_u64()).unwrap_or(0) > 0;
-                        has_sockets && (replace_gems || !has_gem)
+    // Build (slot, socket_count) tuples. Socket count is the max across the
+    // equipped item and any selected alt for the slot — same logic as the
+    // eager path so a 1-socket alt + 2-socket alt slot generates size-2
+    // multisets and the 1-socket alt is truncated at apply time.
+    let gem_combos: Vec<crate::profileset_generator::gem_combos::GemCombo> =
+        if !gem_options.is_empty() {
+            let mut gem_slots: Vec<(String, usize)> = Vec::new();
+            for slot in crate::types::class_data::GEAR_SLOTS {
+                let slot_str = slot.to_string();
+                let equipped_count = equipped_gear
+                    .get(&slot_str)
+                    .map(|simc| {
+                        let item_id = extract_item_id(simc);
+                        if !socketed_item_ids.contains(&item_id) {
+                            return 0;
+                        }
+                        if !replace_gems && extract_gem_id(simc) != 0 {
+                            return 0; // Already gemmed; preserve as-is.
+                        }
+                        simc_socket_count(simc)
                     })
-                })
-                .unwrap_or(false);
-            if equipped_has_socket || alt_has_socket {
-                gem_slots.push(slot_str);
+                    .unwrap_or(0);
+                let alt_count = items_by_slot
+                    .get(&slot_str)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| {
+                                let has_gem = item
+                                    .get("gem_id")
+                                    .and_then(|g| g.as_u64())
+                                    .unwrap_or(0)
+                                    > 0;
+                                if !replace_gems && has_gem {
+                                    return None;
+                                }
+                                item.get("sockets")
+                                    .and_then(|s| s.as_u64())
+                                    .map(|n| n as usize)
+                            })
+                            .max()
+                            .unwrap_or(0)
+                    })
+                    .unwrap_or(0);
+                let socket_count = equipped_count.max(alt_count);
+                if socket_count > 0 {
+                    gem_slots.push((slot_str, socket_count));
+                }
             }
-        }
 
-        let mut gems: Vec<u64> = Vec::new();
-        for &gid in gem_options {
-            if !gems.contains(&gid) {
-                gems.push(gid);
+            let mut gems: Vec<u64> = Vec::new();
+            for &gid in gem_options {
+                if !gems.contains(&gid) {
+                    gems.push(gid);
+                }
             }
-        }
-        if !replace_gems {
-            let has_equipped_diamond = equipped_gear.values().any(|simc| {
-                let gid = extract_gem_id(simc);
-                gid > 0 && is_diamond(gid)
-            });
-            if has_equipped_diamond {
-                gems.retain(|g| !is_diamond(*g));
+            if !replace_gems {
+                // Scan every socket on every equipped item — a 2-socket neck
+                // can hide a diamond at index 1, which single-gem extract
+                // would miss.
+                let has_equipped_diamond = equipped_gear
+                    .values()
+                    .flat_map(|simc| extract_gem_ids(simc))
+                    .any(is_diamond);
+                if has_equipped_diamond {
+                    gems.retain(|g| !is_diamond(*g));
+                }
             }
-        }
 
-        let diamond_ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();
-        gems.retain(|g| !is_diamond(*g));
+            let diamond_ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();
+            gems.retain(|g| !is_diamond(*g));
 
-        let builder = crate::profileset_generator::gem_combos::GemCombosBuilder {
-            gem_options: &gems,
-            gem_slots: &gem_slots,
-            diamond_ids: &diamond_ids,
-            diamond_always_use,
-            max_colors,
+            let builder = crate::profileset_generator::gem_combos::GemCombosBuilder {
+                gem_options: &gems,
+                gem_slots: &gem_slots,
+                diamond_ids: &diamond_ids,
+                diamond_always_use,
+                max_colors,
+            };
+            crate::profileset_generator::gem_combos::enumerate_all(&builder)
+        } else {
+            Vec::new()
         };
-        crate::profileset_generator::gem_combos::enumerate_all(&builder)
-    } else {
-        Vec::new()
-    };
 
     let gem_combo_count = gem_combos.len();
     let gem_combos_resolver = GemCombosResolver::new(gem_combos);

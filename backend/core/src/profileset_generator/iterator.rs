@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use serde_json::{json, Value};
 
+use super::gem_combos::GemCombo;
 use super::identity_key::{compute_identity_key, effective_gems, IdentityInput};
 use crate::types::class_data::GEAR_SLOTS;
 
@@ -42,16 +43,18 @@ pub struct EnchantAxis {
     pub options: Vec<u64>,
 }
 
-/// Wrapper around a pre-built gem combo list.
+/// Wrapper around a pre-built gem combo list. Each entry maps slot →
+/// `Vec<gem_id>` of length equal to the slot's socket count (1 for
+/// single-socket items, 2+ for crafted/socketed necks etc.).
 pub struct GemCombosResolver {
-    inner: Vec<HashMap<String, u64>>,
+    inner: Vec<GemCombo>,
 }
 
 impl GemCombosResolver {
-    pub fn new(combos: Vec<HashMap<String, u64>>) -> Self {
+    pub fn new(combos: Vec<GemCombo>) -> Self {
         Self { inner: combos }
     }
-    pub fn nth(&self, i: usize) -> Option<&HashMap<String, u64>> {
+    pub fn nth(&self, i: usize) -> Option<&GemCombo> {
         self.inner.get(i)
     }
     pub fn len(&self) -> usize {
@@ -234,7 +237,7 @@ impl ProfilesetIterator {
         // ── 6. Resolve gems ──────────────────────────────────────────────────
         let gem_axis_idx = gear_axes_count + self.cfg.enchant_axes.len();
         let gem_combo_idx = self.cursor[gem_axis_idx];
-        let nominal_gems: HashMap<String, u64> = self
+        let nominal_gems: GemCombo = self
             .cfg
             .gem_combos_resolver
             .nth(gem_combo_idx)
@@ -309,7 +312,7 @@ fn format_streaming_profileset_lines(
     name: &str,
     gear_set: &HashMap<String, Arc<Value>>,
     effective_enchants: &HashMap<String, u64>,
-    effective_gems: &HashMap<String, u64>,
+    effective_gems: &HashMap<String, Vec<u64>>,
     talent_string: &str,
 ) -> String {
     let mut lines: Vec<String> = Vec::new();
@@ -328,9 +331,15 @@ fn format_streaming_profileset_lines(
                 base_simc.to_string()
             };
 
-            // Apply gem override if any.
-            let with_gem = if let Some(&gid) = effective_gems.get(*slot) {
-                crate::simc_string::set_gem_id(&with_enchant, gid)
+            // Apply gems. `set_gem_ids` handles both single- and multi-socket
+            // cases by emitting `gem_id=A/B` for multi-gem lists; an empty
+            // list leaves the line untouched.
+            let with_gem = if let Some(gids) = effective_gems.get(*slot) {
+                if gids.is_empty() {
+                    with_enchant
+                } else {
+                    crate::simc_string::set_gem_ids(&with_enchant, gids)
+                }
             } else {
                 with_enchant
             };
@@ -359,7 +368,7 @@ fn format_streaming_profileset_lines(
 fn build_streaming_metadata(
     gear_set: &HashMap<String, Arc<Value>>,
     effective_enchants: &HashMap<String, u64>,
-    effective_gems: &HashMap<String, u64>,
+    effective_gems: &HashMap<String, Vec<u64>>,
 ) -> Value {
     let mut items: Vec<Value> = Vec::new();
     for slot in GEAR_SLOTS {
@@ -380,9 +389,19 @@ fn build_streaming_metadata(
                 let enchant_id = effective_enchants.get(*slot).copied().unwrap_or_else(|| {
                     item.get("enchant_id").and_then(|v| v.as_u64()).unwrap_or(0)
                 });
-                let gem_id = effective_gems.get(*slot).copied().unwrap_or_else(|| {
-                    item.get("gem_id").and_then(|v| v.as_u64()).unwrap_or(0)
-                });
+                let gem_ids_vec: Vec<u64> = effective_gems
+                    .get(*slot)
+                    .cloned()
+                    .or_else(|| {
+                        item.get("gem_id")
+                            .and_then(|v| v.as_u64())
+                            .filter(|g| *g > 0)
+                            .map(|g| vec![g])
+                    })
+                    .unwrap_or_default();
+                // Keep `gem_id` populated for downstream consumers that read
+                // the single-gem field; emit the full list under `gem_ids`.
+                let gem_id_first = gem_ids_vec.first().copied().unwrap_or(0);
                 let origin = item
                     .get("origin")
                     .and_then(|v| v.as_str())
@@ -395,7 +414,8 @@ fn build_streaming_metadata(
                     "name": name,
                     "bonus_ids": bonus_ids,
                     "enchant_id": enchant_id,
-                    "gem_id": gem_id,
+                    "gem_id": gem_id_first,
+                    "gem_ids": gem_ids_vec,
                     "is_kept": false,
                     "origin": origin,
                 }));
@@ -420,21 +440,24 @@ fn build_streaming_metadata(
             }));
         }
     }
-    // Gem overrides.
-    for (slot, &gid) in effective_gems {
-        let info = crate::item_db::get_gem_info(gid);
-        let gname = info
-            .as_ref()
-            .and_then(|v| v.get("name"))
-            .and_then(|n| n.as_str())
-            .unwrap_or("")
-            .to_string();
-        items.push(json!({
-            "slot": slot,
-            "type": "gem",
-            "gem_id": gid,
-            "name": gname,
-        }));
+    // Gem overrides — emit one entry per socket so a 2-gem neck produces
+    // two metadata rows (matches the eager-path shape).
+    for (slot, gids) in effective_gems {
+        for &gid in gids {
+            let info = crate::item_db::get_gem_info(gid);
+            let gname = info
+                .as_ref()
+                .and_then(|v| v.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
+            items.push(json!({
+                "slot": slot,
+                "type": "gem",
+                "gem_id": gid,
+                "name": gname,
+            }));
+        }
     }
     json!(items)
 }
