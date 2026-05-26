@@ -23,7 +23,15 @@ use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, Triag
 pub const TARGET_BATCH_INPUT_BYTES: usize = 1 * 1024 * 1024; // 1 MiB (won't bind)
 pub const MIN_BATCH_PROFILESETS: usize = 500;
 pub const MAX_BATCH_PROFILESETS: usize = 500;
-pub const TRIAGE_ITERATIONS: u32 = 50;
+/// Triage `target_error` (percent). Drives simc's per-profileset auto-tuner;
+/// each profileset runs only as many iterations as needed to hit this CI
+/// half-width. Looser than the user's final precision so triage stays a cheap
+/// coarse pre-filter — anything within ~3× this margin of the top survives.
+pub const TRIAGE_TARGET_ERROR: f64 = 2.0;
+/// Iteration ceiling per profileset in Triage. With `TRIAGE_TARGET_ERROR=2.0`
+/// most profilesets converge in 50-150 iterations; this cap exists only as a
+/// safety net for unusually noisy specs that would otherwise run unbounded.
+pub const TRIAGE_ITERATIONS: u32 = 10_000;
 pub const TRIAGE_CUTOFF_MULTIPLIER: f64 = 3.0;
 pub const MIN_TRIAGE_TARGET_ERROR_FALLBACK: f64 = 1.0;
 pub const MIN_KEEP_PER_BATCH: usize = 100;
@@ -291,6 +299,11 @@ pub struct TriageConstants {
     pub target_batch_input_bytes: usize,
     pub min_batch_profilesets: usize,
     pub max_batch_profilesets: usize,
+    /// CI half-width (percent) simc converges to per profileset. Drives the
+    /// actual precision; replaces the old fixed-iteration approach.
+    pub triage_target_error: f64,
+    /// Iteration ceiling per profileset; safety net only — `triage_target_error`
+    /// is the load-bearing knob.
     pub triage_iterations: u32,
     pub triage_cutoff_multiplier: f64,
     pub min_triage_target_error_fallback: f64,
@@ -306,6 +319,7 @@ impl Default for TriageConstants {
             target_batch_input_bytes: env_usize("TRIAGE_TARGET_BATCH_BYTES", TARGET_BATCH_INPUT_BYTES),
             min_batch_profilesets: env_usize("TRIAGE_MIN_BATCH", MIN_BATCH_PROFILESETS),
             max_batch_profilesets: env_usize("TRIAGE_MAX_BATCH", MAX_BATCH_PROFILESETS),
+            triage_target_error: env_f64("TRIAGE_TARGET_ERROR", TRIAGE_TARGET_ERROR),
             triage_iterations: env_u32("TRIAGE_ITERATIONS", TRIAGE_ITERATIONS),
             triage_cutoff_multiplier: TRIAGE_CUTOFF_MULTIPLIER,
             min_triage_target_error_fallback: MIN_TRIAGE_TARGET_ERROR_FALLBACK,
@@ -322,6 +336,10 @@ fn env_usize(key: &str, fallback: usize) -> usize {
 }
 
 fn env_u32(key: &str, fallback: u32) -> u32 {
+    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
+}
+
+fn env_f64(key: &str, fallback: f64) -> f64 {
     std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
 }
 
@@ -734,6 +752,7 @@ pub async fn run_triage_with_constants(
     let target_batch_input_bytes     = constants.target_batch_input_bytes;
     let min_batch_profilesets        = constants.min_batch_profilesets;
     let max_batch_profilesets        = constants.max_batch_profilesets;
+    let triage_target_error          = constants.triage_target_error;
     let triage_iterations            = constants.triage_iterations;
     let triage_cutoff_multiplier     = constants.triage_cutoff_multiplier;
     let min_triage_target_error_fallback = constants.min_triage_target_error_fallback;
@@ -824,7 +843,10 @@ pub async fn run_triage_with_constants(
             &profileset_simc_block,
             triage_iterations,
             inputs.fight_style,
-            inputs.target_error,
+            // Triage-specific target_error: loose enough that simc converges
+            // in O(100) iterations per profileset. The user's tight final
+            // target_error is reserved for the Staged Final stage.
+            triage_target_error,
             inputs.simc_bin,
             inputs.job_id,
             inputs.log_buffer.clone(),

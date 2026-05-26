@@ -129,28 +129,22 @@ const EXPANSION_OPTIONS: &[&str] = &[
 struct Stage {
     name: &'static str,
     target_error: f64,
-    /// Iteration cap simc receives for this stage. Tight enough that simc's
-    /// per-profileset auto-tuner stops near `target_error` rather than
-    /// overshooting toward final-pass precision. `None` means "use the user's
-    /// full iteration budget" (only the Final stage).
-    iteration_cap: Option<u32>,
 }
 
 /// Coarse-to-fine candidate stages used to construct the adaptive schedule.
 /// Each entry produces an intermediate stage when its target_error is strictly
-/// looser than the user's requested precision. Names are paired by position so
-/// log output stays consistent across runs at different user precisions.
-///
-/// The third field is the iteration cap simc receives at that stage — keeping
-/// it co-located with the target_error prevents the two from drifting apart.
-const STAGE_CANDIDATES: &[(f64, &str, u32)] = &[
-    (2.0,  "Probe",  50),
-    (1.0,  "Coarse", 125),
-    (0.5,  "Refine", 500),
-    (0.2,  "Medium", 3_000),
-    (0.1,  "Fine",   12_000),
-    (0.05, "Trace",  50_000),
-    (0.02, "Ultra",  200_000),
+/// looser than the user's requested precision. SimC's per-profileset auto-tuner
+/// decides iteration count from the `target_error`; we no longer cap iterations
+/// per stage so a Probe stage actually delivers its 2.0% precision (a 50-iter
+/// cap previously left it at ~5% noise).
+const STAGE_CANDIDATES: &[(f64, &str)] = &[
+    (2.0,  "Probe"),
+    (1.0,  "Coarse"),
+    (0.5,  "Refine"),
+    (0.2,  "Medium"),
+    (0.1,  "Fine"),
+    (0.05, "Trace"),
+    (0.02, "Ultra"),
 ];
 
 /// Build the staged schedule for the user's requested `target_error`.
@@ -167,17 +161,15 @@ const STAGE_CANDIDATES: &[(f64, &str, u32)] = &[
 fn build_stage_schedule(user_target_error: f64) -> Vec<Stage> {
     let mut schedule: Vec<Stage> = STAGE_CANDIDATES
         .iter()
-        .filter(|(te, _, _)| *te > user_target_error)
-        .map(|(te, name, cap)| Stage {
+        .filter(|(te, _)| *te > user_target_error)
+        .map(|(te, name)| Stage {
             name,
             target_error: *te,
-            iteration_cap: Some(*cap),
         })
         .collect();
     schedule.push(Stage {
         name: "Final",
         target_error: user_target_error,
-        iteration_cap: None,
     });
     schedule
 }
@@ -247,18 +239,13 @@ const STAGE_MIN_KEEP: usize = 5;
 /// final precision stage instead of walking the remaining intermediate stages.
 const SKIP_TO_FINAL_THRESHOLD: usize = 5;
 
-/// Iteration count simc receives for `stage`. simc treats `iterations=N` as a
-/// hard ceiling; setting it loosely lets simc's auto-tuner overshoot a stage's
-/// `target_error` toward final-pass precision (e.g. a Probe stage at 2.0%
-/// target_error empirically hitting ~0.5% because simc kept running).
-///
-/// Pruning stages return their pinned cap from `STAGE_CANDIDATES`; the Final
-/// stage returns the user's full iteration budget.
-fn iterations_for_stage(stage: &Stage, user_iters: u32) -> u32 {
-    match stage.iteration_cap {
-        Some(cap) => std::cmp::min(cap, user_iters),
-        None => user_iters,
-    }
+/// Iteration count simc receives for `stage`. Used purely as a safety ceiling
+/// — `target_error` drives the per-profileset iteration count, and simc stops
+/// once that precision is hit. Looser stages converge quickly; tight stages
+/// (Trace / Ultra / Final) can need most of the user's budget. The user's
+/// iteration budget is the right cap for every stage.
+fn iterations_for_stage(_stage: &Stage, user_iters: u32) -> u32 {
+    user_iters
 }
 
 /// Progress-bar range `(start_pct, end_pct)` allocated to stage `idx` of `total`.
@@ -1924,44 +1911,28 @@ mod tests {
 
     // ---- iterations_for_stage ----
 
-    fn pruning_stage(target_error: f64, cap: u32) -> Stage {
-        Stage { name: "test", target_error, iteration_cap: Some(cap) }
-    }
-
-    fn final_stage(target_error: f64) -> Stage {
-        Stage { name: "Final", target_error, iteration_cap: None }
+    fn stage(name: &'static str, target_error: f64) -> Stage {
+        Stage { name, target_error }
     }
 
     #[test]
-    fn iterations_final_stage_uses_user_iters() {
-        assert_eq!(iterations_for_stage(&final_stage(0.5), 1000), 1000);
-        assert_eq!(iterations_for_stage(&final_stage(0.01), 100_000), 100_000);
+    fn iterations_for_stage_returns_user_iters_for_every_stage() {
+        // No per-stage caps any more — simc's auto-tuner driven by `target_error`
+        // decides actual iteration count. The user's budget is the safety ceiling.
+        assert_eq!(iterations_for_stage(&stage("Probe", 2.0), 10_000), 10_000);
+        assert_eq!(iterations_for_stage(&stage("Coarse", 1.0), 10_000), 10_000);
+        assert_eq!(iterations_for_stage(&stage("Final", 0.05), 50_000), 50_000);
+        assert_eq!(iterations_for_stage(&stage("Final", 0.01), 100_000), 100_000);
     }
 
     #[test]
-    fn iterations_pruning_stage_uses_its_cap() {
-        // High user_iters: cap dominates.
-        assert_eq!(iterations_for_stage(&pruning_stage(2.0, 50), 100_000), 50);
-        assert_eq!(iterations_for_stage(&pruning_stage(1.0, 125), 100_000), 125);
-        assert_eq!(iterations_for_stage(&pruning_stage(0.5, 500), 100_000), 500);
-        assert_eq!(iterations_for_stage(&pruning_stage(0.02, 200_000), 1_000_000), 200_000);
-    }
-
-    #[test]
-    fn iterations_user_iters_caps_below_stage_cap() {
-        // user_iters below the stage's cap → user_iters wins.
-        assert_eq!(iterations_for_stage(&pruning_stage(2.0, 50), 30), 30);
-        assert_eq!(iterations_for_stage(&pruning_stage(1.0, 125), 100), 100);
-    }
-
-    #[test]
-    fn stage_candidates_caps_align_with_target_errors() {
-        // Caps should monotonically grow as target_error tightens. Drift check:
-        // catches accidentally putting a smaller cap on a tighter stage.
-        let mut prev_cap = 0u32;
-        for (te, _, cap) in STAGE_CANDIDATES {
-            assert!(*cap > prev_cap, "cap for te={} should exceed previous cap", te);
-            prev_cap = *cap;
+    fn stage_candidates_target_errors_are_strictly_tightening() {
+        // Target errors must be monotonically tightening so the schedule
+        // produces a coarse-to-fine sequence.
+        let mut prev_te = f64::INFINITY;
+        for (te, _) in STAGE_CANDIDATES {
+            assert!(*te < prev_te, "target_error {} should be tighter than previous {}", te, prev_te);
+            prev_te = *te;
         }
     }
 
