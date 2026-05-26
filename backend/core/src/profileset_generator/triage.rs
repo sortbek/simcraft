@@ -13,16 +13,16 @@ use crate::db::{
 use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIteratorConfig};
 use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, TriageCheckpoint, StagedCheckpoint};
 
-// Defaults locked from calibration. Treat as initial values.
-// Batch size targets keep individual batches small enough that a pause mid-Triage
-// only loses a small unit of work on replay (spec §5 pause/resume). At ~1.4KB per
-// profileset, 1.5 MiB â‰ˆ 1100 profilesets per batch.
-// BENCHMARK TEST A: small batches (500). Pinning MIN=MAX forces every
-// batch to land exactly at 500 regardless of byte size, isolating the
-// per-profileset-cost question from adaptive sizing.
-pub const TARGET_BATCH_INPUT_BYTES: usize = 1 * 1024 * 1024; // 1 MiB (won't bind)
-pub const MIN_BATCH_PROFILESETS: usize = 500;
-pub const MAX_BATCH_PROFILESETS: usize = 500;
+// Defaults locked from benchmark results. Treat as initial values.
+// On 2026-05-26, with target_error=2.0, 250 profilesets per batch reduced
+// expected pause wait from about 4.3s at 500 to about 2.2s, at a measured
+// throughput cost of about 4.5%. The 1 MiB budget shrinks unusually bulky
+// batches, while the 250-profile cap preserves the normal pause-latency bound.
+// Do not lower the minimum below MIN_KEEP_PER_BATCH without also retuning
+// retention: a 100-profile batch necessarily retains all 100 candidates.
+pub const TARGET_BATCH_INPUT_BYTES: usize = 1 * 1024 * 1024;
+pub const MIN_BATCH_PROFILESETS: usize = 100;
+pub const MAX_BATCH_PROFILESETS: usize = 250;
 /// Triage `target_error` (percent). Drives simc's per-profileset auto-tuner;
 /// each profileset runs only as many iterations as needed to hit this CI
 /// half-width. Looser than the user's final precision so triage stays a cheap
@@ -461,7 +461,13 @@ mod sizing_tests {
     #[test]
     fn target_count_typical() {
         let n = next_batch_target_count(1024);
-        assert!(n >= MIN_BATCH_PROFILESETS && n <= MAX_BATCH_PROFILESETS);
+        assert_eq!(n, MAX_BATCH_PROFILESETS);
+    }
+
+    #[test]
+    fn target_count_shrinks_large_profilesets_before_minimum() {
+        let n = next_batch_target_count(8 * 1024);
+        assert_eq!(n, 128);
     }
 }
 
