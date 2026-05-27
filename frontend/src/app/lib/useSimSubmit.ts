@@ -51,6 +51,7 @@ export function useSimSubmit({
     scenarios,
     clearScenarios,
     parallelProfilesets,
+    triageMaxBatchProfilesets,
   } = useSimContext();
 
   // Derive spec from selected talent string so the backend can override spec= in the SimC input
@@ -130,6 +131,7 @@ export function useSimSubmit({
         ...(simcPostCombos ? { simc_post_combos: simcPostCombos } : {}),
         ...(simcFooter ? { simc_footer: simcFooter } : {}),
         ...(parallelProfilesets ? {} : { parallel_profilesets: false }),
+        triage_max_batch_profilesets: triageMaxBatchProfilesets,
         // Raid buffs: only send overrides for disabled buffs
         ...(Object.values(raidBuffs).some((v) => !v)
           ? {
@@ -237,6 +239,7 @@ export function useSimSubmit({
     scenarios,
     clearScenarios,
     parallelProfilesets,
+    triageMaxBatchProfilesets,
     t,
   ]);
 

@@ -13,7 +13,7 @@ pub struct SimcOutput {
     pub text_output: Option<String>,
 }
 
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 
 // ---- Process Registry (for cancellation) ----
@@ -89,6 +89,45 @@ fn set_process_affinity(pid: u32, threads: u32) {
 }
 
 const SIMC_TIMEOUT_SECS: u64 = 600;
+
+/// Stream both newline-terminated output and carriage-return progress frames.
+///
+/// SimC overwrites live progress using `\r` without a following newline. A
+/// line-based reader therefore withholds in-flight profileset counts until a
+/// long batch ends.
+async fn stream_simc_pipe<R: AsyncRead + Unpin>(
+    mut stream: R,
+    is_stderr: bool,
+    tx: tokio::sync::mpsc::Sender<(bool, String)>,
+) {
+    let mut chunk = [0u8; 4096];
+    let mut pending: Vec<u8> = Vec::new();
+    loop {
+        let n = match stream.read(&mut chunk).await {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        for &byte in &chunk[..n] {
+            if byte == b'\r' || byte == b'\n' {
+                if !pending.is_empty() {
+                    let text = String::from_utf8_lossy(&pending).trim_end().to_string();
+                    pending.clear();
+                    if !text.is_empty() && tx.send((is_stderr, text)).await.is_err() {
+                        return;
+                    }
+                }
+            } else {
+                pending.push(byte);
+            }
+        }
+    }
+    if !pending.is_empty() {
+        let text = String::from_utf8_lossy(&pending).trim_end().to_string();
+        if !text.is_empty() {
+            let _ = tx.send((is_stderr, text)).await;
+        }
+    }
+}
 
 fn max_threads() -> u32 {
     std::thread::available_parallelism()
@@ -422,6 +461,37 @@ pub fn build_full_simc_input(
     single_actor_batch: bool,
     is_dungeon_route: bool,
 ) -> String {
+    build_full_simc_input_with_execution(
+        simc_input,
+        options,
+        fight_style,
+        target_error,
+        iterations,
+        desired_targets,
+        max_time,
+        calculate_scale_factors,
+        single_actor_batch,
+        is_dungeon_route,
+        true,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_full_simc_input_with_execution(
+    simc_input: &str,
+    options: &Value,
+    fight_style: &str,
+    target_error: f64,
+    iterations: u32,
+    desired_targets: u32,
+    max_time: u32,
+    calculate_scale_factors: bool,
+    single_actor_batch: bool,
+    is_dungeon_route: bool,
+    report_details: bool,
+    force_parallel_profilesets: Option<bool>,
+) -> String {
     let consumables = options.get("consumables").and_then(|v| v.as_object());
     let expansion_opts = options.get("expansion_options").and_then(|v| v.as_object());
     let raid_buffs = options.get("raid_buffs").and_then(|v| v.as_object());
@@ -563,7 +633,10 @@ pub fn build_full_simc_input(
     }
 
     // Sim options
-    result.push_str("report_details=1\n");
+    result.push_str(&format!(
+        "report_details={}\n",
+        if report_details { "1" } else { "0" }
+    ));
     if single_actor_batch {
         result.push_str("single_actor_batch=1\n");
     }
@@ -588,10 +661,15 @@ pub fn build_full_simc_input(
         .lines()
         .filter(|l| l.trim_start().starts_with("### Combo "))
         .count();
-    let enable_parallel = match options.get("parallel_profilesets").and_then(|v| v.as_bool()) {
-        Some(b) => b,
-        None => combo_count >= 4 && target_error > 0.2,
-    };
+    let enable_parallel = force_parallel_profilesets.unwrap_or_else(|| {
+        match options
+            .get("parallel_profilesets")
+            .and_then(|v| v.as_bool())
+        {
+            Some(b) => b,
+            None => combo_count >= 4 && target_error > 0.2,
+        }
+    });
     if enable_parallel {
         result.push_str("profileset_work_threads=1\n");
     }
@@ -734,28 +812,7 @@ async fn run_simc_subprocess(
     let tx_err = tx.clone();
     tokio::spawn(async move {
         if let Some(stream) = stderr {
-            let mut reader = BufReader::new(stream);
-            let mut line_buf = String::new();
-            loop {
-                line_buf.clear();
-                match AsyncBufReadExt::read_line(&mut reader, &mut line_buf).await {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        // simc uses \r to overwrite progress lines in-place.
-                        // read_line reads until \n, so a single "line" may contain
-                        // multiple \r-separated updates. Take the last segment.
-                        let resolved = line_buf
-                            .trim_end()
-                            .rsplit('\r')
-                            .next()
-                            .unwrap_or("")
-                            .to_string();
-                        if !resolved.is_empty() {
-                            let _ = tx_err.send((true, resolved)).await;
-                        }
-                    }
-                }
-            }
+            stream_simc_pipe(stream, true, tx_err).await;
         }
     });
 
@@ -763,25 +820,7 @@ async fn run_simc_subprocess(
     let tx_out = tx.clone();
     tokio::spawn(async move {
         if let Some(stream) = stdout {
-            let mut reader = BufReader::new(stream);
-            let mut line_buf = String::new();
-            loop {
-                line_buf.clear();
-                match AsyncBufReadExt::read_line(&mut reader, &mut line_buf).await {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        let resolved = line_buf
-                            .trim_end()
-                            .rsplit('\r')
-                            .next()
-                            .unwrap_or("")
-                            .to_string();
-                        if !resolved.is_empty() {
-                            let _ = tx_out.send((false, resolved)).await;
-                        }
-                    }
-                }
-            }
+            stream_simc_pipe(stream, false, tx_out).await;
         }
     });
 
@@ -797,17 +836,23 @@ async fn run_simc_subprocess(
             .await
         {
             Ok(Some((is_stderr, line))) => {
-                on_log(&line);
+                let mut is_progress = false;
                 if is_stderr {
                     if let Some(caps) = progress_re.captures(&line) {
                         if let (Ok(current), Ok(total)) =
                             (caps[1].parse::<usize>(), caps[2].parse::<usize>())
                         {
                             if total > 1 && current <= total {
+                                is_progress = true;
                                 on_profileset_progress(current, total);
                             }
                         }
                     }
+                }
+                if !is_progress {
+                    on_log(&line);
+                }
+                if is_stderr {
                     stderr_collected.push(line);
                 } else {
                     stdout_collected.push(line);
@@ -1508,47 +1553,53 @@ fn merge_eliminated_into_final(json: &mut Value, eliminated: &HashMap<String, Va
 }
 
 /// Run simc on a single Triage batch's profileset input.
-/// Fixed 50 iterations (or the caller-supplied value), no scale factors,
-/// no HTML report, no consumables / expansion options injection.
+/// Uses the same gameplay-affecting options as staged simulation, while
+/// keeping Triage cheap through loose precision and forced profileset
+/// parallelism. Detailed output remains enabled for completed report data;
+/// live parallel progress is surfaced through the Triage progress callback.
 /// Returns the parsed `sim.profilesets.results` JSON array.
 pub async fn run_simc_triage_batch(
     base_profile: &str,
     profileset_simc_lines: &str,
+    options: &Value,
     iterations: u32,
     fight_style: &str,
     target_error: f64,
     simc_bin: &std::path::Path,
     job_id: &str,
     log_buffer: std::sync::Arc<crate::log_buffer::LogBuffer>,
+    on_profileset_progress: impl Fn(usize, usize),
 ) -> Result<Vec<Value>, String> {
-    // Build a minimal simc input: base profile + profilesets + sim options.
-    // Intentionally bypasses build_full_simc_input to avoid injecting consumables
-    // and expansion options that are irrelevant for the cheap triage pass.
-    let threads = max_threads();
-    let mut triage_input = String::with_capacity(
-        base_profile.len() + profileset_simc_lines.len() + 256,
+    let threads = resolve_threads(options);
+    let desired_targets = options
+        .get("desired_targets")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as u32;
+    let max_time = options
+        .get("max_time")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(300) as u32;
+    let single_actor_batch = options
+        .get("single_actor_batch")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let is_dungeon_route = fight_style == "DungeonRoute";
+    let batch_input = format!("# Base Actor\n{}\n{}", base_profile, profileset_simc_lines);
+    let triage_input = build_full_simc_input_with_execution(
+        &batch_input,
+        options,
+        fight_style,
+        target_error,
+        iterations,
+        desired_targets,
+        max_time,
+        false,
+        single_actor_batch,
+        is_dungeon_route,
+        true,
+        Some(true),
     );
-    triage_input.push_str(base_profile);
-    triage_input.push('\n');
-    triage_input.push_str(profileset_simc_lines);
-    triage_input.push_str("\n\n# Simulation Options\n");
-    triage_input.push_str(&format!("iterations={}\n", iterations));
-    triage_input.push_str(&format!("target_error={}\n", target_error));
-    triage_input.push_str(&format!("fight_style={}\n", fight_style));
-    triage_input.push_str("calculate_scale_factors=0\n");
-    triage_input.push_str("single_actor_batch=1\n");
-    triage_input.push_str("optimize_expressions=1\n");
-    triage_input.push_str("report_details=0\n");
-    // Use parallel profilesets for triage — many profilesets, low iterations.
-    triage_input.push_str("profileset_work_threads=1\n");
 
-    // Reuse existing overrides for buffs/baseline consistency.
-    for opt in OVERRIDES {
-        triage_input.push_str(&format!("{}\n", opt));
-    }
-
-    // Use `raw=true` so run_simc_subprocess skips build_full_simc_input.
-    let options = serde_json::json!({});
     let logs = log_buffer.clone();
     let log_jid = job_id.to_string();
     let output = run_simc_subprocess(
@@ -1556,18 +1607,18 @@ pub async fn run_simc_triage_batch(
         true, // raw — input is already fully composed above
         job_id,
         &triage_input,
-        &options,
+        options,
         fight_style,
         target_error,
         iterations,
         threads,
-        1,     // desired_targets
-        300,   // max_time (seconds)
+        desired_targets,
+        max_time,
         false, // calculate_scale_factors
-        true,  // single_actor_batch
+        single_actor_batch,
         "triage",
-        false, // generate_html
-        |_, _| {}, // no per-profileset progress callbacks needed
+        false,     // generate_html
+        on_profileset_progress,
         move |line| logs.push_line(&log_jid, line.to_string()),
         None, // triage batches don't carry a cancel token — caller serializes batches
     )
@@ -1590,6 +1641,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::collections::HashSet;
+    use tokio::io::AsyncWriteExt;
 
     fn ps(name: &str, mean: f64) -> Value {
         json!({ "name": name, "mean": mean })
@@ -1597,6 +1649,62 @@ mod tests {
 
     fn keep_set(names: &[&str]) -> HashSet<String> {
         names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[tokio::test]
+    async fn pipe_streams_carriage_return_progress_without_waiting_for_newline() {
+        let (mut writer, reader) = tokio::io::duplex(64);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        tokio::spawn(stream_simc_pipe(reader, true, tx));
+
+        writer.write_all(b"Simulating 12/100\r").await.unwrap();
+
+        let received = tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv())
+            .await
+            .expect("carriage-return output should be streamed immediately")
+            .expect("stream should still be open");
+        assert_eq!(received, (true, "Simulating 12/100".to_string()));
+    }
+
+    #[test]
+    fn triage_input_keeps_scenario_options_and_visible_progress_settings() {
+        let options = json!({
+            "consumables": {
+                "food": "feast",
+                "weapon_rune": "rune"
+            },
+            "raid_buffs": {
+                "bloodlust": 0
+            },
+            "expansion_options": {
+                "midnight.crucible_of_erratic_energies_violence": 0
+            }
+        });
+        let input = "mage=\"Tester\"\nprofileset.\"Combo 1\"+=head=id=1";
+        let triage_input = build_full_simc_input_with_execution(
+            input,
+            &options,
+            "Patchwerk",
+            2.0,
+            10_000,
+            3,
+            180,
+            false,
+            true,
+            false,
+            true,
+            Some(true),
+        );
+
+        assert!(triage_input.contains("food=feast"));
+        assert!(triage_input.contains("temporary_enchant=main_hand:rune"));
+        assert!(triage_input.contains("override.bloodlust=0"));
+        assert!(triage_input.contains("midnight.crucible_of_erratic_energies_violence=0"));
+        assert!(triage_input.contains("desired_targets=3"));
+        assert!(triage_input.contains("max_time=180"));
+        assert!(triage_input.contains("target_error=2"));
+        assert!(triage_input.contains("report_details=1"));
+        assert!(triage_input.contains("profileset_work_threads=1"));
     }
 
     #[test]

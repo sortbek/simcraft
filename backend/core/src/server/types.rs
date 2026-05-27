@@ -71,6 +71,10 @@ pub struct SimOptions {
     /// When None, falls back to the combo-count threshold in build_full_simc_input.
     #[serde(default)]
     pub parallel_profilesets: Option<bool>,
+    /// Optional streamed Top Gear Triage batch cap. Larger batches trade pause
+    /// responsiveness for fewer SimC invocations and less per-batch retention overhead.
+    #[serde(default)]
+    pub triage_max_batch_profilesets: Option<usize>,
 }
 
 impl SimOptions {
@@ -107,6 +111,9 @@ impl SimOptions {
         }
         if let Some(b) = self.parallel_profilesets {
             v["parallel_profilesets"] = json!(b);
+        }
+        if let Some(n) = self.triage_max_batch_profilesets {
+            v["triage_max_batch_profilesets"] = json!(n);
         }
         v
     }

@@ -251,6 +251,7 @@ async fn resume_triage(
             simc_bin: &simc_bin_path,
             fight_style: &fight_style,
             target_error,
+            options: &options_for_task,
             base_profile: &base_profile_owned,
             log_buffer: log_buffer_for_task.clone(),
             on_progress: Box::new(on_progress),

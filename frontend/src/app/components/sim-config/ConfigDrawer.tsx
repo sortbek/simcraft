@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { API_URL } from '../../lib/api';
@@ -29,6 +30,7 @@ export default function ConfigDrawer({
   onAvailableBranchesChange,
 }: ConfigDrawerProps) {
   const { t } = useLanguage();
+  const isTopGear = usePathname() === '/top-gear';
   const {
     fightStyle,
     setFightStyle,
@@ -56,6 +58,8 @@ export default function ConfigDrawer({
     setSimcBranch,
     parallelProfilesets,
     setParallelProfilesets,
+    triageMaxBatchProfilesets,
+    setTriageMaxBatchProfilesets,
   } = useSimContext();
 
   useEffect(() => {
@@ -352,6 +356,28 @@ export default function ConfigDrawer({
                   </div>
                 </label>
               </div>
+              {isTopGear && (
+                <div className="space-y-2 border-t border-outline-variant/10 pt-3">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    Triage maximum batch size
+                  </label>
+                  <select
+                    value={triageMaxBatchProfilesets}
+                    onChange={(event) => setTriageMaxBatchProfilesets(Number(event.target.value))}
+                    className="w-full rounded border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:outline-none"
+                  >
+                    <option value={250}>250 - Responsive pausing (default)</option>
+                    <option value={500}>500 - Balanced</option>
+                    <option value={1000}>1,000 - Throughput</option>
+                    <option value={5000}>5,000 - High throughput</option>
+                    <option value={30000}>30,000 - Maximum throughput</option>
+                  </select>
+                  <p className="text-[11px] text-on-surface-variant/40">
+                    Streamed Top Gear only. Larger batches reduce repeated baseline and
+                    retention overhead, but Pause waits until the current batch completes.
+                  </p>
+                </div>
+              )}
             </ExpertToggle>
           </div>
         )}

@@ -162,6 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let outcome = run_one_grid_point(
                     &scenario_text,
                     &base_profile,
+                    options,
                     &fight_style,
                     target_error,
                     &args.simc_bin,
@@ -213,6 +214,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_one_grid_point(
     scenario_json: &str,
     base_profile: &str,
+    options: &serde_json::Value,
     fight_style: &str,
     target_error: f64,
     simc_bin: &std::path::Path,
@@ -254,6 +256,7 @@ async fn run_one_grid_point(
         simc_bin,
         fight_style,
         target_error,
+        options,
         base_profile,
         log_buffer: log_buffer.clone(),
         on_progress,

@@ -68,6 +68,8 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     }
 
     let options_json = req.options.to_json();
+    let triage_constants = crate::profileset_generator::triage::TriageConstants::default()
+        .with_requested_max_batch_profilesets(req.options.triage_max_batch_profilesets);
     let display_input = simc_runner::build_simc_input_from_options(&base_profile, &options_json);
 
     let mut job = Job::new(
@@ -156,12 +158,21 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
             simc_bin: &simc_bin_for_task,
             fight_style: &fight_style,
             target_error,
+            options: &options_for_task,
             base_profile: &base_profile_owned,
             log_buffer: log_buffer_owned.clone(),
             on_progress: Box::new(on_progress),
         };
 
-        match crate::profileset_generator::triage::run_triage(iter_cfg, inputs, estimate).await {
+        match crate::profileset_generator::triage::run_triage_with_constants(
+            iter_cfg,
+            inputs,
+            estimate,
+            triage_constants,
+            None,
+        )
+        .await
+        {
             Ok(crate::profileset_generator::triage::TriageRunOutcome::Completed(result)) => {
                 let _ = repo_for_task
                     .update_progress(
@@ -181,7 +192,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
                     &options_for_task,
                     &result.survivor_combo_ids,
                     &log_buffer_owned,
-                    crate::profileset_generator::triage::TriageConstants::default(),
+                    triage_constants,
                 )
                 .await;
             }
