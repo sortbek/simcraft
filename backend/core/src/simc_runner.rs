@@ -110,7 +110,7 @@ async fn stream_simc_pipe<R: AsyncRead + Unpin>(
         for &byte in &chunk[..n] {
             if byte == b'\r' || byte == b'\n' {
                 if !pending.is_empty() {
-                    let text = String::from_utf8_lossy(&pending).trim_end().to_string();
+                    let text = String::from_utf8_lossy(&pending).trim_end().to_owned();
                     pending.clear();
                     if !text.is_empty() && tx.send((is_stderr, text)).await.is_err() {
                         return;
@@ -827,7 +827,6 @@ async fn run_simc_subprocess(
     // Drop our copy so rx completes when both reader tasks finish.
     drop(tx);
 
-    let progress_re = Regex::new(r"(\d+)/(\d+)").unwrap();
     let mut stderr_collected: Vec<String> = Vec::new();
     let mut stdout_collected: Vec<String> = Vec::new();
 
@@ -838,7 +837,7 @@ async fn run_simc_subprocess(
             Ok(Some((is_stderr, line))) => {
                 let mut is_progress = false;
                 if is_stderr {
-                    if let Some(caps) = progress_re.captures(&line) {
+                    if let Some(caps) = PROGRESS_RE.captures(&line) {
                         if let (Ok(current), Ok(total)) =
                             (caps[1].parse::<usize>(), caps[2].parse::<usize>())
                         {
@@ -938,6 +937,9 @@ fn get_profileset_results(raw: &Value) -> &[Value] {
 static PROFILESET_NAME_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"^\s*profileset\."(Combo \d+)""#).unwrap());
 static COMBO_HEADER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^###\s+(Combo \d+)").unwrap());
+/// SimC progress frame parser. Hoisted to a `Lazy` so each `run_simc_subprocess`
+/// call (one per Triage batch / staged stage) reuses the compiled pattern.
+static PROGRESS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)/(\d+)").unwrap());
 
 pub fn filter_simc_input(
     simc_input: &str,

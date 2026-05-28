@@ -98,10 +98,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|v| v.as_str())
         .unwrap_or("Patchwerk")
         .to_string();
-    let target_error = options
-        .get("target_error")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.05);
     let estimated_total_combos = payload
         .get("estimate")
         .and_then(|v| v.as_u64())
@@ -164,7 +160,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &base_profile,
                     options,
                     &fight_style,
-                    target_error,
                     &args.simc_bin,
                     grid_idx,
                     bsize,
@@ -216,7 +211,6 @@ async fn run_one_grid_point(
     base_profile: &str,
     options: &serde_json::Value,
     fight_style: &str,
-    target_error: f64,
     simc_bin: &std::path::Path,
     grid_idx: usize,
     batch_profilesets: usize,
@@ -255,7 +249,6 @@ async fn run_one_grid_point(
         job_id: &job_id,
         simc_bin,
         fight_style,
-        target_error,
         options,
         base_profile,
         log_buffer: log_buffer.clone(),

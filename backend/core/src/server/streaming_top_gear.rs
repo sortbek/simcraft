@@ -117,7 +117,6 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     let simc_bin_for_task = simc.clone();
     let job_id_task = job_id.clone();
     let fight_style = job.fight_style.clone();
-    let target_error = job.target_error;
     let options_for_task = options_json.clone();
     let base_profile_owned = base_profile.clone();
     let log_buffer_owned = log_buffer.get_ref().clone();
@@ -157,7 +156,6 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
             job_id: &job_id_task,
             simc_bin: &simc_bin_for_task,
             fight_style: &fight_style,
-            target_error,
             options: &options_for_task,
             base_profile: &base_profile_owned,
             log_buffer: log_buffer_owned.clone(),

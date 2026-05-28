@@ -227,7 +227,6 @@ async fn resume_triage(
     let log_buffer_for_task = inputs.log_buffer.clone();
     let job_id_owned = job_id.to_string();
     let fight_style = job.fight_style.clone();
-    let target_error = job.target_error;
     let constants_for_task = checkpoint.constants;
 
     tokio::spawn(async move {
@@ -250,7 +249,6 @@ async fn resume_triage(
             job_id: &job_id_owned,
             simc_bin: &simc_bin_path,
             fight_style: &fight_style,
-            target_error,
             options: &options_for_task,
             base_profile: &base_profile_owned,
             log_buffer: log_buffer_for_task.clone(),

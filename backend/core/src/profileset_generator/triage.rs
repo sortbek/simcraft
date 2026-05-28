@@ -13,13 +13,10 @@ use crate::db::{
 use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIteratorConfig};
 use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, TriageCheckpoint, StagedCheckpoint};
 
-// Defaults locked from benchmark results. Treat as initial values.
-// On 2026-05-26, with target_error=2.0, 250 profilesets per batch reduced
-// expected pause wait from about 4.3s at 500 to about 2.2s, at a measured
-// throughput cost of about 4.5%. The 1 MiB budget shrinks unusually bulky
-// batches, while the 250-profile cap preserves the normal pause-latency bound.
-// Do not lower the minimum below MIN_KEEP_PER_BATCH without also retuning
-// retention: a 100-profile batch necessarily retains all 100 candidates.
+// Default batch sizing. Smaller batches tighten the worst-case pause latency
+// (one batch's work is the longest a pause can be delayed) at a modest
+// throughput cost. Do NOT lower MIN below MIN_KEEP_PER_BATCH — retention
+// assumes the batch is large enough to drop ineligible profilesets.
 pub const TARGET_BATCH_INPUT_BYTES: usize = 1 * 1024 * 1024;
 pub const MIN_BATCH_PROFILESETS: usize = 100;
 pub const MAX_BATCH_PROFILESETS: usize = 250;
@@ -39,7 +36,7 @@ pub const GLOBAL_SURVIVOR_TARGET: usize = 150_000;
 pub const GLOBAL_SURVIVOR_HARD_MAX: usize = 500_000;
 pub const TRIAGE_THRESHOLD: u64 = 500;
 pub const PROBE_SIZE: usize = 100;
-pub const MAX_USER_BATCH_PROFILESETS: usize = 30_000;
+const MAX_USER_BATCH_PROFILESETS: usize = 30_000;
 const BATCH_BUDGET_BYTES_PER_PROFILESET: usize = 4 * 1024;
 
 /// State carried across batches in a single Triage run.
@@ -750,7 +747,6 @@ pub struct TriageRunInputs<'a> {
     pub job_id: &'a str,
     pub simc_bin: &'a std::path::Path,
     pub fight_style: &'a str,
-    pub target_error: f64,
     pub options: &'a Value,
     pub base_profile: &'a str,
     pub log_buffer: std::sync::Arc<crate::log_buffer::LogBuffer>,
@@ -882,8 +878,13 @@ pub async fn run_triage_with_constants(
 
         let batch_number = pre.batch_idx + 1;
         let estimated_batches = state.estimated_total_batches.max(1);
+        // 5%-bucket gate: `on_progress` ultimately spawns a DB `UPDATE jobs`,
+        // so firing it on every simc profileset tick would be ~thousands of
+        // writes per batch. Throttle both the DB update and the log line to
+        // ~20 events per batch. AtomicUsize (not Cell) because the closure
+        // is captured into a Send future via `tokio::spawn` upstream — the
+        // sync overhead is negligible per tick.
         let last_logged_progress_bucket = std::sync::atomic::AtomicUsize::new(0);
-        let progress_logs = inputs.log_buffer.clone();
         let batch_start = std::time::Instant::now();
         let parsed = crate::simc_runner::run_simc_triage_batch(
             inputs.base_profile,
@@ -899,6 +900,13 @@ pub async fn run_triage_with_constants(
             inputs.job_id,
             inputs.log_buffer.clone(),
             |current, total| {
+                let bucket = (current.saturating_mul(20) / total.max(1)).min(20);
+                let prev = last_logged_progress_bucket
+                    .fetch_max(bucket, std::sync::atomic::Ordering::Relaxed);
+                if bucket <= prev {
+                    return;
+                }
+
                 let batch_fraction = current as f64 / total.max(1) as f64;
                 let pct = (((pre.batch_idx as f64 + batch_fraction)
                     / estimated_batches as f64)
@@ -911,23 +919,16 @@ pub async fn run_triage_with_constants(
                         batch_number, current, total
                     ),
                 );
-
-                let bucket = (current.saturating_mul(20) / total.max(1)).min(20);
-                if bucket
-                    > last_logged_progress_bucket
-                        .fetch_max(bucket, std::sync::atomic::Ordering::Relaxed)
-                {
-                    progress_logs.push_line(
-                        inputs.job_id,
-                        format!(
-                            "Triage batch {} progress: {}/{} profilesets ({}%)",
-                            batch_number,
-                            current,
-                            total,
-                            bucket * 5
-                        ),
-                    );
-                }
+                inputs.log_buffer.push_line(
+                    inputs.job_id,
+                    format!(
+                        "Triage batch {} progress: {}/{} profilesets ({}%)",
+                        batch_number,
+                        current,
+                        total,
+                        bucket * 5
+                    ),
+                );
             },
         ).await?;
         let batch_secs = batch_start.elapsed().as_secs_f64();
