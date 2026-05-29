@@ -63,10 +63,7 @@ pub(super) async fn list_jobs(
     }
 }
 
-pub(super) async fn delete_job(
-    path: web::Path<String>,
-    repo: web::Data<JobRepo>,
-) -> HttpResponse {
+pub(super) async fn delete_job(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {
     let job_id = path.into_inner();
     let job = match repo.get(&job_id).await {
         Ok(Some(j)) => j,
@@ -169,9 +166,7 @@ pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>
             HttpResponse::Ok().json(json!({"status": "cancelled"}))
         }
         Ok(false) => match repo.get(&job_id).await {
-            Ok(Some(_)) => {
-                HttpResponse::BadRequest().json(json!({"detail": "Job is not running"}))
-            }
+            Ok(Some(_)) => HttpResponse::BadRequest().json(json!({"detail": "Job is not running"})),
             Ok(None) => HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
             Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
         },
@@ -179,15 +174,14 @@ pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>
     }
 }
 
-pub(super) async fn pause_sim(
-    path: web::Path<String>,
-    repo: web::Data<JobRepo>,
-) -> HttpResponse {
+pub(super) async fn pause_sim(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {
     let job_id = path.into_inner();
     let job = match repo.get(&job_id).await {
         Ok(Some(j)) => j,
         Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
     };
 
     if job.status != JobStatus::Running {
@@ -221,9 +215,11 @@ pub(super) async fn resume_sim(
     let job_id = path.into_inner();
     let pool = match repo.pool() {
         Some(p) => p.clone(),
-        None => return HttpResponse::InternalServerError().json(json!({
-            "detail": "Resume requires a SQLite-backed JobRepo"
-        })),
+        None => {
+            return HttpResponse::InternalServerError().json(json!({
+                "detail": "Resume requires a SQLite-backed JobRepo"
+            }))
+        }
     };
 
     let inputs = crate::profileset_generator::ResumeInputs {

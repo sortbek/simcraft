@@ -202,6 +202,10 @@ mod tests {
         };
         let json = cp.to_json_string().unwrap();
         // The JSON should contain "phase":"triage" because of #[serde(tag = "phase", rename_all = "lowercase")].
-        assert!(json.contains("\"phase\":\"triage\""), "expected phase tag in JSON: {}", json);
+        assert!(
+            json.contains("\"phase\":\"triage\""),
+            "expected phase tag in JSON: {}",
+            json
+        );
     }
 }

@@ -13,9 +13,8 @@ pub use crate::item_db::{
     get_enchant_info, get_gem_info, get_inventory_type, get_item_armor_subclass, get_item_info,
     get_item_limit_categories, get_upgrade_cost_between, get_upgrade_options, get_upgrade_tracks,
     is_catalyst_tier_item, list_augments, list_enchants_for_slot, list_flasks, list_foods,
-    list_gems, list_potions, list_temp_enchants, load,
-    talent_tree, upgrade_bonus_ids_to_max, upgrade_items_by_slot, upgrade_simc_input,
-    CatalystTierItem,
+    list_gems, list_potions, list_temp_enchants, load, talent_tree, upgrade_bonus_ids_to_max,
+    upgrade_items_by_slot, upgrade_simc_input, CatalystTierItem,
 };
 pub use crate::types::class_data::{quality_name, QUALITY_NAMES};
 

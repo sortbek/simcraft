@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Grid axes per spec §3.
     let batch_sizes = args.batch_profilesets;
-    if batch_sizes.is_empty() || batch_sizes.iter().any(|n| *n == 0) {
+    if batch_sizes.is_empty() || batch_sizes.contains(&0) {
         return Err("--batch-profilesets values must be positive".into());
     }
     let iterations: Vec<u32> = vec![25, 50, 100];
@@ -206,6 +206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Run a single grid point against a fresh in-memory SQLite DB. Each grid point
 /// gets its own pool + job_id so survivors don't leak across points.
+#[allow(clippy::too_many_arguments)]
 async fn run_one_grid_point(
     scenario_json: &str,
     base_profile: &str,

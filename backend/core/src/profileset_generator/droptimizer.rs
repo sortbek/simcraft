@@ -431,7 +431,10 @@ main_hand=,id=200\n";
         let profile = "mage=test\nspec=frost\nfinger1=,id=500\nfinger2=,id=101\n";
         let drops = vec![drop(500, 11, vec![])];
         let (input, count, _) = generate_droptimizer_input(profile, &drops);
-        assert_eq!(count, 1, "expected only 1 combo (finger1 replacement):\n{input}");
+        assert_eq!(
+            count, 1,
+            "expected only 1 combo (finger1 replacement):\n{input}"
+        );
         assert!(
             input.contains("profileset.\"Combo 2\"+=finger1=,id=500"),
             "expected finger1 replacement combo:\n{input}"
@@ -530,9 +533,9 @@ finger2=,id=101\n";
     fn multiple_drops_get_sequential_combo_numbers() {
         let profile = "mage=test\nspec=frost\nhead=,id=100\nchest=,id=101\n";
         let drops = vec![
-            drop(901, 1, vec![]),   // head
-            drop(902, 5, vec![]),   // chest
-            drop(903, 16, vec![]),  // back (no equipped slot for this profile, but inv_type maps it)
+            drop(901, 1, vec![]),  // head
+            drop(902, 5, vec![]),  // chest
+            drop(903, 16, vec![]), // back (no equipped slot for this profile, but inv_type maps it)
         ];
         let (input, count, _) = generate_droptimizer_input(profile, &drops);
         // 3 drops, each emitting once. Even back works (it doesn't need equipped slot).

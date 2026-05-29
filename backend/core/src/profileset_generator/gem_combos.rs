@@ -44,11 +44,7 @@ fn multisets<T: Clone>(items: &[T], k: usize) -> Vec<Vec<T>> {
 /// In max_colors mode each *slot* picks a single color shared across all of
 /// its sockets, and distinct slots pick distinct colors. Within a slot, the
 /// K sockets become a K-multiset of that slot's color.
-fn gen_color_combos(
-    slots: &[(String, usize)],
-    gems: &[u64],
-    max_colors: bool,
-) -> Vec<GemCombo> {
+fn gen_color_combos(slots: &[(String, usize)], gems: &[u64], max_colors: bool) -> Vec<GemCombo> {
     if slots.is_empty() {
         return vec![HashMap::new()];
     }
@@ -132,7 +128,10 @@ fn dedupe_gem_assignments(combos: Vec<GemCombo>, max_diamonds: usize) -> Vec<Gem
         // (or A,B vs B,A in a 2-socket item) yields identical DPS. Dedup on
         // the flat sorted gem list across all slots so we don't waste sim
         // budget on permutation duplicates.
-        let mut key: Vec<u64> = combo.values().flat_map(|gids| gids.iter().copied()).collect();
+        let mut key: Vec<u64> = combo
+            .values()
+            .flat_map(|gids| gids.iter().copied())
+            .collect();
         key.sort();
         if seen.insert(key) {
             result.push(combo);

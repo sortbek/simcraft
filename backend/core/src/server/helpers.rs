@@ -35,7 +35,10 @@ pub(super) async fn finalize_job_outcome(
             inject_realm(&mut parsed, simc_input);
             let result_str = serde_json::to_string(&parsed).unwrap_or_default();
             let raw_str = serde_json::to_string(&output.json).ok();
-            if let Err(e) = repo.set_result(job_id, &result_str, raw_str.as_deref()).await {
+            if let Err(e) = repo
+                .set_result(job_id, &result_str, raw_str.as_deref())
+                .await
+            {
                 eprintln!("[{}] Failed to set result: {}", job_id, e);
             }
             if let Err(e) = repo
@@ -361,6 +364,7 @@ fn enqueue_job_update(
 /// checkpoint writes so resume can reconstruct the exact same calibration.
 /// Eager (Inline) callers pass `TriageConstants::default()`; Streamed callers
 /// pass the constants from the Triage checkpoint.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_staged_sim(
     repo: JobRepo,
     simc: PathBuf,
@@ -523,6 +527,7 @@ pub(crate) fn spawn_staged_sim(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handoff_streamed_top_gear_to_staged(
     pool: &sqlx::AnyPool,
     repo: &JobRepo,
@@ -546,7 +551,10 @@ pub(crate) async fn handoff_streamed_top_gear_to_staged(
     }
 
     let metadata_repo = ComboMetadataRepo::new(pool.clone());
-    let rows = match metadata_repo.list_for_combo_ids(job_id, survivor_combo_ids).await {
+    let rows = match metadata_repo
+        .list_for_combo_ids(job_id, survivor_combo_ids)
+        .await
+    {
         Ok(rows) => rows,
         Err(e) => {
             let _ = repo
@@ -569,7 +577,11 @@ pub(crate) async fn handoff_streamed_top_gear_to_staged(
         return;
     }
 
-    let combined_input = format!("# Base Actor\n{}\n{}", base_profile, survivor_simc_lines.join("\n"));
+    let combined_input = format!(
+        "# Base Actor\n{}\n{}",
+        base_profile,
+        survivor_simc_lines.join("\n")
+    );
     spawn_staged_sim(
         repo.clone(),
         simc_bin.to_path_buf(),
@@ -629,7 +641,10 @@ pub(super) async fn write_combo_metadata_table_raw(
     let mut tx = match pool.begin().await {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("[{}] combo_metadata table write: failed to begin tx: {}", job_id, e);
+            eprintln!(
+                "[{}] combo_metadata table write: failed to begin tx: {}",
+                job_id, e
+            );
             return;
         }
     };
@@ -647,11 +662,17 @@ pub(super) async fn write_combo_metadata_table_raw(
         })
         .collect();
     if let Err(e) = metadata_repo.insert_batch(&mut tx, job_id, &inserts).await {
-        eprintln!("[{}] combo_metadata table write failed (non-fatal): {}", job_id, e);
+        eprintln!(
+            "[{}] combo_metadata table write failed (non-fatal): {}",
+            job_id, e
+        );
         return;
     }
     if let Err(e) = tx.commit().await {
-        eprintln!("[{}] combo_metadata table write: commit failed (non-fatal): {}", job_id, e);
+        eprintln!(
+            "[{}] combo_metadata table write: commit failed (non-fatal): {}",
+            job_id, e
+        );
     }
 }
 

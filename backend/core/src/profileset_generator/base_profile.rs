@@ -45,6 +45,28 @@ pub(super) fn parse_base_profile(
     (non_gear_lines, equipped_gear, talents_string, spec_string)
 }
 
+pub(super) fn item_meta(item: &Value, slot: &str) -> Value {
+    let mut meta = json!({
+        "slot": slot,
+        "item_id": item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0),
+        "ilevel": item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0),
+        "name": item.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+        "bonus_ids": item.get("bonus_ids").cloned().unwrap_or(json!([])),
+        "enchant_id": item.get("enchant_id").and_then(|v| v.as_u64()).unwrap_or(0),
+        "gem_id": item.get("gem_id").and_then(|v| v.as_u64()).unwrap_or(0),
+        "is_kept": item.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false),
+        "origin": item.get("origin").and_then(|v| v.as_str()).unwrap_or("bags"),
+    });
+    if item
+        .get("is_catalyst")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        meta["is_catalyst"] = json!(true);
+    }
+    meta
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,26 +206,4 @@ head=,id=100\n\
         assert_eq!(meta["is_kept"], false);
         assert_eq!(meta["origin"], "bags");
     }
-}
-
-pub(super) fn item_meta(item: &Value, slot: &str) -> Value {
-    let mut meta = json!({
-        "slot": slot,
-        "item_id": item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0),
-        "ilevel": item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0),
-        "name": item.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-        "bonus_ids": item.get("bonus_ids").cloned().unwrap_or(json!([])),
-        "enchant_id": item.get("enchant_id").and_then(|v| v.as_u64()).unwrap_or(0),
-        "gem_id": item.get("gem_id").and_then(|v| v.as_u64()).unwrap_or(0),
-        "is_kept": item.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false),
-        "origin": item.get("origin").and_then(|v| v.as_str()).unwrap_or("bags"),
-    });
-    if item
-        .get("is_catalyst")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        meta["is_catalyst"] = json!(true);
-    }
-    meta
 }

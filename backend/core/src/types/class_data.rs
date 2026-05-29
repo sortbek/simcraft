@@ -941,7 +941,9 @@ mod tests {
     #[test]
     fn shaman_enhancement_is_agility_others_intellect() {
         assert_eq!(
-            spec_weapon_profile("shaman", "enhancement").unwrap().primary_stat,
+            spec_weapon_profile("shaman", "enhancement")
+                .unwrap()
+                .primary_stat,
             PrimaryStat::Agility
         );
         for spec in &["elemental", "restoration"] {
@@ -956,7 +958,9 @@ mod tests {
     #[test]
     fn monk_mistweaver_is_intellect() {
         assert_eq!(
-            spec_weapon_profile("monk", "mistweaver").unwrap().primary_stat,
+            spec_weapon_profile("monk", "mistweaver")
+                .unwrap()
+                .primary_stat,
             PrimaryStat::Intellect
         );
         for spec in &["brewmaster", "windwalker"] {
@@ -971,11 +975,15 @@ mod tests {
     #[test]
     fn druid_caster_specs_are_intellect_melee_agility() {
         assert_eq!(
-            spec_weapon_profile("druid", "balance").unwrap().primary_stat,
+            spec_weapon_profile("druid", "balance")
+                .unwrap()
+                .primary_stat,
             PrimaryStat::Intellect
         );
         assert_eq!(
-            spec_weapon_profile("druid", "restoration").unwrap().primary_stat,
+            spec_weapon_profile("druid", "restoration")
+                .unwrap()
+                .primary_stat,
             PrimaryStat::Intellect
         );
         assert_eq!(
@@ -983,7 +991,9 @@ mod tests {
             PrimaryStat::Agility
         );
         assert_eq!(
-            spec_weapon_profile("druid", "guardian").unwrap().primary_stat,
+            spec_weapon_profile("druid", "guardian")
+                .unwrap()
+                .primary_stat,
             PrimaryStat::Agility
         );
     }
@@ -1008,8 +1018,14 @@ mod tests {
         // Paladins can equip 1H and 2H Axes class-wide. The Holy spec list was
         // missing both even though it included the other 2H weapon types.
         let p = spec_weapon_profile("paladin", "holy").unwrap();
-        assert!(p.weapon_subclasses.contains(&0), "Holy paladin should allow 1H Axe (0)");
-        assert!(p.weapon_subclasses.contains(&1), "Holy paladin should allow 2H Axe (1)");
+        assert!(
+            p.weapon_subclasses.contains(&0),
+            "Holy paladin should allow 1H Axe (0)"
+        );
+        assert!(
+            p.weapon_subclasses.contains(&1),
+            "Holy paladin should allow 2H Axe (1)"
+        );
     }
 
     #[test]
@@ -1027,15 +1043,24 @@ mod tests {
         // Monks can equip 1H Axes class-wide; Mistweaver was missing it
         // (Brewmaster and Windwalker had it).
         let p = spec_weapon_profile("monk", "mistweaver").unwrap();
-        assert!(p.weapon_subclasses.contains(&0), "Mistweaver should allow 1H Axe (0)");
+        assert!(
+            p.weapon_subclasses.contains(&0),
+            "Mistweaver should allow 1H Axe (0)"
+        );
     }
 
     #[test]
     fn windwalker_includes_polearm_and_staff() {
         // Brewmaster has both; Windwalker shares monk class proficiencies.
         let p = spec_weapon_profile("monk", "windwalker").unwrap();
-        assert!(p.weapon_subclasses.contains(&6), "WW should allow Polearm (6)");
-        assert!(p.weapon_subclasses.contains(&10), "WW should allow Staff (10)");
+        assert!(
+            p.weapon_subclasses.contains(&6),
+            "WW should allow Polearm (6)"
+        );
+        assert!(
+            p.weapon_subclasses.contains(&10),
+            "WW should allow Staff (10)"
+        );
     }
 
     #[test]
@@ -1043,7 +1068,10 @@ mod tests {
         // Druids' three other specs (Balance/Feral/Guardian) include Polearm.
         // Resto was missing it.
         let p = spec_weapon_profile("druid", "restoration").unwrap();
-        assert!(p.weapon_subclasses.contains(&6), "Resto druid should allow Polearm (6)");
+        assert!(
+            p.weapon_subclasses.contains(&6),
+            "Resto druid should allow Polearm (6)"
+        );
     }
 
     #[test]
@@ -1051,8 +1079,17 @@ mod tests {
         // Enhancement is locked to 1H dual-wield in retail — no 2H spec talent
         // currently exists. Staff and 2H weapons are correctly excluded.
         let p = spec_weapon_profile("shaman", "enhancement").unwrap();
-        assert!(!p.weapon_subclasses.contains(&1), "Enh should NOT allow 2H Axe (1)");
-        assert!(!p.weapon_subclasses.contains(&5), "Enh should NOT allow 2H Mace (5)");
-        assert!(!p.weapon_subclasses.contains(&10), "Enh should NOT allow Staff (10)");
+        assert!(
+            !p.weapon_subclasses.contains(&1),
+            "Enh should NOT allow 2H Axe (1)"
+        );
+        assert!(
+            !p.weapon_subclasses.contains(&5),
+            "Enh should NOT allow 2H Mace (5)"
+        );
+        assert!(
+            !p.weapon_subclasses.contains(&10),
+            "Enh should NOT allow Staff (10)"
+        );
     }
 }

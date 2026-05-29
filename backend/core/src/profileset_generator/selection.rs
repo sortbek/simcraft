@@ -158,7 +158,11 @@ mod tests {
     fn uid_str(item_id: u64, bonus_ids: &[u64], origin: &str, slot: &str) -> String {
         let mut b = bonus_ids.to_vec();
         b.sort();
-        let key = b.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(":");
+        let key = b
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(":");
         format!("{}:{}:{}:{}", item_id, key, origin, slot)
     }
 
@@ -198,10 +202,7 @@ mod tests {
         items_by_slot.insert("head".to_string(), vec![equipped, alt]);
 
         let mut selected = HashMap::new();
-        selected.insert(
-            "head".to_string(),
-            vec![uid_str(200, &[], "bags", "head")],
-        );
+        selected.insert("head".to_string(), vec![uid_str(200, &[], "bags", "head")]);
 
         let result = build_slot_candidates(profile, &items_by_slot, &selected);
         let head = result.get("head").expect("head missing");

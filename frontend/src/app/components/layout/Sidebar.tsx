@@ -17,7 +17,15 @@ const IPlay = () => (
   </svg>
 );
 const IGear = () => (
-  <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    className="h-3.5 w-3.5"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <circle cx="8" cy="8" r="2" />
     <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
   </svg>
@@ -33,7 +41,15 @@ const IGitHub = () => (
   </svg>
 );
 const IGlobe = () => (
-  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    className="h-3.5 w-3.5"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <circle cx="12" cy="12" r="10" />
     <line x1="2" y1="12" x2="22" y2="12" />
     <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
@@ -124,11 +140,7 @@ export default function Sidebar() {
         <GroupLabel>{t('nav.simTools')}</GroupLabel>
         <NavItem href={ROUTES.topGear} label={t('nav.topGear')} pathname={pathname} />
         <NavItem href={ROUTES.dropFinder} label={t('nav.dropFinder')} pathname={pathname} />
-        <NavItem
-          href={ROUTES.upgradeCompare}
-          label={t('nav.crestUpgrades')}
-          pathname={pathname}
-        />
+        <NavItem href={ROUTES.upgradeCompare} label={t('nav.crestUpgrades')} pathname={pathname} />
         <NavItem href={ROUTES.advanced} label={t('nav.advancedSim')} pathname={pathname} />
 
         <GroupLabel>{t('nav.library')}</GroupLabel>
@@ -162,11 +174,7 @@ export default function Sidebar() {
             label={t('nav.github')}
             icon={<IGitHub />}
           />
-          <FooterIcon
-            href="https://simhammer.com"
-            label={t('nav.website')}
-            icon={<IGlobe />}
-          />
+          <FooterIcon href="https://simhammer.com" label={t('nav.website')} icon={<IGlobe />} />
         </div>
 
         {/* Zoom + language kept here until they migrate to /settings. */}

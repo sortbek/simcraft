@@ -772,8 +772,7 @@ pub fn generate_void_forge_alternatives(slots: &mut HashMap<String, SlotResoluti
                 return;
             }
             // Find the first VF-mapped bonus_id on this item.
-            let Some(vf_target) = item.bonus_ids.iter().find_map(|b| vf_map.get(b).copied())
-            else {
+            let Some(vf_target) = item.bonus_ids.iter().find_map(|b| vf_map.get(b).copied()) else {
                 return;
             };
             additions.push(build_void_forge_item(item, vf_target));

@@ -275,7 +275,8 @@ async fn resume_triage(
                     &result.survivor_combo_ids,
                     &log_buffer_for_task,
                     constants_for_task,
-                ).await;
+                )
+                .await;
             }
             Ok(super::triage::TriageRunOutcome::Paused) => {}
             Err(e) => {

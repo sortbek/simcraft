@@ -10,8 +10,8 @@ pub mod iterator;
 pub mod iterator_from_request;
 mod selection;
 mod simc;
-pub mod triage;
 mod top_gear;
+pub mod triage;
 mod upgrade_compare;
 
 pub use checkpoint::{Checkpoint, CheckpointPhase, StagedCheckpoint, TriageCheckpoint};
@@ -23,8 +23,8 @@ pub use iterator::{
     EnchantAxis, GemCombosResolver, ProfilesetCandidate, ProfilesetIterator,
     ProfilesetIteratorConfig,
 };
-pub(crate) use top_gear::build_iterator_config;
 pub use iterator_from_request::build_iterator_from_request_json;
+pub(crate) use top_gear::build_iterator_config;
 
 use once_cell::sync::Lazy;
 use serde_json::Value;
@@ -262,9 +262,8 @@ mod classifier_tests {
 #[cfg(test)]
 mod tests {
     use super::{
-        count_top_gear_combos_with_talents, generate_droptimizer_input,
-        generate_enchant_gem_input, generate_top_gear_input_with_talents,
-        generate_upgrade_compare_input, GemEnchantOptions,
+        count_top_gear_combos_with_talents, generate_droptimizer_input, generate_enchant_gem_input,
+        generate_top_gear_input_with_talents, generate_upgrade_compare_input, GemEnchantOptions,
     };
     use crate::test_support::{ensure_game_data_loaded, TestItem};
     use serde_json::json;
@@ -643,7 +642,10 @@ main_hand=,id=200\n";
         items_by_slot.insert("wrist".to_string(), vec![equipped_wrist, alt_wrist]);
 
         let mut selected = HashMap::new();
-        selected.insert("wrist".to_string(), vec!["300:13534:bags:wrist".to_string()]);
+        selected.insert(
+            "wrist".to_string(),
+            vec!["300:13534:bags:wrist".to_string()],
+        );
 
         let gems = [213453_u64, 213454_u64, 213455_u64, 213456_u64];
         let sockets = HashSet::from([300_u64]);
@@ -811,7 +813,10 @@ main_hand=,id=200\n";
         items_by_slot.insert("wrist".to_string(), vec![equipped_wrist, alt_wrist]);
 
         let mut selected = HashMap::new();
-        selected.insert("wrist".to_string(), vec!["300:13534:bags:wrist".to_string()]);
+        selected.insert(
+            "wrist".to_string(),
+            vec!["300:13534:bags:wrist".to_string()],
+        );
 
         let gems = [213454_u64, 213455_u64, 213456_u64, 213457_u64];
         let sockets = HashSet::from([100_u64, 300_u64]);
@@ -871,7 +876,11 @@ main_hand=,id=200\n";
     fn uid(item_id: u64, bonus_ids: &[u64], origin: &str, slot: &str) -> String {
         let mut b = bonus_ids.to_vec();
         b.sort();
-        let key = b.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(":");
+        let key = b
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(":");
         format!("{}:{}:{}:{}", item_id, key, origin, slot)
     }
 
@@ -1187,10 +1196,7 @@ finger2=,id=101\n";
 
         // Selecting only the equipped item itself → no alternatives.
         let mut selected = HashMap::new();
-        selected.insert(
-            "head".to_string(),
-            vec![uid(100, &[], "equipped", "head")],
-        );
+        selected.insert("head".to_string(), vec![uid(100, &[], "equipped", "head")]);
 
         let (_, count, _) = generate_top_gear_input_with_talents(
             base_profile,
@@ -1356,7 +1362,10 @@ main_hand=,id=200\n";
         items_by_slot.insert("wrist".to_string(), vec![equipped_wrist, alt_wrist]);
 
         let mut selected = HashMap::new();
-        selected.insert("wrist".to_string(), vec!["300:13534:bags:wrist".to_string()]);
+        selected.insert(
+            "wrist".to_string(),
+            vec!["300:13534:bags:wrist".to_string()],
+        );
 
         let gems = [213454_u64, 213455_u64, 213456_u64];
         let sockets = HashSet::from([100_u64, 300_u64]);
@@ -1397,7 +1406,8 @@ main_hand=,id=200\n";
     #[test]
     fn enchant_gem_multiple_slots_create_cartesian_product() {
         ensure_game_data_loaded();
-        let base_profile = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7000\nchest=,id=101,enchant_id=7100\n";
+        let base_profile =
+            "mage=test\nspec=frost\nhead=,id=100,enchant_id=7000\nchest=,id=101,enchant_id=7100\n";
 
         let mut enchant_selections = HashMap::new();
         enchant_selections.insert("head".to_string(), vec![7001_u64]);

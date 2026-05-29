@@ -112,7 +112,8 @@ pub(super) async fn create_sim(
         {
             eprintln!("[{}] Failed to update progress: {}", job_id_clone, e);
         }
-        let cancel_token = crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
+        let cancel_token =
+            crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
         let result = simc_runner::run_simc(
@@ -350,7 +351,8 @@ pub(super) async fn sim_row(
         }
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
-        let cancel_token = crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
+        let cancel_token =
+            crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
         match simc_runner::run_simc(
             &simc,
             &job_id_clone,
@@ -421,10 +423,7 @@ mod sim_row_tests {
             profileset.\"Combo 42\"+=neck=,id=100\n\
             profileset.\"Combo 42\"+=talents=ABCDEF";
         let out = profileset_overrides_to_direct(input);
-        assert_eq!(
-            out,
-            "head=,id=99\nneck=,id=100\ntalents=ABCDEF"
-        );
+        assert_eq!(out, "head=,id=99\nneck=,id=100\ntalents=ABCDEF");
     }
 
     #[test]

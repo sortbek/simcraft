@@ -114,7 +114,10 @@ fn job_to_overview_summary(
 /// Convert a `jobs` row (with `simc_input_head` populated via SUBSTR and
 /// optionally `result_json`) into a `JobOverviewSummary`. Used by both
 /// `list_active` and `list_jobs` so the field-mapping logic lives in one place.
-fn row_to_overview_summary(r: &sqlx::any::AnyRow, has_result_json: bool) -> crate::models::JobOverviewSummary {
+fn row_to_overview_summary(
+    r: &sqlx::any::AnyRow,
+    has_result_json: bool,
+) -> crate::models::JobOverviewSummary {
     let status_str: String = r.get("status");
     let progress_pct: i32 = r.get("progress_pct");
     let simc_input: String = r.get("simc_input_head");
@@ -283,7 +286,7 @@ impl JobRepo {
                         request_json: r.get("request_json"),
                         simc_input_mode: SimcInputMode::from_str(
                             &r.try_get::<String, _>("simc_input_mode")
-                              .unwrap_or_else(|_| "inline".to_string()),
+                                .unwrap_or_else(|_| "inline".to_string()),
                         ),
                         checkpoint: r.get("checkpoint"),
                         pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
@@ -694,7 +697,7 @@ impl JobRepo {
 
     /// Unified job listing for the /sims overview page (combined Active/All view
     /// + stats panel + batch grouping). Returns a single ordered list filtered
-    /// by the requested status set, with optional player/realm scoping.
+    ///   by the requested status set, with optional player/realm scoping.
     pub async fn list_jobs(
         &self,
         filter: ListJobsFilter<'_>,
@@ -733,8 +736,14 @@ impl JobRepo {
                     .collect();
                 if has_post_filter {
                     all.retain(|j| {
-                        filter.player.map(|p| j.player_name.as_deref() == Some(p)).unwrap_or(true)
-                            && filter.realm.map(|r| j.realm.as_deref() == Some(r)).unwrap_or(true)
+                        filter
+                            .player
+                            .map(|p| j.player_name.as_deref() == Some(p))
+                            .unwrap_or(true)
+                            && filter
+                                .realm
+                                .map(|r| j.realm.as_deref() == Some(r))
+                                .unwrap_or(true)
                     });
                     all.truncate(final_limit);
                 }
@@ -814,8 +823,7 @@ impl JobRepo {
 
                 Ok(row.map(|r| {
                     let stages_str: String = r.get("stages_completed");
-                    let stages: Vec<String> =
-                        serde_json::from_str(&stages_str).unwrap_or_default();
+                    let stages: Vec<String> = serde_json::from_str(&stages_str).unwrap_or_default();
                     let status_str: String = r.get("status");
                     let status = str_to_status(&status_str);
                     let pct: i32 = r.get("progress_pct");
@@ -838,34 +846,33 @@ impl JobRepo {
                             &r.try_get::<String, _>("simc_input_mode")
                                 .unwrap_or_else(|_| "inline".to_string()),
                         ),
-                        pause_requested: r
-                            .try_get::<i32, _>("pause_requested")
-                            .unwrap_or(0)
-                            != 0,
+                        pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
                     }
                 }))
             }
-            JobBackend::Memory(jobs) => Ok(jobs
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|j| j.id == id)
-                .map(|j| JobStatusSummary {
-                    id: j.id.clone(),
-                    status: j.status.clone(),
-                    progress_pct: j.progress_pct,
-                    progress_stage: j.progress_stage.clone(),
-                    progress_detail: j.progress_detail.clone(),
-                    stages_completed: j.stages_completed.clone(),
-                    result_json: if j.status == JobStatus::Done {
-                        j.result_json.clone()
-                    } else {
-                        None
-                    },
-                    error_message: j.error_message.clone(),
-                    simc_input_mode: j.simc_input_mode,
-                    pause_requested: j.pause_requested,
-                })),
+            JobBackend::Memory(jobs) => {
+                Ok(jobs
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .find(|j| j.id == id)
+                    .map(|j| JobStatusSummary {
+                        id: j.id.clone(),
+                        status: j.status.clone(),
+                        progress_pct: j.progress_pct,
+                        progress_stage: j.progress_stage.clone(),
+                        progress_detail: j.progress_detail.clone(),
+                        stages_completed: j.stages_completed.clone(),
+                        result_json: if j.status == JobStatus::Done {
+                            j.result_json.clone()
+                        } else {
+                            None
+                        },
+                        error_message: j.error_message.clone(),
+                        simc_input_mode: j.simc_input_mode,
+                        pause_requested: j.pause_requested,
+                    }))
+            }
         }
     }
 }
@@ -967,7 +974,10 @@ mod tests {
         // Exact expected order:
         //   active jobs DESC by created_at: pause-1 (11:00), run-1 (10:00), pending-1 (09:00)
         //   then terminal DESC by created_at: done-1 (12:00), failed-1 (16th 08:00)
-        assert_eq!(ids, vec!["pause-1", "run-1", "pending-1", "done-1", "failed-1"]);
+        assert_eq!(
+            ids,
+            vec!["pause-1", "run-1", "pending-1", "done-1", "failed-1"]
+        );
     }
 
     #[tokio::test]
@@ -1083,7 +1093,9 @@ mod terminal_state_tests {
     #[tokio::test]
     async fn set_result_does_not_overwrite_cancelled() {
         let (repo, id) = make_repo_with_job(JobStatus::Cancelled).await;
-        repo.set_result(&id, r#"{"dps":12345}"#, None).await.unwrap();
+        repo.set_result(&id, r#"{"dps":12345}"#, None)
+            .await
+            .unwrap();
         let after = repo.get(&id).await.unwrap().unwrap();
         assert_eq!(
             after.status,
@@ -1180,7 +1192,10 @@ mod terminal_state_tests {
     async fn cancel_if_active_is_noop_when_already_cancelled() {
         let (repo, id) = make_repo_with_job(JobStatus::Cancelled).await;
         let transitioned = repo.cancel_if_active(&id).await.unwrap();
-        assert!(!transitioned, "second cancel of cancelled job is not a transition");
+        assert!(
+            !transitioned,
+            "second cancel of cancelled job is not a transition"
+        );
     }
 
     #[tokio::test]

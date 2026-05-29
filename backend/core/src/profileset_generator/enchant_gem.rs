@@ -226,14 +226,9 @@ mod tests {
         let profile = "mage=test\nhead=,id=100,enchant_id=7777\n";
         let mut selections = HashMap::new();
         selections.insert("head".to_string(), vec![7777_u64]);
-        let (_, count, _) = generate_enchant_gem_input(
-            profile,
-            &selections,
-            &[],
-            &HashSet::new(),
-            Some(20),
-        )
-        .unwrap();
+        let (_, count, _) =
+            generate_enchant_gem_input(profile, &selections, &[], &HashSet::new(), Some(20))
+                .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -243,14 +238,9 @@ mod tests {
         let profile = "mage=test\nhead=,id=100\n"; // only head, no chest
         let mut selections = HashMap::new();
         selections.insert("chest".to_string(), vec![9001_u64]);
-        let (_, count, _) = generate_enchant_gem_input(
-            profile,
-            &selections,
-            &[],
-            &HashSet::new(),
-            Some(20),
-        )
-        .unwrap();
+        let (_, count, _) =
+            generate_enchant_gem_input(profile, &selections, &[], &HashSet::new(), Some(20))
+                .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -263,13 +253,8 @@ mod tests {
         selections.insert("chest".to_string(), vec![7101, 7102, 7103]);
         selections.insert("legs".to_string(), vec![7201, 7202, 7203]);
         // 4x4x4 - 1 baseline = 63 combos
-        let result = generate_enchant_gem_input(
-            profile,
-            &selections,
-            &[],
-            &HashSet::new(),
-            Some(10),
-        );
+        let result =
+            generate_enchant_gem_input(profile, &selections, &[], &HashSet::new(), Some(10));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Too many combinations"));
     }
@@ -278,7 +263,7 @@ mod tests {
     fn gem_axis_applies_to_socketed_empty_slot() {
         ensure_game_data_loaded();
         let profile = "mage=test\nhead=,id=100\n"; // no gem on head
-        // Only socketed_item_ids decides eligibility — pass head's id.
+                                                   // Only socketed_item_ids decides eligibility — pass head's id.
         let (input, count, _) = generate_enchant_gem_input(
             profile,
             &HashMap::new(),
@@ -312,14 +297,9 @@ mod tests {
     #[test]
     fn empty_gem_list_with_no_enchants_returns_zero() {
         let profile = "mage=test\nhead=,id=100\n";
-        let (_, count, _) = generate_enchant_gem_input(
-            profile,
-            &HashMap::new(),
-            &[],
-            &HashSet::new(),
-            Some(20),
-        )
-        .unwrap();
+        let (_, count, _) =
+            generate_enchant_gem_input(profile, &HashMap::new(), &[], &HashSet::new(), Some(20))
+                .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -329,14 +309,9 @@ mod tests {
         let profile = "mage=test\nhead=,id=100,enchant_id=7000\n";
         let mut selections = HashMap::new();
         selections.insert("head".to_string(), vec![7001_u64]);
-        let (_, _, metadata) = generate_enchant_gem_input(
-            profile,
-            &selections,
-            &[],
-            &HashSet::new(),
-            Some(20),
-        )
-        .unwrap();
+        let (_, _, metadata) =
+            generate_enchant_gem_input(profile, &selections, &[], &HashSet::new(), Some(20))
+                .unwrap();
         assert!(metadata.contains_key("Currently Equipped"));
     }
 }

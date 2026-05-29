@@ -57,8 +57,8 @@ impl SimMode {
 
     /// Whether this mode emits a gear-comparison payload (top-level `base_dps`
     /// + per-combo `results`) or a single-actor payload (top-level `dps`).
-    /// Lets summary/extractor code branch on intent rather than re-detecting
-    /// from the JSON shape.
+    ///   Lets summary/extractor code branch on intent rather than re-detecting
+    ///   from the JSON shape.
     pub fn result_kind(self) -> ResultKind {
         match self {
             SimMode::Quick | SimMode::StatWeights => ResultKind::SingleActor,
@@ -120,6 +120,7 @@ impl SimcInputMode {
             Self::Streamed => "streamed",
         }
     }
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s {
             "streamed" => Self::Streamed,
@@ -348,8 +349,14 @@ mod sim_mode_tests {
         assert_eq!(SimMode::Quick.result_kind(), ResultKind::SingleActor);
         assert_eq!(SimMode::StatWeights.result_kind(), ResultKind::SingleActor);
         assert_eq!(SimMode::TopGear.result_kind(), ResultKind::GearComparison);
-        assert_eq!(SimMode::Droptimizer.result_kind(), ResultKind::GearComparison);
-        assert_eq!(SimMode::EnchantGem.result_kind(), ResultKind::GearComparison);
+        assert_eq!(
+            SimMode::Droptimizer.result_kind(),
+            ResultKind::GearComparison
+        );
+        assert_eq!(
+            SimMode::EnchantGem.result_kind(),
+            ResultKind::GearComparison
+        );
         // Critical: Crest Upgrades is its own mode that *renders* as
         // gear-comparison. Previously this was lying about its identity
         // by storing sim_type = "top_gear" to share the parser.

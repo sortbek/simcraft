@@ -56,9 +56,7 @@ export default function SidebarRoutes() {
       <button
         onClick={() => setOpen((v) => !v)}
         className={`flex w-full items-center px-6 py-3 text-left font-headline text-xs font-bold uppercase tracking-wider transition-all ${
-          open
-            ? 'text-on-surface'
-            : 'text-on-surface-variant hover:bg-surface hover:text-white'
+          open ? 'text-on-surface' : 'text-on-surface-variant hover:bg-surface hover:text-white'
         }`}
       >
         <span className="flex min-w-0 flex-1 items-baseline gap-1.5">

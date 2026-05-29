@@ -10,9 +10,9 @@
 //! `cursor[gear+enchant]`                      — gem combo index
 //! `cursor[gear+enchant+1]`                    — talent build index
 
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use serde_json::{json, Value};
 
 use super::gem_combos::GemCombo;
 use super::identity_key::{compute_identity_key, effective_gems, IdentityInput};
@@ -100,11 +100,7 @@ impl ProfilesetIterator {
 
         // Gear axes.
         for slot in &cfg.varying_slots {
-            let sz = cfg
-                .slot_item_lists
-                .get(slot)
-                .map(|v| v.len())
-                .unwrap_or(1);
+            let sz = cfg.slot_item_lists.get(slot).map(|v| v.len()).unwrap_or(1);
             axis_sizes.push(sz);
         }
 
@@ -121,7 +117,7 @@ impl ProfilesetIterator {
 
         let cursor = vec![0usize; axis_sizes.len()];
         // Terminate immediately if any axis has size 0 (can't enumerate).
-        let done = axis_sizes.iter().any(|&s| s == 0);
+        let done = axis_sizes.contains(&0);
 
         Self {
             cfg,
@@ -352,7 +348,10 @@ fn format_streaming_profileset_lines(
     }
 
     if !talent_string.is_empty() {
-        lines.push(format!("profileset.\"{}\"+=talents={}", name, talent_string));
+        lines.push(format!(
+            "profileset.\"{}\"+=talents={}",
+            name, talent_string
+        ));
     }
 
     lines.join("\n")

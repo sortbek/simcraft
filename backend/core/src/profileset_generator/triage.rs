@@ -1,23 +1,23 @@
-﻿//! Streaming Triage stage. Pulls candidates from a ProfilesetIterator in
+//! Streaming Triage stage. Pulls candidates from a ProfilesetIterator in
 //! adaptive batches, runs cheap simc on each batch, and keeps survivors
 //! via a statistical CI-window retention with a global survivor budget.
 //! See spec §2 (transaction lifecycle) and §3 (Triage stage) for design.
 
-use std::collections::HashSet;
 use serde_json::Value;
 use sqlx::AnyPool;
+use std::collections::HashSet;
 
-use crate::db::{
-    ComboDedupRepo, ComboMetadataInsert, ComboMetadataRepo, TriageBatchesRepo,
-};
 use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIteratorConfig};
-use crate::profileset_generator::checkpoint::{Checkpoint, CheckpointPhase, TriageCheckpoint, StagedCheckpoint};
+use crate::db::{ComboDedupRepo, ComboMetadataInsert, ComboMetadataRepo, TriageBatchesRepo};
+use crate::profileset_generator::checkpoint::{
+    Checkpoint, CheckpointPhase, StagedCheckpoint, TriageCheckpoint,
+};
 
 // Default batch sizing. Smaller batches tighten the worst-case pause latency
 // (one batch's work is the longest a pause can be delayed) at a modest
 // throughput cost. Do NOT lower MIN below MIN_KEEP_PER_BATCH — retention
 // assumes the batch is large enough to drop ineligible profilesets.
-pub const TARGET_BATCH_INPUT_BYTES: usize = 1 * 1024 * 1024;
+pub const TARGET_BATCH_INPUT_BYTES: usize = 1024 * 1024;
 pub const MIN_BATCH_PROFILESETS: usize = 100;
 pub const MAX_BATCH_PROFILESETS: usize = 250;
 /// Triage `target_error` (percent). Drives simc's per-profileset auto-tuner;
@@ -170,11 +170,11 @@ impl<'a> BatchDriver<'a> {
 
         let existing: HashSet<String> = self
             .dedup_repo
-            .snapshot_existing(&mut *tx, self.job_id, &candidate_keys)
+            .snapshot_existing(&mut tx, self.job_id, &candidate_keys)
             .await?;
 
         self.dedup_repo
-            .insert_chunked(&mut *tx, self.job_id, batch_idx, &candidate_keys)
+            .insert_chunked(&mut tx, self.job_id, batch_idx, &candidate_keys)
             .await?;
 
         // Filter pending â†’ accepted (new keys only). Assign combo_ids.
@@ -188,13 +188,17 @@ impl<'a> BatchDriver<'a> {
                 state.next_combo_id += 1;
                 let combo_name = format!("Combo {}", combo_id);
                 let candidate = rename_profileset_candidate(cand, &combo_name);
-                accepted.push(AcceptedCandidate { candidate, combo_id, combo_name });
+                accepted.push(AcceptedCandidate {
+                    candidate,
+                    combo_id,
+                    combo_name,
+                });
             }
         }
 
         self.triage_repo
             .insert_committed(
-                &mut *tx,
+                &mut tx,
                 self.job_id,
                 batch_idx,
                 &start_cursor_json,
@@ -227,7 +231,7 @@ impl<'a> BatchDriver<'a> {
             }),
             constants,
         };
-        write_checkpoint_in_tx(&mut *tx, self.job_id, &checkpoint).await?;
+        write_checkpoint_in_tx(&mut tx, self.job_id, &checkpoint).await?;
 
         tx.commit().await?;
         state.next_batch_idx += 1;
@@ -253,11 +257,14 @@ impl<'a> BatchDriver<'a> {
         let survivor_set: HashSet<i64> = survivors_combo_ids.iter().copied().collect();
 
         // Collect owned strings so the InsertRow borrow lifetimes work.
-        let owned: Vec<(i64, String, String, String, String, String)> = accepted.iter()
+        let owned: Vec<(i64, String, String, String, String, String)> = accepted
+            .iter()
             .filter(|ac| survivor_set.contains(&ac.combo_id))
             .map(|ac| {
-                let metadata_json = serde_json::to_string(&ac.candidate.metadata).unwrap_or_else(|_| "null".into());
-                let cursor_json = serde_json::to_string(&ac.candidate.cursor_at_emission).unwrap_or_else(|_| "[]".into());
+                let metadata_json =
+                    serde_json::to_string(&ac.candidate.metadata).unwrap_or_else(|_| "null".into());
+                let cursor_json = serde_json::to_string(&ac.candidate.cursor_at_emission)
+                    .unwrap_or_else(|_| "[]".into());
                 (
                     ac.combo_id,
                     ac.combo_name.clone(),
@@ -269,8 +276,9 @@ impl<'a> BatchDriver<'a> {
             })
             .collect();
 
-        let inserts: Vec<ComboMetadataInsert> = owned.iter().map(|(id, name, key, cur, simc, meta)| {
-            ComboMetadataInsert {
+        let inserts: Vec<ComboMetadataInsert> = owned
+            .iter()
+            .map(|(id, name, key, cur, simc, meta)| ComboMetadataInsert {
                 combo_id: *id,
                 combo_name: name,
                 combo_key: key,
@@ -278,13 +286,17 @@ impl<'a> BatchDriver<'a> {
                 cursor_json: cur,
                 profileset_simc: simc,
                 metadata_json: meta,
-            }
-        }).collect();
+            })
+            .collect();
 
         let mut tx = self.pool.begin().await?;
-        self.metadata_repo.insert_batch(&mut *tx, self.job_id, &inserts).await?;
-        self.triage_repo.mark_completed(&mut *tx, self.job_id, batch_idx, inserts.len() as i64).await?;
-        write_checkpoint_in_tx(&mut *tx, self.job_id, checkpoint).await?;
+        self.metadata_repo
+            .insert_batch(&mut tx, self.job_id, &inserts)
+            .await?;
+        self.triage_repo
+            .mark_completed(&mut tx, self.job_id, batch_idx, inserts.len() as i64)
+            .await?;
+        write_checkpoint_in_tx(&mut tx, self.job_id, checkpoint).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -315,7 +327,10 @@ pub struct TriageConstants {
 impl Default for TriageConstants {
     fn default() -> Self {
         Self {
-            target_batch_input_bytes: env_usize("TRIAGE_TARGET_BATCH_BYTES", TARGET_BATCH_INPUT_BYTES),
+            target_batch_input_bytes: env_usize(
+                "TRIAGE_TARGET_BATCH_BYTES",
+                TARGET_BATCH_INPUT_BYTES,
+            ),
             min_batch_profilesets: env_usize("TRIAGE_MIN_BATCH", MIN_BATCH_PROFILESETS),
             max_batch_profilesets: env_usize("TRIAGE_MAX_BATCH", MAX_BATCH_PROFILESETS),
             triage_target_error: env_f64("TRIAGE_TARGET_ERROR", TRIAGE_TARGET_ERROR),
@@ -348,15 +363,24 @@ impl TriageConstants {
 }
 
 fn env_usize(key: &str, fallback: usize) -> usize {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(fallback)
 }
 
 fn env_u32(key: &str, fallback: u32) -> u32 {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(fallback)
 }
 
 fn env_f64(key: &str, fallback: f64) -> f64 {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(fallback)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(fallback)
 }
 
 /// Compute the next batch's target candidate count from observed avg bytes-per-profileset.
@@ -466,7 +490,10 @@ mod sizing_tests {
 
     #[test]
     fn target_count_respects_min_bound() {
-        assert_eq!(next_batch_target_count(1024 * 1024 * 1024), MIN_BATCH_PROFILESETS);
+        assert_eq!(
+            next_batch_target_count(1024 * 1024 * 1024),
+            MIN_BATCH_PROFILESETS
+        );
     }
 
     #[test]
@@ -488,7 +515,8 @@ mod sizing_tests {
 
     #[test]
     fn requested_max_batch_scales_byte_budget_and_clamps_range() {
-        let throughput = TriageConstants::default().with_requested_max_batch_profilesets(Some(1000));
+        let throughput =
+            TriageConstants::default().with_requested_max_batch_profilesets(Some(1000));
         assert_eq!(throughput.min_batch_profilesets, MIN_KEEP_PER_BATCH);
         assert_eq!(throughput.max_batch_profilesets, 1000);
         assert_eq!(
@@ -537,15 +565,20 @@ pub fn select_survivors_with(
         return vec![];
     }
 
-    let name_to_id: std::collections::HashMap<&str, i64> =
-        accepted.iter().map(|ac| (ac.combo_name.as_str(), ac.combo_id)).collect();
+    let name_to_id: std::collections::HashMap<&str, i64> = accepted
+        .iter()
+        .map(|ac| (ac.combo_name.as_str(), ac.combo_id))
+        .collect();
 
-    let mut sorted: Vec<(&str, f64, f64)> = profilesets.iter().filter_map(|p| {
-        let name = p.get("name").and_then(|v| v.as_str())?;
-        let mean = p.get("mean").and_then(|v| v.as_f64())?;
-        let stddev = p.get("stddev").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        Some((name, mean, stddev))
-    }).collect();
+    let mut sorted: Vec<(&str, f64, f64)> = profilesets
+        .iter()
+        .filter_map(|p| {
+            let name = p.get("name").and_then(|v| v.as_str())?;
+            let mean = p.get("mean").and_then(|v| v.as_f64())?;
+            let stddev = p.get("stddev").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            Some((name, mean, stddev))
+        })
+        .collect();
     sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     if sorted.is_empty() {
@@ -565,18 +598,26 @@ pub fn select_survivors_with(
     // calibration harness (backend/calibration) tunes TRIAGE_CUTOFF_MULTIPLIER
     // against winner-loss rates on a real scenario; running calibration once will
     // pick a multiplier that compensates for the formula's looseness. See spec O2.
-    let s: f64 = sorted.iter().map(|(_, m, sd)| if *m > 0.0 { sd / m * 100.0 } else { 0.0 }).sum();
+    let s: f64 = sorted
+        .iter()
+        .map(|(_, m, sd)| if *m > 0.0 { sd / m * 100.0 } else { 0.0 })
+        .sum();
     let avg_rel_stddev = (s / sorted.len() as f64).max(min_triage_target_error_fallback);
     let cutoff = batch_top_mean * (1.0 - triage_cutoff_multiplier * avg_rel_stddev / 100.0);
 
-    let mut kept: Vec<(&str, f64)> = sorted.iter()
+    let mut kept: Vec<(&str, f64)> = sorted
+        .iter()
         .filter(|(_, m, _)| *m >= cutoff)
         .map(|(n, m, _)| (*n, *m))
         .collect();
 
     if kept.len() < min_keep_per_batch {
         let take_n = min_keep_per_batch.min(sorted.len());
-        kept = sorted.iter().take(take_n).map(|(n, m, _)| (*n, *m)).collect();
+        kept = sorted
+            .iter()
+            .take(take_n)
+            .map(|(n, m, _)| (*n, *m))
+            .collect();
     }
 
     let per_batch_max = if batches_remaining == 0 {
@@ -638,36 +679,49 @@ mod retention_tests {
 
     #[test]
     fn keeps_top_when_tight_distribution() {
-        let accepted: Vec<AcceptedCandidate> = (0..200).map(|i| ac(i, &format!("Combo {}", i))).collect();
-        let profilesets: Vec<Value> = (0..200).map(|i| json!({
-            "name": format!("Combo {}", i),
-            "mean": 100_000.0 - i as f64 * 10.0,
-            "stddev": 50.0,
-        })).collect();
+        let accepted: Vec<AcceptedCandidate> =
+            (0..200).map(|i| ac(i, &format!("Combo {}", i))).collect();
+        let profilesets: Vec<Value> = (0..200)
+            .map(|i| {
+                json!({
+                    "name": format!("Combo {}", i),
+                    "mean": 100_000.0 - i as f64 * 10.0,
+                    "stddev": 50.0,
+                })
+            })
+            .collect();
         let survivors = select_survivors(&profilesets, &accepted, 10_000, 100);
         assert!(survivors.len() >= MIN_KEEP_PER_BATCH);
     }
 
     #[test]
     fn drops_clear_losers() {
-        let accepted: Vec<AcceptedCandidate> = (0..200).map(|i| ac(i, &format!("Combo {}", i))).collect();
-        let profilesets: Vec<Value> = (0..200).map(|i| {
-            let mean = if i < 50 { 100_000.0 } else { 90_000.0 };
-            json!({ "name": format!("Combo {}", i), "mean": mean, "stddev": 100.0 })
-        }).collect();
+        let accepted: Vec<AcceptedCandidate> =
+            (0..200).map(|i| ac(i, &format!("Combo {}", i))).collect();
+        let profilesets: Vec<Value> = (0..200)
+            .map(|i| {
+                let mean = if i < 50 { 100_000.0 } else { 90_000.0 };
+                json!({ "name": format!("Combo {}", i), "mean": mean, "stddev": 100.0 })
+            })
+            .collect();
         let survivors = select_survivors(&profilesets, &accepted, 10_000, 100);
         assert!(survivors.len() >= MIN_KEEP_PER_BATCH);
-        assert!(survivors.contains(&0));  // top combo always present
+        assert!(survivors.contains(&0)); // top combo always present
     }
 
     #[test]
     fn global_budget_caps_survivors() {
-        let accepted: Vec<AcceptedCandidate> = (0..1000).map(|i| ac(i, &format!("Combo {}", i))).collect();
-        let profilesets: Vec<Value> = (0..1000).map(|i| json!({
-            "name": format!("Combo {}", i),
-            "mean": 100_000.0,
-            "stddev": 50.0,
-        })).collect();
+        let accepted: Vec<AcceptedCandidate> =
+            (0..1000).map(|i| ac(i, &format!("Combo {}", i))).collect();
+        let profilesets: Vec<Value> = (0..1000)
+            .map(|i| {
+                json!({
+                    "name": format!("Combo {}", i),
+                    "mean": 100_000.0,
+                    "stddev": 50.0,
+                })
+            })
+            .collect();
         let survivors = select_survivors(&profilesets, &accepted, 500, 10);
         // per_batch_max = max(500/10, MIN_KEEP) = max(50, 100) = 100
         assert_eq!(survivors.len(), MIN_KEEP_PER_BATCH);
@@ -689,7 +743,11 @@ pub fn enforce_hard_max(current_survivors: usize, next_count: usize) -> Option<u
 }
 
 /// Parameterized variant used by the calibration harness.
-pub fn enforce_hard_max_with(current_survivors: usize, next_count: usize, global_survivor_hard_max: usize) -> Option<usize> {
+pub fn enforce_hard_max_with(
+    current_survivors: usize,
+    next_count: usize,
+    global_survivor_hard_max: usize,
+) -> Option<usize> {
     if current_survivors >= global_survivor_hard_max {
         return None;
     }
@@ -772,7 +830,14 @@ pub async fn run_triage(
     inputs: TriageRunInputs<'_>,
     estimated_total_combos: u64,
 ) -> Result<TriageRunOutcome, String> {
-    run_triage_with_constants(iter_cfg, inputs, estimated_total_combos, TriageConstants::default(), None).await
+    run_triage_with_constants(
+        iter_cfg,
+        inputs,
+        estimated_total_combos,
+        TriageConstants::default(),
+        None,
+    )
+    .await
 }
 
 /// Full Triage run with explicit constants. Called by `run_triage` (production)
@@ -782,21 +847,21 @@ pub async fn run_triage_with_constants(
     inputs: TriageRunInputs<'_>,
     estimated_total_combos: u64,
     constants: TriageConstants,
-    resume: Option<TriageResumeState>,  // None = fresh run; Some = resumed from checkpoint
+    resume: Option<TriageResumeState>, // None = fresh run; Some = resumed from checkpoint
 ) -> Result<TriageRunOutcome, String> {
     // Shadow module-level consts with values from the constants struct so all
     // helper call-sites below read from the struct without needing extra parameters.
-    let target_batch_input_bytes     = constants.target_batch_input_bytes;
-    let min_batch_profilesets        = constants.min_batch_profilesets;
-    let max_batch_profilesets        = constants.max_batch_profilesets;
-    let triage_target_error          = constants.triage_target_error;
-    let triage_iterations            = constants.triage_iterations;
-    let triage_cutoff_multiplier     = constants.triage_cutoff_multiplier;
+    let target_batch_input_bytes = constants.target_batch_input_bytes;
+    let min_batch_profilesets = constants.min_batch_profilesets;
+    let max_batch_profilesets = constants.max_batch_profilesets;
+    let triage_target_error = constants.triage_target_error;
+    let triage_iterations = constants.triage_iterations;
+    let triage_cutoff_multiplier = constants.triage_cutoff_multiplier;
     let min_triage_target_error_fallback = constants.min_triage_target_error_fallback;
-    let min_keep_per_batch           = constants.min_keep_per_batch;
-    let global_survivor_target       = constants.global_survivor_target;
-    let global_survivor_hard_max     = constants.global_survivor_hard_max;
-    let probe_size                   = constants.probe_size;
+    let min_keep_per_batch = constants.min_keep_per_batch;
+    let global_survivor_target = constants.global_survivor_target;
+    let global_survivor_hard_max = constants.global_survivor_hard_max;
+    let probe_size = constants.probe_size;
 
     let dedup_repo = ComboDedupRepo::new(inputs.pool.clone());
     let triage_repo = TriageBatchesRepo::new(inputs.pool.clone());
@@ -817,7 +882,9 @@ pub async fn run_triage_with_constants(
     let mut iter = ProfilesetIterator::new(iter_cfg);
     if let Some(cursor) = resume_cursor {
         if !iter.seek(cursor) {
-            return Err("Resume cursor seek failed — request_json may not match the checkpoint".to_string());
+            return Err(
+                "Resume cursor seek failed — request_json may not match the checkpoint".to_string(),
+            );
         }
     }
 
@@ -845,11 +912,14 @@ pub async fn run_triage_with_constants(
             probe_size,
         );
         (inputs.on_progress)(
-            ((state.next_batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0).min(100.0) as u8,
+            ((state.next_batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0)
+                .min(100.0) as u8,
             format!("Preparing batch {}", state.next_batch_idx + 1),
         );
 
-        let pre = driver.pre_simc_phase(&mut iter, &mut state, target, constants).await
+        let pre = driver
+            .pre_simc_phase(&mut iter, &mut state, target, constants)
+            .await
             .map_err(|e| format!("Triage pre-simc DB phase failed: {}", e))?;
 
         if pre.accepted.is_empty() && pre.iterator_exhausted {
@@ -865,13 +935,20 @@ pub async fn run_triage_with_constants(
             state.estimated_total_batches,
         );
         (inputs.on_progress)(
-            ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0).min(100.0) as u8,
-            format!("Triage batch {} \u{00b7} simc on {} profilesets{}",
-                    pre.batch_idx + 1, pre.accepted.len(), eta_suffix),
+            ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0)
+                .min(100.0) as u8,
+            format!(
+                "Triage batch {} \u{00b7} simc on {} profilesets{}",
+                pre.batch_idx + 1,
+                pre.accepted.len(),
+                eta_suffix
+            ),
         );
 
         // Concatenate profileset_simc lines for this batch.
-        let profileset_simc_block: String = pre.accepted.iter()
+        let profileset_simc_block: String = pre
+            .accepted
+            .iter()
             .map(|ac| ac.candidate.profileset_simc.as_str())
             .collect::<Vec<_>>()
             .join("\n");
@@ -908,8 +985,7 @@ pub async fn run_triage_with_constants(
                 }
 
                 let batch_fraction = current as f64 / total.max(1) as f64;
-                let pct = (((pre.batch_idx as f64 + batch_fraction)
-                    / estimated_batches as f64)
+                let pct = (((pre.batch_idx as f64 + batch_fraction) / estimated_batches as f64)
                     * 100.0)
                     .min(100.0) as u8;
                 (inputs.on_progress)(
@@ -930,7 +1006,8 @@ pub async fn run_triage_with_constants(
                     ),
                 );
             },
-        ).await?;
+        )
+        .await?;
         let batch_secs = batch_start.elapsed().as_secs_f64();
         let batch_per_ps_ms = if pre.accepted.is_empty() {
             0.0
@@ -938,7 +1015,10 @@ pub async fn run_triage_with_constants(
             batch_secs * 1000.0 / pre.accepted.len() as f64
         };
         let global_remaining = global_remaining_for_with(&state, global_survivor_target);
-        let batches_remaining = state.estimated_total_batches.saturating_sub(state.next_batch_idx as usize).max(1);
+        let batches_remaining = state
+            .estimated_total_batches
+            .saturating_sub(state.next_batch_idx as usize)
+            .max(1);
         let survivors = select_survivors_with(
             &parsed,
             &pre.accepted,
@@ -949,15 +1029,24 @@ pub async fn run_triage_with_constants(
             min_keep_per_batch,
         );
 
-        let hard_max_hit = enforce_hard_max_with(state.survivors_so_far, 1, global_survivor_hard_max).is_none();
-        let survivors = match enforce_hard_max_with(state.survivors_so_far, survivors.len(), global_survivor_hard_max) {
-            None => Vec::new(),  // hard max hit; treat as zero survivors but still commit the batch
+        let hard_max_hit =
+            enforce_hard_max_with(state.survivors_so_far, 1, global_survivor_hard_max).is_none();
+        let survivors = match enforce_hard_max_with(
+            state.survivors_so_far,
+            survivors.len(),
+            global_survivor_hard_max,
+        ) {
+            None => Vec::new(), // hard max hit; treat as zero survivors but still commit the batch
             Some(n) => survivors.into_iter().take(n).collect::<Vec<_>>(),
         };
 
         state.survivors_so_far += survivors.len();
 
-        let batch_total_bytes: usize = pre.accepted.iter().map(|ac| ac.candidate.profileset_simc.len()).sum();
+        let batch_total_bytes: usize = pre
+            .accepted
+            .iter()
+            .map(|ac| ac.candidate.profileset_simc.len())
+            .sum();
         state.avg_bytes_per_profileset = update_avg_bytes(
             state.avg_bytes_per_profileset,
             batch_total_bytes,
@@ -972,7 +1061,8 @@ pub async fn run_triage_with_constants(
                 max_batch_profilesets,
                 probe_size,
             );
-            state.estimated_total_batches = ((estimated_total_combos as usize) / per_batch.max(1)).max(1);
+            state.estimated_total_batches =
+                ((estimated_total_combos as usize) / per_batch.max(1)).max(1);
         }
 
         let completed_checkpoint = Checkpoint {
@@ -988,11 +1078,19 @@ pub async fn run_triage_with_constants(
         };
 
         (inputs.on_progress)(
-            ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0).min(100.0) as u8,
+            ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0)
+                .min(100.0) as u8,
             format!("Recording survivors for batch {}", pre.batch_idx + 1),
         );
 
-        driver.commit_survivors(&pre.accepted, &survivors, pre.batch_idx, &completed_checkpoint).await
+        driver
+            .commit_survivors(
+                &pre.accepted,
+                &survivors,
+                pre.batch_idx,
+                &completed_checkpoint,
+            )
+            .await
             .map_err(|e| format!("Triage post-simc DB phase failed: {}", e))?;
 
         let batch_message = format!(
@@ -1018,7 +1116,9 @@ pub async fn run_triage_with_constants(
             Ok(true) => {
                 // Clear the flag and flip status. Order matters: clear flag first so a
                 // concurrent reader doesn't see Paused + pending pause.
-                let _ = pause_check_repo.set_pause_requested(inputs.job_id, false).await;
+                let _ = pause_check_repo
+                    .set_pause_requested(inputs.job_id, false)
+                    .await;
                 let _ = pause_check_repo
                     .update_status(inputs.job_id, crate::models::JobStatus::Paused)
                     .await;

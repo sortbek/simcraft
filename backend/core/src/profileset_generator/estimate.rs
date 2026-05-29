@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 
 /// Upper-bound estimate of the profileset count for a Top Gear request,
 /// computed in O(axes) time without enumerating any combos. The result
@@ -35,7 +35,11 @@ fn gear_axis_size(
     let mut prod: u64 = 1;
     for slot in items_by_slot.keys() {
         let selected = selected_items.get(slot).map(|v| v.len()).unwrap_or(0);
-        let axis = if selected == 0 { 1 } else { selected as u64 + 1 };
+        let axis = if selected == 0 {
+            1
+        } else {
+            selected as u64 + 1
+        };
         prod = prod.saturating_mul(axis);
     }
     prod
@@ -65,7 +69,8 @@ fn gem_axis_size_upper_bound(
     let mut socketed_slots: u64 = 0;
     for items in items_by_slot.values() {
         let any_socketed = items.iter().any(|it| {
-            it.get("item_id").and_then(|v| v.as_u64())
+            it.get("item_id")
+                .and_then(|v| v.as_u64())
                 .map(|id| socketed_item_ids.contains(&id))
                 .unwrap_or(false)
         });
@@ -103,7 +108,12 @@ mod tests {
         items.insert("head".to_string(), vec![make_item(1)]);
         let selected = HashMap::new();
         let count = estimate_top_gear_combo_count(
-            &items, &selected, &HashMap::new(), &[], &HashSet::new(), 1,
+            &items,
+            &selected,
+            &HashMap::new(),
+            &[],
+            &HashSet::new(),
+            1,
         );
         assert_eq!(count, 1);
     }
@@ -112,11 +122,19 @@ mod tests {
     fn gear_only_axis() {
         // 2 selectable alternatives in head -> axis 3 (2 selected + 1 equipped)
         let mut items = HashMap::new();
-        items.insert("head".to_string(), vec![make_item(1), make_item(2), make_item(3)]);
+        items.insert(
+            "head".to_string(),
+            vec![make_item(1), make_item(2), make_item(3)],
+        );
         let mut selected = HashMap::new();
         selected.insert("head".to_string(), vec!["2".to_string(), "3".to_string()]);
         let count = estimate_top_gear_combo_count(
-            &items, &selected, &HashMap::new(), &[], &HashSet::new(), 1,
+            &items,
+            &selected,
+            &HashMap::new(),
+            &[],
+            &HashSet::new(),
+            1,
         );
         assert_eq!(count, 3);
     }
@@ -128,7 +146,12 @@ mod tests {
         let mut selected = HashMap::new();
         selected.insert("head".to_string(), vec!["2".to_string()]);
         let count = estimate_top_gear_combo_count(
-            &items, &selected, &HashMap::new(), &[], &HashSet::new(), 3,
+            &items,
+            &selected,
+            &HashMap::new(),
+            &[],
+            &HashSet::new(),
+            3,
         );
         assert_eq!(count, 2 * 3);
     }
@@ -144,7 +167,12 @@ mod tests {
             selected.insert(slot, (1..10).map(|n| n.to_string()).collect());
         }
         let count = estimate_top_gear_combo_count(
-            &items, &selected, &HashMap::new(), &[], &HashSet::new(), 1,
+            &items,
+            &selected,
+            &HashMap::new(),
+            &[],
+            &HashSet::new(),
+            1,
         );
         // 10^30 is way beyond u64::MAX; estimator must saturate, not panic.
         assert_eq!(count, u64::MAX);

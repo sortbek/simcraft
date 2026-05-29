@@ -24,6 +24,7 @@ impl TriageBatchesRepo {
     /// Insert a 'committed' batch row at the start of the pre-simc phase.
     /// Caller passes the same executor used for the dedup inserts so this
     /// is atomic with them.
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_committed(
         &self,
         executor: &mut sqlx::AnyConnection,

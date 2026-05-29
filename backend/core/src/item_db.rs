@@ -105,7 +105,8 @@ fn build_void_forge_map() -> HashMap<u64, u64> {
 
     // First pass: collect "Voidforged: <Tier>" entries.
     // Pattern matches "Ascendant Voidforged: Myth", "Galactic Void-Charged: Hero", etc.
-    let tag_re = Regex::new(r"^(?:Ascendant|Galactic)\s+Void(?:forged|-Charged):\s*(\w+)$").unwrap();
+    let tag_re =
+        Regex::new(r"^(?:Ascendant|Galactic)\s+Void(?:forged|-Charged):\s*(\w+)$").unwrap();
     let mut vf_by_tier: HashMap<String, u64> = HashMap::new();
     for (bonus_id, value) in bonuses.iter() {
         if let Some(tag) = value.get("tag").and_then(|t| t.as_str()) {
@@ -130,8 +131,12 @@ fn build_void_forge_map() -> HashMap<u64, u64> {
             .and_then(|n| n.as_str());
         let Some(full_name) = full_name else { continue };
         // Expect "<Tier> N/M" — match only the max step (e.g. "Myth 6/6")
-        let Some((tier, step)) = full_name.split_once(' ') else { continue };
-        let Some((cur, max)) = step.split_once('/') else { continue };
+        let Some((tier, step)) = full_name.split_once(' ') else {
+            continue;
+        };
+        let Some((cur, max)) = step.split_once('/') else {
+            continue;
+        };
         if cur != max {
             continue;
         }

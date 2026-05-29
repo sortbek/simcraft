@@ -6,8 +6,8 @@
 //! either don't use the streaming iterator (Inline mode) or don't have a
 //! resumable workflow.
 
-use std::collections::{HashMap, HashSet};
 use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 
 use super::iterator::ProfilesetIteratorConfig;
 use super::GemEnchantOptions;
@@ -17,8 +17,8 @@ use crate::server::request_json::NormalizedRequest;
 /// The envelope shape is `{ sim_type, version, payload }` per
 /// [crate::server::request_json::NormalizedRequest].
 pub fn build_iterator_from_request_json(json: &str) -> Result<ProfilesetIteratorConfig, String> {
-    let envelope: NormalizedRequest = serde_json::from_str(json)
-        .map_err(|e| format!("Invalid request_json: {}", e))?;
+    let envelope: NormalizedRequest =
+        serde_json::from_str(json).map_err(|e| format!("Invalid request_json: {}", e))?;
     if envelope.sim_type != "top_gear" {
         return Err(format!(
             "Resume not supported for sim_type={} (only top_gear in Phase 2)",
@@ -91,7 +91,9 @@ pub fn build_iterator_from_request_json(json: &str) -> Result<ProfilesetIterator
                     }
                     if let Some(obj) = t.as_object() {
                         let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                        let ts = obj.get("talent_string").and_then(|v| v.as_str())
+                        let ts = obj
+                            .get("talent_string")
+                            .and_then(|v| v.as_str())
                             .or_else(|| obj.get("ts").and_then(|v| v.as_str()))
                             .unwrap_or("");
                         return Some((name.to_string(), ts.to_string()));
@@ -149,7 +151,10 @@ mod tests {
     #[test]
     fn rejects_invalid_json() {
         let err = unwrap_err(build_iterator_from_request_json("{not json"));
-        assert!(err.contains("Invalid request_json"), "unexpected error: {err}");
+        assert!(
+            err.contains("Invalid request_json"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

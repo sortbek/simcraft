@@ -177,11 +177,11 @@ struct Stage {
 /// per stage so a Probe stage actually delivers its 2.0% precision (a 50-iter
 /// cap previously left it at ~5% noise).
 const STAGE_CANDIDATES: &[(f64, &str)] = &[
-    (2.0,  "Probe"),
-    (1.0,  "Coarse"),
-    (0.5,  "Refine"),
-    (0.2,  "Medium"),
-    (0.1,  "Fine"),
+    (2.0, "Probe"),
+    (1.0, "Coarse"),
+    (0.5, "Refine"),
+    (0.2, "Medium"),
+    (0.1, "Fine"),
     (0.05, "Trace"),
     (0.02, "Ultra"),
 ];
@@ -233,7 +233,7 @@ fn staged_batch_size() -> usize {
 
 /// Resume state for `run_simc_staged`. Built from a `StagedCheckpoint` by
 /// `resume_staged`, or `default()` for a fresh start.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StagedResumeState {
     pub start_stage_idx: usize,
     /// Batch index to resume the start_stage_idx stage from. `0` = start the
@@ -242,16 +242,6 @@ pub struct StagedResumeState {
     /// Profileset results accumulated from batches already completed in the
     /// stage being resumed.
     pub resumed_batch_results: Vec<Value>,
-}
-
-impl Default for StagedResumeState {
-    fn default() -> Self {
-        Self {
-            start_stage_idx: 0,
-            start_batch_idx: 0,
-            resumed_batch_results: Vec::new(),
-        }
-    }
 }
 
 /// Extract profileset names ("Combo N") from a simc input string in iteration
@@ -339,7 +329,10 @@ fn select_kept_profilesets(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let top_mean = sorted[0].get("mean").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let top_mean = sorted[0]
+        .get("mean")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let cutoff_factor = 1.0 - STAGE_CUTOFF_MULTIPLIER * target_error / 100.0;
     let top_threshold = top_mean * cutoff_factor;
     let baseline_threshold = baseline_mean.map(|m| m * cutoff_factor).unwrap_or(f64::MIN);
@@ -424,6 +417,7 @@ pub struct SimcInputBuild<'a> {
 
 impl<'a> SimcInputBuild<'a> {
     /// Standard non-Triage build: detailed report, parallelism auto-derived.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         simc_input: &'a str,
         options: &'a Value,
@@ -1118,7 +1112,6 @@ fn parse_combo_id(name: &str) -> Option<i64> {
 /// Resume calls pass the `next_stage_idx` from the Staged checkpoint to skip
 /// already-completed stages. The `simc_input` must already contain only the
 /// survivor profilesets for the resumed stage.
-
 /// Persist a Staged checkpoint and check whether a pause has been requested.
 /// No-op for non-Streamed jobs or when no pool is configured.
 ///
@@ -1278,7 +1271,8 @@ pub async fn run_simc_staged(
 
         let stage = &stages[stage_idx];
         let is_final = stage_idx == final_idx;
-        let (range_start, range_end) = progress_range_for_stage(stage_idx, total_stages, base_start);
+        let (range_start, range_end) =
+            progress_range_for_stage(stage_idx, total_stages, base_start);
         let stage_iters = iterations_for_stage(stage, user_iterations);
         let stage_label = stage.name.to_lowercase();
         let stage_name_for_progress = stage.name;
@@ -1319,7 +1313,8 @@ pub async fn run_simc_staged(
                 false,
                 |current, total| {
                     let pct = range_start
-                        + ((current as f64 / total as f64) * (range_end - range_start) as f64) as u8;
+                        + ((current as f64 / total as f64) * (range_end - range_start) as f64)
+                            as u8;
                     on_progress(
                         pct,
                         &format!("Stage {} of {}", stage_idx + 1, total_stages),
@@ -1341,11 +1336,13 @@ pub async fn run_simc_staged(
 
         // ── Intermediate stage: batched ──────────────────────────────────────
         let stage_names = list_profileset_names(&current_input);
-        let total_batches = (stage_names.len() + batch_size - 1) / batch_size;
+        let total_batches = stage_names.len().div_ceil(batch_size);
         let batches: Vec<&[String]> = stage_names.chunks(batch_size).collect();
         // Survivor ids for this stage don't change across batches — compute once.
-        let stage_survivor_combo_ids: Vec<i64> =
-            stage_names.iter().filter_map(|n| parse_combo_id(n)).collect();
+        let stage_survivor_combo_ids: Vec<i64> = stage_names
+            .iter()
+            .filter_map(|n| parse_combo_id(n))
+            .collect();
 
         let mut all_results: Vec<Value> = std::mem::take(&mut resumed_batch_results);
         let mut last_batch_json: Option<Value> = None;
@@ -1355,17 +1352,16 @@ pub async fn run_simc_staged(
         let batch_start = std::mem::replace(&mut next_batch_idx_on_entry, 0);
         let batch_start = batch_start.min(total_batches);
 
+        #[allow(clippy::needless_range_loop)]
         for batch_idx in batch_start..total_batches {
-            let batch_names_set: HashSet<String> =
-                batches[batch_idx].iter().cloned().collect();
+            let batch_names_set: HashSet<String> = batches[batch_idx].iter().cloned().collect();
             let batch_input = filter_simc_input(&current_input, &batch_names_set);
 
             // Per-batch progress mapping: each batch occupies an equal slice
             // of the stage's progress range. Within a batch we further sub-
             // divide via simc's own profileset counter.
             let batch_pct_start = range_start as f64
-                + (batch_idx as f64 / total_batches as f64)
-                    * (range_end - range_start) as f64;
+                + (batch_idx as f64 / total_batches as f64) * (range_end - range_start) as f64;
             let batch_pct_end = range_start as f64
                 + ((batch_idx + 1) as f64 / total_batches as f64)
                     * (range_end - range_start) as f64;
@@ -1391,9 +1387,7 @@ pub async fn run_simc_staged(
                 false,
                 |current, total| {
                     let span = batch_pct_end - batch_pct_start;
-                    let pct = (batch_pct_start
-                        + (current as f64 / total as f64) * span)
-                        as u8;
+                    let pct = (batch_pct_start + (current as f64 / total as f64) * span) as u8;
                     on_progress(
                         pct,
                         &format!("Stage {} of {}", stage_idx + 1, total_stages),
@@ -1401,7 +1395,7 @@ pub async fn run_simc_staged(
                             "batch {}/{} · {}/{} profilesets · {} precision",
                             batch_idx + 1,
                             total_batches,
-                            cumulative_done + current as usize,
+                            cumulative_done + current,
                             total_for_display,
                             stage_name_for_progress
                         ),
@@ -1449,13 +1443,8 @@ pub async fn run_simc_staged(
                 ),
                 constants,
             };
-            write_staged_checkpoint_and_check_pause(
-                &pool,
-                job_id,
-                simc_input_mode,
-                checkpoint,
-            )
-            .await?;
+            write_staged_checkpoint_and_check_pause(&pool, job_id, simc_input_mode, checkpoint)
+                .await?;
         }
 
         // ── End of stage: prune from accumulated batch results ──────────────
@@ -1515,8 +1504,10 @@ pub async fn run_simc_staged(
             .get(next_idx)
             .map(|s| s.name.to_string())
             .unwrap_or_else(|| "Done".to_string());
-        let survivor_combo_ids: Vec<i64> =
-            keep_combos.iter().filter_map(|n| parse_combo_id(n)).collect();
+        let survivor_combo_ids: Vec<i64> = keep_combos
+            .iter()
+            .filter_map(|n| parse_combo_id(n))
+            .collect();
         let checkpoint = crate::profileset_generator::checkpoint::Checkpoint {
             phase: crate::profileset_generator::checkpoint::CheckpointPhase::Staged(
                 crate::profileset_generator::checkpoint::StagedCheckpoint {
@@ -1529,13 +1520,7 @@ pub async fn run_simc_staged(
             ),
             constants,
         };
-        write_staged_checkpoint_and_check_pause(
-            &pool,
-            job_id,
-            simc_input_mode,
-            checkpoint,
-        )
-        .await?;
+        write_staged_checkpoint_and_check_pause(&pool, job_id, simc_input_mode, checkpoint).await?;
 
         // Skip intermediate stages once survivors are few enough — jump to final precision.
         if remaining <= SKIP_TO_FINAL_THRESHOLD {
@@ -1548,7 +1533,7 @@ pub async fn run_simc_staged(
     if let Some(ref mut output) = result {
         merge_eliminated_into_final(&mut output.json, &eliminated);
     }
-    return result.ok_or_else(|| StagedRunError::Other("No simulation result produced".to_string()));
+    result.ok_or_else(|| StagedRunError::Other("No simulation result produced".to_string()))
 }
 
 /// Splice combos that were dropped at intermediate stages back into the final
@@ -1586,6 +1571,7 @@ fn merge_eliminated_into_final(json: &mut Value, eliminated: &HashMap<String, Va
 /// parallelism. Detailed output remains enabled for completed report data;
 /// live parallel progress is surfaced through the Triage progress callback.
 /// Returns the parsed `sim.profilesets.results` JSON array.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_simc_triage_batch(
     base_profile: &str,
     profileset_simc_lines: &str,
@@ -1648,7 +1634,7 @@ pub async fn run_simc_triage_batch(
         false, // calculate_scale_factors
         single_actor_batch,
         "triage",
-        false,     // generate_html
+        false, // generate_html
         on_profileset_progress,
         move |line| logs.push_line(&log_jid, line.to_string()),
         None, // triage batches don't carry a cancel token — caller serializes batches
@@ -1715,7 +1701,16 @@ mod tests {
         let triage_input = build_full_simc_input(&SimcInputBuild {
             force_parallel_profilesets: Some(true),
             ..SimcInputBuild::new(
-                input, &options, "Patchwerk", 2.0, 10_000, 3, 180, false, true, false,
+                input,
+                &options,
+                "Patchwerk",
+                2.0,
+                10_000,
+                3,
+                180,
+                false,
+                true,
+                false,
             )
         });
 
@@ -1810,7 +1805,10 @@ mod tests {
             ]}}
         });
         let mut eliminated: HashMap<String, Value> = HashMap::new();
-        eliminated.insert("A".to_string(), json!({"name":"A","mean": 980.0,"iter":"intermediate"}));
+        eliminated.insert(
+            "A".to_string(),
+            json!({"name":"A","mean": 980.0,"iter":"intermediate"}),
+        );
         eliminated.insert("B".to_string(), json!({"name":"B","mean": 970.0}));
 
         merge_eliminated_into_final(&mut final_json, &eliminated);
@@ -1833,8 +1831,7 @@ mod tests {
 
     #[test]
     fn merge_eliminated_is_noop_when_empty() {
-        let mut json =
-            json!({"sim":{"profilesets":{"results":[{"name":"X","mean":1.0}]}}});
+        let mut json = json!({"sim":{"profilesets":{"results":[{"name":"X","mean":1.0}]}}});
         merge_eliminated_into_final(&mut json, &HashMap::new());
         let arr = json
             .pointer("/sim/profilesets/results")
@@ -1955,7 +1952,12 @@ mod tests {
         //   effective        = max(964.8, 960.0)  =  964.8
         // Without baseline: "c" at 970 would survive only the top cut anyway,
         // but adding baseline makes the cut explicit even when top tracks baseline.
-        let pss = vec![ps("a", 1005.0), ps("b", 980.0), ps("c", 970.0), ps("d", 950.0)];
+        let pss = vec![
+            ps("a", 1005.0),
+            ps("b", 980.0),
+            ps("c", 970.0),
+            ps("d", 950.0),
+        ];
         let kept = select_kept_profilesets(&pss, 2.0, 1, Some(1000.0));
         assert!(kept.contains("a"));
         assert!(kept.contains("b"));
@@ -2019,10 +2021,7 @@ mod tests {
         // Multi-talent job: base actor on talent A is 950, Currently Equipped (B)
         // profileset is 1010. Use the larger.
         let raw = sim_with_base_actor_dps(950.0);
-        let pss = vec![
-            ps("Currently Equipped (B)", 1010.0),
-            ps("Combo 2", 900.0),
-        ];
+        let pss = vec![ps("Currently Equipped (B)", 1010.0), ps("Combo 2", 900.0)];
         assert_eq!(baseline_mean_for_pruning(&raw, &pss), Some(1010.0));
     }
 
@@ -2053,7 +2052,10 @@ mod tests {
         assert_eq!(iterations_for_stage(&stage("Probe", 2.0), 10_000), 10_000);
         assert_eq!(iterations_for_stage(&stage("Coarse", 1.0), 10_000), 10_000);
         assert_eq!(iterations_for_stage(&stage("Final", 0.05), 50_000), 50_000);
-        assert_eq!(iterations_for_stage(&stage("Final", 0.01), 100_000), 100_000);
+        assert_eq!(
+            iterations_for_stage(&stage("Final", 0.01), 100_000),
+            100_000
+        );
     }
 
     #[test]
@@ -2062,7 +2064,12 @@ mod tests {
         // produces a coarse-to-fine sequence.
         let mut prev_te = f64::INFINITY;
         for (te, _) in STAGE_CANDIDATES {
-            assert!(*te < prev_te, "target_error {} should be tighter than previous {}", te, prev_te);
+            assert!(
+                *te < prev_te,
+                "target_error {} should be tighter than previous {}",
+                te,
+                prev_te
+            );
             prev_te = *te;
         }
     }
@@ -2075,7 +2082,7 @@ mod tests {
         let (start, _) = progress_range_for_stage(0, 6, 10);
         assert_eq!(start, 10);
         let (_, end) = progress_range_for_stage(5, 6, 10);
-        assert!(end >= 90 && end <= 95);
+        assert!((90..=95).contains(&end));
     }
 
     #[test]
@@ -2084,7 +2091,7 @@ mod tests {
         let (start, _) = progress_range_for_stage(0, 6, 50);
         assert_eq!(start, 50);
         let (_, end) = progress_range_for_stage(5, 6, 50);
-        assert!(end >= 90 && end <= 95);
+        assert!((90..=95).contains(&end));
     }
 
     #[test]

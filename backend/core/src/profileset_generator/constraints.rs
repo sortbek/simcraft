@@ -48,9 +48,7 @@ pub(super) fn is_legal_gear_set<V: Borrow<Value>>(
     true
 }
 
-pub(super) fn validate_vault_constraint<V: Borrow<Value>>(
-    gear_set: &HashMap<String, V>,
-) -> bool {
+pub(super) fn validate_vault_constraint<V: Borrow<Value>>(gear_set: &HashMap<String, V>) -> bool {
     let mut vault_item_ids: HashSet<u64> = HashSet::new();
     for item in gear_set.values() {
         let item = item.borrow();
@@ -196,9 +194,7 @@ pub(super) fn main_hand_is_two_hand<V: Borrow<Value>>(
     inv_type == 17
 }
 
-pub(super) fn validate_unique_equipped<V: Borrow<Value>>(
-    gear_set: &HashMap<String, V>,
-) -> bool {
+pub(super) fn validate_unique_equipped<V: Borrow<Value>>(gear_set: &HashMap<String, V>) -> bool {
     for (slot1, slot2) in UNIQUE_SLOT_PAIRS {
         let item1 = gear_set.get(*slot1).map(|v| v.borrow());
         let item2 = gear_set.get(*slot2).map(|v| v.borrow());

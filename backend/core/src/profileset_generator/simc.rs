@@ -87,13 +87,19 @@ mod tests {
     #[test]
     fn set_enchant_id_replaces_existing() {
         let s = ",id=100,enchant_id=7777,bonus_id=12";
-        assert_eq!(set_enchant_id(s, 8888), ",id=100,enchant_id=8888,bonus_id=12");
+        assert_eq!(
+            set_enchant_id(s, 8888),
+            ",id=100,enchant_id=8888,bonus_id=12"
+        );
     }
 
     #[test]
     fn set_enchant_id_inserts_after_item_id_when_missing() {
         let s = ",id=100,bonus_id=12";
-        assert_eq!(set_enchant_id(s, 8888), ",id=100,enchant_id=8888,bonus_id=12");
+        assert_eq!(
+            set_enchant_id(s, 8888),
+            ",id=100,enchant_id=8888,bonus_id=12"
+        );
     }
 
     #[test]

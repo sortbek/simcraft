@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Inputs needed to compute an identity_key for one profileset candidate.
 /// The key reflects the EFFECTIVE profileset behavior, not the cursor —
@@ -107,7 +107,9 @@ pub fn effective_gems(
 ) -> HashMap<String, Vec<u64>> {
     let mut out = HashMap::new();
     for (slot, gem_ids) in nominal_gems {
-        let Some(item) = gear_set.get(slot) else { continue };
+        let Some(item) = gear_set.get(slot) else {
+            continue;
+        };
         let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
         let inherent_sockets = item.get("sockets").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         let socketable = inherent_sockets > 0 || socketed_item_ids.contains(&item_id);
@@ -119,7 +121,12 @@ pub fn effective_gems(
         } else {
             gem_ids.len()
         };
-        let kept: Vec<u64> = gem_ids.iter().take(cap).copied().filter(|g| *g > 0).collect();
+        let kept: Vec<u64> = gem_ids
+            .iter()
+            .take(cap)
+            .copied()
+            .filter(|g| *g > 0)
+            .collect();
         if !kept.is_empty() {
             out.insert(slot.clone(), kept);
         }
@@ -213,7 +220,10 @@ mod tests {
             effective_gems: &eff_b,
             talent_string: "",
         });
-        assert_eq!(k_a, k_b, "effective gems differ in nominal but not effective; keys must match");
+        assert_eq!(
+            k_a, k_b,
+            "effective gems differ in nominal but not effective; keys must match"
+        );
     }
 
     #[test]

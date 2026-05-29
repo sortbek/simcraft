@@ -328,7 +328,10 @@ mod tests {
         // Best spend = 5 (either head or chest, not both).
         // DFS retains all max-spend combos: 2.
         assert_eq!(count, 2);
-        assert!(input.contains("head=,id=100,bonus_id=200") || input.contains("chest=,id=101,bonus_id=300"));
+        assert!(
+            input.contains("head=,id=100,bonus_id=200")
+                || input.contains("chest=,id=101,bonus_id=300")
+        );
     }
 
     #[test]
@@ -352,8 +355,14 @@ mod tests {
             Some(10),
         )
         .unwrap();
-        assert!(input.contains("### Combo 1"), "missing baseline combo header");
-        assert!(input.contains("head=,id=100\n"), "baseline should show equipped head");
+        assert!(
+            input.contains("### Combo 1"),
+            "missing baseline combo header"
+        );
+        assert!(
+            input.contains("head=,id=100\n"),
+            "baseline should show equipped head"
+        );
     }
 
     #[test]

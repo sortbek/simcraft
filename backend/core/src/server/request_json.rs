@@ -12,7 +12,11 @@ pub struct NormalizedRequest {
 
 impl NormalizedRequest {
     pub fn new(sim_type: impl Into<String>, payload: Value) -> Self {
-        Self { sim_type: sim_type.into(), version: 1, payload }
+        Self {
+            sim_type: sim_type.into(),
+            version: 1,
+            payload,
+        }
     }
 
     pub fn to_json_string(&self) -> Result<String, serde_json::Error> {
