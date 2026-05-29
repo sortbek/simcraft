@@ -19,6 +19,7 @@ import {
   type ScenarioSibling,
 } from '../../lib/scenario-siblings';
 import { getTopGearState } from '../../lib/topgear-state';
+import { ROUTES } from '../../lib/routes';
 
 interface JobData {
   id: string;
@@ -394,7 +395,7 @@ export default function SimResultClient() {
             backLink={
               hasTopGearState ? (
                 <a
-                  href="/top-gear"
+                  href={ROUTES.topGear}
                   className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
                 >
                   <svg

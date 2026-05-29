@@ -398,6 +398,61 @@ fn baseline_mean_for_pruning(raw: &Value, profilesets: &[Value]) -> Option<f64> 
     }
 }
 
+/// Named-field inputs for [`build_full_simc_input`]. The booleans
+/// (`calculate_scale_factors` / `single_actor_batch` / `is_dungeon_route` /
+/// `report_details`) all type-check identically as positional args, which made
+/// the old signature error-prone — the struct forces each call site to label
+/// what it's setting.
+pub struct SimcInputBuild<'a> {
+    pub simc_input: &'a str,
+    pub options: &'a Value,
+    pub fight_style: &'a str,
+    pub target_error: f64,
+    pub iterations: u32,
+    pub desired_targets: u32,
+    pub max_time: u32,
+    pub calculate_scale_factors: bool,
+    pub single_actor_batch: bool,
+    pub is_dungeon_route: bool,
+    /// `true` for normal sims; `false` only inside Triage where the detailed
+    /// per-actor report bloats output for no benefit.
+    pub report_details: bool,
+    /// `None` = derive parallelism from combo count + target_error. `Some(b)`
+    /// = force on/off (Triage forces on; tests bypass the heuristic).
+    pub force_parallel_profilesets: Option<bool>,
+}
+
+impl<'a> SimcInputBuild<'a> {
+    /// Standard non-Triage build: detailed report, parallelism auto-derived.
+    pub fn new(
+        simc_input: &'a str,
+        options: &'a Value,
+        fight_style: &'a str,
+        target_error: f64,
+        iterations: u32,
+        desired_targets: u32,
+        max_time: u32,
+        calculate_scale_factors: bool,
+        single_actor_batch: bool,
+        is_dungeon_route: bool,
+    ) -> Self {
+        Self {
+            simc_input,
+            options,
+            fight_style,
+            target_error,
+            iterations,
+            desired_targets,
+            max_time,
+            calculate_scale_factors,
+            single_actor_batch,
+            is_dungeon_route,
+            report_details: true,
+            force_parallel_profilesets: None,
+        }
+    }
+}
+
 /// Build the full simc input from the options Value (convenience wrapper).
 pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> String {
     let fight_style = options
@@ -431,7 +486,7 @@ pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> Strin
         t == "fight_style=DungeonRoute" || t == "fight_style=\"DungeonRoute\""
     });
 
-    build_full_simc_input(
+    build_full_simc_input(&SimcInputBuild::new(
         simc_input,
         options,
         fight_style,
@@ -442,26 +497,14 @@ pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> Strin
         calculate_scale_factors,
         single_actor_batch,
         is_dungeon_route,
-    )
+    ))
 }
 
 /// Build the full simc input file with all options inline (matching Raidbots format).
 /// Injects consumables, expansion options after the base actor, and appends a
 /// `# Simulation Options` section at the end with overrides, sim config, etc.
-#[allow(clippy::too_many_arguments)]
-pub fn build_full_simc_input(
-    simc_input: &str,
-    options: &Value,
-    fight_style: &str,
-    target_error: f64,
-    iterations: u32,
-    desired_targets: u32,
-    max_time: u32,
-    calculate_scale_factors: bool,
-    single_actor_batch: bool,
-    is_dungeon_route: bool,
-) -> String {
-    build_full_simc_input_with_execution(
+pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
+    let SimcInputBuild {
         simc_input,
         options,
         fight_style,
@@ -472,26 +515,9 @@ pub fn build_full_simc_input(
         calculate_scale_factors,
         single_actor_batch,
         is_dungeon_route,
-        true,
-        None,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_full_simc_input_with_execution(
-    simc_input: &str,
-    options: &Value,
-    fight_style: &str,
-    target_error: f64,
-    iterations: u32,
-    desired_targets: u32,
-    max_time: u32,
-    calculate_scale_factors: bool,
-    single_actor_batch: bool,
-    is_dungeon_route: bool,
-    report_details: bool,
-    force_parallel_profilesets: Option<bool>,
-) -> String {
+        report_details,
+        force_parallel_profilesets,
+    } = *b;
     let consumables = options.get("consumables").and_then(|v| v.as_object());
     let expansion_opts = options.get("expansion_options").and_then(|v| v.as_object());
     let raid_buffs = options.get("raid_buffs").and_then(|v| v.as_object());
@@ -737,7 +763,7 @@ async fn run_simc_subprocess(
     let final_input = if raw {
         simc_input.to_string()
     } else {
-        build_full_simc_input(
+        build_full_simc_input(&SimcInputBuild::new(
             simc_input,
             options,
             fight_style,
@@ -748,7 +774,7 @@ async fn run_simc_subprocess(
             calculate_scale_factors,
             single_actor_batch,
             is_dungeon_route,
-        )
+        ))
     };
     std::fs::write(&input_file, &final_input)
         .map_err(|e| format!("Failed to write input file: {}", e))?;
@@ -1587,20 +1613,23 @@ pub async fn run_simc_triage_batch(
         .unwrap_or(true);
     let is_dungeon_route = fight_style == "DungeonRoute";
     let batch_input = format!("# Base Actor\n{}\n{}", base_profile, profileset_simc_lines);
-    let triage_input = build_full_simc_input_with_execution(
-        &batch_input,
-        options,
-        fight_style,
-        target_error,
-        iterations,
-        desired_targets,
-        max_time,
-        false,
-        single_actor_batch,
-        is_dungeon_route,
-        true,
-        Some(true),
-    );
+    let triage_input = build_full_simc_input(&SimcInputBuild {
+        // Triage forces profileset parallelism: many cheap profilesets per
+        // batch beat sequential per-profileset iteration parallelism.
+        force_parallel_profilesets: Some(true),
+        ..SimcInputBuild::new(
+            &batch_input,
+            options,
+            fight_style,
+            target_error,
+            iterations,
+            desired_targets,
+            max_time,
+            false,
+            single_actor_batch,
+            is_dungeon_route,
+        )
+    });
 
     let logs = log_buffer.clone();
     let log_jid = job_id.to_string();
@@ -1683,20 +1712,12 @@ mod tests {
             }
         });
         let input = "mage=\"Tester\"\nprofileset.\"Combo 1\"+=head=id=1";
-        let triage_input = build_full_simc_input_with_execution(
-            input,
-            &options,
-            "Patchwerk",
-            2.0,
-            10_000,
-            3,
-            180,
-            false,
-            true,
-            false,
-            true,
-            Some(true),
-        );
+        let triage_input = build_full_simc_input(&SimcInputBuild {
+            force_parallel_profilesets: Some(true),
+            ..SimcInputBuild::new(
+                input, &options, "Patchwerk", 2.0, 10_000, 3, 180, false, true, false,
+            )
+        });
 
         assert!(triage_input.contains("food=feast"));
         assert!(triage_input.contains("temporary_enchant=main_hand:rune"));

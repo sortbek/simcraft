@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { FightScenario } from '../../lib/types';
 import { API_URL } from '../../lib/api';
+import { readSessionString, readStoredJson, readStoredPositiveInt } from '../../lib/storage';
+import { TRIAGE_BATCH_DEFAULT } from '../../lib/triageBatch';
 
 export type RotationMode = 'default' | 'assisted_combat' | 'one_button';
 
@@ -100,26 +102,6 @@ export const DEFAULT_EXPANSION_OPTIONS: Record<string, boolean> = {
   'midnight.crucible_of_erratic_energies_predation': true,
 };
 
-function readStoredJson<T>(key: string, fallback: T): T {
-  try {
-    const v = localStorage.getItem(key);
-    return v ? JSON.parse(v) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function readStored(key: string, fallback: number): number {
-  const v = localStorage.getItem(key);
-  if (v == null) return fallback;
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function readSessionString(key: string, fallback: string): string {
-  return sessionStorage.getItem(key) ?? fallback;
-}
-
 export function SimProvider({ children }: { children: ReactNode }) {
   const [simcInput, _setSimcInput] = useState('');
   const [fightStyle, setFightStyle] = useState('Patchwerk');
@@ -143,20 +125,23 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [talentBuilds, setTalentBuilds] = useState<{ name: string; talentString: string }[]>([]);
   const [scenarios, setScenarios] = useState<FightScenario[]>([]);
   const [parallelProfilesets, setParallelProfilesets] = useState(true);
-  const [triageMaxBatchProfilesets, _setTriageMaxBatchProfilesets] = useState(250);
+  const [triageMaxBatchProfilesets, _setTriageMaxBatchProfilesets] =
+    useState(TRIAGE_BATCH_DEFAULT);
   const [statWeights, _setStatWeights] = useState(false);
 
   useEffect(() => {
     try {
       _setSimcInput(readSessionString('simhammer_simc_input', ''));
-      _setThreads(readStored('simhammer_threads', 0));
+      _setThreads(readStoredPositiveInt('simhammer_threads', 0));
       const storedError = localStorage.getItem('simhammer_target_error');
       if (storedError != null) {
         const n = parseFloat(storedError);
         if (Number.isFinite(n) && n > 0) _setTargetError(n);
       }
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
-      _setTriageMaxBatchProfilesets(readStored('simhammer_triage_max_batch_profilesets', 250));
+      _setTriageMaxBatchProfilesets(
+        readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
+      );
       const storedBranch = normalizeSimcBranch(localStorage.getItem('simhammer_simc_branch') ?? '');
       _setSimcBranch(storedBranch);
       if (storedBranch) {

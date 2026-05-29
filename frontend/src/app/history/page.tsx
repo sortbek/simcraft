@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { ROUTES } from '../lib/routes';
 
 /**
  * /history was merged into /sims (unified overview with stats panel,
@@ -11,7 +12,7 @@ import { useRouter } from 'next/navigation';
 export default function HistoryRedirect() {
   const router = useRouter();
   useEffect(() => {
-    router.replace('/sims');
+    router.replace(ROUTES.sims);
   }, [router]);
   return null;
 }

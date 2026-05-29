@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useLanguage } from '../lib/i18n';
+import { ROUTES } from '../lib/routes';
 
 interface SimType {
   href: string;
@@ -16,40 +17,44 @@ interface SimType {
 
 const simTypes: SimType[] = [
   {
-    href: '/quick-sim',
+    href: ROUTES.quickSim,
     labelKey: 'page.quickSim',
     descriptionKey: 'page.quickSimDesc',
     icon: 'M13 8l-5 5-5-5M3 3h10',
-    matchPaths: ['/quick-sim'],
+    matchPaths: [ROUTES.quickSim],
   },
   {
-    href: '/top-gear',
+    href: ROUTES.topGear,
     labelKey: 'page.topGear',
     descriptionKey: 'page.topGearDesc',
     icon: 'M8 1l2 4 4.5.7-3.2 3.1.8 4.5L8 11l-4.1 2.3.8-4.5L1.5 5.7 6 5z',
-    matchPaths: ['/top-gear'],
+    matchPaths: [ROUTES.topGear],
   },
   {
-    href: '/drop-finder',
+    href: ROUTES.dropFinder,
     labelKey: 'page.upgrades',
     descriptionKey: 'page.upgradesDesc',
     icon: 'M7 7m-4.5 0a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0-9 0M10.5 10.5L14 14',
-    matchPaths: ['/drop-finder', '/upgrade-compare'],
+    matchPaths: [ROUTES.dropFinder, ROUTES.upgradeCompare],
     children: [
-      { href: '/drop-finder', labelKey: 'page.dropFinder', descriptionKey: 'page.dropFinderDesc' },
       {
-        href: '/upgrade-compare',
+        href: ROUTES.dropFinder,
+        labelKey: 'page.dropFinder',
+        descriptionKey: 'page.dropFinderDesc',
+      },
+      {
+        href: ROUTES.upgradeCompare,
         labelKey: 'page.crestUpgrades',
         descriptionKey: 'page.crestUpgradesDesc',
       },
     ],
   },
   {
-    href: '/sims',
+    href: ROUTES.sims,
     labelKey: 'page.history',
     descriptionKey: 'page.historyDesc',
     icon: 'M8 8m-6.5 0a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0M8 4.5V8l2.5 2.5',
-    matchPaths: ['/sims', '/history'],
+    matchPaths: [ROUTES.sims, ROUTES.history],
   },
 ];
 

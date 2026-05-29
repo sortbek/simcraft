@@ -8,6 +8,7 @@ import { ScaleSelector } from './ContentScaler';
 import UpdateChecker from './UpdateChecker';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
+import { ROUTES, SIM_RESULT_PREFIX } from '../../lib/routes';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -16,24 +17,24 @@ export default function Sidebar() {
 
   const navItems = [
     {
-      href: '/quick-sim',
+      href: ROUTES.quickSim,
       label: t('nav.quickSim'),
-      matchPaths: ['/quick-sim'],
+      matchPaths: [ROUTES.quickSim],
     },
     {
-      href: '/top-gear',
+      href: ROUTES.topGear,
       label: t('nav.topGear'),
-      matchPaths: ['/top-gear'],
+      matchPaths: [ROUTES.topGear],
     },
     {
-      href: '/drop-finder',
+      href: ROUTES.dropFinder,
       label: t('nav.dropFinder'),
-      matchPaths: ['/drop-finder'],
+      matchPaths: [ROUTES.dropFinder],
     },
     {
-      href: '/upgrade-compare',
+      href: ROUTES.upgradeCompare,
       label: t('nav.crestUpgrades'),
-      matchPaths: ['/upgrade-compare'],
+      matchPaths: [ROUTES.upgradeCompare],
     },
     {
       href: '/advanced',
@@ -41,10 +42,10 @@ export default function Sidebar() {
       matchPaths: ['/advanced'],
     },
     {
-      href: '/sims',
+      href: ROUTES.sims,
       label: t('nav.sims'),
       // Also highlights when viewing /sim/[id] or following old /history links.
-      matchPaths: ['/sims', '/sim', '/history'],
+      matchPaths: [ROUTES.sims, SIM_RESULT_PREFIX, ROUTES.history],
     },
   ];
 

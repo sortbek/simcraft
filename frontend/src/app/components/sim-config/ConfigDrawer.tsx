@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { API_URL } from '../../lib/api';
+import { ROUTES } from '../../lib/routes';
+import { TRIAGE_BATCH_OPTIONS } from '../../lib/triageBatch';
 import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
@@ -30,7 +32,7 @@ export default function ConfigDrawer({
   onAvailableBranchesChange,
 }: ConfigDrawerProps) {
   const { t } = useLanguage();
-  const isTopGear = usePathname() === '/top-gear';
+  const isTopGear = usePathname() === ROUTES.topGear;
   const {
     fightStyle,
     setFightStyle,
@@ -366,11 +368,11 @@ export default function ConfigDrawer({
                     onChange={(event) => setTriageMaxBatchProfilesets(Number(event.target.value))}
                     className="w-full rounded border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:outline-none"
                   >
-                    <option value={250}>250 - Responsive pausing (default)</option>
-                    <option value={500}>500 - Balanced</option>
-                    <option value={1000}>1,000 - Throughput</option>
-                    <option value={5000}>5,000 - High throughput</option>
-                    <option value={30000}>30,000 - Maximum throughput</option>
+                    {TRIAGE_BATCH_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                   <p className="text-[11px] text-on-surface-variant/40">
                     Streamed Top Gear only. Larger batches reduce repeated baseline and
