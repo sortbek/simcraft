@@ -8,7 +8,9 @@ export const ROUTES = {
   topGear: '/top-gear',
   dropFinder: '/drop-finder',
   upgradeCompare: '/upgrade-compare',
+  advanced: '/advanced',
   sims: '/sims',
+  settings: '/settings',
   /** Legacy alias; redirects to `sims`. */
   history: '/history',
 } as const;
@@ -20,3 +22,8 @@ export function simResultRoute(id: string): string {
 
 /** Prefix used by `matchPaths` to match any `/sim/...` deep link. */
 export const SIM_RESULT_PREFIX = '/sim';
+
+/** Is the user currently on any of `paths` (exact match or `path/*` subpage)? */
+export function isRouteActive(pathname: string, paths: readonly string[]): boolean {
+  return paths.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useLanguage } from '../lib/i18n';
-import { ROUTES } from '../lib/routes';
+import { ROUTES, isRouteActive } from '../lib/routes';
 
 interface SimType {
   href: string;
@@ -66,7 +66,7 @@ export default function SimTypeCards() {
   return (
     <div className="mb-8 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       {simTypes.map((sim) => {
-        const isActive = sim.matchPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
+        const isActive = isRouteActive(pathname, sim.matchPaths);
         const hasChildren = sim.children && sim.children.length > 0;
         const label = t(sim.labelKey);
         const isOpen = openMenu === sim.labelKey;
@@ -123,8 +123,7 @@ export default function SimTypeCards() {
               <div className="absolute left-0 right-0 top-full z-50 pt-1">
                 <div className="overflow-hidden rounded-lg bg-surface-container-high shadow-ambient">
                   {sim.children!.map((child) => {
-                    const childActive =
-                      pathname === child.href || pathname.startsWith(child.href + '/');
+                    const childActive = isRouteActive(pathname, [child.href]);
                     return (
                       <Link
                         key={child.href}
