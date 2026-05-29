@@ -214,7 +214,7 @@ struct StatusResponse {
     #[serde(default)]
     progress: Option<StatusProgress>,
     #[serde(default, rename = "logEntries")]
-    log_entries: Vec<StatusLog>,
+    log_entries: Option<Vec<StatusLog>>,
 }
 #[derive(Deserialize, Debug, Default)]
 struct StatusQueue {
@@ -239,9 +239,34 @@ struct StatusStage {
 }
 #[derive(Deserialize, Debug)]
 struct StatusLog {
-    source: String,
-    message: String,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_ts")]
     ts: u64,
+}
+
+/// Accept either an integer or a float for `ts` (epoch ms). Treat absent or
+/// non-numeric as 0 so log dedup still progresses.
+fn deserialize_ts<'de, D>(d: D) -> Result<u64, D::Error>
+where D: serde::Deserializer<'de> {
+    use serde::de::Error;
+    let v = serde_json::Value::deserialize(d)?;
+    match v {
+        serde_json::Value::Number(n) => {
+            if let Some(u) = n.as_u64() {
+                Ok(u)
+            } else if let Some(f) = n.as_f64() {
+                Ok(f.max(0.0) as u64)
+            } else {
+                Ok(0)
+            }
+        }
+        serde_json::Value::String(s) => s.parse::<u64>().map_err(D::Error::custom),
+        serde_json::Value::Null => Ok(0),
+        _ => Err(D::Error::custom("ts is not a number")),
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -280,13 +305,22 @@ impl SimmitProvider {
                 let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
                 return Err(map_simmit_error(status_code, err));
             }
-            let s: StatusResponse = resp.json().await
-                .map_err(|e| RunError::Other(format!("Simmit poll decode: {}", e)))?;
+            let body_text = resp.text().await
+                .map_err(|e| RunError::Other(format!("Simmit poll body read: {}", e)))?;
+            let s: StatusResponse = serde_json::from_str(&body_text)
+                .map_err(|e| {
+                    let preview: String = body_text.chars().take(400).collect();
+                    eprintln!("[simmit] status decode failed: {} | body: {}", e, preview);
+                    RunError::Other(format!("Simmit poll decode: {}", e))
+                })?;
 
             // Stream new log lines, dedup by ts.
-            let new_logs: Vec<&StatusLog> = s.log_entries.iter().filter(|l| l.ts > last_log_ts).collect();
+            let logs_slice = s.log_entries.as_deref().unwrap_or(&[]);
+            let new_logs: Vec<&StatusLog> = logs_slice.iter().filter(|l| l.ts > last_log_ts).collect();
             for log in new_logs {
-                (ctx.on_log)(&format!("[{}] {}", log.source, log.message));
+                let src = log.source.as_deref().unwrap_or("?");
+                let msg = log.message.as_deref().unwrap_or("");
+                (ctx.on_log)(&format!("[{}] {}", src, msg));
                 last_log_ts = log.ts;
             }
 
