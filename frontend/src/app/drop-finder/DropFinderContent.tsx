@@ -7,6 +7,8 @@ import { useSimContext } from '../components/sim-config/SimContext';
 import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
+import { useComputeChoice } from '../lib/useComputeChoice';
+import ComputeSelector from '../components/ComputeSelector';
 import type {
   SeasonConfigResponse,
   DifficultyDef,
@@ -194,6 +196,7 @@ export default function DropFinderContent() {
   const { t } = useLanguage();
   const { simcInput, hasInput } = useSimContext();
   const [category, setCategory] = useState('mplus');
+  const [compute, setCompute] = useComputeChoice('droptimizer');
 
   // Spec selection: main spec on by default, off-specs toggleable
   const detectedClass = useMemo(() => detectClass(simcInput), [simcInput]);
@@ -579,8 +582,8 @@ export default function DropFinderContent() {
         }
       }
     }
-    return { simc_input: simcInput, drop_items: dropItems };
-  }, [visibleDrops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
+    return { simc_input: simcInput, drop_items: dropItems, compute_provider: compute };
+  }, [visibleDrops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks, compute]);
 
   const validate = useCallback(() => {
     if (!visibleDrops || selected.size === 0) return t('validation.selectItems');
@@ -854,7 +857,9 @@ export default function DropFinderContent() {
         submitting={submitting}
         buttonLabel={submitLabel}
         disabled={selected.size === 0 || !hasCharacter}
-      />
+      >
+        <ComputeSelector value={compute} onChange={setCompute} />
+      </ConfigFooter>
     </div>
   );
 }

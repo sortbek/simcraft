@@ -10,11 +10,13 @@ import TalentPicker from '../components/talents/TalentPicker';
 import GearOverview from '../components/gear/GearOverview';
 import type { GearItem } from '../components/gear/GearOverview';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import ComputeSelector from '../components/ComputeSelector';
 import { specDisplayName } from '../lib/types';
 import { API_URL } from '../lib/api';
 import type { ResolveGearResponse } from '../lib/types';
 import { useLanguage } from '../lib/i18n';
 import { parseCharacterInfo } from '../lib/character';
+import { useComputeChoice } from '../lib/useComputeChoice';
 
 interface LastSim {
   id: string;
@@ -94,6 +96,7 @@ function useEquippedGear(simcInput: string): Record<string, GearItem> | null {
 export default function QuickSimPage() {
   const { simcInput, hasInput, statWeights } = useSimContext();
   const { t } = useLanguage();
+  const [compute, setCompute] = useComputeChoice('quick');
 
   const characterInfo = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
   const lastSim = useLastSim(characterInfo?.name ?? null, characterInfo?.realm ?? null);
@@ -113,8 +116,9 @@ export default function QuickSimPage() {
     () => ({
       simc_input: simcInput,
       sim_type: statWeights ? 'stat_weights' : 'quick',
+      compute_provider: compute,
     }),
-    [simcInput, statWeights]
+    [simcInput, statWeights, compute]
   );
 
   const validate = useCallback(() => {
@@ -208,7 +212,9 @@ export default function QuickSimPage() {
         buttonLabel={buttonLabel(t('button.runSimulation'))}
         disabled={!hasInput}
         showStatWeightsToggle
-      />
+      >
+        <ComputeSelector value={compute} onChange={setCompute} />
+      </ConfigFooter>
     </div>
   );
 }

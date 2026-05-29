@@ -12,9 +12,11 @@ import { QUALITY_COLORS, getIconUrl, useItemInfo, type ItemQuery } from '../lib/
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import ComputeSelector from '../components/ComputeSelector';
 import { useLanguage } from '../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../lib/useItemInfo';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
+import { useComputeChoice } from '../lib/useComputeChoice';
 
 // ---- Types ----
 
@@ -101,6 +103,7 @@ export default function UpgradeComparePage() {
   const { t, locale } = useLanguage();
   useItemNames();
   const { simcInput, hasInput } = useSimContext();
+  const [compute, setCompute] = useComputeChoice('upgrade_compare');
 
   const { data, loading } = useUpgradeData(simcInput);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -159,8 +162,9 @@ export default function UpgradeComparePage() {
     return {
       simc_input: simcInput,
       selected_slots: [...selectedSlots],
+      compute_provider: compute,
     };
-  }, [simcInput, selectedSlots]);
+  }, [simcInput, selectedSlots, compute]);
 
   const validate = useCallback(() => {
     if (!hasInput) return t('validation.simcTooShort');
@@ -383,7 +387,9 @@ export default function UpgradeComparePage() {
         submitting={submitting}
         buttonLabel={submitLabel}
         disabled={selectedSlots.size === 0 || !hasCurrencies}
-      />
+      >
+        <ComputeSelector value={compute} onChange={setCompute} />
+      </ConfigFooter>
     </div>
   );
 }

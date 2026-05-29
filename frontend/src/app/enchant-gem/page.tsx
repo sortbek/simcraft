@@ -7,10 +7,12 @@ import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import ComputeSelector from '../components/ComputeSelector';
 import EnchantGemSelector from '../components/gear/EnchantGemSelector';
 import { API_URL } from '../lib/api';
 import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useLanguage } from '../lib/i18n';
+import { useComputeChoice } from '../lib/useComputeChoice';
 
 function useResolvedGear(simcInput: string) {
   const [slots, setSlots] = useState<Record<string, ResolvedItem> | null>(null);
@@ -58,6 +60,7 @@ export default function EnchantGemPage() {
   const { simcInput, hasInput } = useSimContext();
   const { t } = useLanguage();
   const { slots: equippedSlots, resolving } = useResolvedGear(simcInput);
+  const [compute, setCompute] = useComputeChoice('enchant_gem');
 
   // Enchant selections: slot -> Set of enchant_ids
   const [enchantSelections, setEnchantSelections] = useState<Record<string, Set<number>>>({});
@@ -167,8 +170,9 @@ export default function EnchantGemPage() {
       simc_input: simcInput,
       enchant_selections: enchantSelectionsArray,
       gem_options: gemOptionsArray,
+      compute_provider: compute,
     }),
-    [simcInput, enchantSelectionsArray, gemOptionsArray]
+    [simcInput, enchantSelectionsArray, gemOptionsArray, compute]
   );
 
   const validate = useCallback(() => {
@@ -243,7 +247,9 @@ export default function EnchantGemPage() {
         submitting={submitting}
         buttonLabel={buttonText}
         disabled={!hasInput || !hasSelections}
-      />
+      >
+        <ComputeSelector value={compute} onChange={setCompute} />
+      </ConfigFooter>
     </div>
   );
 }

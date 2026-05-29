@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
 import EnchantGemSelector from '../components/gear/EnchantGemSelector';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import ComputeSelector from '../components/ComputeSelector';
 import TalentPicker from '../components/talents/TalentPicker';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
@@ -20,6 +21,7 @@ import {
   toLocalItem,
 } from './topGearPayload';
 import type { TopGearLocalItem } from './topGearTypes';
+import { useComputeChoice } from '../lib/useComputeChoice';
 
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (
@@ -86,6 +88,7 @@ function Toggle({
 export default function TopGearScreen() {
   const { simcInput, talentBuilds } = useSimContext();
   const { t } = useLanguage();
+  const [compute, setCompute] = useComputeChoice('top_gear');
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
   const [localItems, setLocalItems] = useState<TopGearLocalItem[]>([]);
@@ -407,6 +410,7 @@ export default function TopGearScreen() {
       diamond_always_use: diamondAlwaysUse,
       max_colors: maxColors,
       ...(voidForge || hasVoidForgeItems ? { void_forge: true } : {}),
+      compute_provider: compute,
     }),
     [
       submitInput,
@@ -424,6 +428,7 @@ export default function TopGearScreen() {
       maxColors,
       voidForge,
       hasVoidForgeItems,
+      compute,
     ]
   );
 
@@ -575,7 +580,9 @@ export default function TopGearScreen() {
         submitting={submitting}
         buttonLabel={buttonLabel(t('button.findTopGear'))}
         disabled={!resolved}
-      />
+      >
+        <ComputeSelector value={compute} onChange={setCompute} />
+      </ConfigFooter>
     </div>
   );
 }
