@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSimContext } from '../components/sim-config/SimContext';
-import { API_URL, fetchActiveJobs } from './api';
+import { API_URL, fetchActiveJobs, providerKeyHeaders } from './api';
 import { useLanguage } from './i18n';
 import { decodeHeader } from './talentDecode';
 import { SPEC_ID_TO_NAME } from './types';
@@ -157,7 +157,7 @@ export function useSimSubmit({
         configs.map(async (config) => {
           const res = await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...providerKeyHeaders() },
             body: JSON.stringify({
               ...sharedPayload,
               fight_style: config.fightStyle,

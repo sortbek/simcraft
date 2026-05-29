@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
-import { API_URL } from '../lib/api';
+import { API_URL, providerKeyHeaders } from '../lib/api';
 import { useLanguage } from '../lib/i18n';
 
 export default function AdvancedPage() {
@@ -24,7 +24,7 @@ export default function AdvancedPage() {
     try {
       const res = await fetch(`${API_URL}/api/sim`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...providerKeyHeaders() },
         body: JSON.stringify({
           simc_input: rawInput,
           sim_type: 'quick',

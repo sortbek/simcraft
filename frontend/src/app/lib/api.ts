@@ -1,3 +1,5 @@
+import { getLocalKey } from './providers';
+
 // API URL detection: in Electron, the backend serves the frontend on the
 // same origin, so window.location.origin always points at the right backend
 // (matters when the Electron main process falls back to an ephemeral port
@@ -6,6 +8,15 @@ export const API_URL =
   typeof window !== 'undefined' && window.electronAPI
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_API_URL ?? '');
+
+/** Build provider key headers from localStorage. */
+export function providerKeyHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const out: Record<string, string> = {};
+  const simmit = getLocalKey('simmit');
+  if (simmit) out['X-Provider-simmit-Key'] = simmit;
+  return out;
+}
 
 /** Fetch JSON with consistent error handling. Throws on non-ok responses. */
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
