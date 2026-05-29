@@ -184,6 +184,129 @@ fn map_simmit_error(status: reqwest::StatusCode, err: ErrorBody) -> RunError {
     }
 }
 
+#[derive(Deserialize, Debug)]
+struct StatusResponse {
+    status: String,
+    #[serde(default, rename = "errorCode")]
+    error_code: Option<String>,
+    #[serde(default, rename = "statusReason")]
+    status_reason: Option<String>,
+    #[serde(default)]
+    queue: Option<StatusQueue>,
+    #[serde(default)]
+    progress: Option<StatusProgress>,
+    #[serde(default, rename = "logEntries")]
+    log_entries: Vec<StatusLog>,
+}
+#[derive(Deserialize, Debug, Default)]
+struct StatusQueue {
+    #[serde(default, rename = "estimatedStartSeconds")]
+    estimated_start_seconds: Option<u32>,
+}
+#[derive(Deserialize, Debug, Default)]
+struct StatusProgress {
+    #[serde(default)]
+    percent: Option<f64>,
+    #[serde(default)]
+    stage: Option<StatusStage>,
+}
+#[derive(Deserialize, Debug, Default)]
+struct StatusStage {
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    current: Option<u32>,
+    #[serde(default)]
+    total: Option<u32>,
+}
+#[derive(Deserialize, Debug)]
+struct StatusLog {
+    source: String,
+    message: String,
+    ts: u64,
+}
+
+fn is_terminal(status: &str) -> bool {
+    matches!(status, "completed" | "failed" | "cancelled" | "timed_out")
+}
+
+impl SimmitProvider {
+    async fn poll_to_terminal(
+        &self,
+        bearer: &str,
+        remote_job_id: &str,
+        ctx: &RunCtx<'_>,
+    ) -> Result<StatusResponse, RunError> {
+        let mut last_log_ts: u64 = 0;
+        loop {
+            // Cancel between polls.
+            if let Some(tok) = ctx.cancel.as_ref() {
+                if tok.is_cancelled().await {
+                    self.cancel_remote(bearer, remote_job_id).await;
+                    return Err(RunError::Cancelled);
+                }
+            }
+            let url = format!("{}/v1/simc/jobs/{}/status?include=logEntries", SIMMIT_BASE_URL, remote_job_id);
+            let resp = self.http.get(&url).bearer_auth(bearer).send().await
+                .map_err(|e| RunError::Other(format!("Simmit poll: {}", e)))?;
+            if !resp.status().is_success() {
+                let status_code = resp.status();
+                let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
+                return Err(map_simmit_error(status_code, err));
+            }
+            let s: StatusResponse = resp.json().await
+                .map_err(|e| RunError::Other(format!("Simmit poll decode: {}", e)))?;
+
+            // Stream new log lines, dedup by ts.
+            let new_logs: Vec<&StatusLog> = s.log_entries.iter().filter(|l| l.ts > last_log_ts).collect();
+            for log in new_logs {
+                (ctx.on_log)(&format!("[{}] {}", log.source, log.message));
+                last_log_ts = log.ts;
+            }
+
+            // Map progress.
+            if let Some(p) = &s.progress {
+                let pct = p.percent.unwrap_or(0.0).clamp(0.0, 100.0) as u8;
+                let (label, sub) = match (&p.stage, &s.queue, s.status.as_str()) {
+                    (Some(st), _, _) => (
+                        st.label.clone().unwrap_or_else(|| "Simulating".into()),
+                        format!("{}/{} · cloud",
+                            st.current.unwrap_or(0),
+                            st.total.unwrap_or(0),
+                        ),
+                    ),
+                    (None, Some(q), "queued" | "pending") => (
+                        "Queued".to_string(),
+                        match q.estimated_start_seconds {
+                            Some(n) => format!("starts in ~{}s", n),
+                            None => "in queue".to_string(),
+                        },
+                    ),
+                    _ => ("Simulating".to_string(), "cloud".to_string()),
+                };
+                (ctx.on_progress)(pct, &label, &sub);
+            } else if s.status == "queued" || s.status == "pending" {
+                // Provide some progress feedback even without server-side percent.
+                let sub = s.queue.as_ref()
+                    .and_then(|q| q.estimated_start_seconds)
+                    .map(|n| format!("starts in ~{}s", n))
+                    .unwrap_or_else(|| "in queue".to_string());
+                (ctx.on_progress)(5, "Queued", &sub);
+            }
+
+            if is_terminal(&s.status) {
+                return Ok(s);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        }
+    }
+
+    /// Placeholder filled in Task 18.
+    async fn cancel_remote(&self, _bearer: &str, _remote_job_id: &str) {
+        // Implemented in Task 18.
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
