@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { API_URL } from '../lib/api';
-import { useProviders, getLocalKey, setLocalKey, useProviderReady } from '../lib/providers';
+import {
+  useProviders,
+  getLocalKey,
+  setLocalKey,
+  useProviderReady,
+  invalidateProviders,
+} from '../lib/providers';
 import { useIsDesktop } from '../lib/useIsDesktop';
 
 interface TestResult { ok: boolean; credits_available?: number | null; detail?: string; }
@@ -33,6 +39,7 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: key }),
       });
+      invalidateProviders();
     } else {
       setLocalKey(providerId, key);
     }
@@ -43,6 +50,7 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
   async function remove() {
     if (isDesktop) {
       await fetch(`${API_URL}/api/settings/provider/${providerId}`, { method: 'DELETE' });
+      invalidateProviders();
     } else {
       setLocalKey(providerId, null);
     }

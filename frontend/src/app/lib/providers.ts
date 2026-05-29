@@ -16,6 +16,8 @@ export interface ProviderMeta {
 
 let cache: ProviderMeta[] | null = null;
 let inflight: Promise<ProviderMeta[]> | null = null;
+type Listener = (data: ProviderMeta[]) => void;
+const providerListeners = new Set<Listener>();
 
 export async function fetchProviders(): Promise<ProviderMeta[]> {
   if (cache) return cache;
@@ -32,12 +34,33 @@ export async function fetchProviders(): Promise<ProviderMeta[]> {
   return inflight;
 }
 
+/** Force a re-fetch of /api/providers and notify all useProviders subscribers.
+ *  Call after saving or removing a provider API key on the server. */
+export function invalidateProviders(): void {
+  cache = null;
+  inflight = null;
+  fetchProviders()
+    .then((data) => {
+      providerListeners.forEach((l) => l(data));
+    })
+    .catch(() => {
+      providerListeners.forEach((l) => l([]));
+    });
+}
+
 export function useProviders(): ProviderMeta[] | null {
   const [v, setV] = useState<ProviderMeta[] | null>(cache);
   useEffect(() => {
-    if (v) return;
-    fetchProviders().then(setV).catch(() => setV([]));
-  }, [v]);
+    providerListeners.add(setV);
+    if (v === null) {
+      fetchProviders().then(setV).catch(() => setV([]));
+    }
+    return () => {
+      providerListeners.delete(setV);
+    };
+    // setV is stable; cache check happens once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return v;
 }
 
@@ -67,6 +90,9 @@ export function getLocalKey(id: string): string | null {
   return window.localStorage.getItem(localKeyName(id));
 }
 
+/** Fired by setLocalKey so same-tab consumers re-read; cross-tab uses `storage`. */
+const LOCAL_KEY_EVENT = 'simhammer:provider-key-changed';
+
 export function setLocalKey(id: string, key: string | null) {
   if (typeof window === 'undefined') return;
   if (key === null || key === '') {
@@ -74,6 +100,7 @@ export function setLocalKey(id: string, key: string | null) {
   } else {
     window.localStorage.setItem(localKeyName(id), key);
   }
+  window.dispatchEvent(new CustomEvent(LOCAL_KEY_EVENT, { detail: { id } }));
 }
 
 export function useProviderReady(id: string): boolean {
@@ -85,7 +112,11 @@ export function useProviderReady(id: string): boolean {
     if (typeof window === 'undefined') return;
     const handler = () => setLk(getLocalKey(id));
     window.addEventListener('storage', handler);
-    return () => window.removeEventListener('storage', handler);
+    window.addEventListener(LOCAL_KEY_EVENT, handler);
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener(LOCAL_KEY_EVENT, handler);
+    };
   }, [id]);
   if (id === 'local') return true;
   return !!(meta?.server_configured || localKey);
