@@ -200,9 +200,9 @@ impl JobRepo {
                     "INSERT INTO jobs (id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, batch_id,
-                     request_json, simc_input_mode, checkpoint, pause_requested)
+                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                             $16, $17, $18, $19)",
+                             $16, $17, $18, $19, $20)",
                 )
                 .bind(&job.id)
                 .bind(Self::status_to_str(&job.status))
@@ -223,6 +223,7 @@ impl JobRepo {
                 .bind(job.simc_input_mode.as_str())
                 .bind(&job.checkpoint)
                 .bind(if job.pause_requested { 1i32 } else { 0i32 })
+                .bind(&job.provider_id)
                 .execute(pool)
                 .await?;
 
@@ -906,6 +907,7 @@ mod tests {
             simc_input_mode: SimcInputMode::Inline,
             checkpoint: None,
             pause_requested: false,
+            provider_id: "local".to_string(),
         }
     }
 
