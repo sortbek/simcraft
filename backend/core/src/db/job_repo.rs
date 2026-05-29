@@ -254,7 +254,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
-                     request_json, simc_input_mode, checkpoint, pause_requested
+                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id
                      FROM jobs WHERE id = $1",
                 )
                 .bind(id)
@@ -293,7 +293,7 @@ impl JobRepo {
                         ),
                         checkpoint: r.get("checkpoint"),
                         pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
-                        provider_id: r.get("provider_id"),
+                        provider_id: r.try_get("provider_id").unwrap_or_else(|_| "local".to_string()),
                     }
                 }))
             }
