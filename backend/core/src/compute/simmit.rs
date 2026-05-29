@@ -306,6 +306,11 @@ where D: serde::Deserializer<'de> {
 }
 
 #[derive(Deserialize, Debug)]
+/// We deserialize but don't inspect the body — Simmit's HTTP status code is
+/// the source of truth for whether the cancel was accepted. The fields are
+/// kept structured for forward-compat (we may surface `status` in the UI
+/// later) but marked allow(dead_code) so the compiler doesn't complain.
+#[allow(dead_code)]
 struct CancelResponse {
     #[serde(default)]
     success: bool,
@@ -534,8 +539,8 @@ struct MainActor {
 }
 #[derive(Deserialize, Debug, Default)]
 struct ProfilesetsBlock {
-    #[serde(default)]
-    count: Option<u32>,
+    // `count` is in Simmit's response shape but we don't use it — we trust
+    // `results.len()` instead. Drop the field rather than carry a dead one.
     #[serde(default)]
     results: Vec<serde_json::Value>,
 }
@@ -567,7 +572,7 @@ fn simmit_metadata(body: &ResultBody) -> serde_json::Value {
 
 /// Adapter: build a SimC-shaped JSON from Simmit's response body so the
 /// existing `result_parser::parse_simc_result` can ingest it unchanged.
-pub fn simmit_result_to_simc_output(body: &ResultBody) -> SimcOutput {
+fn simmit_result_to_simc_output(body: &ResultBody) -> SimcOutput {
     let actor = body.result.as_ref().map(|r| &r.summary.main_actor);
     let actor_name = actor.and_then(|a| a.name.clone()).unwrap_or_default();
     let dps_mean = actor.and_then(|a| a.mean).unwrap_or(0.0);

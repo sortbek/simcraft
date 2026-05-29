@@ -478,7 +478,14 @@ pub(crate) fn spawn_staged_sim(
                     Some(raw_meta)
                 };
 
-                let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
+                // spawn_staged_sim is only called from the streaming Top Gear
+                // handoff (local-only per routing rule), so the sim_type is
+                // always "top_gear" here.
+                let mut parsed = result_parser::parse_top_gear_result(
+                    &output.json,
+                    meta.as_ref(),
+                    "top_gear",
+                );
                 inject_realm(&mut parsed, &simc_input);
                 if let Some(ref snap) = job_snap {
                     inject_total_elapsed(&mut parsed, &snap.created_at);
@@ -546,6 +553,7 @@ pub(crate) fn spawn_profileset_sim(
     auth: crate::compute::ProviderAuth,
     options: Value,
     job_id: String,
+    sim_type: String,
     simc_input: String,
     combo_count: usize,
     log_buffer: Arc<LogBuffer>,
@@ -557,6 +565,7 @@ pub(crate) fn spawn_profileset_sim(
         auth,
         options,
         job_id,
+        sim_type,
         simc_input,
         combo_count,
         log_buffer,
@@ -640,6 +649,7 @@ async fn run_profileset_job_task(
     auth: crate::compute::ProviderAuth,
     options: Value,
     job_id: String,
+    sim_type: String,
     simc_input: String,
     combo_count: usize,
     log_buffer: Arc<LogBuffer>,
@@ -660,17 +670,20 @@ async fn run_profileset_job_task(
     drop(tx);
     let _ = writer_handle.await;
 
-    finalize_gear_comparison_result(&repo, &job_id, &simc_input, result).await;
+    finalize_gear_comparison_result(&repo, &job_id, &simc_input, &sim_type, result).await;
     log_buffer.remove(&job_id);
 }
 
 /// Translate the provider's `Result<SimcOutput, RunError>` into the right
 /// terminal state: parse via gear-comparison, persist; Paused / Cancelled
 /// are no-ops (status already set elsewhere); Other writes an error.
+/// `sim_type` is the actual wire string ("top_gear", "droptimizer", etc.) —
+/// it's stamped into the parsed result so mode identity isn't lost.
 async fn finalize_gear_comparison_result(
     repo: &JobRepo,
     job_id: &str,
     simc_input: &str,
+    sim_type: &str,
     result: Result<crate::simc_runner::SimcOutput, crate::compute::RunError>,
 ) {
     match result {
@@ -680,7 +693,7 @@ async fn finalize_gear_comparison_result(
             let meta: Option<HashMap<String, Vec<Value>>> =
                 if raw_meta.is_empty() { None } else { Some(raw_meta) };
 
-            let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
+            let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref(), sim_type);
             inject_realm(&mut parsed, simc_input);
             if let Some(ref snap) = job_snap {
                 inject_total_elapsed(&mut parsed, &snap.created_at);
@@ -821,6 +834,7 @@ pub(crate) async fn submit_profileset_sim(
 
     write_combo_metadata_table_raw(repo, &job_id, &submission.combo_metadata_serialized).await;
 
+    let sim_type = submission.sim_type.to_string();
     let auth = avail.auth_for(provider.id());
     spawn_profileset_sim(
         repo.clone(),
@@ -828,6 +842,7 @@ pub(crate) async fn submit_profileset_sim(
         auth,
         options_json,
         job_id.clone(),
+        sim_type,
         display_input,
         submission.combo_count,
         log_buffer.clone(),

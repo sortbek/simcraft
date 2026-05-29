@@ -434,6 +434,7 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
 pub fn parse_top_gear_result(
     raw: &Value,
     combo_metadata: Option<&HashMap<String, Vec<Value>>>,
+    sim_type: &str,
 ) -> Value {
     let empty_meta = HashMap::new();
     let combo_metadata = combo_metadata.unwrap_or(&empty_meta);
@@ -444,7 +445,7 @@ pub fn parse_top_gear_result(
 
     let players = match players {
         Some(p) if !p.is_empty() => p,
-        _ => return json!({"type": "top_gear", "error": "No player data found"}),
+        _ => return json!({"type": sim_type, "result_kind": "gear_comparison", "error": "No player data found"}),
     };
 
     let player = &players[0];
@@ -611,7 +612,8 @@ pub fn parse_top_gear_result(
     let dps_error_abs = base_dps * error_pct / 100.0;
 
     json!({
-        "type": "top_gear",
+        "type": sim_type,
+        "result_kind": "gear_comparison",
         "base_dps": round1(base_dps),
         "dps_error": round1(dps_error_abs),
         "dps_error_pct": round2(error_pct),

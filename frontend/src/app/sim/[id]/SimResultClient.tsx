@@ -321,7 +321,13 @@ export default function SimResultClient() {
   }
 
   const r = job.result;
-  const isTopGear = r.type === 'top_gear' || r.type === 'enchant_gem';
+  // The backend now emits an accurate per-mode `type` plus a `result_kind`
+  // grouping. Renderers branch on the shape (gear comparison vs single actor)
+  // rather than on each specific sim type. Fall back to type-list matching
+  // for results persisted before this field landed.
+  const isTopGear =
+    r.result_kind === 'gear_comparison' ||
+    ['top_gear', 'enchant_gem', 'droptimizer', 'upgrade_compare'].includes(r.type as string);
   const hasTopGearState = isTopGear && getTopGearState() !== null;
 
   return (
