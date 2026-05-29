@@ -46,7 +46,10 @@ impl SimcProvider for SimmitProvider {
         input: &str,
         _opts: &Value,
         _combo_count: usize,
+        _staged_ctx: crate::compute::StagedExecutionContext,
     ) -> Result<SimcOutput, RunError> {
+        // Server-side multistage handles its own staged execution — the
+        // resume_state / triage_constants from staged_ctx don't apply here.
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
         let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;

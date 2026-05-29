@@ -5,5 +5,6 @@ pub mod simmit;
 
 pub use provider::{
     CredentialTest, ProviderAuth, ProviderCaps, ProviderError, RunCtx, RunError, SimcProvider,
+    StagedExecutionContext,
 };
 pub use registry::{ProviderAvailability, ProviderRegistry, ProviderSettings, WorkloadEstimate};

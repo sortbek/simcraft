@@ -375,8 +375,15 @@ pub async fn start_server(
         .connect_timeout(std::time::Duration::from_secs(10))
         .build()
         .expect("reqwest client");
+    // Pool is Some on web (sqlx-backed JobRepo) and None on desktop (memory
+    // backend). LocalSimcProvider threads it into run_simc_staged for
+    // pause-resume checkpoint persistence.
     let provider_registry = web::Data::new(Arc::new(
-        crate::compute::ProviderRegistry::new_default(simc_bins.clone(), http_client.clone()),
+        crate::compute::ProviderRegistry::new_default(
+            simc_bins.clone(),
+            job_repo.pool().cloned(),
+            http_client.clone(),
+        ),
     ));
     #[cfg(feature = "desktop")]
     let stats_data = web::Data::new(Arc::new(Mutex::new(system_handlers::SystemStats::new())));

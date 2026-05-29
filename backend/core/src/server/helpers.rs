@@ -527,56 +527,92 @@ pub(crate) fn spawn_staged_sim(
     });
 }
 
+/// Provider-agnostic profileset spawner. Used by Top Gear, Drop Finder,
+/// Upgrade Compare, and Enchant/Gem handlers — they pass the resolved
+/// `Arc<dyn SimcProvider>` directly and never branch on `provider.id()`.
+///
+/// Mirrors `spawn_staged_sim` for the channel-serialized progress writer +
+/// gear-comparison finalize, but dispatches execution through the trait so
+/// both local and cloud paths share one spawn site.
+///
+/// Streaming Top Gear's post-triage handoff still calls `spawn_staged_sim`
+/// directly because the streaming pipeline is local-only by routing rule
+/// and threading the trait through its phase machinery is out of scope here.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn spawn_cloud_sim(
+pub(crate) fn spawn_profileset_sim(
     repo: JobRepo,
-    provider: std::sync::Arc<dyn crate::compute::SimcProvider>,
+    provider: Arc<dyn crate::compute::SimcProvider>,
     auth: crate::compute::ProviderAuth,
     options: Value,
     job_id: String,
     simc_input: String,
     combo_count: usize,
     log_buffer: Arc<LogBuffer>,
+    staged_ctx: crate::compute::StagedExecutionContext,
 ) {
     tokio::spawn(async move {
         if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
             eprintln!("[{}] Failed to set Running status: {}", job_id, e);
         }
-        if let Err(e) = repo.update_progress(&job_id, 5, "Submitting to cloud", "").await {
-            eprintln!("[{}] Failed to update progress: {}", job_id, e);
-        }
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<JobUpdate>();
+        let writer_repo = repo.clone();
+        let writer_jid = job_id.clone();
+        let writer_handle = tokio::spawn(async move {
+            while let Some(update) = rx.recv().await {
+                match update {
+                    JobUpdate::Progress { pct, stage, detail } => {
+                        if let Err(e) = writer_repo
+                            .update_progress(&writer_jid, pct, &stage, &detail)
+                            .await
+                        {
+                            eprintln!("[{}] Failed to update progress: {}", writer_jid, e);
+                        }
+                    }
+                    JobUpdate::StageComplete { summary } => {
+                        if let Err(e) = writer_repo.complete_stage(&writer_jid, &summary).await {
+                            eprintln!("[{}] Failed to complete stage: {}", writer_jid, e);
+                        }
+                    }
+                }
+            }
+        });
+
         let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
 
+        let tx_progress = tx.clone();
+        let tx_stages = tx.clone();
         let logs_cb = log_buffer.clone();
-        let jid_cb = job_id.clone();
-        let progress_repo = repo.clone();
-        let progress_jid = job_id.clone();
+        let jid_logs = job_id.clone();
+
         let ctx = crate::compute::RunCtx {
             job_id: &job_id,
-            on_progress: Box::new(move |pct, label, sub| {
-                let r = progress_repo.clone();
-                let j = progress_jid.clone();
-                let lbl = label.to_string();
-                let s = sub.to_string();
-                tokio::spawn(async move {
-                    let _ = r.update_progress(&j, pct, &lbl, &s).await;
+            on_progress: Arc::new(move |pct, lbl: &str, sub: &str| {
+                let _ = tx_progress.send(JobUpdate::Progress {
+                    pct,
+                    stage: lbl.to_string(),
+                    detail: sub.to_string(),
                 });
             }),
-            on_log: Box::new(move |line| logs_cb.push_line(&jid_cb, line.to_string())),
+            on_stage_complete: Arc::new(move |summary: &str| {
+                let _ = tx_stages.send(JobUpdate::StageComplete {
+                    summary: summary.to_string(),
+                });
+            }),
+            on_log: Arc::new(move |line: &str| logs_cb.push_line(&jid_logs, line.to_string())),
             cancel: Some(cancel_token),
             auth,
         };
 
         let result = provider
-            .run_with_profilesets(ctx, &simc_input, &options, combo_count)
-            .await
-            .map_err(|e| e.to_string());
+            .run_with_profilesets(ctx, &simc_input, &options, combo_count, staged_ctx)
+            .await;
 
-        // spawn_cloud_sim is only invoked from the four gear-comparison
-        // sim_types (Top Gear, Drop Finder, Upgrade Compare, Enchant/Gem),
-        // so we always finalize through parse_top_gear_result with the
-        // combo metadata loaded from the job. Mirrors the local-staged
-        // success path so cloud + local results render identically.
+        // Close the writer channel and let any queued updates drain before
+        // we touch result/error fields, so the final status isn't overwritten.
+        drop(tx);
+        let _ = writer_handle.await;
+
         match result {
             Ok(output) => {
                 let job_snap = repo.get(&job_id).await.ok().flatten();
@@ -608,7 +644,13 @@ pub(crate) fn spawn_cloud_sim(
                     eprintln!("[{}] Failed to set report files: {}", job_id, e);
                 }
             }
-            Err(e) => {
+            Err(crate::compute::RunError::Paused) => {
+                // Status was already set to Paused inside run_simc_staged.
+            }
+            Err(crate::compute::RunError::Cancelled) => {
+                // Cancel already handled by the CancelToken terminal-state invariant.
+            }
+            Err(crate::compute::RunError::Other(e)) => {
                 let is_cancelled = repo
                     .get(&job_id)
                     .await

@@ -22,7 +22,7 @@ pub(super) async fn create_sim(
     req: web::Json<SimRequest>,
     repo: web::Data<JobRepo>,
     settings_repo: web::Data<SettingsRepo>,
-    simc_bins: web::Data<Arc<SimcBinaries>>,
+    _simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
@@ -141,7 +141,7 @@ pub(super) async fn create_sim(
         let progress_jid = job_id_clone.clone();
         let ctx = RunCtx {
             job_id: &job_id_clone,
-            on_progress: Box::new(move |pct, label, sub| {
+            on_progress: std::sync::Arc::new(move |pct, label: &str, sub: &str| {
                 let r = progress_repo.clone();
                 let j = progress_jid.clone();
                 let lbl = label.to_string();
@@ -150,7 +150,14 @@ pub(super) async fn create_sim(
                     let _ = r.update_progress(&j, pct, &lbl, &s).await;
                 });
             }),
-            on_log: Box::new(move |line| logs_cb.push_line(&jid_cb, line.to_string())),
+            on_stage_complete: std::sync::Arc::new(|_summary: &str| {
+                // Quick Sim never emits stage_complete; only staged profileset
+                // workloads use this. Cloud providers (Simmit) also no-op since
+                // server-side multistage doesn't expose per-stage boundaries.
+            }),
+            on_log: std::sync::Arc::new(move |line: &str| {
+                logs_cb.push_line(&jid_cb, line.to_string())
+            }),
             cancel: Some(cancel_token),
             auth,
         };

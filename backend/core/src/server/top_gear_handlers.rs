@@ -271,36 +271,21 @@ pub(super) async fn create_top_gear_sim(
     write_combo_metadata_table(repo.get_ref(), &job_id, &combo_metadata).await;
 
     let auth = avail.auth_for(provider.id());
-    if provider.id() == "local" {
-        let simc = match simc_bins.resolve(&req.options.simc_branch) {
-            Ok(path) => path,
-            Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
-        };
-        spawn_staged_sim(
-            repo.get_ref().clone(),
-            simc,
-            req.options.to_json(),
-            job_id.clone(),
-            generated_input,
-            combo_count,
-            log_buffer.get_ref().clone(),
-            10, // inline/eager path: staged pipeline spans 10-95%
-            SimcInputMode::Inline,
-            crate::simc_runner::StagedResumeState::default(),
-            crate::profileset_generator::triage::TriageConstants::default(),
-        );
-    } else {
-        super::helpers::spawn_cloud_sim(
-            repo.get_ref().clone(),
-            provider.clone(),
-            auth,
-            req.options.to_json(),
-            job_id.clone(),
-            generated_input,
-            combo_count,
-            log_buffer.get_ref().clone(),
-        );
-    }
+    super::helpers::spawn_profileset_sim(
+        repo.get_ref().clone(),
+        provider.clone(),
+        auth,
+        req.options.to_json(),
+        job_id.clone(),
+        generated_input,
+        combo_count,
+        log_buffer.get_ref().clone(),
+        crate::compute::StagedExecutionContext {
+            base_start: 10, // inline/eager: staged pipeline spans 10-95%
+            simc_input_mode: SimcInputMode::Inline,
+            ..Default::default()
+        },
+    );
 
     HttpResponse::Ok().json(SimResponse {
         id: job_id,

@@ -1,5 +1,5 @@
 use crate::compute::provider::{
-    ProviderCaps, RunCtx, RunError, SimcOutput, SimcProvider,
+    ProviderCaps, RunCtx, RunError, SimcOutput, SimcProvider, StagedExecutionContext,
 };
 use crate::server::SimcBinaries;
 use crate::simc_runner;
@@ -9,11 +9,14 @@ use std::sync::Arc;
 
 pub struct LocalSimcProvider {
     simc_bins: Arc<SimcBinaries>,
+    /// `Some` on web (sqlx-backed JobRepo), `None` on desktop (memory backend).
+    /// Threaded through to `run_simc_staged` for pause-resume checkpoint writes.
+    pool: Option<sqlx::AnyPool>,
 }
 
 impl LocalSimcProvider {
-    pub fn new(simc_bins: Arc<SimcBinaries>) -> Self {
-        Self { simc_bins }
+    pub fn new(simc_bins: Arc<SimcBinaries>, pool: Option<sqlx::AnyPool>) -> Self {
+        Self { simc_bins, pool }
     }
 
     fn resolve_path(&self, opts: &Value) -> Result<std::path::PathBuf, RunError> {
@@ -51,14 +54,44 @@ impl SimcProvider for LocalSimcProvider {
 
     async fn run_with_profilesets(
         &self,
-        _ctx: RunCtx<'_>,
-        _input: &str,
-        _opts: &Value,
-        _combo_count: usize,
+        ctx: RunCtx<'_>,
+        input: &str,
+        opts: &Value,
+        combo_count: usize,
+        staged_ctx: StagedExecutionContext,
     ) -> Result<SimcOutput, RunError> {
-        Err(RunError::Other(
-            "LocalSimcProvider::run_with_profilesets not wired in Phase 1; call simc_runner::run_simc_staged directly".into(),
-        ))
+        let _ = ctx.auth;
+        let path = self.resolve_path(opts)?;
+        let on_progress = ctx.on_progress;
+        let on_stage_complete = ctx.on_stage_complete;
+        let on_log = ctx.on_log;
+
+        let result = simc_runner::run_simc_staged(
+            &path,
+            ctx.job_id,
+            input,
+            opts,
+            combo_count,
+            staged_ctx.base_start,
+            staged_ctx.simc_input_mode,
+            self.pool.clone(),
+            staged_ctx.resume_state,
+            staged_ctx.triage_constants,
+            move |pct, lbl, sub| on_progress(pct, lbl, sub),
+            move |stage| on_stage_complete(stage),
+            move |line| on_log(line),
+            ctx.cancel,
+        )
+        .await;
+
+        match result {
+            Ok(output) => Ok(output),
+            Err(simc_runner::StagedRunError::Paused) => Err(RunError::Paused),
+            Err(simc_runner::StagedRunError::Other(s)) if s == simc_runner::CANCEL_ERR => {
+                Err(RunError::Cancelled)
+            }
+            Err(simc_runner::StagedRunError::Other(s)) => Err(RunError::Other(s)),
+        }
     }
 }
 
@@ -73,7 +106,7 @@ mod tests {
 
     #[test]
     fn local_provider_caps_are_full() {
-        let p = LocalSimcProvider::new(empty_bins());
+        let p = LocalSimcProvider::new(empty_bins(), None);
         let caps = p.capabilities();
         assert!(caps.cancel);
         assert!(caps.pause);
