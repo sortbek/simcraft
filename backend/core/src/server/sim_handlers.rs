@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Deserialize;
@@ -9,7 +9,8 @@ use super::helpers::*;
 use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
-use crate::db::{ComboMetadataRepo, JobRepo};
+use crate::compute::{ProviderAvailability, ProviderRegistry, ProviderSettings, RunCtx, WorkloadEstimate};
+use crate::db::{ComboMetadataRepo, JobRepo, SettingsRepo};
 use crate::game_data;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus, SimcInputMode};
@@ -17,10 +18,13 @@ use crate::result_parser;
 use crate::simc_runner;
 
 pub(super) async fn create_sim(
+    http_req: HttpRequest,
     req: web::Json<SimRequest>,
     repo: web::Data<JobRepo>,
+    settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
+    registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
     let simc_input = if req.raw {
         req.simc_input.clone()
@@ -61,19 +65,32 @@ pub(super) async fn create_sim(
         }),
     );
 
-    // Resolve the simc binary BEFORE inserting the job — otherwise an invalid
-    // branch produces an orphan Pending row that nothing will ever finish.
-    let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(path) => path,
-        Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
+    // Resolve compute provider.
+    let settings = match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
+        Ok(s) => s,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     };
+    let avail = ProviderAvailability::build(&settings, registry.get_ref(), http_req.headers());
+    let est = WorkloadEstimate { combo_count: 0, would_use_streaming_path: false }; // Quick Sim has no profilesets
+    let provider = match registry.for_request(
+        req.sim_type.as_str(),
+        req.options.compute_provider.as_deref(),
+        &avail,
+        &est,
+    ) {
+        Ok(p) => p,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e.to_string()})),
+    };
+    let auth = avail.auth_for(provider.id());
+    let provider_id_str = provider.id().to_string();
 
-    let mut job = Job::new(
+    let mut job = Job::new_with_provider(
         display_input,
         req.sim_type.clone(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
+        provider_id_str.clone(),
     );
     job.batch_id = req.options.batch_id.clone();
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
@@ -94,11 +111,12 @@ pub(super) async fn create_sim(
     let logs = log_buffer.get_ref().clone();
     let jid_logs = job_id.clone();
     let created_at_for_task = created_at.clone();
+    let provider_for_task = provider.clone();
 
     tokio::spawn(async move {
         // update_status honors the terminal-state invariant: if the job was
         // cancelled between create and spawn, this is a no-op. The token
-        // below gives run_simc a cooperative cancel signal at subprocess
+        // below gives the provider a cooperative cancel signal at subprocess
         // launch so we don't burn cycles on a sim the user already aborted.
         if let Err(e) = repo_clone
             .update_status(&job_id_clone, JobStatus::Running)
@@ -116,15 +134,17 @@ pub(super) async fn create_sim(
             crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
-        let result = simc_runner::run_simc(
-            &simc,
-            &job_id_clone,
-            &simc_input,
-            &options,
-            move |line| logs_cb.push_line(&jid_cb, line.to_string()),
-            Some(cancel_token),
-        )
-        .await;
+        let ctx = RunCtx {
+            job_id: &job_id_clone,
+            on_progress: Box::new(|_pct, _label, _sub| {}), // Quick Sim has no incremental progress from runner
+            on_log: Box::new(move |line| logs_cb.push_line(&jid_cb, line.to_string())),
+            cancel: Some(cancel_token),
+            auth,
+        };
+        let result = provider_for_task
+            .run_quick(ctx, &simc_input, &options)
+            .await
+            .map_err(|e| e.to_string());
         super::helpers::finalize_job_outcome(
             &repo_clone,
             &job_id_clone,
