@@ -9,6 +9,7 @@ mod game_data_handlers;
 pub(crate) mod helpers;
 mod job_handlers;
 pub mod request_json;
+mod provider_handlers;
 mod route_handlers;
 mod sim_handlers;
 mod streaming_top_gear;

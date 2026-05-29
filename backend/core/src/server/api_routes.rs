@@ -7,6 +7,7 @@ use super::droptimizer_handlers;
 use super::enchant_gem_handlers;
 use super::game_data_handlers;
 use super::job_handlers;
+use super::provider_handlers;
 use super::route_handlers;
 use super::sim_handlers;
 use super::system_handlers;
@@ -180,6 +181,7 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             "/api/simc/updates",
             web::get().to(system_handlers::check_simc_updates),
         )
+        .route("/api/providers", web::get().to(provider_handlers::list_providers))
         .route("/health", web::get().to(system_handlers::health_check))
         .route("/api/routes", web::get().to(route_handlers::list_routes))
         .route("/api/routes", web::post().to(route_handlers::create_route))
