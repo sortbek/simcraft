@@ -226,6 +226,14 @@ struct StatusLog {
     ts: u64,
 }
 
+#[derive(Deserialize, Debug)]
+struct CancelResponse {
+    #[serde(default)]
+    success: bool,
+    #[serde(default)]
+    status: Option<String>,
+}
+
 fn is_terminal(status: &str) -> bool {
     matches!(status, "completed" | "failed" | "cancelled" | "timed_out")
 }
@@ -301,9 +309,23 @@ impl SimmitProvider {
         }
     }
 
-    /// Placeholder filled in Task 18.
-    async fn cancel_remote(&self, _bearer: &str, _remote_job_id: &str) {
-        // Implemented in Task 18.
+    async fn cancel_remote(&self, bearer: &str, remote_job_id: &str) {
+        let url = format!("{}/v1/simc/jobs/{}/cancel", SIMMIT_BASE_URL, remote_job_id);
+        let resp = self.http.post(&url).bearer_auth(bearer).send().await;
+        match resp {
+            Ok(r) if r.status().is_success() => {
+                let _ = r.json::<CancelResponse>().await;
+            }
+            Ok(r) if r.status() == reqwest::StatusCode::CONFLICT => {
+                // 409 = already terminal — fine.
+            }
+            Ok(r) => {
+                eprintln!("Simmit cancel returned {}", r.status());
+            }
+            Err(e) => {
+                eprintln!("Simmit cancel network error: {}", e);
+            }
+        }
     }
 }
 
