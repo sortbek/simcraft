@@ -324,37 +324,61 @@ impl SimmitProvider {
                 last_log_ts = log.ts;
             }
 
-            // Map progress.
-            if let Some(p) = &s.progress {
-                let pct = p.percent.unwrap_or(0.0).clamp(0.0, 100.0) as u8;
-                let (label, sub) = match (&p.stage, &s.queue, s.status.as_str()) {
-                    (Some(st), _, _) => (
-                        st.label.clone().unwrap_or_else(|| "Simulating".into()),
-                        format!("{}/{} · cloud",
-                            st.current.unwrap_or(0),
-                            st.total.unwrap_or(0),
+            // Map progress. Single-stage Simmit jobs report stage = {1,1,"initial"};
+            // suppress that as noise and just show the percent. Multistage shows
+            // the live stage label + N/M.
+            let pct = s.progress.as_ref()
+                .and_then(|p| p.percent)
+                .unwrap_or(0.0)
+                .clamp(0.0, 100.0) as u8;
+            let queue_eta = s.queue.as_ref().and_then(|q| q.estimated_start_seconds);
+            let (label, sub) = match s.status.as_str() {
+                "queued" | "pending" => (
+                    "Queued on Simmit".to_string(),
+                    queue_eta.map(|n| format!("starts in ~{}s", n)).unwrap_or_else(|| "in queue".to_string()),
+                ),
+                "starting" => (
+                    "Starting on Simmit".to_string(),
+                    "spinning up worker".to_string(),
+                ),
+                "running" => {
+                    let multistage = s.progress.as_ref()
+                        .and_then(|p| p.stage.as_ref())
+                        .filter(|st| st.total.unwrap_or(1) > 1);
+                    match multistage {
+                        Some(st) => (
+                            format!("Stage {}/{} on Simmit",
+                                st.current.unwrap_or(0),
+                                st.total.unwrap_or(0),
+                            ),
+                            st.label.clone().unwrap_or_else(|| "running".into()),
                         ),
-                    ),
-                    (None, Some(q), "queued" | "pending") => (
-                        "Queued".to_string(),
-                        match q.estimated_start_seconds {
-                            Some(n) => format!("starts in ~{}s", n),
-                            None => "in queue".to_string(),
-                        },
-                    ),
-                    _ => ("Simulating".to_string(), "cloud".to_string()),
-                };
-                (ctx.on_progress)(pct, &label, &sub);
-            } else if s.status == "queued" || s.status == "pending" {
-                // Provide some progress feedback even without server-side percent.
-                let sub = s.queue.as_ref()
-                    .and_then(|q| q.estimated_start_seconds)
-                    .map(|n| format!("starts in ~{}s", n))
-                    .unwrap_or_else(|| "in queue".to_string());
-                (ctx.on_progress)(5, "Queued", &sub);
-            }
+                        None => ("Running on Simmit".to_string(), format!("{}%", pct)),
+                    }
+                }
+                other => (format!("Simmit: {}", other), String::new()),
+            };
+            // Floor the percent at 5 while pending/queued so the bar doesn't sit at 0.
+            let display_pct = if matches!(s.status.as_str(), "queued" | "pending" | "starting") {
+                pct.max(5)
+            } else {
+                pct
+            };
+            (ctx.on_progress)(display_pct, &label, &sub);
 
             if is_terminal(&s.status) {
+                // Surface error_code / status_reason for non-completed terminal states.
+                if s.status != "completed" {
+                    let reason = s.status_reason.clone().unwrap_or_default();
+                    let code = s.error_code.clone().unwrap_or_default();
+                    let msg = match (code.is_empty(), reason.is_empty()) {
+                        (false, false) => format!("Simmit job {}: {} ({})", s.status, reason, code),
+                        (false, true)  => format!("Simmit job {}: {}", s.status, code),
+                        (true, false)  => format!("Simmit job {}: {}", s.status, reason),
+                        (true, true)   => format!("Simmit job ended with status {}", s.status),
+                    };
+                    return Err(RunError::Other(msg));
+                }
                 return Ok(s);
             }
             tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
@@ -370,8 +394,46 @@ impl SimmitProvider {
             let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
             return Err(map_simmit_error(status_code, err));
         }
-        let body: ResultBody = resp.json().await
-            .map_err(|e| RunError::Other(format!("Simmit result decode: {}", e)))?;
+        let body_text = resp.text().await
+            .map_err(|e| RunError::Other(format!("Simmit result body read: {}", e)))?;
+        let body: ResultBody = serde_json::from_str(&body_text)
+            .map_err(|e| {
+                let preview: String = body_text.chars().take(400).collect();
+                eprintln!("[simmit] result decode failed: {} | body: {}", e, preview);
+                RunError::Other(format!("Simmit result decode: {}", e))
+            })?;
+
+        // Prefer the full SimC JSON artifact (has per-ability damage breakdown).
+        // Fall back to the synthesized summary if the artifact isn't downloadable.
+        let artifact_url = body
+            .result
+            .as_ref()
+            .and_then(|r| {
+                r.artifacts
+                    .iter()
+                    .find(|a| a.kind.as_deref() == Some("json_report"))
+                    .and_then(|a| a.url.clone())
+            });
+
+        if let Some(url) = artifact_url {
+            match self.http.get(&url).send().await {
+                Ok(r) if r.status().is_success() => {
+                    match r.json::<serde_json::Value>().await {
+                        Ok(mut full_json) => {
+                            // Inject the simmit metadata block so the result-page
+                            // footer can show credits / build commit.
+                            if let Some(obj) = full_json.as_object_mut() {
+                                obj.insert("simmit".to_string(), simmit_metadata(&body));
+                            }
+                            return Ok(SimcOutput { json: full_json, html_report: None, text_output: None });
+                        }
+                        Err(e) => eprintln!("[simmit] artifact JSON decode failed: {}", e),
+                    }
+                }
+                Ok(r) => eprintln!("[simmit] artifact fetch returned {}", r.status()),
+                Err(e) => eprintln!("[simmit] artifact fetch error: {}", e),
+            }
+        }
         Ok(simmit_result_to_simc_output(&body))
     }
 
@@ -406,6 +468,15 @@ struct ResultBody {
 #[derive(Deserialize, Debug)]
 struct ResultPayload {
     summary: SummaryBlock,
+    #[serde(default)]
+    artifacts: Vec<ArtifactRef>,
+}
+#[derive(Deserialize, Debug, Clone)]
+struct ArtifactRef {
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
 }
 #[derive(Deserialize, Debug)]
 struct SummaryBlock {
@@ -445,6 +516,17 @@ struct BuildInfo {
     id: Option<String>,
     #[serde(default)]
     commit: Option<String>,
+}
+
+/// Provider metadata block injected into the result JSON. The frontend's
+/// result-page footer reads `result.simmit.{credits_consumed,build_commit}`.
+fn simmit_metadata(body: &ResultBody) -> serde_json::Value {
+    serde_json::json!({
+        "credits_consumed": body.runtime.as_ref().and_then(|r| r.credits_consumed),
+        "sim_duration_ms": body.runtime.as_ref().and_then(|r| r.sim_duration_ms),
+        "build_id": body.build.as_ref().and_then(|b| b.id.clone()),
+        "build_commit": body.build.as_ref().and_then(|b| b.commit.clone()),
+    })
 }
 
 /// Adapter: build a SimC-shaped JSON from Simmit's response body so the
