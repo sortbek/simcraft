@@ -122,6 +122,7 @@ pub(super) async fn get_sim_status(
         "error": job.error_message,
         "simc_input_mode": job.simc_input_mode.as_str(),
         "pause_requested": job.pause_requested,
+        "provider_id": job.provider_id,
     }))
 }
 
