@@ -21,7 +21,7 @@ use crate::types::ResolveGearResponse;
 /// finalize semantics can't drift across handlers.
 ///
 /// `parse` lets callers pick the result-shape parser their sim mode emits
-/// (single-actor `parse_simc_result` vs gear-comparison `parse_top_gear_result`
+/// (single-actor `parse_simc_result` vs gear-comparison `parse_gear_comparison_result`
 /// + metadata). Both shapes go through the same terminal-state guard.
 pub(super) async fn finalize_job_outcome(
     repo: &JobRepo,
@@ -481,7 +481,7 @@ pub(crate) fn spawn_staged_sim(
                 // spawn_staged_sim is only called from the streaming Top Gear
                 // handoff (local-only per routing rule), so the sim_type is
                 // always "top_gear" here.
-                let mut parsed = result_parser::parse_top_gear_result(
+                let mut parsed = result_parser::parse_gear_comparison_result(
                     &output.json,
                     meta.as_ref(),
                     "top_gear",
@@ -693,7 +693,7 @@ async fn finalize_gear_comparison_result(
             let meta: Option<HashMap<String, Vec<Value>>> =
                 if raw_meta.is_empty() { None } else { Some(raw_meta) };
 
-            let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref(), sim_type);
+            let mut parsed = result_parser::parse_gear_comparison_result(&output.json, meta.as_ref(), sim_type);
             inject_realm(&mut parsed, simc_input);
             if let Some(ref snap) = job_snap {
                 inject_total_elapsed(&mut parsed, &snap.created_at);

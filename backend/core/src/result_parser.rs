@@ -431,7 +431,15 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
 }
 
 /// Extract profileset results from simc JSON output for Top Gear.
-pub fn parse_top_gear_result(
+/// Parse a profileset/gear-comparison SimC result (Top Gear, Drop Finder,
+/// Upgrade Compare, Enchant/Gem). The `sim_type` parameter is the exact
+/// wire string of the mode that produced the result; it lands in the
+/// returned payload as `"type"`.
+///
+/// This was historically named `parse_top_gear_result` back when Top Gear
+/// was the only caller. After the SimMode/ResultKind split and sim_type
+/// parameterization, the broader name reflects the actual contract.
+pub fn parse_gear_comparison_result(
     raw: &Value,
     combo_metadata: Option<&HashMap<String, Vec<Value>>>,
     sim_type: &str,

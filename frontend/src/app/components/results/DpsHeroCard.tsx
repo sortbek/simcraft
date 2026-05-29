@@ -138,7 +138,11 @@ export default function DpsHeroCard({
       {hasMetadata && (
         <div className="relative z-10 grid grid-cols-2 gap-4 border-t border-outline-variant/10 bg-surface-container-lowest/80 px-8 py-4 backdrop-blur-md md:grid-cols-5">
           {targetError != null && targetError > 0 && (
-            <HeroMetaStat label={t('results.error')} value={`± ${targetError}%`} />
+            <HeroMetaStat
+              label={t('results.error')}
+              value={`± ${targetError}%`}
+              note={`± ${Math.round((targetError / 100) * dps).toLocaleString()} ${t('results.dps')}`}
+            />
           )}
           {fightLength != null && (
             <HeroMetaStat
