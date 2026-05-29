@@ -86,6 +86,9 @@ export default function SimStatus({
   const cpuUsage = useCpuUsage(isRunning);
   const title = progressStage || (isPending ? t('results.queued') : t('results.simulating'));
   const hasStages = stagesCompleted && stagesCompleted.length > 0;
+  // Backend signals queued-state by setting progressStage to "Queued" (see
+  // LocalSimcProvider::acquire_queue_permit). Surface it as a distinct banner.
+  const isQueued = (progressStage ?? '').toLowerCase().startsWith('queued');
 
   async function handleCancel() {
     if (!jobId || cancelling) return;
@@ -102,10 +105,19 @@ export default function SimStatus({
 
   return (
     <div className="flex flex-col items-center justify-center space-y-6 py-16">
+      {isQueued && (
+        <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-[12px] font-bold uppercase tracking-wider text-amber-300">
+          <svg className="h-3.5 w-3.5 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7z" />
+          </svg>
+          Waiting in local queue
+        </div>
+      )}
+
       <div className="relative">
-        <div className="h-12 w-12 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary" />
+        <div className={`h-12 w-12 animate-spin rounded-full border-2 border-surface-container-highest ${isQueued ? 'border-t-amber-400' : 'border-t-primary'}`} />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-primary/60" />
+          <div className={`h-2 w-2 animate-pulse rounded-full ${isQueued ? 'bg-amber-400/60' : 'bg-primary/60'}`} />
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSimContext } from '../components/sim-config/SimContext';
-import { API_URL, fetchActiveJobs, providerKeyHeaders } from './api';
+import { API_URL, providerKeyHeaders } from './api';
 import { useLanguage } from './i18n';
 import { decodeHeader } from './talentDecode';
 import { SPEC_ID_TO_NAME } from './types';
@@ -79,35 +79,11 @@ export function useSimSubmit({
       }
     }
 
-    // Soft warning if other LOCAL sims are already running.
-    //
-    // Only local sims share the same CPU and the new backend queue —
-    // adding another one of those just makes the user wait longer in
-    // sequence (it won't slow anything down because the backend
-    // serializes local execution). Remote sims (Simmit) run server-side
-    // and don't affect local throughput; they also have their own
-    // server-side queue, so we never warn for them.
-    //
-    // Paused jobs are excluded — they're inactive on the CPU.
-    try {
-      const active = await fetchActiveJobs();
-      const localActive = active.filter(
-        (j) =>
-          ['pending', 'running'].includes(j.status) &&
-          (j.provider_id === 'local' || j.provider_id === undefined),
-      );
-      if (localActive.length >= 1) {
-        const message =
-          localActive.length >= 2
-            ? `You have ${localActive.length} local sims queued or running. New sims wait their turn in the local queue; this just adds to the line.`
-            : `You have 1 local sim running. Your new sim will queue and start when the active one finishes. Continue?`;
-        if (!window.confirm(message)) {
-          return;
-        }
-      }
-    } catch {
-      // If the active-list fetch fails, fall through silently — don't block submission on a stat call.
-    }
+    // No pre-submit warning. The backend queues local sims (see
+    // LocalSimcProvider) and Simmit handles its own queue, so simultaneous
+    // submits can't actually fight for resources. While a sim waits in the
+    // local queue the SimStatus screen surfaces "Queued · waiting for active
+    // local sim to finish" via the standard progress channel.
 
     const pagePayload = buildPayload();
     if (pagePayload === null) return;
