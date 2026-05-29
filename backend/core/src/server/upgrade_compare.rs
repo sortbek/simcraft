@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,7 +8,8 @@ use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
-use crate::db::JobRepo;
+use crate::compute::{ProviderAvailability, ProviderRegistry, ProviderSettings, WorkloadEstimate};
+use crate::db::{JobRepo, SettingsRepo};
 use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
@@ -367,10 +368,13 @@ pub(super) async fn get_upgrade_compare_combo_count(
 }
 
 pub(super) async fn create_upgrade_compare_sim(
+    http_req: HttpRequest,
     req: web::Json<UpgradeCompareRequest>,
     repo: web::Data<JobRepo>,
+    settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
+    registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
     let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_spec_override(
         &apply_talent_override(&req.simc_input, &req.options.talents),
@@ -407,6 +411,27 @@ pub(super) async fn create_upgrade_compare_sim(
         return resp;
     }
 
+    // Resolve compute provider.
+    let settings = match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
+        Ok(s) => s,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+    let avail = ProviderAvailability::build(&settings, registry.get_ref(), http_req.headers());
+    let est = WorkloadEstimate {
+        combo_count,
+        would_use_streaming_path: false,
+    };
+    let provider = match registry.for_request(
+        "upgrade_compare",
+        req.options.compute_provider.as_deref(),
+        &avail,
+        &est,
+    ) {
+        Ok(p) => p,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e.to_string()})),
+    };
+    let provider_id_str = provider.id().to_string();
+
     let options_json_uc = req.options.to_json();
     let display_input_uc =
         crate::simc_runner::build_simc_input_from_options(&generated_input, &options_json_uc);
@@ -414,12 +439,13 @@ pub(super) async fn create_upgrade_compare_sim(
     // `top_gear`. The staged finalize parses every staged result through the
     // gear-comparison path regardless of sim_type (see helpers.rs), so this
     // no longer needs to lie about what it is.
-    let job = Job::new(
+    let job = Job::new_with_provider(
         display_input_uc,
         crate::models::SimMode::UpgradeCompare.as_wire().to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
+        provider_id_str.clone(),
     );
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();

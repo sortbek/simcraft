@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::json;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -8,7 +8,8 @@ use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
-use crate::db::JobRepo;
+use crate::compute::{ProviderAvailability, ProviderRegistry, ProviderSettings, WorkloadEstimate};
+use crate::db::{JobRepo, SettingsRepo};
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::models::Job;
@@ -46,10 +47,13 @@ fn socketed_item_ids(resolved: &crate::types::ResolveGearResponse) -> HashSet<u6
 }
 
 pub(super) async fn create_enchant_gem_sim(
+    http_req: HttpRequest,
     req: web::Json<EnchantGemSimRequest>,
     repo: web::Data<JobRepo>,
+    settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
+    registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
     let simc_input = apply_spec_override(
         &apply_talent_override(&req.simc_input, &req.options.talents),
@@ -88,15 +92,37 @@ pub(super) async fn create_enchant_gem_sim(
         return resp;
     }
 
+    // Resolve compute provider.
+    let settings = match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
+        Ok(s) => s,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+    let avail = ProviderAvailability::build(&settings, registry.get_ref(), http_req.headers());
+    let est = WorkloadEstimate {
+        combo_count,
+        would_use_streaming_path: false,
+    };
+    let provider = match registry.for_request(
+        "enchant_gem",
+        req.options.compute_provider.as_deref(),
+        &avail,
+        &est,
+    ) {
+        Ok(p) => p,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e.to_string()})),
+    };
+    let provider_id_str = provider.id().to_string();
+
     let options_json_eg = req.options.to_json();
     let display_input_eg =
         simc_runner::build_simc_input_from_options(&generated_input, &options_json_eg);
-    let job = Job::new(
+    let job = Job::new_with_provider(
         display_input_eg,
         crate::models::SimMode::EnchantGem.as_wire().to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
+        provider_id_str.clone(),
     );
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();

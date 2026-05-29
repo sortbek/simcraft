@@ -25,6 +25,7 @@ pub(super) struct StreamingTopGearStart {
     pub catalyst_charges: Option<u32>,
     pub max_combinations: Option<usize>,
     pub estimate: u64,
+    pub provider_id: String,
 }
 
 /// Full streaming triage path.
@@ -45,6 +46,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         catalyst_charges,
         max_combinations,
         estimate,
+        provider_id,
     } = start;
 
     let gem_opts = profileset_generator::GemEnchantOptions {
@@ -72,12 +74,13 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         .with_requested_max_batch_profilesets(req.options.triage_max_batch_profilesets);
     let display_input = simc_runner::build_simc_input_from_options(&base_profile, &options_json);
 
-    let mut job = Job::new(
+    let mut job = Job::new_with_provider(
         display_input,
         "top_gear".to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
+        provider_id,
     );
     job.simc_input_mode = SimcInputMode::Streamed;
     job.batch_id = req.options.batch_id.clone();

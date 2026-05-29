@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -8,7 +8,8 @@ use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
-use crate::db::JobRepo;
+use crate::compute::{ProviderAvailability, ProviderRegistry, ProviderSettings, WorkloadEstimate};
+use crate::db::{JobRepo, SettingsRepo};
 use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
@@ -86,10 +87,13 @@ fn build_items_by_slot(
 }
 
 pub(super) async fn create_top_gear_sim(
+    http_req: HttpRequest,
     req: web::Json<TopGearRequest>,
     repo: web::Data<JobRepo>,
+    settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
+    registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
@@ -145,6 +149,27 @@ pub(super) async fn create_top_gear_sim(
         .unwrap_or(estimate);
     let use_streaming_path = effective_estimate >= TRIAGE_THRESHOLD;
 
+    // Resolve compute provider.
+    let settings = match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
+        Ok(s) => s,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+    let avail = ProviderAvailability::build(&settings, registry.get_ref(), http_req.headers());
+    let est = WorkloadEstimate {
+        combo_count: effective_estimate as usize,
+        would_use_streaming_path: use_streaming_path,
+    };
+    let provider = match registry.for_request(
+        "top_gear",
+        req.options.compute_provider.as_deref(),
+        &avail,
+        &est,
+    ) {
+        Ok(p) => p,
+        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e.to_string()})),
+    };
+    let provider_id_str = provider.id().to_string();
+
     if use_streaming_path {
         let simc = match simc_bins.resolve(&req.options.simc_branch) {
             Ok(path) => path,
@@ -163,6 +188,7 @@ pub(super) async fn create_top_gear_sim(
                 catalyst_charges,
                 max_combinations,
                 estimate,
+                provider_id: provider_id_str.clone(),
             },
         )
         .await;
@@ -201,12 +227,13 @@ pub(super) async fn create_top_gear_sim(
 
     let options_json = req.options.to_json();
     let display_input = simc_runner::build_simc_input_from_options(&generated_input, &options_json);
-    let job = Job::new(
+    let job = Job::new_with_provider(
         display_input,
         crate::models::SimMode::TopGear.as_wire().to_string(),
         req.options.iterations,
         req.options.fight_style.clone(),
         req.options.target_error,
+        provider_id_str.clone(),
     );
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();
