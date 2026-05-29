@@ -27,13 +27,31 @@ impl SimcProvider for SimmitProvider {
             server_side_multistage: true,
         }
     }
-    async fn run_quick(&self, _ctx: RunCtx<'_>, _input: &str, _opts: &Value) -> Result<SimcOutput, RunError> {
-        let _ = &self.http;
-        let _ = ProviderAuth::None; // Silence dead-code warning until Phase 2.
-        Err(RunError::Other("SimmitProvider not yet implemented".into()))
+    async fn run_quick(
+        &self,
+        ctx: RunCtx<'_>,
+        input: &str,
+        _opts: &Value,
+    ) -> Result<SimcOutput, RunError> {
+        let bearer = Self::bearer(&ctx)?;
+        let stripped = strip_simmit_blocked_directives(input);
+        let remote_id = self.submit(&bearer, ctx.job_id, &stripped, false).await?;
+        let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
+        self.fetch_result(&bearer, &remote_id).await
     }
-    async fn run_with_profilesets(&self, _ctx: RunCtx<'_>, _input: &str, _opts: &Value, _combo_count: usize) -> Result<SimcOutput, RunError> {
-        Err(RunError::Other("SimmitProvider not yet implemented".into()))
+
+    async fn run_with_profilesets(
+        &self,
+        ctx: RunCtx<'_>,
+        input: &str,
+        _opts: &Value,
+        _combo_count: usize,
+    ) -> Result<SimcOutput, RunError> {
+        let bearer = Self::bearer(&ctx)?;
+        let stripped = strip_simmit_blocked_directives(input);
+        let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;
+        let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
+        self.fetch_result(&bearer, &remote_id).await
     }
 }
 
