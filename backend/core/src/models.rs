@@ -171,6 +171,7 @@ pub struct JobStatusSummary {
     pub error_message: Option<String>,
     pub simc_input_mode: SimcInputMode,
     pub pause_requested: bool,
+    pub provider_id: String,
 }
 
 /// Slim row for the sims-overview endpoint. Excludes large columns
@@ -198,6 +199,7 @@ pub struct JobOverviewSummary {
     pub region: Option<String>,
     pub dps: Option<f64>,
     pub batch_id: Option<String>,
+    pub provider_id: String,
 }
 
 pub struct ResultSummary {

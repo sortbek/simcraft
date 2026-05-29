@@ -108,6 +108,7 @@ fn job_to_overview_summary(
         region: s.region,
         dps: s.dps,
         batch_id: j.batch_id.clone(),
+        provider_id: j.provider_id.clone(),
     }
 }
 
@@ -150,6 +151,7 @@ fn row_to_overview_summary(
         region: summary.region,
         dps: summary.dps,
         batch_id: r.try_get("batch_id").ok().flatten(),
+        provider_id: r.try_get("provider_id").unwrap_or_else(|_| "local".to_string()),
     }
 }
 
@@ -643,7 +645,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, \
+                            iterations, batch_id, provider_id, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('pending', 'running', 'paused') \
@@ -656,7 +658,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, result_json, \
+                            iterations, batch_id, result_json, provider_id, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('done', 'failed', 'cancelled') \
@@ -722,7 +724,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, result_json, \
+                            iterations, batch_id, result_json, provider_id, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE {status_clause} \
@@ -816,7 +818,7 @@ impl JobRepo {
                 let row = sqlx::query(
                     "SELECT id, status, progress_pct, progress_stage, progress_detail,
                      stages_completed, result_json, error_message, simc_input_mode,
-                     pause_requested
+                     pause_requested, provider_id
                      FROM jobs WHERE id = $1",
                 )
                 .bind(id)
@@ -849,6 +851,7 @@ impl JobRepo {
                                 .unwrap_or_else(|_| "inline".to_string()),
                         ),
                         pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
+                        provider_id: r.try_get("provider_id").unwrap_or_else(|_| "local".to_string()),
                     }
                 }))
             }
@@ -873,6 +876,7 @@ impl JobRepo {
                         error_message: j.error_message.clone(),
                         simc_input_mode: j.simc_input_mode,
                         pause_requested: j.pause_requested,
+                        provider_id: j.provider_id.clone(),
                     }))
             }
         }
