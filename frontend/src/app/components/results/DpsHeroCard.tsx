@@ -18,8 +18,6 @@ interface DpsHeroCardProps {
   playerRealm?: string;
   playerRegion?: string;
   dps: number;
-  dpsError?: number;
-  dpsErrorPct?: number;
   fightLength?: number;
   desiredTargets?: number;
   iterations?: number;
@@ -36,8 +34,6 @@ export default function DpsHeroCard({
   playerRealm,
   playerRegion,
   dps,
-  dpsError,
-  dpsErrorPct,
   fightLength,
   iterations,
   targetError,
@@ -52,7 +48,7 @@ export default function DpsHeroCard({
   const dpsDeltaPct = baseDps != null && baseDps > 0 ? ((dps - baseDps) / baseDps) * 100 : null;
 
   const hasMetadata =
-    (dpsError != null && dpsError > 0) ||
+    (targetError != null && targetError > 0) ||
     fightLength != null ||
     (iterations != null && iterations > 0) ||
     elapsedTime != null;
@@ -141,14 +137,8 @@ export default function DpsHeroCard({
 
       {hasMetadata && (
         <div className="relative z-10 grid grid-cols-2 gap-4 border-t border-outline-variant/10 bg-surface-container-lowest/80 px-8 py-4 backdrop-blur-md md:grid-cols-5">
-          {dpsError != null && dpsError > 0 && (
-            <HeroMetaStat
-              label={t('results.error')}
-              value={`± ${Math.round(dpsError).toLocaleString()}${
-                dpsErrorPct != null ? ` (${dpsErrorPct}%)` : ''
-              }`}
-              note={targetError != null && targetError > 0 ? `target: ${targetError}%` : undefined}
-            />
+          {targetError != null && targetError > 0 && (
+            <HeroMetaStat label={t('results.error')} value={`± ${targetError}%`} />
           )}
           {fightLength != null && (
             <HeroMetaStat

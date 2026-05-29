@@ -26,7 +26,6 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
       const existing = getLocalKey(providerId);
       setStored(!!existing);
     } else {
-      // For desktop the key lives in SettingsRepo; rely on `ready` from useProviderReady
       setStored(ready);
     }
   }, [providerId, isDesktop, ready]);
@@ -77,40 +76,62 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
   }
 
   return (
-    <div className="rounded-lg border border-outline/30 bg-surface p-4">
+    <div className="rounded-lg border border-outline-variant/10 bg-surface-container p-3">
       <div className="flex items-center justify-between">
-        <div>
-          <div className="font-headline text-lg font-bold">{displayName}</div>
-          <div className="text-xs text-on-surface-variant">{providerId}</div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold">{displayName}</p>
+            <span
+              className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                ready
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-outline-variant/10 text-on-surface-variant/70'
+              }`}
+            >
+              {ready ? 'Ready' : 'Not configured'}
+            </span>
+          </div>
+          <p className="text-[10px] text-on-surface-variant/70">{providerId}</p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${ready ? 'bg-primary/20 text-primary' : 'bg-outline/20 text-on-surface-variant'}`}>
-          {ready ? 'Ready' : 'Not configured'}
-        </span>
       </div>
 
       <div className="mt-3 flex gap-2">
         <input
           type="password"
-          placeholder={stored ? 'Key on file — paste a new key to replace' : 'Paste your Simmit API key'}
+          placeholder={stored ? 'Key on file — paste a new key to replace' : `Paste your ${displayName} API key`}
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          className="flex-1 rounded border border-outline/40 bg-surface-container px-3 py-2 text-sm"
+          className="flex-1 rounded border border-outline-variant/20 bg-surface-container-lowest px-3 py-1.5 text-xs placeholder:text-on-surface-variant/50 focus:border-primary/40 focus:outline-none"
         />
-        <button onClick={save} className="rounded bg-primary px-4 py-2 text-sm font-bold text-on-primary">Save</button>
-        <button onClick={testConn} disabled={testing} className="rounded border border-outline px-4 py-2 text-sm">
+        <button
+          onClick={save}
+          className="rounded bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary transition-all hover:bg-primary/20"
+        >
+          Save
+        </button>
+        <button
+          onClick={testConn}
+          disabled={testing}
+          className="rounded bg-surface-container-highest px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface transition-colors hover:bg-surface-bright disabled:opacity-50"
+        >
           {testing ? '...' : 'Test'}
         </button>
         {stored && (
-          <button onClick={remove} className="rounded border border-error/40 px-4 py-2 text-sm text-error">Remove</button>
+          <button
+            onClick={remove}
+            className="rounded px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-error/60 transition-all hover:bg-error/10 hover:text-error"
+          >
+            Remove
+          </button>
         )}
       </div>
 
       {test && (
-        <div className={`mt-2 text-xs ${test.ok ? 'text-primary' : 'text-error'}`}>
+        <p className={`mt-2 text-[10px] ${test.ok ? 'text-primary' : 'text-error'}`}>
           {test.ok
             ? `Connected · ${test.credits_available ?? '—'} credits available`
             : `Failed: ${test.detail ?? 'unknown error'}`}
-        </div>
+        </p>
       )}
     </div>
   );
@@ -122,14 +143,22 @@ export default function ComputeProvidersSection() {
   const remote = providers.filter((p) => p.id !== 'local');
   return (
     <section className="space-y-4">
-      <h2 className="font-headline text-xl font-bold">Compute Providers</h2>
-      <p className="text-sm text-on-surface-variant">
-        Cloud SimC providers. Configure once; pick per sim with the Compute selector.
-      </p>
-      <div className="space-y-3">
-        {remote.map((p) => (
-          <ProviderRow key={p.id} providerId={p.id} displayName={p.display_name} />
-        ))}
+      <div className="text-primary-fixed-dim flex items-center gap-2">
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
+        </svg>
+        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">Compute Providers</h2>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
+        <p className="text-xs text-on-surface-variant">
+          Cloud SimC providers. Configure once; pick per sim with the Compute selector.
+        </p>
+        <div className="space-y-2">
+          {remote.map((p) => (
+            <ProviderRow key={p.id} providerId={p.id} displayName={p.display_name} />
+          ))}
+        </div>
       </div>
     </section>
   );

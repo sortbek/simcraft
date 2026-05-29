@@ -27,8 +27,6 @@ export default function TopGearResults({
   baseDps,
   results,
   equippedGear,
-  dpsError,
-  dpsErrorPct,
   fightLength,
   desiredTargets,
   iterations,
@@ -92,8 +90,6 @@ export default function TopGearResults({
         playerRealm={playerRealm}
         playerRegion={playerRegion}
         dps={selectedResult && selectedResult.delta > 0 ? selectedResult.dps : baseDps}
-        dpsError={dpsError}
-        dpsErrorPct={dpsErrorPct}
         fightLength={fightLength}
         desiredTargets={desiredTargets}
         iterations={iterations}

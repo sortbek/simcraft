@@ -393,8 +393,6 @@ export default function SimResultClient() {
                 }
               >
             }
-            dpsError={r.dps_error as number | undefined}
-            dpsErrorPct={r.dps_error_pct as number | undefined}
             fightLength={r.fight_length as number | undefined}
             desiredTargets={r.desired_targets as number | undefined}
             iterations={r.iterations as number | undefined}
@@ -437,8 +435,6 @@ export default function SimResultClient() {
             playerRealm={r.realm as string | undefined}
             playerRegion={r.region as string | undefined}
             dps={r.dps as number}
-            dpsError={r.dps_error as number}
-            dpsErrorPct={r.dps_error_pct as number | undefined}
             fightLength={r.fight_length as number}
             desiredTargets={r.desired_targets as number | undefined}
             iterations={r.iterations as number | undefined}
