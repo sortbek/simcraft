@@ -134,9 +134,22 @@ pub(super) async fn create_sim(
             crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
+        // Cloud providers (Simmit) stream progress through this callback; local
+        // SimC for Quick Sim doesn't emit per-iteration progress, so the
+        // hardcoded "Simulating · 20%" above stays the floor.
+        let progress_repo = repo_clone.clone();
+        let progress_jid = job_id_clone.clone();
         let ctx = RunCtx {
             job_id: &job_id_clone,
-            on_progress: Box::new(|_pct, _label, _sub| {}), // Quick Sim has no incremental progress from runner
+            on_progress: Box::new(move |pct, label, sub| {
+                let r = progress_repo.clone();
+                let j = progress_jid.clone();
+                let lbl = label.to_string();
+                let s = sub.to_string();
+                tokio::spawn(async move {
+                    let _ = r.update_progress(&j, pct, &lbl, &s).await;
+                });
+            }),
             on_log: Box::new(move |line| logs_cb.push_line(&jid_cb, line.to_string())),
             cancel: Some(cancel_token),
             auth,
