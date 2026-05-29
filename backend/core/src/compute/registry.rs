@@ -1,4 +1,6 @@
 use crate::compute::provider::ProviderError;
+use crate::db::SettingsRepo;
+use std::collections::HashMap;
 
 /// Workload size + whether the handler is about to take its streaming-only path.
 /// Routing consumes this; the handler computes it once.
@@ -83,9 +85,44 @@ fn smart_default(
     }
 }
 
-// Stubs kept for the `pub use` in compute/mod.rs; replaced by real impls in Tasks 9-10.
+pub struct ProviderSettings {
+    api_keys: HashMap<&'static str, String>,
+    enabled: HashMap<&'static str, bool>,
+}
+
+impl ProviderSettings {
+    /// One async call per sim-create. Reads provider.<id>.api_key and
+    /// provider.<id>.enabled for every remote provider id in the registry.
+    pub async fn load(
+        repo: &SettingsRepo,
+        remote_ids: &[&'static str],
+    ) -> Result<Self, sqlx::Error> {
+        let mut api_keys = HashMap::new();
+        let mut enabled = HashMap::new();
+        for &id in remote_ids {
+            if let Some(k) = repo.get(&format!("provider.{}.api_key", id)).await? {
+                if !k.is_empty() {
+                    api_keys.insert(id, k);
+                }
+            }
+            let on = repo.get(&format!("provider.{}.enabled", id)).await?
+                .map(|v| v == "true")
+                .unwrap_or(true);
+            enabled.insert(id, on);
+        }
+        Ok(Self { api_keys, enabled })
+    }
+
+    pub fn get_api_key(&self, id: &str) -> Option<&str> {
+        if !self.enabled.get(id).copied().unwrap_or(true) {
+            return None;
+        }
+        self.api_keys.get(id).map(|s| s.as_str())
+    }
+}
+
+// Stub kept for the `pub use` in compute/mod.rs; replaced by real impl in Task 10.
 pub struct ProviderRegistry;
-pub struct ProviderSettings;
 
 #[cfg(test)]
 mod tests {
