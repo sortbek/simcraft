@@ -572,14 +572,57 @@ pub(crate) fn spawn_cloud_sim(
             .await
             .map_err(|e| e.to_string());
 
-        finalize_job_outcome(
-            &repo,
-            &job_id,
-            &simc_input,
-            result,
-            |json| crate::result_parser::parse_simc_result(json),
-        )
-        .await;
+        // spawn_cloud_sim is only invoked from the four gear-comparison
+        // sim_types (Top Gear, Drop Finder, Upgrade Compare, Enchant/Gem),
+        // so we always finalize through parse_top_gear_result with the
+        // combo metadata loaded from the job. Mirrors the local-staged
+        // success path so cloud + local results render identically.
+        match result {
+            Ok(output) => {
+                let job_snap = repo.get(&job_id).await.ok().flatten();
+                let raw_meta = load_combo_metadata(&repo, &job_id).await;
+                let meta: Option<HashMap<String, Vec<Value>>> =
+                    if raw_meta.is_empty() { None } else { Some(raw_meta) };
+
+                let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
+                inject_realm(&mut parsed, &simc_input);
+                if let Some(ref snap) = job_snap {
+                    inject_total_elapsed(&mut parsed, &snap.created_at);
+                }
+                let result_str = serde_json::to_string(&parsed).unwrap_or_default();
+                let raw_str = serde_json::to_string(&output.json).ok();
+                if let Err(e) = repo
+                    .set_result(&job_id, &result_str, raw_str.as_deref())
+                    .await
+                {
+                    eprintln!("[{}] Failed to set result: {}", job_id, e);
+                }
+                if let Err(e) = repo
+                    .set_report_files(
+                        &job_id,
+                        output.html_report.as_deref(),
+                        output.text_output.as_deref(),
+                    )
+                    .await
+                {
+                    eprintln!("[{}] Failed to set report files: {}", job_id, e);
+                }
+            }
+            Err(e) => {
+                let is_cancelled = repo
+                    .get(&job_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|j| j.status == JobStatus::Cancelled)
+                    .unwrap_or(false);
+                if !is_cancelled {
+                    if let Err(db_err) = repo.set_error(&job_id, &e).await {
+                        eprintln!("[{}] Failed to set error: {}", job_id, db_err);
+                    }
+                }
+            }
+        }
         log_buffer.remove(&job_id);
     });
 }
