@@ -56,6 +56,8 @@ export default function SimResultClient() {
   }
 
   const [job, setJob] = useState<JobData | null>(null);
+  const caps = useProviderCaps(job?.provider_id ?? '');
+  const providerMeta = useProviderMeta(job?.provider_id ?? '');
   const [fetchError, setFetchError] = useState('');
   const [logLines, setLogLines] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(true);
@@ -232,7 +234,6 @@ export default function SimResultClient() {
   }
 
   if (job.status === 'pending' || job.status === 'running' || job.status === 'paused') {
-    const caps = useProviderCaps(job.provider_id);
     const canCancel = (job.status === 'pending' || job.status === 'running') && caps.cancel;
     const canPause = job.status === 'running' && caps.pause && job.simc_input_mode === 'streamed';
 
@@ -319,7 +320,6 @@ export default function SimResultClient() {
     return <p className="text-sm text-muted">{t('results.noResultData')}</p>;
   }
 
-  const providerMeta = useProviderMeta(job.provider_id);
   const r = job.result;
   const isTopGear = r.type === 'top_gear' || r.type === 'enchant_gem';
   const hasTopGearState = isTopGear && getTopGearState() !== null;
