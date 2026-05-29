@@ -371,6 +371,8 @@ pub async fn start_server(
 
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("simhammer/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
         .build()
         .expect("reqwest client");
     let provider_registry = web::Data::new(Arc::new(
