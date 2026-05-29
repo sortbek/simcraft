@@ -78,6 +78,7 @@ export interface JobOverviewSummary {
   region: string | null;
   dps: number | null;
   batch_id: string | null;
+  provider_id: string;
 }
 
 /** Active sims (pending/running/paused) + up to 20 most recent terminal jobs. */
