@@ -753,8 +753,21 @@ async fn run_simc_subprocess(
         trimmed == "fight_style=DungeonRoute" || trimmed == "fight_style=\"DungeonRoute\""
     });
 
-    // Build the full input file with all options inline
-    let final_input = if raw {
+    // Build the full input file with all options inline.
+    //
+    // `prebuilt`: handler already ran the simc_input through
+    // `build_simc_input_from_options`, so we pass it through verbatim. This
+    // keeps "input creation" as a single step in the handler, no matter which
+    // provider executes the job. Stage-specific overrides (target_error,
+    // profileset_work_threads) are appended by `run_simc_staged` per stage.
+    //
+    // `raw`: legacy API-level flag (req.raw=true). Same effect for the
+    // subprocess — skip the internal build — but signals user intent.
+    let prebuilt = options
+        .get("prebuilt")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let final_input = if raw || prebuilt {
         simc_input.to_string()
     } else {
         build_full_simc_input(&SimcInputBuild::new(
@@ -960,6 +973,26 @@ static COMBO_HEADER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^###\s+(Combo \d
 /// SimC progress frame parser. Hoisted to a `Lazy` so each `run_simc_subprocess`
 /// call (one per Triage batch / staged stage) reuses the compiled pattern.
 static PROGRESS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)/(\d+)").unwrap());
+
+/// Append a `# Stage override` block to a pre-built simc input so the staged
+/// loop can override the user's `target_error` (and the parallel-profilesets
+/// decision) without rebuilding the whole input from scratch. SimC's
+/// last-wins parsing makes the appended values authoritative.
+///
+/// Only used when the caller provided a pre-built input (`opts.prebuilt = true`).
+fn append_stage_overrides(input: &str, stage_target_error: f64, want_parallel: bool) -> String {
+    let mut out = input.to_string();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str("\n# Stage override\n");
+    out.push_str(&format!("target_error={}\n", stage_target_error));
+    out.push_str(&format!(
+        "profileset_work_threads={}\n",
+        if want_parallel { 1 } else { 0 }
+    ));
+    out
+}
 
 pub fn filter_simc_input(
     simc_input: &str,
@@ -1237,6 +1270,19 @@ pub async fn run_simc_staged(
     // Key: combo name, Value: profileset result object from the stage where it was cut.
     let mut eliminated: HashMap<String, Value> = HashMap::new();
 
+    // When the caller pre-built the input (handler pipeline), each per-stage
+    // subprocess call needs to:
+    //   - tell the subprocess to skip rebuilding (via the cloned per-call opts)
+    //   - append target_error / profileset_work_threads overrides to the input
+    //     itself so SimC's last-wins parsing picks them up.
+    let prebuilt = options
+        .get("prebuilt")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let user_parallel_override = options
+        .get("parallel_profilesets")
+        .and_then(|v| v.as_bool());
+
     let user_target_error = options
         .get("target_error")
         .and_then(|v| v.as_f64())
@@ -1295,11 +1341,18 @@ pub async fn run_simc_staged(
         // SKIP_TO_FINAL_THRESHOLD or earlier pruning, so a single run is
         // tractable in practice.
         if is_final {
+            let want_parallel = user_parallel_override
+                .unwrap_or(remaining >= 4 && stage.target_error > 0.2);
+            let final_input = if prebuilt {
+                append_stage_overrides(&current_input, stage.target_error, want_parallel)
+            } else {
+                current_input.clone()
+            };
             let stage_result = run_simc_subprocess(
                 simc_path,
                 false,
                 job_id,
-                &current_input,
+                &final_input,
                 options,
                 fight_style,
                 stage.target_error,
@@ -1355,7 +1408,18 @@ pub async fn run_simc_staged(
         #[allow(clippy::needless_range_loop)]
         for batch_idx in batch_start..total_batches {
             let batch_names_set: HashSet<String> = batches[batch_idx].iter().cloned().collect();
-            let batch_input = filter_simc_input(&current_input, &batch_names_set);
+            let filtered = filter_simc_input(&current_input, &batch_names_set);
+            // Intermediate stages force per-profileset parallelism on large
+            // batches; carry that decision through as an explicit override on
+            // the pre-built input. (When not prebuilt, run_simc_subprocess
+            // re-derives the same decision via build_full_simc_input.)
+            let batch_input = if prebuilt {
+                let want_parallel = user_parallel_override
+                    .unwrap_or(batches[batch_idx].len() >= 4 && stage.target_error > 0.2);
+                append_stage_overrides(&filtered, stage.target_error, want_parallel)
+            } else {
+                filtered
+            };
 
             // Per-batch progress mapping: each batch occupies an equal slice
             // of the stage's progress range. Within a batch we further sub-

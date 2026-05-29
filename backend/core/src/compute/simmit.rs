@@ -31,17 +31,13 @@ impl SimcProvider for SimmitProvider {
         &self,
         ctx: RunCtx<'_>,
         input: &str,
-        opts: &Value,
+        _opts: &Value,
     ) -> Result<SimcOutput, RunError> {
+        // Input is already in final form — the handler ran it through
+        // build_simc_input_from_options before invoking the provider.
+        // We only strip Simmit-forbidden directives (threads=, output=, ...).
         let bearer = Self::bearer(&ctx)?;
-        // Apply the same user-options injection LocalSimcProvider gets for
-        // free via run_simc → build_full_simc_input: target_error, iterations,
-        // fight_style, raid buff overrides, consumables, expansion options,
-        // and the `# Simulation Options` block at the end. Without this,
-        // Simmit only sees the raw profile and falls back to its own
-        // defaults (target_error=0.2 etc).
-        let built = crate::simc_runner::build_simc_input_from_options(input, opts);
-        let stripped = strip_simmit_blocked_directives(&built);
+        let stripped = strip_simmit_blocked_directives(input);
         let remote_id = self.submit(&bearer, ctx.job_id, &stripped, false).await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
@@ -51,15 +47,15 @@ impl SimcProvider for SimmitProvider {
         &self,
         ctx: RunCtx<'_>,
         input: &str,
-        opts: &Value,
+        _opts: &Value,
         _combo_count: usize,
         _staged_ctx: crate::compute::StagedExecutionContext,
     ) -> Result<SimcOutput, RunError> {
         // Server-side multistage handles its own staged execution — the
         // resume_state / triage_constants from staged_ctx don't apply here.
+        // Input is pre-built by the handler.
         let bearer = Self::bearer(&ctx)?;
-        let built = crate::simc_runner::build_simc_input_from_options(input, opts);
-        let stripped = strip_simmit_blocked_directives(&built);
+        let stripped = strip_simmit_blocked_directives(input);
         let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
@@ -67,7 +63,7 @@ impl SimcProvider for SimmitProvider {
 
     async fn test_credential(&self, api_key: &str) -> Result<crate::compute::CredentialTest, String> {
         let resp = self.http
-            .get(format!("{}/v1/simc/usage", SIMMIT_BASE_URL))
+            .get(format!("{}/v1/simc/credits", SIMMIT_BASE_URL))
             .bearer_auth(api_key)
             .send()
             .await
@@ -76,12 +72,22 @@ impl SimcProvider for SimmitProvider {
             return Err(format!("Simmit returned {}", resp.status()));
         }
         let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
-        let credits = body
-            .pointer("/balance/availableCredits")
-            .and_then(|v| v.as_u64())
-            .or_else(|| body.pointer("/credits/available").and_then(|v| v.as_u64()))
-            .or_else(|| body.pointer("/credits").and_then(|v| v.as_u64()));
-        Ok(crate::compute::CredentialTest { credits_available: credits })
+        // Simmit /v1/simc/credits shape:
+        //   { purchased, reserved, grants: [{ remaining, ... }, ...] }
+        // Available = purchased + Σ grants[].remaining − reserved.
+        let purchased = body.get("purchased").and_then(|v| v.as_u64()).unwrap_or(0);
+        let reserved = body.get("reserved").and_then(|v| v.as_u64()).unwrap_or(0);
+        let granted: u64 = body
+            .get("grants")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|g| g.get("remaining").and_then(|v| v.as_u64()))
+                    .sum()
+            })
+            .unwrap_or(0);
+        let available = purchased.saturating_add(granted).saturating_sub(reserved);
+        Ok(crate::compute::CredentialTest { credits_available: Some(available) })
     }
 }
 

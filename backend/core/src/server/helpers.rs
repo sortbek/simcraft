@@ -788,14 +788,19 @@ pub(crate) async fn submit_profileset_sim(
     log_buffer: &Arc<LogBuffer>,
 ) -> HttpResponse {
     let provider_id_str = provider.id().to_string();
-    let options_json = options.to_json();
+    let mut options_json = options.to_json();
+    // The handler-built `display_input` is the final ready-to-execute simc
+    // text. It's what we store on the Job and what we hand to the provider.
+    // `prebuilt: true` tells simc_runner to skip its internal rebuild;
+    // SimmitProvider submits the text as-is.
     let display_input = crate::simc_runner::build_simc_input_from_options(
         &submission.generated_input,
         &options_json,
     );
+    options_json["prebuilt"] = serde_json::json!(true);
 
     let mut job = crate::models::Job::new_with_provider(
-        display_input,
+        display_input.clone(),
         submission.sim_mode.as_wire().to_string(),
         options.iterations,
         options.fight_style.clone(),
@@ -823,7 +828,7 @@ pub(crate) async fn submit_profileset_sim(
         auth,
         options_json,
         job_id.clone(),
-        submission.generated_input,
+        display_input,
         submission.combo_count,
         log_buffer.clone(),
         crate::compute::StagedExecutionContext {
@@ -895,12 +900,20 @@ pub(crate) async fn handoff_streamed_top_gear_to_staged(
         base_profile,
         survivor_simc_lines.join("\n")
     );
+    // Pre-build through the same pipeline the eager handlers use so the
+    // streamed final stage sees identically-prepared input. `prebuilt: true`
+    // tells run_simc_staged to append per-stage target_error overrides
+    // instead of rebuilding the whole input each stage.
+    let prebuilt_input =
+        crate::simc_runner::build_simc_input_from_options(&combined_input, options);
+    let mut staged_options = options.clone();
+    staged_options["prebuilt"] = serde_json::json!(true);
     spawn_staged_sim(
         repo.clone(),
         simc_bin.to_path_buf(),
-        options.clone(),
+        staged_options,
         job_id.to_string(),
-        combined_input,
+        prebuilt_input,
         survivor_simc_lines.len(),
         log_buffer.clone(),
         50,

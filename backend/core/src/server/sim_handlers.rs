@@ -85,7 +85,7 @@ pub(super) async fn create_sim(
     let provider_id_str = provider.id().to_string();
 
     let mut job = Job::new_with_provider(
-        display_input,
+        display_input.clone(),
         req.sim_type.clone(),
         req.options.iterations,
         req.options.fight_style.clone(),
@@ -101,11 +101,18 @@ pub(super) async fn create_sim(
     }
     // Quick Sim has no combo_metadata, so no table write needed.
 
+    // display_input IS the final, ready-to-execute simc input — the same text
+    // we stored on the Job and the same text we hand to the provider. Mark
+    // `prebuilt` so simc_runner skips its internal rebuild and SimmitProvider
+    // submits as-is.
+    let provider_input = display_input;
+
     let repo_clone = repo.get_ref().clone();
     let mut options = req.options.to_json_with_sim_type(&req.sim_type);
     if req.raw {
         options["raw"] = serde_json::json!(true);
     }
+    options["prebuilt"] = serde_json::json!(true);
 
     let job_id_clone = job_id.clone();
     let logs = log_buffer.get_ref().clone();
@@ -162,13 +169,13 @@ pub(super) async fn create_sim(
             auth,
         };
         let result = provider_for_task
-            .run_quick(ctx, &simc_input, &options)
+            .run_quick(ctx, &provider_input, &options)
             .await
             .map_err(|e| e.to_string());
         super::helpers::finalize_job_outcome(
             &repo_clone,
             &job_id_clone,
-            &simc_input,
+            &provider_input,
             result,
             |json| {
                 let mut parsed = result_parser::parse_simc_result(json);
