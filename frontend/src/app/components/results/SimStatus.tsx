@@ -14,6 +14,7 @@ interface SimStatusProps {
   jobId?: string;
   onCancelled?: () => void;
   canPause?: boolean;
+  canCancel?: boolean;
   pauseRequested?: boolean;
   onPause?: () => void;
   logLines?: string[];
@@ -70,6 +71,7 @@ export default function SimStatus({
   jobId,
   onCancelled,
   canPause = false,
+  canCancel = true,
   pauseRequested = false,
   onPause,
   logLines,
@@ -135,13 +137,15 @@ export default function SimStatus({
 
       {jobId && (isRunning || isPending) && (
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="rounded-lg px-3 py-1 text-[14px] text-on-surface-variant/60 transition-colors hover:bg-red-500/10 hover:text-error"
-          >
-            {cancelling ? t('results.cancelling') : t('results.cancelSim')}
-          </button>
+          {canCancel && (
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="rounded-lg px-3 py-1 text-[14px] text-on-surface-variant/60 transition-colors hover:bg-red-500/10 hover:text-error"
+            >
+              {cancelling ? t('results.cancelling') : t('results.cancelSim')}
+            </button>
+          )}
           {canPause && onPause && (
             <button
               onClick={onPause}
