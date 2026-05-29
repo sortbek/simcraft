@@ -4,16 +4,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::helpers::*;
-use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
-use crate::compute::{ProviderAvailability, ProviderRegistry, ProviderSettings, WorkloadEstimate};
+use crate::compute::{ProviderRegistry, WorkloadEstimate};
 use crate::db::{JobRepo, SettingsRepo};
 use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
-use crate::models::Job;
 use crate::profileset_generator;
 
 /// Shared prep: parse SimC input, extract upgrade budget, build upgrade options per slot.
@@ -411,90 +409,53 @@ pub(super) async fn create_upgrade_compare_sim(
         return resp;
     }
 
-    // Resolve compute provider.
-    let settings = match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
-        Ok(s) => s,
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
-    };
-    let avail = ProviderAvailability::build(&settings, registry.get_ref(), http_req.headers());
-    let est = WorkloadEstimate {
-        combo_count,
-        would_use_streaming_path: false,
-    };
-    let provider = match registry.for_request(
+    let (provider, avail) = match resolve_provider_for_request(
         "upgrade_compare",
         req.options.compute_provider.as_deref(),
-        &avail,
-        &est,
-    ) {
-        Ok(p) => p,
-        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e.to_string()})),
+        WorkloadEstimate { combo_count, would_use_streaming_path: false },
+        http_req.headers(),
+        settings_repo.get_ref(),
+        registry.get_ref(),
+    ).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
     };
-    let provider_id_str = provider.id().to_string();
 
-    let options_json_uc = req.options.to_json();
-    let display_input_uc =
-        crate::simc_runner::build_simc_input_from_options(&generated_input, &options_json_uc);
-    // Preserve mode identity: a Crest Upgrade sim is `upgrade_compare`, not
-    // `top_gear`. The staged finalize parses every staged result through the
-    // gear-comparison path regardless of sim_type (see helpers.rs), so this
-    // no longer needs to lie about what it is.
-    let job = Job::new_with_provider(
-        display_input_uc,
-        crate::models::SimMode::UpgradeCompare.as_wire().to_string(),
-        req.options.iterations,
-        req.options.fight_style.clone(),
-        req.options.target_error,
-        provider_id_str.clone(),
-    );
-    let job_id = job.id.clone();
-    let created_at = job.created_at.clone();
+    let envelope_payload = json!({
+        "base_profile": prepared.base_profile,
+        "upgraded_options_by_slot": prepared.upgraded_options_by_slot,
+        "upgrade_budget": prepared.upgrade_budget,
+        "selected_slots": req.selected_slots,
+        "max_combinations": req.max_combinations,
+        "options": req.options.to_json(),
+    });
 
-    // Build normalized request envelope for resumability.
-    let envelope = NormalizedRequest::new(
-        "upgrade_compare",
-        json!({
-            "base_profile": prepared.base_profile,
-            "upgraded_options_by_slot": prepared.upgraded_options_by_slot,
-            "upgrade_budget": prepared.upgrade_budget,
-            "selected_slots": req.selected_slots,
-            "max_combinations": req.max_combinations,
-            "options": req.options.to_json(),
-        }),
-    );
+    let combo_metadata_serialized: Vec<(String, String)> = combo_metadata
+        .iter()
+        .map(|(name, deltas)| {
+            (
+                name.clone(),
+                serde_json::to_string(deltas).unwrap_or_else(|_| "[]".to_string()),
+            )
+        })
+        .collect();
 
-    let mut job = job;
-    job.request_json = Some(envelope.to_json_string().unwrap_or_default());
-    job.batch_id = req.options.batch_id.clone();
-    if let Err(e) = repo.insert(&job).await {
-        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
-    }
-
-    // Best-effort write of per-combo metadata rows to the combo_metadata table.
-    write_combo_metadata_table(repo.get_ref(), &job_id, &combo_metadata).await;
-
-    let auth = avail.auth_for(provider.id());
-    super::helpers::spawn_profileset_sim(
-        repo.get_ref().clone(),
-        provider.clone(),
-        auth,
-        req.options.to_json(),
-        job_id.clone(),
-        generated_input,
-        combo_count,
-        log_buffer.get_ref().clone(),
-        crate::compute::StagedExecutionContext {
-            base_start: 10, // inline/eager: staged pipeline spans 10-95%
-            simc_input_mode: crate::models::SimcInputMode::Inline,
-            ..Default::default()
+    submit_profileset_sim(
+        ProfilesetSubmission {
+            sim_type: "upgrade_compare",
+            sim_mode: crate::models::SimMode::UpgradeCompare,
+            generated_input,
+            combo_count,
+            combo_metadata_serialized,
+            envelope_payload,
         },
-    );
-
-    HttpResponse::Ok().json(SimResponse {
-        id: job_id,
-        status: "pending".to_string(),
-        created_at,
-    })
+        &req.options,
+        provider,
+        avail,
+        repo.get_ref(),
+        log_buffer.get_ref(),
+    )
+    .await
 }
 
 pub(super) async fn get_upgrade_options_handler(

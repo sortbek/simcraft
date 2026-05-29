@@ -1,10 +1,11 @@
+use actix_web::HttpResponse;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::types::SimOptions;
-use crate::db::{self, ComboMetadataInsert, ComboMetadataRepo, JobRepo};
+use crate::db::{self, ComboMetadataInsert, ComboMetadataRepo, JobRepo, SettingsRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::{JobStatus, SimcInputMode};
 use crate::result_parser;
@@ -669,6 +670,119 @@ pub(crate) fn spawn_profileset_sim(
     });
 }
 
+/// Sim-type-agnostic payload describing a profileset workload that has been
+/// generated and is ready to submit. Built by each handler from its own
+/// gear/talent/enchant logic, then consumed by `submit_profileset_sim`.
+pub(crate) struct ProfilesetSubmission {
+    pub sim_type: &'static str,
+    pub sim_mode: crate::models::SimMode,
+    pub generated_input: String,
+    pub combo_count: usize,
+    /// Pre-serialized `(combo_name, json_string)` pairs for `combo_metadata`.
+    /// Each handler serializes its own per-combo metadata shape (top_gear/
+    /// enchant_gem use `Vec<Value>`; droptimizer uses `Value`) before passing
+    /// here so this helper stays sim-type-agnostic.
+    pub combo_metadata_serialized: Vec<(String, String)>,
+    /// JSON body for the `NormalizedRequest` envelope (sim-type-specific).
+    pub envelope_payload: Value,
+}
+
+/// Resolve the compute provider for an incoming sim request. Shared by all
+/// profileset-using handlers (and Top Gear's streaming-path pre-check).
+/// Returns the chosen provider + the availability snapshot used to derive auth.
+pub(crate) async fn resolve_provider_for_request(
+    sim_type: &str,
+    compute_provider: Option<&str>,
+    est: crate::compute::WorkloadEstimate,
+    req_headers: &actix_web::http::header::HeaderMap,
+    settings_repo: &SettingsRepo,
+    registry: &crate::compute::ProviderRegistry,
+) -> Result<
+    (
+        Arc<dyn crate::compute::SimcProvider>,
+        crate::compute::ProviderAvailability,
+    ),
+    HttpResponse,
+> {
+    let settings = crate::compute::ProviderSettings::load(settings_repo, &registry.remote_ids())
+        .await
+        .map_err(|e| {
+            HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        })?;
+    let avail = crate::compute::ProviderAvailability::build(&settings, registry, req_headers);
+    let provider = registry
+        .for_request(sim_type, compute_provider, &avail, &est)
+        .map_err(|e| HttpResponse::BadRequest().json(json!({"detail": e.to_string()})))?;
+    Ok((provider, avail))
+}
+
+/// Shared post-resolution finalize for profileset workloads. Owns the entire
+/// "build Job, insert, write metadata, spawn, return SimResponse" sequence
+/// that previously sat duplicated at the bottom of four handlers.
+///
+/// Streaming Top Gear bypasses this helper because its long-tail flow lives
+/// in `streaming_top_gear.rs` and is local-only by routing rule.
+pub(crate) async fn submit_profileset_sim(
+    submission: ProfilesetSubmission,
+    options: &crate::server::types::SimOptions,
+    provider: Arc<dyn crate::compute::SimcProvider>,
+    avail: crate::compute::ProviderAvailability,
+    repo: &JobRepo,
+    log_buffer: &Arc<LogBuffer>,
+) -> HttpResponse {
+    let provider_id_str = provider.id().to_string();
+    let options_json = options.to_json();
+    let display_input = crate::simc_runner::build_simc_input_from_options(
+        &submission.generated_input,
+        &options_json,
+    );
+
+    let mut job = crate::models::Job::new_with_provider(
+        display_input,
+        submission.sim_mode.as_wire().to_string(),
+        options.iterations,
+        options.fight_style.clone(),
+        options.target_error,
+        provider_id_str,
+    );
+    let job_id = job.id.clone();
+    let created_at = job.created_at.clone();
+
+    let envelope =
+        crate::server::request_json::NormalizedRequest::new(submission.sim_type, submission.envelope_payload);
+    job.request_json = Some(envelope.to_json_string().unwrap_or_default());
+    job.batch_id = options.batch_id.clone();
+
+    if let Err(e) = repo.insert(&job).await {
+        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
+    }
+
+    write_combo_metadata_table_raw(repo, &job_id, &submission.combo_metadata_serialized).await;
+
+    let auth = avail.auth_for(provider.id());
+    spawn_profileset_sim(
+        repo.clone(),
+        provider,
+        auth,
+        options_json,
+        job_id.clone(),
+        submission.generated_input,
+        submission.combo_count,
+        log_buffer.clone(),
+        crate::compute::StagedExecutionContext {
+            base_start: 10, // inline/eager: staged pipeline spans 10-95%
+            simc_input_mode: crate::models::SimcInputMode::Inline,
+            ..Default::default()
+        },
+    );
+
+    HttpResponse::Ok().json(crate::server::types::SimResponse {
+        id: job_id,
+        status: "pending".to_string(),
+        created_at,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handoff_streamed_top_gear_to_staged(
     pool: &sqlx::AnyPool,
@@ -820,41 +934,10 @@ pub(super) async fn write_combo_metadata_table_raw(
 
 /// Convenience wrapper for handlers that have `HashMap<String, Vec<Value>>` combo_metadata
 /// (top_gear, enchant_gem, upgrade_compare).
-pub(super) async fn write_combo_metadata_table(
-    repo: &JobRepo,
-    job_id: &str,
-    combo_metadata: &HashMap<String, Vec<Value>>,
-) {
-    let metadata_strs: Vec<(String, String)> = combo_metadata
-        .iter()
-        .map(|(name, deltas)| {
-            (
-                name.clone(),
-                serde_json::to_string(deltas).unwrap_or_else(|_| "[]".to_string()),
-            )
-        })
-        .collect();
-    write_combo_metadata_table_raw(repo, job_id, &metadata_strs).await;
-}
-
-/// Convenience wrapper for handlers that have `HashMap<String, Value>` combo_metadata
-/// (droptimizer).
-pub(super) async fn write_combo_metadata_table_value(
-    repo: &JobRepo,
-    job_id: &str,
-    combo_metadata: &HashMap<String, Value>,
-) {
-    let metadata_strs: Vec<(String, String)> = combo_metadata
-        .iter()
-        .map(|(name, val)| {
-            (
-                name.clone(),
-                serde_json::to_string(val).unwrap_or_else(|_| "null".to_string()),
-            )
-        })
-        .collect();
-    write_combo_metadata_table_raw(repo, job_id, &metadata_strs).await;
-}
+// `write_combo_metadata_table` and `write_combo_metadata_table_value` were
+// removed: each handler now pre-serializes its combo_metadata into the
+// `ProfilesetSubmission::combo_metadata_serialized` field, and
+// `submit_profileset_sim` writes via `write_combo_metadata_table_raw`.
 
 /// Load combo_metadata for a job from the `combo_metadata` table.
 /// Returns an empty map for in-memory repos or when no rows exist.

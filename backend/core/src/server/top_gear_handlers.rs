@@ -4,19 +4,16 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use super::helpers::*;
-use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
 use crate::addon_parser;
-use crate::compute::{ProviderAvailability, ProviderRegistry, ProviderSettings, WorkloadEstimate};
+use crate::compute::{ProviderRegistry, WorkloadEstimate};
 use crate::db::{JobRepo, SettingsRepo};
 use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
-use crate::models::{Job, SimcInputMode};
 use crate::profileset_generator;
 use crate::profileset_generator::triage::TRIAGE_THRESHOLD;
-use crate::simc_runner;
 
 fn normalized_talent_builds(talent_builds: &[TalentBuild]) -> Vec<(String, String)> {
     talent_builds
@@ -149,24 +146,19 @@ pub(super) async fn create_top_gear_sim(
         .unwrap_or(estimate);
     let use_streaming_path = effective_estimate >= TRIAGE_THRESHOLD;
 
-    // Resolve compute provider.
-    let settings = match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
-        Ok(s) => s,
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
-    };
-    let avail = ProviderAvailability::build(&settings, registry.get_ref(), http_req.headers());
-    let est = WorkloadEstimate {
-        combo_count: effective_estimate as usize,
-        would_use_streaming_path: use_streaming_path,
-    };
-    let provider = match registry.for_request(
+    let (provider, avail) = match resolve_provider_for_request(
         "top_gear",
         req.options.compute_provider.as_deref(),
-        &avail,
-        &est,
-    ) {
-        Ok(p) => p,
-        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e.to_string()})),
+        WorkloadEstimate {
+            combo_count: effective_estimate as usize,
+            would_use_streaming_path: use_streaming_path,
+        },
+        http_req.headers(),
+        settings_repo.get_ref(),
+        registry.get_ref(),
+    ).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
     };
     let provider_id_str = provider.id().to_string();
 
@@ -225,73 +217,50 @@ pub(super) async fn create_top_gear_sim(
         return resp;
     }
 
-    let options_json = req.options.to_json();
-    let display_input = simc_runner::build_simc_input_from_options(&generated_input, &options_json);
-    let job = Job::new_with_provider(
-        display_input,
-        crate::models::SimMode::TopGear.as_wire().to_string(),
-        req.options.iterations,
-        req.options.fight_style.clone(),
-        req.options.target_error,
-        provider_id_str.clone(),
-    );
-    let job_id = job.id.clone();
-    let created_at = job.created_at.clone();
+    let envelope_payload = json!({
+        "items_by_slot": items_by_slot,
+        "selected_items": req.selected_items,
+        "enchant_selections": req.enchant_selections,
+        "gem_options": req.gem_options,
+        "socketed_item_ids": socketed_ids.iter().collect::<Vec<_>>(),
+        "replace_gems": req.replace_gems,
+        "diamond_always_use": req.diamond_always_use,
+        "max_colors": req.max_colors,
+        "talent_builds": talent_builds,
+        "catalyst_charges": catalyst_charges,
+        "spec": req.options.spec_override,
+        "base_profile": base_profile,
+        "max_combinations": max_combinations,
+        "void_forge": req.void_forge,
+        "options": req.options.to_json(),
+    });
 
-    // Build normalized request envelope for resumability.
-    let envelope = NormalizedRequest::new(
-        "top_gear",
-        json!({
-            "items_by_slot": items_by_slot,
-            "selected_items": req.selected_items,
-            "enchant_selections": req.enchant_selections,
-            "gem_options": req.gem_options,
-            "socketed_item_ids": socketed_ids.iter().collect::<Vec<_>>(),
-            "replace_gems": req.replace_gems,
-            "diamond_always_use": req.diamond_always_use,
-            "max_colors": req.max_colors,
-            "talent_builds": talent_builds,
-            "catalyst_charges": catalyst_charges,
-            "spec": req.options.spec_override,
-            "base_profile": base_profile,
-            "max_combinations": max_combinations,
-            "void_forge": req.void_forge,
-            "options": req.options.to_json(),
-        }),
-    );
+    let combo_metadata_serialized: Vec<(String, String)> = combo_metadata
+        .iter()
+        .map(|(name, deltas)| {
+            (
+                name.clone(),
+                serde_json::to_string(deltas).unwrap_or_else(|_| "[]".to_string()),
+            )
+        })
+        .collect();
 
-    let mut job = job;
-    job.request_json = Some(envelope.to_json_string().unwrap_or_default());
-    job.batch_id = req.options.batch_id.clone();
-    if let Err(e) = repo.insert(&job).await {
-        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
-    }
-
-    // Best-effort write of per-combo metadata rows to the combo_metadata table.
-    write_combo_metadata_table(repo.get_ref(), &job_id, &combo_metadata).await;
-
-    let auth = avail.auth_for(provider.id());
-    super::helpers::spawn_profileset_sim(
-        repo.get_ref().clone(),
-        provider.clone(),
-        auth,
-        req.options.to_json(),
-        job_id.clone(),
-        generated_input,
-        combo_count,
-        log_buffer.get_ref().clone(),
-        crate::compute::StagedExecutionContext {
-            base_start: 10, // inline/eager: staged pipeline spans 10-95%
-            simc_input_mode: SimcInputMode::Inline,
-            ..Default::default()
+    submit_profileset_sim(
+        ProfilesetSubmission {
+            sim_type: "top_gear",
+            sim_mode: crate::models::SimMode::TopGear,
+            generated_input,
+            combo_count,
+            combo_metadata_serialized,
+            envelope_payload,
         },
-    );
-
-    HttpResponse::Ok().json(SimResponse {
-        id: job_id,
-        status: "pending".to_string(),
-        created_at,
-    })
+        &req.options,
+        provider,
+        avail,
+        repo.get_ref(),
+        log_buffer.get_ref(),
+    )
+    .await
 }
 pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
