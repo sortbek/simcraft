@@ -75,6 +75,10 @@ pub struct SimOptions {
     /// responsiveness for fewer SimC invocations and less per-batch retention overhead.
     #[serde(default)]
     pub triage_max_batch_profilesets: Option<usize>,
+    /// Provider routing hint from the frontend: None / Some("auto") = let the
+    /// backend pick; Some("local") / Some("simmit") = explicit selection.
+    #[serde(default)]
+    pub compute_provider: Option<String>,
 }
 
 impl SimOptions {
