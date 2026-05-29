@@ -1,6 +1,9 @@
-use crate::compute::provider::ProviderError;
+use crate::compute::provider::{ProviderAuth, ProviderError, SimcProvider};
 use crate::db::SettingsRepo;
+use actix_web::http::header::HeaderMap;
+use secrecy::SecretString;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Workload size + whether the handler is about to take its streaming-only path.
 /// Routing consumes this; the handler computes it once.
@@ -12,18 +15,51 @@ pub struct WorkloadEstimate {
 
 /// In-memory snapshot of provider readiness for one request. Built by the
 /// handler from `ProviderSettings` (desktop server-side keys) and request
-/// headers (web per-request keys). See Task 10.
+/// headers (web per-request keys).
 pub struct ProviderAvailability {
     pub(crate) ready: std::collections::HashSet<&'static str>,
     pub(crate) remote_order: Vec<&'static str>,
+    pub(crate) auth_by_id: std::collections::HashMap<&'static str, ProviderAuth>,
 }
 
 impl ProviderAvailability {
+    pub fn build(
+        settings: &ProviderSettings,
+        registry: &ProviderRegistry,
+        req_headers: &HeaderMap,
+    ) -> Self {
+        let mut ready: std::collections::HashSet<&'static str> = ["local"].into_iter().collect();
+        let mut auth_by_id = std::collections::HashMap::new();
+        auth_by_id.insert("local", ProviderAuth::None);
+        let remote_order = registry.remote_ids();
+
+        for &id in &remote_order {
+            if let Some(key) = settings.get_api_key(id) {
+                ready.insert(id);
+                auth_by_id.insert(id, ProviderAuth::BearerToken(SecretString::new(key.to_string().into())));
+                continue;
+            }
+            let header_name = format!("X-Provider-{}-Key", id);
+            if let Some(val) = req_headers.get(&header_name).and_then(|h| h.to_str().ok()) {
+                if !val.is_empty() {
+                    ready.insert(id);
+                    auth_by_id.insert(id, ProviderAuth::BearerToken(SecretString::new(val.to_string().into())));
+                }
+            }
+        }
+        Self { ready, remote_order, auth_by_id }
+    }
+
     pub fn is_ready(&self, id: &str) -> bool {
         self.ready.contains(id)
     }
+
     pub fn first_configured_remote(&self) -> Option<&'static str> {
         self.remote_order.iter().copied().find(|id| self.ready.contains(id))
+    }
+
+    pub fn auth_for(&self, id: &str) -> ProviderAuth {
+        self.auth_by_id.get(id).cloned().unwrap_or(ProviderAuth::None)
     }
 }
 
@@ -121,17 +157,73 @@ impl ProviderSettings {
     }
 }
 
-// Stub kept for the `pub use` in compute/mod.rs; replaced by real impl in Task 10.
-pub struct ProviderRegistry;
+pub struct ProviderRegistry {
+    providers: std::collections::HashMap<&'static str, Arc<dyn SimcProvider>>,
+    remote_order: Vec<&'static str>,
+}
+
+impl ProviderRegistry {
+    pub fn new_default(
+        local_simc_path: std::path::PathBuf,
+        http: reqwest::Client,
+    ) -> Self {
+        let mut providers: std::collections::HashMap<&'static str, Arc<dyn SimcProvider>> =
+            std::collections::HashMap::new();
+        providers.insert(
+            "local",
+            Arc::new(crate::compute::local::LocalSimcProvider::new(local_simc_path)),
+        );
+        providers.insert(
+            "simmit",
+            Arc::new(crate::compute::simmit::SimmitProvider::new(http.clone())),
+        );
+        Self {
+            providers,
+            remote_order: vec!["simmit"],
+        }
+    }
+
+    pub fn get(&self, id: &str) -> Option<Arc<dyn SimcProvider>> {
+        self.providers.get(id).cloned()
+    }
+
+    pub fn ids(&self) -> Vec<&'static str> {
+        let mut v: Vec<&'static str> = self.providers.keys().copied().collect();
+        v.sort();
+        v
+    }
+
+    pub fn remote_ids(&self) -> Vec<&'static str> {
+        self.remote_order.clone()
+    }
+
+    /// Convenience: combines pick_provider lookup + registry get.
+    pub fn for_request(
+        &self,
+        sim_type: &str,
+        compute_provider: Option<&str>,
+        avail: &ProviderAvailability,
+        est: &WorkloadEstimate,
+    ) -> Result<Arc<dyn SimcProvider>, crate::compute::provider::ProviderError> {
+        let known: Vec<&'static str> = self.remote_ids();
+        let id = pick_provider(sim_type, compute_provider, avail, est, &known)?;
+        self.get(id).ok_or_else(|| {
+            crate::compute::provider::ProviderError::UnknownProvider(id.to_string())
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn avail(ready: &[&'static str]) -> ProviderAvailability {
+        let mut auth_by_id = std::collections::HashMap::new();
+        auth_by_id.insert("local", ProviderAuth::None);
         ProviderAvailability {
             ready: ready.iter().copied().collect(),
             remote_order: vec!["simmit"],
+            auth_by_id,
         }
     }
     fn est(combos: usize, streaming: bool) -> WorkloadEstimate {
