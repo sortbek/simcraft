@@ -31,10 +31,17 @@ impl SimcProvider for SimmitProvider {
         &self,
         ctx: RunCtx<'_>,
         input: &str,
-        _opts: &Value,
+        opts: &Value,
     ) -> Result<SimcOutput, RunError> {
         let bearer = Self::bearer(&ctx)?;
-        let stripped = strip_simmit_blocked_directives(input);
+        // Apply the same user-options injection LocalSimcProvider gets for
+        // free via run_simc → build_full_simc_input: target_error, iterations,
+        // fight_style, raid buff overrides, consumables, expansion options,
+        // and the `# Simulation Options` block at the end. Without this,
+        // Simmit only sees the raw profile and falls back to its own
+        // defaults (target_error=0.2 etc).
+        let built = crate::simc_runner::build_simc_input_from_options(input, opts);
+        let stripped = strip_simmit_blocked_directives(&built);
         let remote_id = self.submit(&bearer, ctx.job_id, &stripped, false).await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
@@ -44,14 +51,15 @@ impl SimcProvider for SimmitProvider {
         &self,
         ctx: RunCtx<'_>,
         input: &str,
-        _opts: &Value,
+        opts: &Value,
         _combo_count: usize,
         _staged_ctx: crate::compute::StagedExecutionContext,
     ) -> Result<SimcOutput, RunError> {
         // Server-side multistage handles its own staged execution — the
         // resume_state / triage_constants from staged_ctx don't apply here.
         let bearer = Self::bearer(&ctx)?;
-        let stripped = strip_simmit_blocked_directives(input);
+        let built = crate::simc_runner::build_simc_input_from_options(input, opts);
+        let stripped = strip_simmit_blocked_directives(&built);
         let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
