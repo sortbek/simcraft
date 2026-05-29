@@ -86,4 +86,17 @@ pub trait SimcProvider: Send + Sync {
         opts: &Value,
         combo_count: usize,
     ) -> Result<SimcOutput, RunError>;
+
+    /// Probe a credential against the provider's usage/health endpoint.
+    /// Default (suitable for `local`): success with no credits info.
+    /// Remote providers override to hit their own endpoint.
+    async fn test_credential(&self, _api_key: &str) -> Result<CredentialTest, String> {
+        Ok(CredentialTest { credits_available: None })
+    }
+}
+
+/// Result of probing a provider credential (the Settings "Test connection" button).
+pub struct CredentialTest {
+    /// Credits / quota remaining, if the provider reports one. Display-only.
+    pub credits_available: Option<u64>,
 }

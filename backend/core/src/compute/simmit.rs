@@ -53,6 +53,25 @@ impl SimcProvider for SimmitProvider {
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
     }
+
+    async fn test_credential(&self, api_key: &str) -> Result<crate::compute::CredentialTest, String> {
+        let resp = self.http
+            .get(format!("{}/v1/simc/usage", SIMMIT_BASE_URL))
+            .bearer_auth(api_key)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("Simmit returned {}", resp.status()));
+        }
+        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
+        let credits = body
+            .pointer("/balance/availableCredits")
+            .and_then(|v| v.as_u64())
+            .or_else(|| body.pointer("/credits/available").and_then(|v| v.as_u64()))
+            .or_else(|| body.pointer("/credits").and_then(|v| v.as_u64()));
+        Ok(crate::compute::CredentialTest { credits_available: credits })
+    }
 }
 
 /// Lines whose first `=`-prefix matches any of these are stripped before
