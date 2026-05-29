@@ -91,6 +91,7 @@ pub(super) async fn create_top_gear_sim(
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
+    local_queue: web::Data<crate::compute::local::LocalSimQueue>,
 ) -> HttpResponse {
     let mut simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
@@ -181,6 +182,7 @@ pub(super) async fn create_top_gear_sim(
                 max_combinations,
                 estimate,
                 provider_id: provider_id_str.clone(),
+                local_queue: local_queue.get_ref().clone(),
             },
         )
         .await;

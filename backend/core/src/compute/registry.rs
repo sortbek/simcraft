@@ -167,13 +167,18 @@ impl ProviderRegistry {
     pub fn new_default(
         simc_bins: Arc<SimcBinaries>,
         pool: Option<sqlx::AnyPool>,
+        local_queue: crate::compute::local::LocalSimQueue,
         http: reqwest::Client,
     ) -> Self {
         let mut providers: std::collections::HashMap<&'static str, Arc<dyn SimcProvider>> =
             std::collections::HashMap::new();
         providers.insert(
             "local",
-            Arc::new(crate::compute::local::LocalSimcProvider::new(simc_bins, pool)),
+            Arc::new(crate::compute::local::LocalSimcProvider::new(
+                simc_bins,
+                pool,
+                local_queue,
+            )),
         );
         providers.insert(
             "simmit",

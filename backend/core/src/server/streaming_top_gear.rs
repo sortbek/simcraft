@@ -26,6 +26,7 @@ pub(super) struct StreamingTopGearStart {
     pub max_combinations: Option<usize>,
     pub estimate: u64,
     pub provider_id: String,
+    pub local_queue: crate::compute::local::LocalSimQueue,
 }
 
 /// Full streaming triage path.
@@ -47,6 +48,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         max_combinations,
         estimate,
         provider_id,
+        local_queue,
     } = start;
 
     let gem_opts = profileset_generator::GemEnchantOptions {
@@ -124,7 +126,41 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     let base_profile_owned = base_profile.clone();
     let log_buffer_owned = log_buffer.get_ref().clone();
 
+    let queue_for_task = local_queue.clone();
+    let repo_for_queue_wait = repo_for_task.clone();
+    let jid_for_queue_wait = job_id_task.clone();
     tokio::spawn(async move {
+        // Streaming Top Gear shares the local sim queue with eager local jobs
+        // — hold a permit for the duration of triage + staged handoff so we
+        // don't fight a Quick Sim for the CPU. While waiting in the queue,
+        // surface the status to the UI.
+        let _permit = {
+            if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
+                p
+            } else {
+                let _ = repo_for_queue_wait
+                    .update_progress(&jid_for_queue_wait, 0, "Queued", "waiting for active local sim to finish")
+                    .await;
+                loop {
+                    let acquire = queue_for_task.clone().acquire_owned();
+                    let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
+                    let res = tokio::select! {
+                        p = acquire => Some(p),
+                        _ = timeout => None,
+                    };
+                    if let Some(Ok(p)) = res {
+                        break p;
+                    }
+                    // Check for cancellation while waiting in queue.
+                    if let Ok(Some(snap)) = repo_for_queue_wait.get(&jid_for_queue_wait).await {
+                        if snap.status == crate::models::JobStatus::Cancelled {
+                            return;
+                        }
+                    }
+                }
+            }
+        };
+
         // Flip status to Running so the UI shows the Pause affordance and the
         // pause endpoint accepts requests during Triage. Without this the job
         // sits at Pending throughout triage and pause is unreachable.

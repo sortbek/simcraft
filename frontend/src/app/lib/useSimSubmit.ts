@@ -79,20 +79,28 @@ export function useSimSubmit({
       }
     }
 
-    // Soft warning if other sims are already running. v1 uses confirm()
-    // — a styled modal is a future polish.
+    // Soft warning if other LOCAL sims are already running.
     //
-    // Intentionally narrower than isActiveStatus: Paused jobs are "active"
-    // for UI purposes (still incomplete) but don't compete for CPU here, so
-    // they don't trigger the warning.
+    // Only local sims share the same CPU and the new backend queue —
+    // adding another one of those just makes the user wait longer in
+    // sequence (it won't slow anything down because the backend
+    // serializes local execution). Remote sims (Simmit) run server-side
+    // and don't affect local throughput; they also have their own
+    // server-side queue, so we never warn for them.
+    //
+    // Paused jobs are excluded — they're inactive on the CPU.
     try {
       const active = await fetchActiveJobs();
-      const activeCount = active.filter((j) => ['pending', 'running'].includes(j.status)).length;
-      if (activeCount >= 1) {
-        const stronger = activeCount >= 2;
-        const message = stronger
-          ? `You have ${activeCount} sims already running. Adding another will slow them all down significantly. Consider pausing one of the active sims first. Continue anyway?`
-          : `You have 1 sim already running. Each simc uses all CPU cores by default — running multiple at once will slow each one down proportionally. Continue?`;
+      const localActive = active.filter(
+        (j) =>
+          ['pending', 'running'].includes(j.status) &&
+          (j.provider_id === 'local' || j.provider_id === undefined),
+      );
+      if (localActive.length >= 1) {
+        const message =
+          localActive.length >= 2
+            ? `You have ${localActive.length} local sims queued or running. New sims wait their turn in the local queue; this just adds to the line.`
+            : `You have 1 local sim running. Your new sim will queue and start when the active one finishes. Continue?`;
         if (!window.confirm(message)) {
           return;
         }

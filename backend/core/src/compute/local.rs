@@ -6,22 +6,75 @@ use crate::simc_runner;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+
+/// Local sims share one SimC binary on one machine, so they must run
+/// sequentially or each one starves the others of CPU. The shared semaphore
+/// has exactly one permit: hold it while a sim is running, release on drop.
+///
+/// Streaming Top Gear acquires from the same semaphore at the top of its
+/// pipeline so triage + handoff are serialized with eager sims too.
+pub type LocalSimQueue = Arc<Semaphore>;
+
+pub fn new_local_sim_queue() -> LocalSimQueue {
+    Arc::new(Semaphore::new(1))
+}
 
 pub struct LocalSimcProvider {
     simc_bins: Arc<SimcBinaries>,
     /// `Some` on web (sqlx-backed JobRepo), `None` on desktop (memory backend).
     /// Threaded through to `run_simc_staged` for pause-resume checkpoint writes.
     pool: Option<sqlx::AnyPool>,
+    queue: LocalSimQueue,
 }
 
 impl LocalSimcProvider {
-    pub fn new(simc_bins: Arc<SimcBinaries>, pool: Option<sqlx::AnyPool>) -> Self {
-        Self { simc_bins, pool }
+    pub fn new(
+        simc_bins: Arc<SimcBinaries>,
+        pool: Option<sqlx::AnyPool>,
+        queue: LocalSimQueue,
+    ) -> Self {
+        Self {
+            simc_bins,
+            pool,
+            queue,
+        }
     }
 
     fn resolve_path(&self, opts: &Value) -> Result<std::path::PathBuf, RunError> {
         let branch = opts.get("simc_branch").and_then(|v| v.as_str()).unwrap_or("");
         self.simc_bins.resolve(branch).map_err(RunError::Other)
+    }
+
+    /// Wait for the queue permit, honoring cancellation. While waiting, emits
+    /// "Queued · waiting for active sim to finish" so the UI shows progress.
+    /// Returns the permit (dropped on function exit releases it) or
+    /// `RunError::Cancelled` if the user cancels before the permit lands.
+    async fn acquire_queue_permit(
+        &self,
+        ctx: &RunCtx<'_>,
+    ) -> Result<OwnedSemaphorePermit, RunError> {
+        // Fast path: try once. If immediately available, skip the queued status update.
+        if let Ok(permit) = self.queue.clone().try_acquire_owned() {
+            return Ok(permit);
+        }
+        // Slow path: surface "Queued" status, then poll-with-cancel.
+        (ctx.on_progress)(0, "Queued", "waiting for active local sim to finish");
+        loop {
+            if let Some(tok) = ctx.cancel.as_ref() {
+                if tok.is_cancelled().await {
+                    return Err(RunError::Cancelled);
+                }
+            }
+            let acquire = self.queue.clone().acquire_owned();
+            let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
+            tokio::select! {
+                p = acquire => {
+                    return p.map_err(|_| RunError::Other("local queue closed".into()));
+                }
+                _ = timeout => continue,
+            }
+        }
     }
 }
 
@@ -46,6 +99,7 @@ impl SimcProvider for LocalSimcProvider {
     ) -> Result<SimcOutput, RunError> {
         let _ = ctx.auth;
         let path = self.resolve_path(opts)?;
+        let _permit = self.acquire_queue_permit(&ctx).await?;
         let on_log = ctx.on_log;
         simc_runner::run_simc(&path, ctx.job_id, input, opts, move |line| on_log(line), ctx.cancel)
             .await
@@ -62,6 +116,7 @@ impl SimcProvider for LocalSimcProvider {
     ) -> Result<SimcOutput, RunError> {
         let _ = ctx.auth;
         let path = self.resolve_path(opts)?;
+        let _permit = self.acquire_queue_permit(&ctx).await?;
         let on_progress = ctx.on_progress;
         let on_stage_complete = ctx.on_stage_complete;
         let on_log = ctx.on_log;
@@ -106,12 +161,23 @@ mod tests {
 
     #[test]
     fn local_provider_caps_are_full() {
-        let p = LocalSimcProvider::new(empty_bins(), None);
+        let p = LocalSimcProvider::new(empty_bins(), None, new_local_sim_queue());
         let caps = p.capabilities();
         assert!(caps.cancel);
         assert!(caps.pause);
         assert!(caps.streaming_logs);
         assert!(!caps.server_side_multistage);
         assert_eq!(p.id(), "local");
+    }
+
+    #[tokio::test]
+    async fn queue_serializes_acquisitions() {
+        let q = new_local_sim_queue();
+        let p1 = q.clone().try_acquire_owned().expect("first permit available");
+        // Second try-acquire fails while first is held.
+        assert!(q.clone().try_acquire_owned().is_err());
+        drop(p1);
+        // After drop, second can acquire.
+        assert!(q.clone().try_acquire_owned().is_ok());
     }
 }

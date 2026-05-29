@@ -378,10 +378,19 @@ pub async fn start_server(
     // Pool is Some on web (sqlx-backed JobRepo) and None on desktop (memory
     // backend). LocalSimcProvider threads it into run_simc_staged for
     // pause-resume checkpoint persistence.
+    //
+    // local_sim_queue: 1-permit semaphore shared by LocalSimcProvider and the
+    // streaming Top Gear pipeline. Local sims acquire/release around their
+    // execution so they serialize instead of fighting over CPU. Remote
+    // providers (Simmit) don't touch the queue — they have their own
+    // server-side queueing.
+    let local_sim_queue = crate::compute::local::new_local_sim_queue();
+    let local_queue_data = web::Data::new(local_sim_queue.clone());
     let provider_registry = web::Data::new(Arc::new(
         crate::compute::ProviderRegistry::new_default(
             simc_bins.clone(),
             job_repo.pool().cloned(),
+            local_sim_queue,
             http_client.clone(),
         ),
     ));
@@ -412,6 +421,7 @@ pub async fn start_server(
             .app_data(char_repo.clone())
             .app_data(settings_repo.clone())
             .app_data(provider_registry.clone())
+            .app_data(local_queue_data.clone())
             .configure(api_routes::configure);
         #[cfg(not(feature = "desktop"))]
         let app = app.app_data(admin_secret.clone());
