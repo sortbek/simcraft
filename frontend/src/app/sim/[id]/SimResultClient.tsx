@@ -19,6 +19,7 @@ import {
   type SimInputPreview,
 } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
+import { useProviderCaps } from '../../lib/providers';
 import {
   getScenarioSiblings,
   formatScenarioLabel,
@@ -38,6 +39,7 @@ interface JobData {
   error: string | null;
   simc_input_mode?: 'inline' | 'streamed';
   pause_requested?: boolean;
+  provider_id: string;
 }
 
 export default function SimResultClient() {
@@ -230,6 +232,10 @@ export default function SimResultClient() {
   }
 
   if (job.status === 'pending' || job.status === 'running' || job.status === 'paused') {
+    const caps = useProviderCaps(job.provider_id);
+    const canCancel = (job.status === 'pending' || job.status === 'running') && caps.cancel;
+    const canPause = job.status === 'running' && caps.pause && job.simc_input_mode === 'streamed';
+
     return (
       <div className="space-y-3">
         {job.status === 'paused' ? (
@@ -286,7 +292,8 @@ export default function SimResultClient() {
             stagesCompleted={job.stages_completed}
             jobId={id}
             onCancelled={() => setJob({ ...job, status: 'cancelled' })}
-            canPause={job.status === 'running' && job.simc_input_mode === 'streamed'}
+            canCancel={canCancel}
+            canPause={canPause}
             pauseRequested={!!job.pause_requested}
             onPause={handlePause}
             logLines={logLines}
