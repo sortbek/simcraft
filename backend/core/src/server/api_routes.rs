@@ -183,8 +183,6 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         )
         .route("/api/providers", web::get().to(provider_handlers::list_providers))
         .route("/api/providers/{id}/test", web::post().to(provider_handlers::test_provider))
-        .route("/api/settings/provider/{id}", web::post().to(provider_handlers::save_provider_key))
-        .route("/api/settings/provider/{id}", web::delete().to(provider_handlers::delete_provider_key))
         .route("/health", web::get().to(system_handlers::health_check))
         .route("/api/routes", web::get().to(route_handlers::list_routes))
         .route("/api/routes", web::post().to(route_handlers::create_route))
@@ -218,6 +216,18 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         cfg.route(
             "/api/system-stats",
             web::get().to(system_handlers::system_stats),
+        )
+        // Server-side persisted provider keys are desktop-only. Web stores keys
+        // in localStorage and sends them per-request via X-Provider-<id>-Key so
+        // the server never holds them. Exposing these on web would let an
+        // anonymous caller plant a key that the server attaches to all sims.
+        .route(
+            "/api/settings/provider/{id}",
+            web::post().to(provider_handlers::save_provider_key),
+        )
+        .route(
+            "/api/settings/provider/{id}",
+            web::delete().to(provider_handlers::delete_provider_key),
         );
     }
 

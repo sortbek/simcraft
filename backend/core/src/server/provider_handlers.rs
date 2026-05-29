@@ -43,55 +43,42 @@ pub struct TestKeyBody {
 pub async fn test_provider(
     path: web::Path<String>,
     body: web::Json<TestKeyBody>,
+    registry: web::Data<std::sync::Arc<crate::compute::ProviderRegistry>>,
 ) -> HttpResponse {
     let id = path.into_inner();
-    if id != "simmit" {
-        return HttpResponse::BadRequest().json(serde_json::json!({"detail": "unknown provider"}));
-    }
+    let provider = match registry.get(&id) {
+        Some(p) => p,
+        None => return HttpResponse::BadRequest().json(serde_json::json!({"detail": "unknown provider"})),
+    };
     if body.api_key.trim().is_empty() {
         return HttpResponse::BadRequest().json(serde_json::json!({"detail": "missing api_key"}));
     }
-    let client = match reqwest::Client::builder().build() {
-        Ok(c) => c,
-        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"detail": e.to_string()})),
-    };
-    let resp = client
-        .get("https://api.simmit.com/v1/simc/usage")
-        .bearer_auth(&body.api_key)
-        .send()
-        .await;
-    match resp {
-        Ok(r) if r.status().is_success() => {
-            let body: serde_json::Value = r.json().await.unwrap_or(serde_json::json!({}));
-            // Try a few common JSON paths for credit balance; surface None if not found.
-            let credits = body
-                .pointer("/balance/availableCredits")
-                .and_then(|v| v.as_u64())
-                .or_else(|| body.pointer("/credits/available").and_then(|v| v.as_u64()))
-                .or_else(|| body.pointer("/credits").and_then(|v| v.as_u64()));
-            HttpResponse::Ok().json(serde_json::json!({
-                "ok": true,
-                "credits_available": credits,
-            }))
-        }
-        Ok(r) => HttpResponse::Ok().json(serde_json::json!({
-            "ok": false,
-            "detail": format!("Simmit returned {}", r.status()),
+    match provider.test_credential(&body.api_key).await {
+        Ok(test) => HttpResponse::Ok().json(serde_json::json!({
+            "ok": true,
+            "credits_available": test.credits_available,
         })),
-        Err(e) => HttpResponse::Ok().json(serde_json::json!({
+        Err(detail) => HttpResponse::Ok().json(serde_json::json!({
             "ok": false,
-            "detail": e.to_string(),
+            "detail": detail,
         })),
     }
 }
 
+/// Desktop-only: persists a provider API key into the local SettingsRepo.
+/// Web doesn't expose this route (see api_routes.rs); on web the key lives in
+/// browser localStorage and travels per-request via X-Provider-<id>-Key.
+#[cfg(feature = "desktop")]
 pub async fn save_provider_key(
     path: web::Path<String>,
     body: web::Json<TestKeyBody>,
     settings_repo: web::Data<SettingsRepo>,
+    registry: web::Data<std::sync::Arc<crate::compute::ProviderRegistry>>,
 ) -> HttpResponse {
     let id = path.into_inner();
-    if id != "simmit" { return HttpResponse::BadRequest().finish(); }
+    if !registry.remote_ids().contains(&id.as_str()) {
+        return HttpResponse::BadRequest().json(serde_json::json!({"detail": "unknown provider"}));
+    }
     if let Err(e) = settings_repo.set(&format!("provider.{}.api_key", id), &body.api_key).await {
         return HttpResponse::InternalServerError().json(serde_json::json!({"detail": e.to_string()}));
     }
@@ -99,12 +86,16 @@ pub async fn save_provider_key(
     HttpResponse::Ok().json(serde_json::json!({"ok": true}))
 }
 
+#[cfg(feature = "desktop")]
 pub async fn delete_provider_key(
     path: web::Path<String>,
     settings_repo: web::Data<SettingsRepo>,
+    registry: web::Data<std::sync::Arc<crate::compute::ProviderRegistry>>,
 ) -> HttpResponse {
     let id = path.into_inner();
-    if id != "simmit" { return HttpResponse::BadRequest().finish(); }
+    if !registry.remote_ids().contains(&id.as_str()) {
+        return HttpResponse::BadRequest().finish();
+    }
     let _ = settings_repo.set(&format!("provider.{}.api_key", id), "").await;
     HttpResponse::Ok().finish()
 }
