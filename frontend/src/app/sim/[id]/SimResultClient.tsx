@@ -19,7 +19,7 @@ import {
   type SimInputPreview,
 } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
-import { useProviderCaps } from '../../lib/providers';
+import { useProviderCaps, useProviderMeta } from '../../lib/providers';
 import {
   getScenarioSiblings,
   formatScenarioLabel,
@@ -319,6 +319,7 @@ export default function SimResultClient() {
     return <p className="text-sm text-muted">{t('results.noResultData')}</p>;
   }
 
+  const providerMeta = useProviderMeta(job.provider_id);
   const r = job.result;
   const isTopGear = r.type === 'top_gear' || r.type === 'enchant_gem';
   const hasTopGearState = isTopGear && getTopGearState() !== null;
@@ -593,6 +594,24 @@ export default function SimResultClient() {
           {t('results.textOutput')}
         </a>
       </div>
+
+      {/* Provider footer (non-local jobs only) */}
+      {job.provider_id !== 'local' && (
+        <div className="mt-4 text-center text-[11px] uppercase tracking-wider text-on-surface-variant/50">
+          {(() => {
+            const sim = (job.result as any)?.simmit ?? {};
+            const credits = sim.credits_consumed;
+            const commit = sim.build_commit;
+            return (
+              <>
+                Ran on {providerMeta?.display_name ?? job.provider_id}
+                {credits != null && ` · ${Number(credits).toLocaleString()} credits`}
+                {commit && ` · build ${String(commit).slice(0, 7)}`}
+              </>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }
