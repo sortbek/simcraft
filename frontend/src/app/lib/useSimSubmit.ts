@@ -153,11 +153,15 @@ export function useSimSubmit({
         ...(simcBranch ? { simc_branch: simcBranch } : {}),
       };
 
+      const computeChoice = (sharedPayload as { compute_provider?: string }).compute_provider;
       const results = await Promise.allSettled(
         configs.map(async (config) => {
           const res = await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...providerKeyHeaders() },
+            headers: {
+              'Content-Type': 'application/json',
+              ...providerKeyHeaders(computeChoice),
+            },
             body: JSON.stringify({
               ...sharedPayload,
               fight_style: config.fightStyle,

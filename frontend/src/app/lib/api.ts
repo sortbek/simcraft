@@ -7,12 +7,18 @@ export const API_URL =
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_API_URL ?? '');
 
-/** Build provider key headers from localStorage.
- *  Generic over all configured providers — scans for the
- *  `simhammer.provider.<id>.api_key` localStorage convention so adding a
- *  new remote provider needs zero changes here. */
-export function providerKeyHeaders(): Record<string, string> {
+/** Build provider key headers from localStorage, scoped by the user's
+ *  Compute selection so we don't leak unrelated provider keys to the backend.
+ *
+ *  - `"local"`: no remote keys ever sent.
+ *  - `"auto"` / `undefined`: all configured remote keys (backend chooses).
+ *  - specific remote id (`"simmit"`, ...): just that one key.
+ *
+ *  Scans `simhammer.provider.<id>.api_key` so adding a new remote provider
+ *  needs zero changes here. */
+export function providerKeyHeaders(computeChoice?: string): Record<string, string> {
   if (typeof window === 'undefined') return {};
+  if (computeChoice === 'local') return {};
   const out: Record<string, string> = {};
   for (let i = 0; i < window.localStorage.length; i++) {
     const storageKey = window.localStorage.key(i);
@@ -21,6 +27,8 @@ export function providerKeyHeaders(): Record<string, string> {
     if (!m) continue;
     const id = m[1];
     if (id === 'local') continue;
+    // Specific remote selection: only that id's key.
+    if (computeChoice && computeChoice !== 'auto' && computeChoice !== id) continue;
     const value = window.localStorage.getItem(storageKey);
     if (value) out[`X-Provider-${id}-Key`] = value;
   }

@@ -228,6 +228,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/settings/provider/{id}",
             web::delete().to(provider_handlers::delete_provider_key),
+        )
+        .route(
+            "/api/providers/{id}/test-stored",
+            web::post().to(provider_handlers::test_stored_provider_key),
         );
     }
 

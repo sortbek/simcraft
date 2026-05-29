@@ -65,6 +65,44 @@ pub async fn test_provider(
     }
 }
 
+/// Desktop-only: probe the credential that's already stored in SettingsRepo.
+/// Lets the "Test" button verify a saved key without re-typing it. Web
+/// frontend keeps its key in localStorage and calls `test_provider` directly.
+#[cfg(feature = "desktop")]
+pub async fn test_stored_provider_key(
+    path: web::Path<String>,
+    settings_repo: web::Data<SettingsRepo>,
+    registry: web::Data<std::sync::Arc<crate::compute::ProviderRegistry>>,
+) -> HttpResponse {
+    let id = path.into_inner();
+    let provider = match registry.get(&id) {
+        Some(p) => p,
+        None => return HttpResponse::BadRequest().json(serde_json::json!({"detail": "unknown provider"})),
+    };
+    let remote_ids = registry.remote_ids();
+    let settings = match crate::compute::ProviderSettings::load(settings_repo.get_ref(), &remote_ids).await {
+        Ok(s) => s,
+        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"detail": e.to_string()})),
+    };
+    let key = match settings.get_api_key(&id) {
+        Some(k) if !k.is_empty() => k.to_string(),
+        _ => return HttpResponse::Ok().json(serde_json::json!({
+            "ok": false,
+            "detail": "no stored key for this provider",
+        })),
+    };
+    match provider.test_credential(&key).await {
+        Ok(test) => HttpResponse::Ok().json(serde_json::json!({
+            "ok": true,
+            "credits_available": test.credits_available,
+        })),
+        Err(detail) => HttpResponse::Ok().json(serde_json::json!({
+            "ok": false,
+            "detail": detail,
+        })),
+    }
+}
+
 /// Desktop-only: persists a provider API key into the local SettingsRepo.
 /// Web doesn't expose this route (see api_routes.rs); on web the key lives in
 /// browser localStorage and travels per-request via X-Provider-<id>-Key.

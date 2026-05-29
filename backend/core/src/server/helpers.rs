@@ -532,13 +532,13 @@ pub(crate) fn spawn_staged_sim(
 /// Upgrade Compare, and Enchant/Gem handlers — they pass the resolved
 /// `Arc<dyn SimcProvider>` directly and never branch on `provider.id()`.
 ///
-/// Mirrors `spawn_staged_sim` for the channel-serialized progress writer +
-/// gear-comparison finalize, but dispatches execution through the trait so
-/// both local and cloud paths share one spawn site.
+/// Decomposed into three pieces:
+///   - `make_run_ctx` builds the ordered-update channel + `RunCtx` callbacks
+///   - `run_profileset_job_task` owns the spawn + execute path
+///   - `finalize_gear_comparison_result` writes the parsed result + report files
 ///
 /// Streaming Top Gear's post-triage handoff still calls `spawn_staged_sim`
-/// directly because the streaming pipeline is local-only by routing rule
-/// and threading the trait through its phase machinery is out of scope here.
+/// directly because the streaming pipeline is local-only by routing rule.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_profileset_sim(
     repo: JobRepo,
@@ -551,123 +551,180 @@ pub(crate) fn spawn_profileset_sim(
     log_buffer: Arc<LogBuffer>,
     staged_ctx: crate::compute::StagedExecutionContext,
 ) {
-    tokio::spawn(async move {
-        if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
-            eprintln!("[{}] Failed to set Running status: {}", job_id, e);
-        }
+    tokio::spawn(run_profileset_job_task(
+        repo,
+        provider,
+        auth,
+        options,
+        job_id,
+        simc_input,
+        combo_count,
+        log_buffer,
+        staged_ctx,
+    ));
+}
 
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<JobUpdate>();
-        let writer_repo = repo.clone();
-        let writer_jid = job_id.clone();
-        let writer_handle = tokio::spawn(async move {
-            while let Some(update) = rx.recv().await {
-                match update {
-                    JobUpdate::Progress { pct, stage, detail } => {
-                        if let Err(e) = writer_repo
-                            .update_progress(&writer_jid, pct, &stage, &detail)
-                            .await
-                        {
-                            eprintln!("[{}] Failed to update progress: {}", writer_jid, e);
-                        }
+/// Set up an ordered progress/stage-complete writer task and return a `RunCtx`
+/// whose callbacks feed that writer. The returned `JoinHandle` must be awaited
+/// (after dropping `_tx`) before writing the final result, so queued updates
+/// drain without overwriting the terminal state.
+fn make_run_ctx<'a>(
+    job_id: &'a str,
+    repo: &JobRepo,
+    log_buffer: &Arc<LogBuffer>,
+    auth: crate::compute::ProviderAuth,
+) -> (
+    crate::compute::RunCtx<'a>,
+    tokio::sync::mpsc::UnboundedSender<JobUpdate>,
+    tokio::task::JoinHandle<()>,
+) {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<JobUpdate>();
+    let writer_repo = repo.clone();
+    let writer_jid = job_id.to_string();
+    let writer_handle = tokio::spawn(async move {
+        while let Some(update) = rx.recv().await {
+            match update {
+                JobUpdate::Progress { pct, stage, detail } => {
+                    if let Err(e) = writer_repo
+                        .update_progress(&writer_jid, pct, &stage, &detail)
+                        .await
+                    {
+                        eprintln!("[{}] Failed to update progress: {}", writer_jid, e);
                     }
-                    JobUpdate::StageComplete { summary } => {
-                        if let Err(e) = writer_repo.complete_stage(&writer_jid, &summary).await {
-                            eprintln!("[{}] Failed to complete stage: {}", writer_jid, e);
-                        }
-                    }
                 }
-            }
-        });
-
-        let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
-
-        let tx_progress = tx.clone();
-        let tx_stages = tx.clone();
-        let logs_cb = log_buffer.clone();
-        let jid_logs = job_id.clone();
-
-        let ctx = crate::compute::RunCtx {
-            job_id: &job_id,
-            on_progress: Arc::new(move |pct, lbl: &str, sub: &str| {
-                let _ = tx_progress.send(JobUpdate::Progress {
-                    pct,
-                    stage: lbl.to_string(),
-                    detail: sub.to_string(),
-                });
-            }),
-            on_stage_complete: Arc::new(move |summary: &str| {
-                let _ = tx_stages.send(JobUpdate::StageComplete {
-                    summary: summary.to_string(),
-                });
-            }),
-            on_log: Arc::new(move |line: &str| logs_cb.push_line(&jid_logs, line.to_string())),
-            cancel: Some(cancel_token),
-            auth,
-        };
-
-        let result = provider
-            .run_with_profilesets(ctx, &simc_input, &options, combo_count, staged_ctx)
-            .await;
-
-        // Close the writer channel and let any queued updates drain before
-        // we touch result/error fields, so the final status isn't overwritten.
-        drop(tx);
-        let _ = writer_handle.await;
-
-        match result {
-            Ok(output) => {
-                let job_snap = repo.get(&job_id).await.ok().flatten();
-                let raw_meta = load_combo_metadata(&repo, &job_id).await;
-                let meta: Option<HashMap<String, Vec<Value>>> =
-                    if raw_meta.is_empty() { None } else { Some(raw_meta) };
-
-                let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
-                inject_realm(&mut parsed, &simc_input);
-                if let Some(ref snap) = job_snap {
-                    inject_total_elapsed(&mut parsed, &snap.created_at);
-                }
-                let result_str = serde_json::to_string(&parsed).unwrap_or_default();
-                let raw_str = serde_json::to_string(&output.json).ok();
-                if let Err(e) = repo
-                    .set_result(&job_id, &result_str, raw_str.as_deref())
-                    .await
-                {
-                    eprintln!("[{}] Failed to set result: {}", job_id, e);
-                }
-                if let Err(e) = repo
-                    .set_report_files(
-                        &job_id,
-                        output.html_report.as_deref(),
-                        output.text_output.as_deref(),
-                    )
-                    .await
-                {
-                    eprintln!("[{}] Failed to set report files: {}", job_id, e);
-                }
-            }
-            Err(crate::compute::RunError::Paused) => {
-                // Status was already set to Paused inside run_simc_staged.
-            }
-            Err(crate::compute::RunError::Cancelled) => {
-                // Cancel already handled by the CancelToken terminal-state invariant.
-            }
-            Err(crate::compute::RunError::Other(e)) => {
-                let is_cancelled = repo
-                    .get(&job_id)
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|j| j.status == JobStatus::Cancelled)
-                    .unwrap_or(false);
-                if !is_cancelled {
-                    if let Err(db_err) = repo.set_error(&job_id, &e).await {
-                        eprintln!("[{}] Failed to set error: {}", job_id, db_err);
+                JobUpdate::StageComplete { summary } => {
+                    if let Err(e) = writer_repo.complete_stage(&writer_jid, &summary).await {
+                        eprintln!("[{}] Failed to complete stage: {}", writer_jid, e);
                     }
                 }
             }
         }
-        log_buffer.remove(&job_id);
     });
+
+    let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.to_string());
+
+    let tx_progress = tx.clone();
+    let tx_stages = tx.clone();
+    let logs_cb = log_buffer.clone();
+    let jid_logs = job_id.to_string();
+
+    let ctx = crate::compute::RunCtx {
+        job_id,
+        on_progress: Arc::new(move |pct, lbl: &str, sub: &str| {
+            let _ = tx_progress.send(JobUpdate::Progress {
+                pct,
+                stage: lbl.to_string(),
+                detail: sub.to_string(),
+            });
+        }),
+        on_stage_complete: Arc::new(move |summary: &str| {
+            let _ = tx_stages.send(JobUpdate::StageComplete {
+                summary: summary.to_string(),
+            });
+        }),
+        on_log: Arc::new(move |line: &str| logs_cb.push_line(&jid_logs, line.to_string())),
+        cancel: Some(cancel_token),
+        auth,
+    };
+
+    (ctx, tx, writer_handle)
+}
+
+/// The actual spawned future. Sets Running status, builds the `RunCtx`,
+/// calls the provider, drains the writer, then finalizes by gear-comparison
+/// parser. Independently testable without touching `tokio::spawn`.
+#[allow(clippy::too_many_arguments)]
+async fn run_profileset_job_task(
+    repo: JobRepo,
+    provider: Arc<dyn crate::compute::SimcProvider>,
+    auth: crate::compute::ProviderAuth,
+    options: Value,
+    job_id: String,
+    simc_input: String,
+    combo_count: usize,
+    log_buffer: Arc<LogBuffer>,
+    staged_ctx: crate::compute::StagedExecutionContext,
+) {
+    if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
+        eprintln!("[{}] Failed to set Running status: {}", job_id, e);
+    }
+
+    let (ctx, tx, writer_handle) = make_run_ctx(&job_id, &repo, &log_buffer, auth);
+
+    let result = provider
+        .run_with_profilesets(ctx, &simc_input, &options, combo_count, staged_ctx)
+        .await;
+
+    // Close the writer channel and drain queued updates before writing the
+    // final result — otherwise a late progress write could clobber it.
+    drop(tx);
+    let _ = writer_handle.await;
+
+    finalize_gear_comparison_result(&repo, &job_id, &simc_input, result).await;
+    log_buffer.remove(&job_id);
+}
+
+/// Translate the provider's `Result<SimcOutput, RunError>` into the right
+/// terminal state: parse via gear-comparison, persist; Paused / Cancelled
+/// are no-ops (status already set elsewhere); Other writes an error.
+async fn finalize_gear_comparison_result(
+    repo: &JobRepo,
+    job_id: &str,
+    simc_input: &str,
+    result: Result<crate::simc_runner::SimcOutput, crate::compute::RunError>,
+) {
+    match result {
+        Ok(output) => {
+            let job_snap = repo.get(job_id).await.ok().flatten();
+            let raw_meta = load_combo_metadata(repo, job_id).await;
+            let meta: Option<HashMap<String, Vec<Value>>> =
+                if raw_meta.is_empty() { None } else { Some(raw_meta) };
+
+            let mut parsed = result_parser::parse_top_gear_result(&output.json, meta.as_ref());
+            inject_realm(&mut parsed, simc_input);
+            if let Some(ref snap) = job_snap {
+                inject_total_elapsed(&mut parsed, &snap.created_at);
+            }
+            let result_str = serde_json::to_string(&parsed).unwrap_or_default();
+            let raw_str = serde_json::to_string(&output.json).ok();
+            if let Err(e) = repo
+                .set_result(job_id, &result_str, raw_str.as_deref())
+                .await
+            {
+                eprintln!("[{}] Failed to set result: {}", job_id, e);
+            }
+            if let Err(e) = repo
+                .set_report_files(
+                    job_id,
+                    output.html_report.as_deref(),
+                    output.text_output.as_deref(),
+                )
+                .await
+            {
+                eprintln!("[{}] Failed to set report files: {}", job_id, e);
+            }
+        }
+        Err(crate::compute::RunError::Paused) => {
+            // Status was already set to Paused inside run_simc_staged.
+        }
+        Err(crate::compute::RunError::Cancelled) => {
+            // Cancel already handled by the CancelToken terminal-state invariant.
+        }
+        Err(crate::compute::RunError::Other(e)) => {
+            let is_cancelled = repo
+                .get(job_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|j| j.status == JobStatus::Cancelled)
+                .unwrap_or(false);
+            if !is_cancelled {
+                if let Err(db_err) = repo.set_error(job_id, &e).await {
+                    eprintln!("[{}] Failed to set error: {}", job_id, db_err);
+                }
+            }
+        }
+    }
 }
 
 /// Sim-type-agnostic payload describing a profileset workload that has been

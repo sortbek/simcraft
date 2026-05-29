@@ -58,14 +58,47 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
   }
 
   async function testConn() {
-    const k = key || (isDesktop ? '' : getLocalKey(providerId) || '');
-    if (!k && !stored) return;
+    // Three sources for the key, in priority order:
+    //   1. text input (`key`) — user is replacing or testing before save
+    //   2. localStorage (web only)
+    //   3. backend-stored secret (desktop) — fetched via /api/providers/{id}/test-stored
+    // Without #3, desktop's "Test" required re-typing the stored key, which
+    // defeats the purpose of "Ready".
+    const trimmed = key.trim();
+    if (trimmed) {
+      await postTest(trimmed);
+      return;
+    }
+    if (!isDesktop) {
+      const localK = getLocalKey(providerId) ?? '';
+      if (localK) {
+        await postTest(localK);
+      }
+      return;
+    }
+    if (stored) {
+      // Desktop with a saved key — ask the backend to test what it has on file.
+      setTesting(true);
+      try {
+        const res = await fetch(`${API_URL}/api/providers/${providerId}/test-stored`, {
+          method: 'POST',
+        });
+        setTest(await res.json());
+      } catch (e: any) {
+        setTest({ ok: false, detail: e?.message ?? 'network error' });
+      } finally {
+        setTesting(false);
+      }
+    }
+  }
+
+  async function postTest(api_key: string) {
     setTesting(true);
     try {
       const res = await fetch(`${API_URL}/api/providers/${providerId}/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: k || (getLocalKey(providerId) ?? '') }),
+        body: JSON.stringify({ api_key }),
       });
       setTest(await res.json());
     } catch (e: any) {
