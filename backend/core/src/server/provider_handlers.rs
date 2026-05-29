@@ -84,3 +84,27 @@ pub async fn test_provider(
         })),
     }
 }
+
+pub async fn save_provider_key(
+    path: web::Path<String>,
+    body: web::Json<TestKeyBody>,
+    settings_repo: web::Data<SettingsRepo>,
+) -> HttpResponse {
+    let id = path.into_inner();
+    if id != "simmit" { return HttpResponse::BadRequest().finish(); }
+    if let Err(e) = settings_repo.set(&format!("provider.{}.api_key", id), &body.api_key).await {
+        return HttpResponse::InternalServerError().json(serde_json::json!({"detail": e.to_string()}));
+    }
+    let _ = settings_repo.set(&format!("provider.{}.enabled", id), "true").await;
+    HttpResponse::Ok().json(serde_json::json!({"ok": true}))
+}
+
+pub async fn delete_provider_key(
+    path: web::Path<String>,
+    settings_repo: web::Data<SettingsRepo>,
+) -> HttpResponse {
+    let id = path.into_inner();
+    if id != "simmit" { return HttpResponse::BadRequest().finish(); }
+    let _ = settings_repo.set(&format!("provider.{}.api_key", id), "").await;
+    HttpResponse::Ok().finish()
+}
