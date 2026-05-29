@@ -478,9 +478,6 @@ pub(crate) fn spawn_staged_sim(
                     Some(raw_meta)
                 };
 
-                // spawn_staged_sim is only called from the streaming Top Gear
-                // handoff (local-only per routing rule), so the sim_type is
-                // always "top_gear" here.
                 let mut parsed = result_parser::parse_gear_comparison_result(
                     &output.json,
                     meta.as_ref(),

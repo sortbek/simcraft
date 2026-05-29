@@ -1,3 +1,4 @@
+use crate::cancel::CancelToken;
 use crate::compute::provider::{
     ProviderCaps, RunCtx, RunError, SimcOutput, SimcProvider, StagedExecutionContext,
 };
@@ -18,6 +19,31 @@ pub type LocalSimQueue = Arc<Semaphore>;
 
 pub fn new_local_sim_queue() -> LocalSimQueue {
     Arc::new(Semaphore::new(1))
+}
+
+/// Wait for the next available permit on the local sim queue, polling the
+/// cancel token every 500ms so a queued job can be aborted before it ever
+/// runs. Callers that want to surface a "Queued" status to the user should
+/// emit it before invoking this — the helper is silent.
+pub(crate) async fn await_local_queue_permit(
+    queue: &LocalSimQueue,
+    cancel: Option<&CancelToken>,
+) -> Result<OwnedSemaphorePermit, RunError> {
+    loop {
+        if let Some(tok) = cancel {
+            if tok.is_cancelled().await {
+                return Err(RunError::Cancelled);
+            }
+        }
+        let acquire = queue.clone().acquire_owned();
+        let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
+        tokio::select! {
+            p = acquire => {
+                return p.map_err(|_| RunError::Other("local queue closed".into()));
+            }
+            _ = timeout => continue,
+        }
+    }
 }
 
 pub struct LocalSimcProvider {
@@ -46,35 +72,15 @@ impl LocalSimcProvider {
         self.simc_bins.resolve(branch).map_err(RunError::Other)
     }
 
-    /// Wait for the queue permit, honoring cancellation. While waiting, emits
-    /// "Queued · waiting for active sim to finish" so the UI shows progress.
-    /// Returns the permit (dropped on function exit releases it) or
-    /// `RunError::Cancelled` if the user cancels before the permit lands.
     async fn acquire_queue_permit(
         &self,
         ctx: &RunCtx<'_>,
     ) -> Result<OwnedSemaphorePermit, RunError> {
-        // Fast path: try once. If immediately available, skip the queued status update.
         if let Ok(permit) = self.queue.clone().try_acquire_owned() {
             return Ok(permit);
         }
-        // Slow path: surface "Queued" status, then poll-with-cancel.
         (ctx.on_progress)(0, "Queued", "waiting for active local sim to finish");
-        loop {
-            if let Some(tok) = ctx.cancel.as_ref() {
-                if tok.is_cancelled().await {
-                    return Err(RunError::Cancelled);
-                }
-            }
-            let acquire = self.queue.clone().acquire_owned();
-            let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
-            tokio::select! {
-                p = acquire => {
-                    return p.map_err(|_| RunError::Other("local queue closed".into()));
-                }
-                _ = timeout => continue,
-            }
-        }
+        await_local_queue_permit(&self.queue, ctx.cancel.as_ref()).await
     }
 }
 

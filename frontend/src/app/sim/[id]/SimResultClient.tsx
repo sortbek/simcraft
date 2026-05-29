@@ -27,6 +27,7 @@ import {
 } from '../../lib/scenario-siblings';
 import { getTopGearState } from '../../lib/topgear-state';
 import { ROUTES } from '../../lib/routes';
+import { GEAR_COMPARISON_SIM_TYPES } from '../../lib/simTypes';
 
 interface JobData {
   id: string;
@@ -321,13 +322,9 @@ export default function SimResultClient() {
   }
 
   const r = job.result;
-  // The backend now emits an accurate per-mode `type` plus a `result_kind`
-  // grouping. Renderers branch on the shape (gear comparison vs single actor)
-  // rather than on each specific sim type. Fall back to type-list matching
-  // for results persisted before this field landed.
   const isTopGear =
     r.result_kind === 'gear_comparison' ||
-    ['top_gear', 'enchant_gem', 'droptimizer', 'upgrade_compare'].includes(r.type as string);
+    (GEAR_COMPARISON_SIM_TYPES as readonly string[]).includes(r.type as string);
   const hasTopGearState = isTopGear && getTopGearState() !== null;
 
   return (

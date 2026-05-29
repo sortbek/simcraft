@@ -86,8 +86,6 @@ export default function SimStatus({
   const cpuUsage = useCpuUsage(isRunning);
   const title = progressStage || (isPending ? t('results.queued') : t('results.simulating'));
   const hasStages = stagesCompleted && stagesCompleted.length > 0;
-  // Backend signals queued-state by setting progressStage to "Queued" (see
-  // LocalSimcProvider::acquire_queue_permit). Surface it as a distinct banner.
   const isQueued = (progressStage ?? '').toLowerCase().startsWith('queued');
 
   async function handleCancel() {

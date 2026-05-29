@@ -132,32 +132,25 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     tokio::spawn(async move {
         // Streaming Top Gear shares the local sim queue with eager local jobs
         // — hold a permit for the duration of triage + staged handoff so we
-        // don't fight a Quick Sim for the CPU. While waiting in the queue,
-        // surface the status to the UI.
-        let _permit = {
-            if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
-                p
-            } else {
-                let _ = repo_for_queue_wait
-                    .update_progress(&jid_for_queue_wait, 0, "Queued", "waiting for active local sim to finish")
-                    .await;
-                loop {
-                    let acquire = queue_for_task.clone().acquire_owned();
-                    let timeout = tokio::time::sleep(std::time::Duration::from_millis(500));
-                    let res = tokio::select! {
-                        p = acquire => Some(p),
-                        _ = timeout => None,
-                    };
-                    if let Some(Ok(p)) = res {
-                        break p;
-                    }
-                    // Check for cancellation while waiting in queue.
-                    if let Ok(Some(snap)) = repo_for_queue_wait.get(&jid_for_queue_wait).await {
-                        if snap.status == crate::models::JobStatus::Cancelled {
-                            return;
-                        }
-                    }
-                }
+        // don't fight a Quick Sim for the CPU.
+        let _permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
+            p
+        } else {
+            let _ = repo_for_queue_wait
+                .update_progress(&jid_for_queue_wait, 0, "Queued", "waiting for active local sim to finish")
+                .await;
+            let cancel_tok = crate::cancel::CancelToken::new(
+                repo_for_queue_wait.clone(),
+                jid_for_queue_wait.clone(),
+            );
+            match crate::compute::local::await_local_queue_permit(
+                &queue_for_task,
+                Some(&cancel_tok),
+            )
+            .await
+            {
+                Ok(p) => p,
+                Err(_) => return,
             }
         };
 

@@ -38,3 +38,14 @@ export function getSimTypeLabel(simType: string, t: Translator): string {
 export function getSimTypeColorClass(simType: string): string {
   return COLOR_CLASSES[simType] ?? DEFAULT_COLOR;
 }
+
+/** Sim modes that render via the gear-comparison result shape (rows of
+ *  combos ranked vs a base). Mirrors `SimMode::result_kind() == GearComparison`
+ *  in `backend/core/src/models.rs`. Used as a legacy fallback for results
+ *  persisted before `result_kind` started shipping in the payload. */
+export const GEAR_COMPARISON_SIM_TYPES = [
+  'top_gear',
+  'enchant_gem',
+  'droptimizer',
+  'upgrade_compare',
+] as const;
