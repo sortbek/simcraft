@@ -6,12 +6,7 @@ import { specDisplayName } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
 import { formatDps } from '../../lib/format';
 import { JobActionButtons } from './JobActionButtons';
-import {
-  SIM_TYPE_COLORS,
-  SIM_TYPE_LABELS,
-  StatusDot,
-  timeAgo,
-} from './shared';
+import { SIM_TYPE_COLORS, SIM_TYPE_LABELS, StatusDot, timeAgo } from './shared';
 
 type HistoryEntry =
   | { type: 'single'; sim: JobOverviewSummary }
@@ -40,13 +35,7 @@ function groupByBatch(sims: JobOverviewSummary[]): HistoryEntry[] {
  * right of the timestamp — either the delete X for terminal rows or the
  * Pause/Resume/Cancel cluster for active ones. Keeping the slot inline
  * (rather than stacking a second row) keeps row heights uniform. */
-function HistoryRow({
-  job,
-  trailing,
-}: {
-  job: JobOverviewSummary;
-  trailing: ReactNode;
-}) {
+function HistoryRow({ job, trailing }: { job: JobOverviewSummary; trailing: ReactNode }) {
   const router = useRouter();
   const { t } = useLanguage();
   const isFailed = job.status === 'failed';
@@ -115,14 +104,7 @@ interface RowProps {
   onDelete: (id: string) => void;
 }
 
-function ActionableHistoryRow({
-  job,
-  busy,
-  onPause,
-  onResume,
-  onCancel,
-  onDelete,
-}: RowProps) {
+function ActionableHistoryRow({ job, busy, onPause, onResume, onCancel, onDelete }: RowProps) {
   const trailing = isActiveStatus(job.status) ? (
     <JobActionButtons
       job={job}

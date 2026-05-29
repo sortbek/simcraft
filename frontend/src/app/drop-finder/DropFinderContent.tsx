@@ -580,15 +580,7 @@ export default function DropFinderContent() {
       }
     }
     return { simc_input: simcInput, drop_items: dropItems };
-  }, [
-    visibleDrops,
-    selected,
-    simcInput,
-    difficulty,
-    dungeonDiff,
-    upgradeLevel,
-    upgradeTracks,
-  ]);
+  }, [visibleDrops, selected, simcInput, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
 
   const validate = useCallback(() => {
     if (!visibleDrops || selected.size === 0) return t('validation.selectItems');

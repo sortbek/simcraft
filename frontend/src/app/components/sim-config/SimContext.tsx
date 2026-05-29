@@ -125,8 +125,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [talentBuilds, setTalentBuilds] = useState<{ name: string; talentString: string }[]>([]);
   const [scenarios, setScenarios] = useState<FightScenario[]>([]);
   const [parallelProfilesets, setParallelProfilesets] = useState(true);
-  const [triageMaxBatchProfilesets, _setTriageMaxBatchProfilesets] =
-    useState(TRIAGE_BATCH_DEFAULT);
+  const [triageMaxBatchProfilesets, _setTriageMaxBatchProfilesets] = useState(TRIAGE_BATCH_DEFAULT);
   const [statWeights, _setStatWeights] = useState(false);
 
   useEffect(() => {

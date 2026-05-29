@@ -28,10 +28,7 @@ function ActiveRow({ job, busy, onPause, onResume, onCancel }: ActiveRowProps) {
       className="cursor-pointer border-b border-outline-variant/5 transition-colors hover:bg-surface-container-high/50 focus:bg-surface-container-high/30 focus:outline-none"
     >
       <td className="px-4 py-3">
-        <div
-          className="flex items-center gap-2"
-          title={job.error_message ?? undefined}
-        >
+        <div className="flex items-center gap-2" title={job.error_message ?? undefined}>
           <StatusDot status={job.status} />
           <span className="text-[13px] capitalize text-on-surface">{job.status}</span>
         </div>

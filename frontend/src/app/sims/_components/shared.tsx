@@ -26,14 +26,12 @@ const STATUS_DOT_COLOR: Record<JobStatus, string> = {
 };
 
 export function StatusDot({ status }: { status: JobStatus }) {
-  return (
-    <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLOR[status]}`} />
-  );
+  return <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLOR[status]}`} />;
 }
 
 export function timeAgo(
   iso: string,
-  t: (key: string, params?: Record<string, string | number>) => string,
+  t: (key: string, params?: Record<string, string | number>) => string
 ): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return t('time.justNow');

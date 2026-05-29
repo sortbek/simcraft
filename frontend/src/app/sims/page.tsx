@@ -61,9 +61,7 @@ export default function SimsPage() {
     }
     setAllLoading(true);
     setAllError(null);
-    fetchAllJobs(
-      isDesktop ? {} : { player: character!.name, realm: character!.realm },
-    )
+    fetchAllJobs(isDesktop ? {} : { player: character!.name, realm: character!.realm })
       .then((data) => setAllJobs(Array.isArray(data) ? data : []))
       .catch((e) => {
         setAllJobs([]);
@@ -91,7 +89,7 @@ export default function SimsPage() {
 
   const activeList = useMemo(
     () => activeSnapshot.filter((j) => isActiveStatus(j.status)),
-    [activeSnapshot],
+    [activeSnapshot]
   );
 
   const refreshAll = useCallback(() => {
@@ -112,7 +110,7 @@ export default function SimsPage() {
         setBusy(null);
       }
     },
-    [refreshAll],
+    [refreshAll]
   );
 
   const handlePause = useCallback(
@@ -130,11 +128,11 @@ export default function SimsPage() {
         setBusy(null);
       }
     },
-    [refreshAll, setPauseRequested],
+    [refreshAll, setPauseRequested]
   );
   const handleResume = useCallback(
     (id: string) => wrapAction(id, () => resumeSim(id), 'Failed to resume sim'),
-    [wrapAction],
+    [wrapAction]
   );
   const handleCancel = useCallback(
     (id: string) => {
@@ -148,17 +146,17 @@ export default function SimsPage() {
             throw new Error(detail.detail || `Cancel failed (${res.status})`);
           }
         },
-        'Failed to cancel sim',
+        'Failed to cancel sim'
       );
     },
-    [wrapAction],
+    [wrapAction]
   );
   const handleDelete = useCallback(
     (id: string) => {
       if (!window.confirm('Delete this sim from history? This cannot be undone.')) return;
       wrapAction(id, () => deleteJob(id), 'Failed to delete sim');
     },
-    [wrapAction],
+    [wrapAction]
   );
 
   const error = actionError ?? pollError ?? allError;

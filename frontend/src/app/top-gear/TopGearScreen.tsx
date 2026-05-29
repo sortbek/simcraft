@@ -527,11 +527,7 @@ export default function TopGearScreen() {
           </>
         )}
         <span className="h-5 w-px bg-outline-variant/20" />
-        <Toggle
-          checked={voidForge}
-          onChange={setVoidForge}
-          label={t('topGear.voidForge')}
-        />
+        <Toggle checked={voidForge} onChange={setVoidForge} label={t('topGear.voidForge')} />
       </div>
 
       {!resolved ? (

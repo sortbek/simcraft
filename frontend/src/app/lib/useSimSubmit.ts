@@ -87,9 +87,7 @@ export function useSimSubmit({
     // they don't trigger the warning.
     try {
       const active = await fetchActiveJobs();
-      const activeCount = active.filter((j) =>
-        ['pending', 'running'].includes(j.status)
-      ).length;
+      const activeCount = active.filter((j) => ['pending', 'running'].includes(j.status)).length;
       if (activeCount >= 1) {
         const stronger = activeCount >= 2;
         const message = stronger

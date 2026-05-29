@@ -238,19 +238,21 @@ export default function ConfigDrawer({
                 {t('config.rotationMode')}
               </label>
               <div className="flex gap-2">
-                {([
-                  { value: 'default', label: t('config.rotationModeDefault'), hint: null },
-                  {
-                    value: 'assisted_combat',
-                    label: t('config.rotationModeAssisted'),
-                    hint: t('config.rotationModeAssistedHint'),
-                  },
-                  {
-                    value: 'one_button',
-                    label: t('config.rotationModeOneButton'),
-                    hint: t('config.rotationModeOneButtonHint'),
-                  },
-                ] as const).map((mode) => {
+                {(
+                  [
+                    { value: 'default', label: t('config.rotationModeDefault'), hint: null },
+                    {
+                      value: 'assisted_combat',
+                      label: t('config.rotationModeAssisted'),
+                      hint: t('config.rotationModeAssistedHint'),
+                    },
+                    {
+                      value: 'one_button',
+                      label: t('config.rotationModeOneButton'),
+                      hint: t('config.rotationModeOneButtonHint'),
+                    },
+                  ] as const
+                ).map((mode) => {
                   const isActive = rotationMode === mode.value;
                   return (
                     <button
@@ -283,7 +285,7 @@ export default function ConfigDrawer({
                 {t('config.customAplSimcOptions')}
               </label>
               {rotationMode !== 'default' && (
-                <div className="rounded-md bg-tertiary-container/40 px-3 py-2 text-[11px] text-on-tertiary-container">
+                <div className="text-on-tertiary-container rounded-md bg-tertiary-container/40 px-3 py-2 text-[11px]">
                   {t('config.rotationModeAplWarning')}
                 </div>
               )}
@@ -349,11 +351,13 @@ export default function ConfigDrawer({
                     </div>
                     <p className="mt-1 text-[11px] text-on-surface-variant/40">
                       When enabled, SimHammer adds{' '}
-                      <code className="font-mono text-on-surface-variant/70">profileset_work_threads=1</code>{' '}
-                      to early Top Gear stages (4+ combos at target_error &gt; 0.2), running profilesets
-                      concurrently instead of sequentially. Measured to be modestly faster on those stages;
-                      disabled at tighter precision where iteration parallelism wins. Uncheck to never emit
-                      the flag.
+                      <code className="font-mono text-on-surface-variant/70">
+                        profileset_work_threads=1
+                      </code>{' '}
+                      to early Top Gear stages (4+ combos at target_error &gt; 0.2), running
+                      profilesets concurrently instead of sequentially. Measured to be modestly
+                      faster on those stages; disabled at tighter precision where iteration
+                      parallelism wins. Uncheck to never emit the flag.
                     </p>
                   </div>
                 </label>
@@ -375,8 +379,8 @@ export default function ConfigDrawer({
                     ))}
                   </select>
                   <p className="text-[11px] text-on-surface-variant/40">
-                    Streamed Top Gear only. Larger batches reduce repeated baseline and
-                    retention overhead, but Pause waits until the current batch completes.
+                    Streamed Top Gear only. Larger batches reduce repeated baseline and retention
+                    overhead, but Pause waits until the current batch completes.
                   </p>
                 </div>
               )}

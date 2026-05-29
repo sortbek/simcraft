@@ -100,9 +100,7 @@ export default function TopGearGroupCard({
             onUpgradeClick={() => onUpgradeClick(item, item.uid)}
             onUpgradeSelect={(option) => onUpgradeSelect(item, option)}
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
-            onVoidForgeConvert={
-              item.can_void_forge ? () => onVoidForgeConvert(item) : undefined
-            }
+            onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
             onRemoveGem={item.gem_id > 0 ? () => onRemoveGem(item) : undefined}
             t={t}
@@ -140,9 +138,7 @@ export default function TopGearGroupCard({
             onUpgradeClick={() => onUpgradeClick(item, item.uid)}
             onUpgradeSelect={(option) => onUpgradeSelect(item, option)}
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
-            onVoidForgeConvert={
-              item.can_void_forge ? () => onVoidForgeConvert(item) : undefined
-            }
+            onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
             onRemoveGem={item.gem_id > 0 ? () => onRemoveGem(item) : undefined}
             t={t}

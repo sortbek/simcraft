@@ -49,24 +49,15 @@ export async function resumeSim(jobId: string): Promise<void> {
  * `sourceJobId` is the parent Top Gear job; `comboId` is the integer
  * from the row's "Combo N" name. Returns the new sim's job_id. */
 export async function simRow(sourceJobId: string, comboId: number): Promise<string> {
-  const data = await fetchJson<{ id: string }>(
-    `${API_URL}/api/sim/${sourceJobId}/sim-row`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ combo_id: comboId }),
-    },
-  );
+  const data = await fetchJson<{ id: string }>(`${API_URL}/api/sim/${sourceJobId}/sim-row`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ combo_id: comboId }),
+  });
   return data.id;
 }
 
-export type JobStatus =
-  | 'pending'
-  | 'running'
-  | 'paused'
-  | 'done'
-  | 'failed'
-  | 'cancelled';
+export type JobStatus = 'pending' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
 export interface JobOverviewSummary {
   id: string;

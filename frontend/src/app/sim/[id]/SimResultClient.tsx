@@ -11,7 +11,13 @@ import StatWeightsTable from '../../components/results/StatWeightsTable';
 import TalentTree from '../../components/talents/TalentTree';
 import TopGearResults from '../../components/gear/TopGearResults';
 
-import { API_URL, fetchSimInputPreview, pauseSim, resumeSim, type SimInputPreview } from '../../lib/api';
+import {
+  API_URL,
+  fetchSimInputPreview,
+  pauseSim,
+  resumeSim,
+  type SimInputPreview,
+} from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import {
   getScenarioSiblings,
@@ -73,7 +79,10 @@ export default function SimResultClient() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: JobData = await res.json();
         if (active) setJob(data);
-        if (active && (data.status === 'pending' || data.status === 'running' || data.status === 'paused')) {
+        if (
+          active &&
+          (data.status === 'pending' || data.status === 'running' || data.status === 'paused')
+        ) {
           timer = setTimeout(poll, 2000);
         }
       } catch (err) {
@@ -124,12 +133,7 @@ export default function SimResultClient() {
   // lost from the UI even though it's still in the backend ring buffer.
   useEffect(() => {
     if (!showLogs || !id || id === '_') return;
-    if (
-      job?.status !== 'done' &&
-      job?.status !== 'failed' &&
-      job?.status !== 'cancelled'
-    )
-      return;
+    if (job?.status !== 'done' && job?.status !== 'failed' && job?.status !== 'cancelled') return;
     const cursor = logCursorRef.current;
     fetch(`${API_URL}/api/sim/${id}/logs?after=${cursor}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -150,17 +154,13 @@ export default function SimResultClient() {
 
   const handlePause = useCallback(async () => {
     setJob((current) =>
-      current && current.id === id
-        ? { ...current, pause_requested: true }
-        : current,
+      current && current.id === id ? { ...current, pause_requested: true } : current
     );
     try {
       await pauseSim(id);
     } catch (e) {
       setJob((current) =>
-        current && current.id === id
-          ? { ...current, pause_requested: false }
-          : current,
+        current && current.id === id ? { ...current, pause_requested: false } : current
       );
       console.error('Pause failed:', e);
     }
@@ -174,7 +174,7 @@ export default function SimResultClient() {
         fetchSimInputPreview(id)
           .then((data) => setInputPreview(data))
           .catch((err) =>
-            setInputPreviewError(err instanceof Error ? err.message : 'Failed to load input'),
+            setInputPreviewError(err instanceof Error ? err.message : 'Failed to load input')
           );
       }
       return next;
@@ -234,12 +234,14 @@ export default function SimResultClient() {
       <div className="space-y-3">
         {job.status === 'paused' ? (
           <div className="flex flex-col items-center justify-center space-y-6 py-16">
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 w-72">
+            <div className="w-72 rounded-xl border border-amber-500/20 bg-amber-500/5 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-bold uppercase tracking-wider text-amber-400">Paused</p>
+                  <p className="text-sm font-bold uppercase tracking-wider text-amber-400">
+                    Paused
+                  </p>
                   {job.progress_stage && (
-                    <p className="text-xs text-on-surface-variant mt-0.5">
+                    <p className="mt-0.5 text-xs text-on-surface-variant">
                       at {job.progress_stage}
                       {job.progress_detail ? ` · ${job.progress_detail}` : ''}
                     </p>

@@ -107,11 +107,11 @@ function usePolledActiveSims(): UseActiveSimsResult {
 
   const activeCount = useMemo(
     () => jobs.filter((j) => ACTIVE_STATUS_SET.has(j.status)).length,
-    [jobs],
+    [jobs]
   );
   const runningCount = useMemo(
     () => jobs.filter((j) => RUNNING_STATUS_SET.has(j.status)).length,
-    [jobs],
+    [jobs]
   );
 
   return useMemo(
@@ -126,13 +126,11 @@ function usePolledActiveSims(): UseActiveSimsResult {
       },
       setPauseRequested: (jobId: string, requested: boolean) => {
         setJobs((prev) =>
-          prev.map((job) =>
-            job.id === jobId ? { ...job, pause_requested: requested } : job,
-          ),
+          prev.map((job) => (job.id === jobId ? { ...job, pause_requested: requested } : job))
         );
       },
     }),
-    [jobs, activeCount, runningCount, loading, error],
+    [jobs, activeCount, runningCount, loading, error]
   );
 }
 
