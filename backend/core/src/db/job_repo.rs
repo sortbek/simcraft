@@ -290,6 +290,7 @@ impl JobRepo {
                         ),
                         checkpoint: r.get("checkpoint"),
                         pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
+                        provider_id: r.get("provider_id"),
                     }
                 }))
             }

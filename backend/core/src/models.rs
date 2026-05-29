@@ -153,6 +153,7 @@ pub struct Job {
     pub simc_input_mode: SimcInputMode,
     pub checkpoint: Option<String>,
     pub pause_requested: bool,
+    pub provider_id: String,
 }
 
 /// Slim view of a Job row used by the status polling endpoint.
@@ -294,6 +295,17 @@ impl Job {
         fight_style: String,
         target_error: f64,
     ) -> Self {
+        Self::new_with_provider(simc_input, sim_type, iterations, fight_style, target_error, "local".to_string())
+    }
+
+    pub fn new_with_provider(
+        simc_input: String,
+        sim_type: String,
+        iterations: u32,
+        fight_style: String,
+        target_error: f64,
+        provider_id: String,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             status: JobStatus::Pending,
@@ -317,6 +329,7 @@ impl Job {
             simc_input_mode: SimcInputMode::Inline,
             checkpoint: None,
             pause_requested: false,
+            provider_id,
         }
     }
 }
