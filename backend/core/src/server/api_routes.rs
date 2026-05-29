@@ -182,6 +182,7 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(system_handlers::check_simc_updates),
         )
         .route("/api/providers", web::get().to(provider_handlers::list_providers))
+        .route("/api/providers/{id}/test", web::post().to(provider_handlers::test_provider))
         .route("/health", web::get().to(system_handlers::health_check))
         .route("/api/routes", web::get().to(route_handlers::list_routes))
         .route("/api/routes", web::post().to(route_handlers::create_route))
