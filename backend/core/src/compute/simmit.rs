@@ -101,7 +101,7 @@ struct SubmitRuntime {
     max_runtime_seconds: u32,
 }
 #[derive(Serialize)]
-struct SubmitArtifactsJson { version: u8 }
+struct SubmitArtifactsJson { version: &'static str }
 #[derive(Serialize)]
 struct SubmitArtifacts { json: SubmitArtifactsJson }
 #[derive(Serialize)]
@@ -155,7 +155,7 @@ impl SimmitProvider {
                 multi_stage: if enable_multistage { Some(true) } else { None },
                 max_runtime_seconds: 1800,
             },
-            artifacts: SubmitArtifacts { json: SubmitArtifactsJson { version: 2 } },
+            artifacts: SubmitArtifacts { json: SubmitArtifactsJson { version: "2" } },
             metadata,
         };
 
