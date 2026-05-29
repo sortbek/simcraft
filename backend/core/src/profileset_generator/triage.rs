@@ -620,11 +620,10 @@ pub fn select_survivors_with(
             .collect();
     }
 
-    let per_batch_max = if batches_remaining == 0 {
-        global_remaining
-    } else {
-        (global_remaining / batches_remaining).max(min_keep_per_batch)
-    };
+    let per_batch_max = global_remaining
+        .checked_div(batches_remaining)
+        .map(|n| n.max(min_keep_per_batch))
+        .unwrap_or(global_remaining);
     if kept.len() > per_batch_max {
         kept.truncate(per_batch_max);
     }
