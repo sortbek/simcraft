@@ -2,6 +2,7 @@ use crate::compute::provider::{
     ProviderAuth, ProviderCaps, RunCtx, RunError, SimcOutput, SimcProvider,
 };
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub struct SimmitProvider {
@@ -66,6 +67,121 @@ pub fn strip_simmit_blocked_directives(input: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+const SIMMIT_BASE_URL: &str = "https://api.simmit.com";
+
+#[derive(Serialize)]
+struct SubmitBuild { channel: &'static str }
+#[derive(Serialize)]
+struct SubmitProfile<'a> { text: &'a str }
+#[derive(Serialize)]
+struct SubmitRuntime {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "multiStage")]
+    multi_stage: Option<bool>,
+    #[serde(rename = "maxRuntimeSeconds")]
+    max_runtime_seconds: u32,
+}
+#[derive(Serialize)]
+struct SubmitArtifactsJson { version: u8 }
+#[derive(Serialize)]
+struct SubmitArtifacts { json: SubmitArtifactsJson }
+#[derive(Serialize)]
+struct SubmitBody<'a> {
+    build: SubmitBuild,
+    profile: SubmitProfile<'a>,
+    runtime: SubmitRuntime,
+    artifacts: SubmitArtifacts,
+    metadata: std::collections::HashMap<&'static str, String>,
+}
+
+#[derive(Deserialize)]
+struct SubmitResponse {
+    #[serde(default)]
+    success: bool,
+    id: Option<String>,
+    #[serde(default)]
+    warnings: Vec<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct ErrorBody {
+    error: Option<String>,
+    code: Option<String>,
+}
+
+impl SimmitProvider {
+    fn bearer(ctx: &RunCtx<'_>) -> Result<String, RunError> {
+        use secrecy::ExposeSecret;
+        match &ctx.auth {
+            ProviderAuth::BearerToken(s) => Ok(s.expose_secret().to_string()),
+            ProviderAuth::None => Err(RunError::Other(
+                "Simmit requires a configured API key — set it in Settings.".into(),
+            )),
+        }
+    }
+
+    async fn submit(
+        &self,
+        bearer: &str,
+        job_id: &str,
+        input: &str,
+        enable_multistage: bool,
+    ) -> Result<String, RunError> {
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("simhammer_job_id", job_id.to_string());
+        let body = SubmitBody {
+            build: SubmitBuild { channel: "nightly" },
+            profile: SubmitProfile { text: input },
+            runtime: SubmitRuntime {
+                multi_stage: if enable_multistage { Some(true) } else { None },
+                max_runtime_seconds: 1800,
+            },
+            artifacts: SubmitArtifacts { json: SubmitArtifactsJson { version: 2 } },
+            metadata,
+        };
+
+        let resp = self.http
+            .post(format!("{}/v1/simc/jobs", SIMMIT_BASE_URL))
+            .bearer_auth(bearer)
+            .header("idempotency-key", job_id)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| RunError::Other(format!("Simmit submit network error: {}", e)))?;
+
+        let status = resp.status();
+        if status.is_success() {
+            let parsed: SubmitResponse = resp.json().await
+                .map_err(|e| RunError::Other(format!("Simmit submit decode: {}", e)))?;
+            if !parsed.success {
+                return Err(RunError::Other("Simmit returned success=false".into()));
+            }
+            let _ = parsed.warnings;  // We don't surface warnings in v1.
+            parsed.id.ok_or_else(|| RunError::Other("Simmit submit returned no id".into()))
+        } else {
+            let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
+            Err(map_simmit_error(status, err))
+        }
+    }
+}
+
+fn map_simmit_error(status: reqwest::StatusCode, err: ErrorBody) -> RunError {
+    let code = err.code.as_deref().unwrap_or("");
+    let msg = err.error.unwrap_or_else(|| status.to_string());
+    match (status.as_u16(), code) {
+        (401, _) => RunError::Other(format!("Invalid Simmit API key — re-enter in Settings ({})", msg)),
+        (402, _) | (_, "insufficient_credits") | (_, "inactive_entitlement") => {
+            RunError::Other(format!("Simmit: out of credits — add credits at dashboard.simmit.com ({})", msg))
+        }
+        (_, "input_sanitized_rejected") => {
+            RunError::Other(format!("Simmit rejected the profile: {}", msg))
+        }
+        (429, _) | (_, "rate_limit_exceeded") | (_, "max_active_jobs_exceeded") => {
+            RunError::Other(format!("Simmit rate-limited — try again shortly ({})", msg))
+        }
+        _ => RunError::Other(format!("Simmit error [{} {}]: {}", status, code, msg)),
+    }
 }
 
 #[cfg(test)]
