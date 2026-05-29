@@ -528,6 +528,63 @@ pub(crate) fn spawn_staged_sim(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_cloud_sim(
+    repo: JobRepo,
+    provider: std::sync::Arc<dyn crate::compute::SimcProvider>,
+    auth: crate::compute::ProviderAuth,
+    options: Value,
+    job_id: String,
+    simc_input: String,
+    combo_count: usize,
+    log_buffer: Arc<LogBuffer>,
+) {
+    tokio::spawn(async move {
+        if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
+            eprintln!("[{}] Failed to set Running status: {}", job_id, e);
+        }
+        if let Err(e) = repo.update_progress(&job_id, 5, "Submitting to cloud", "").await {
+            eprintln!("[{}] Failed to update progress: {}", job_id, e);
+        }
+        let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
+
+        let logs_cb = log_buffer.clone();
+        let jid_cb = job_id.clone();
+        let progress_repo = repo.clone();
+        let progress_jid = job_id.clone();
+        let ctx = crate::compute::RunCtx {
+            job_id: &job_id,
+            on_progress: Box::new(move |pct, label, sub| {
+                let r = progress_repo.clone();
+                let j = progress_jid.clone();
+                let lbl = label.to_string();
+                let s = sub.to_string();
+                tokio::spawn(async move {
+                    let _ = r.update_progress(&j, pct, &lbl, &s).await;
+                });
+            }),
+            on_log: Box::new(move |line| logs_cb.push_line(&jid_cb, line.to_string())),
+            cancel: Some(cancel_token),
+            auth,
+        };
+
+        let result = provider
+            .run_with_profilesets(ctx, &simc_input, &options, combo_count)
+            .await
+            .map_err(|e| e.to_string());
+
+        finalize_job_outcome(
+            &repo,
+            &job_id,
+            &simc_input,
+            result,
+            |json| crate::result_parser::parse_simc_result(json),
+        )
+        .await;
+        log_buffer.remove(&job_id);
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handoff_streamed_top_gear_to_staged(
     pool: &sqlx::AnyPool,
     repo: &JobRepo,

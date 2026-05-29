@@ -463,13 +463,6 @@ pub(super) async fn create_upgrade_compare_sim(
         }),
     );
 
-    // Resolve simc BEFORE insert — invalid branch must not create an orphan
-    // Pending row.
-    let simc = match simc_bins.resolve(&req.options.simc_branch) {
-        Ok(path) => path,
-        Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
-    };
-
     let mut job = job;
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = req.options.batch_id.clone();
@@ -480,19 +473,37 @@ pub(super) async fn create_upgrade_compare_sim(
     // Best-effort write of per-combo metadata rows to the combo_metadata table.
     write_combo_metadata_table(repo.get_ref(), &job_id, &combo_metadata).await;
 
-    spawn_staged_sim(
-        repo.get_ref().clone(),
-        simc,
-        req.options.to_json(),
-        job_id.clone(),
-        generated_input,
-        combo_count,
-        log_buffer.get_ref().clone(),
-        10, // inline/eager path: staged pipeline spans 10-95%
-        crate::models::SimcInputMode::Inline,
-        crate::simc_runner::StagedResumeState::default(),
-        crate::profileset_generator::triage::TriageConstants::default(),
-    );
+    let auth = avail.auth_for(provider.id());
+    if provider.id() == "local" {
+        let simc = match simc_bins.resolve(&req.options.simc_branch) {
+            Ok(path) => path,
+            Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
+        };
+        spawn_staged_sim(
+            repo.get_ref().clone(),
+            simc,
+            req.options.to_json(),
+            job_id.clone(),
+            generated_input,
+            combo_count,
+            log_buffer.get_ref().clone(),
+            10, // inline/eager path: staged pipeline spans 10-95%
+            crate::models::SimcInputMode::Inline,
+            crate::simc_runner::StagedResumeState::default(),
+            crate::profileset_generator::triage::TriageConstants::default(),
+        );
+    } else {
+        super::helpers::spawn_cloud_sim(
+            repo.get_ref().clone(),
+            provider.clone(),
+            auth,
+            req.options.to_json(),
+            job_id.clone(),
+            generated_input,
+            combo_count,
+            log_buffer.get_ref().clone(),
+        );
+    }
 
     HttpResponse::Ok().json(SimResponse {
         id: job_id,
