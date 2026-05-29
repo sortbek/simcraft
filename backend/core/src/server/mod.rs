@@ -365,8 +365,16 @@ pub async fn start_server(
         }
     }
 
-    let simc_data = web::Data::new(simc_bins);
+    let simc_data = web::Data::new(simc_bins.clone());
     let log_data = web::Data::new(Arc::new(LogBuffer::new()));
+
+    let http_client = reqwest::Client::builder()
+        .user_agent(concat!("simhammer/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .expect("reqwest client");
+    let provider_registry = web::Data::new(Arc::new(
+        crate::compute::ProviderRegistry::new_default(simc_bins.clone(), http_client.clone()),
+    ));
     #[cfg(feature = "desktop")]
     let stats_data = web::Data::new(Arc::new(Mutex::new(system_handlers::SystemStats::new())));
     #[cfg(not(feature = "desktop"))]
@@ -393,6 +401,7 @@ pub async fn start_server(
             .app_data(route_repo.clone())
             .app_data(char_repo.clone())
             .app_data(settings_repo.clone())
+            .app_data(provider_registry.clone())
             .configure(api_routes::configure);
         #[cfg(not(feature = "desktop"))]
         let app = app.app_data(admin_secret.clone());

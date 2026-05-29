@@ -1,18 +1,24 @@
 use crate::compute::provider::{
     ProviderCaps, RunCtx, RunError, SimcOutput, SimcProvider,
 };
+use crate::server::SimcBinaries;
 use crate::simc_runner;
 use async_trait::async_trait;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::sync::Arc;
 
 pub struct LocalSimcProvider {
-    simc_path: PathBuf,
+    simc_bins: Arc<SimcBinaries>,
 }
 
 impl LocalSimcProvider {
-    pub fn new(simc_path: PathBuf) -> Self {
-        Self { simc_path }
+    pub fn new(simc_bins: Arc<SimcBinaries>) -> Self {
+        Self { simc_bins }
+    }
+
+    fn resolve_path(&self, opts: &Value) -> Result<std::path::PathBuf, RunError> {
+        let branch = opts.get("simc_branch").and_then(|v| v.as_str()).unwrap_or("");
+        self.simc_bins.resolve(branch).map_err(RunError::Other)
     }
 }
 
@@ -35,8 +41,10 @@ impl SimcProvider for LocalSimcProvider {
         input: &str,
         opts: &Value,
     ) -> Result<SimcOutput, RunError> {
+        let _ = ctx.auth;
+        let path = self.resolve_path(opts)?;
         let on_log = ctx.on_log;
-        simc_runner::run_simc(&self.simc_path, ctx.job_id, input, opts, move |line| on_log(line), ctx.cancel)
+        simc_runner::run_simc(&path, ctx.job_id, input, opts, move |line| on_log(line), ctx.cancel)
             .await
             .map_err(RunError::from)
     }
@@ -48,10 +56,6 @@ impl SimcProvider for LocalSimcProvider {
         _opts: &Value,
         _combo_count: usize,
     ) -> Result<SimcOutput, RunError> {
-        // run_simc_staged has a different signature (progress + stage callbacks);
-        // the call sites in top_gear / drop_finder etc. still invoke it directly
-        // in this phase. Providers gain a generic staged path in a later task,
-        // but for now this method exists only so the trait object compiles.
         Err(RunError::Other(
             "LocalSimcProvider::run_with_profilesets not wired in Phase 1; call simc_runner::run_simc_staged directly".into(),
         ))
@@ -61,10 +65,15 @@ impl SimcProvider for LocalSimcProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn empty_bins() -> Arc<SimcBinaries> {
+        Arc::new(SimcBinaries::from_dir(&PathBuf::from("/nonexistent")))
+    }
 
     #[test]
     fn local_provider_caps_are_full() {
-        let p = LocalSimcProvider::new(PathBuf::from("/nonexistent"));
+        let p = LocalSimcProvider::new(empty_bins());
         let caps = p.capabilities();
         assert!(caps.cancel);
         assert!(caps.pause);

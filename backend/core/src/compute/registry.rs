@@ -1,5 +1,6 @@
 use crate::compute::provider::{ProviderAuth, ProviderError, SimcProvider};
 use crate::db::SettingsRepo;
+use crate::server::SimcBinaries;
 use actix_web::http::header::HeaderMap;
 use secrecy::SecretString;
 use std::collections::HashMap;
@@ -164,14 +165,14 @@ pub struct ProviderRegistry {
 
 impl ProviderRegistry {
     pub fn new_default(
-        local_simc_path: std::path::PathBuf,
+        simc_bins: Arc<SimcBinaries>,
         http: reqwest::Client,
     ) -> Self {
         let mut providers: std::collections::HashMap<&'static str, Arc<dyn SimcProvider>> =
             std::collections::HashMap::new();
         providers.insert(
             "local",
-            Arc::new(crate::compute::local::LocalSimcProvider::new(local_simc_path)),
+            Arc::new(crate::compute::local::LocalSimcProvider::new(simc_bins)),
         );
         providers.insert(
             "simmit",
