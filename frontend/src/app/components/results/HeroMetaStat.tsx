@@ -7,7 +7,7 @@ interface HeroMetaStatProps {
 
 export default function HeroMetaStat({ label, value, note, border }: HeroMetaStatProps) {
   return (
-    <div className={`flex flex-col${border ? 'border-l border-outline-variant/10 pl-4' : ''}`}>
+    <div className={`flex flex-col${border ? ' border-l border-outline-variant/10 pl-4' : ''}`}>
       <span className="font-headline text-[10px] font-bold uppercase text-on-surface-variant opacity-60">
         {label}
       </span>
