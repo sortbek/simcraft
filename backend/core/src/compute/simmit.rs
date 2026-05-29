@@ -309,6 +309,20 @@ impl SimmitProvider {
         }
     }
 
+    async fn fetch_result(&self, bearer: &str, remote_job_id: &str) -> Result<SimcOutput, RunError> {
+        let url = format!("{}/v1/simc/jobs/{}/result", SIMMIT_BASE_URL, remote_job_id);
+        let resp = self.http.get(&url).bearer_auth(bearer).send().await
+            .map_err(|e| RunError::Other(format!("Simmit result fetch: {}", e)))?;
+        if !resp.status().is_success() {
+            let status_code = resp.status();
+            let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
+            return Err(map_simmit_error(status_code, err));
+        }
+        let body: ResultBody = resp.json().await
+            .map_err(|e| RunError::Other(format!("Simmit result decode: {}", e)))?;
+        Ok(simmit_result_to_simc_output(&body))
+    }
+
     async fn cancel_remote(&self, bearer: &str, remote_job_id: &str) {
         let url = format!("{}/v1/simc/jobs/{}/cancel", SIMMIT_BASE_URL, remote_job_id);
         let resp = self.http.post(&url).bearer_auth(bearer).send().await;
@@ -327,6 +341,96 @@ impl SimmitProvider {
             }
         }
     }
+}
+
+#[derive(Deserialize, Debug)]
+struct ResultBody {
+    result: Option<ResultPayload>,
+    #[serde(default)]
+    runtime: Option<RuntimeInfo>,
+    #[serde(default)]
+    build: Option<BuildInfo>,
+}
+#[derive(Deserialize, Debug)]
+struct ResultPayload {
+    summary: SummaryBlock,
+}
+#[derive(Deserialize, Debug)]
+struct SummaryBlock {
+    #[serde(rename = "mainActor")]
+    main_actor: MainActor,
+}
+#[derive(Deserialize, Debug)]
+struct MainActor {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    mean: Option<f64>,
+    #[serde(default, rename = "mean_error")]
+    mean_error: Option<f64>,
+    #[serde(default, rename = "mean_stddev")]
+    mean_stddev: Option<f64>,
+    #[serde(default)]
+    profilesets: Option<ProfilesetsBlock>,
+}
+#[derive(Deserialize, Debug, Default)]
+struct ProfilesetsBlock {
+    #[serde(default)]
+    count: Option<u32>,
+    #[serde(default)]
+    results: Vec<serde_json::Value>,
+}
+#[derive(Deserialize, Debug, Default)]
+struct RuntimeInfo {
+    #[serde(default, rename = "creditsConsumed")]
+    credits_consumed: Option<u64>,
+    #[serde(default, rename = "simDurationMs")]
+    sim_duration_ms: Option<u64>,
+}
+#[derive(Deserialize, Debug, Default)]
+struct BuildInfo {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    commit: Option<String>,
+}
+
+/// Adapter: build a SimC-shaped JSON from Simmit's response body so the
+/// existing `result_parser::parse_simc_result` can ingest it unchanged.
+pub fn simmit_result_to_simc_output(body: &ResultBody) -> SimcOutput {
+    let actor = body.result.as_ref().map(|r| &r.summary.main_actor);
+    let actor_name = actor.and_then(|a| a.name.clone()).unwrap_or_default();
+    let dps_mean = actor.and_then(|a| a.mean).unwrap_or(0.0);
+    let dps_error = actor.and_then(|a| a.mean_error).unwrap_or(0.0);
+    let dps_stddev = actor.and_then(|a| a.mean_stddev).unwrap_or(0.0);
+    let profilesets = actor
+        .and_then(|a| a.profilesets.as_ref())
+        .map(|p| p.results.clone())
+        .unwrap_or_default();
+
+    let json = serde_json::json!({
+        "sim": {
+            "players": [{
+                "name": actor_name,
+                "collected_data": {
+                    "dps": {
+                        "mean": dps_mean,
+                        "mean_std_dev": dps_error,
+                        "std_dev": dps_stddev,
+                    }
+                }
+            }],
+            "profilesets": { "results": profilesets },
+        },
+        "simmit": {
+            "credits_consumed": body.runtime.as_ref().and_then(|r| r.credits_consumed),
+            "sim_duration_ms": body.runtime.as_ref().and_then(|r| r.sim_duration_ms),
+            "build_id": body.build.as_ref().and_then(|b| b.id.clone()),
+            "build_commit": body.build.as_ref().and_then(|b| b.commit.clone()),
+        }
+    });
+
+    SimcOutput { json, html_report: None, text_output: None }
 }
 
 #[cfg(test)]
@@ -376,5 +480,52 @@ mod tests {
         let input = "apiKey=secret\napi_key=secret\napikey=secret\nfight_style=Patchwerk";
         let out = strip_simmit_blocked_directives(input);
         assert_eq!(out, "fight_style=Patchwerk");
+    }
+
+    #[test]
+    fn adapter_main_actor_dps_lands_in_sim_players() {
+        let body: ResultBody = serde_json::from_value(serde_json::json!({
+            "result": {
+                "summary": {
+                    "mainActor": {
+                        "name": "Testchar",
+                        "mean": 123456.78,
+                        "mean_error": 250.0,
+                        "mean_stddev": 1500.0,
+                        "profilesets": { "count": 10, "results": [] }
+                    }
+                }
+            },
+            "runtime": { "creditsConsumed": 9600 },
+            "build": { "id": "b-1", "commit": "abc123" }
+        })).unwrap();
+        let out = simmit_result_to_simc_output(&body);
+        assert_eq!(out.json["sim"]["players"][0]["name"], "Testchar");
+        let dps = &out.json["sim"]["players"][0]["collected_data"]["dps"]["mean"];
+        assert!((dps.as_f64().unwrap() - 123456.78).abs() < 0.001);
+        assert_eq!(out.json["simmit"]["credits_consumed"], 9600);
+        assert!(out.html_report.is_none());
+    }
+
+    #[test]
+    fn adapter_handles_empty_result_gracefully() {
+        let body: ResultBody = serde_json::from_value(serde_json::json!({})).unwrap();
+        let out = simmit_result_to_simc_output(&body);
+        assert_eq!(out.json["sim"]["players"][0]["collected_data"]["dps"]["mean"], 0.0);
+    }
+
+    #[test]
+    fn adapter_passes_profileset_results_through() {
+        let body: ResultBody = serde_json::from_value(serde_json::json!({
+            "result": { "summary": { "mainActor": {
+                "name": "A", "mean": 1.0, "mean_error": 0.0, "mean_stddev": 0.0,
+                "profilesets": { "count": 2, "results": [
+                    {"name": "Combo 1", "mean": 100.0},
+                    {"name": "Combo 2", "mean": 200.0}
+                ]}
+            }}}
+        })).unwrap();
+        let out = simmit_result_to_simc_output(&body);
+        assert_eq!(out.json["sim"]["profilesets"]["results"].as_array().unwrap().len(), 2);
     }
 }
