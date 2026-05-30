@@ -12,6 +12,10 @@ interface ComboCountResponse {
  * enchant-gem, and upgrade-compare. `enabled` gates the request (when false,
  * resets to 0). `buildBody` returns the request payload (or null to skip).
  * `debounceMs` keeps each page's existing timing (top-gear/upgrade 300, enchant 200).
+ *
+ * NOTE: the effect re-runs on `deps` only. Any value feeding `enabled` (or read
+ * by `buildBody`) MUST be included in `deps`, or the request won't re-fire when
+ * it changes. Today's callers derive `enabled` from values already in their deps.
  */
 export function useComboCount(
   endpoint: string,
