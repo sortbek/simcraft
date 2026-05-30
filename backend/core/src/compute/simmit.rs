@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[derive(Clone)]
 pub struct SimmitProvider {
     http: reqwest::Client,
 }
@@ -114,6 +115,10 @@ impl SimcProvider for SimmitProvider {
         }
         let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
         Ok(parse_usage(&body))
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

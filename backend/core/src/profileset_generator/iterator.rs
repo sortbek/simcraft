@@ -161,6 +161,17 @@ impl ProfilesetIterator {
         self.next_name_idx
     }
 
+    /// Restore the global `Combo {n}` name counter after a [`seek`]. `seek`
+    /// (re)positions the cursor but leaves `next_name_idx` at its post-`new`
+    /// value (1), so a resumed run MUST call this with the checkpointed
+    /// `next_name_idx` or it would re-emit "Combo 1, Combo 2, …" and collide
+    /// with the names already produced by earlier (completed) chunks.
+    ///
+    /// [`seek`]: Self::seek
+    pub fn set_next_name_idx(&mut self, next_name_idx: usize) {
+        self.next_name_idx = next_name_idx;
+    }
+
     fn advance(&mut self) {
         let mut i = self.cursor.len();
         while i > 0 {
@@ -509,6 +520,23 @@ mod tests {
         // axis_sizes = [2(head), 1(gem), 1(talent)] = 3 axes.
         // cursor [0, 0, 0] is valid (all within bounds).
         assert!(iter.seek(vec![0, 0, 0]));
+    }
+
+    #[test]
+    fn set_next_name_idx_continues_naming_after_seek() {
+        // seek resets the cursor but leaves next_name_idx at 1; a resumed run
+        // restores the global counter so emitted names continue (no collision
+        // with names earlier chunks already produced).
+        let cfg = make_cfg();
+        let mut iter = ProfilesetIterator::new(cfg);
+        assert!(iter.seek(vec![0, 0, 0]));
+        iter.set_next_name_idx(50);
+        assert_eq!(iter.next_name_idx(), 50);
+        let first = iter.next().expect("one candidate after seek");
+        assert_eq!(
+            first.profileset_name, "Combo 50",
+            "restored next_name_idx must drive the first emitted name"
+        );
     }
 
     #[test]

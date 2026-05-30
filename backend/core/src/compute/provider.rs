@@ -126,6 +126,14 @@ pub trait SimcProvider: Send + Sync {
     async fn get_usage(&self, _auth: &ProviderAuth) -> Result<ProviderUsage, String> {
         Ok(ProviderUsage::default())
     }
+
+    /// Downcast hook. The cloud-streaming orchestrator/resume needs the concrete
+    /// `SimmitProvider` (its chunk-submit/poll methods are inherent, not on this
+    /// trait). Default: no downcast (suitable for `local`); `SimmitProvider`
+    /// overrides to return `self`.
+    fn as_any(&self) -> &dyn std::any::Any {
+        &()
+    }
 }
 
 /// Result of probing a provider credential (the Settings "Test connection" button).

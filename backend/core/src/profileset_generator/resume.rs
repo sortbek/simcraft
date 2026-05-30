@@ -20,6 +20,12 @@ pub struct ResumeInputs {
     pub simc_bins: Arc<SimcBinaries>,
     pub queue: crate::compute::local::LocalSimQueue,
     pub local_provider: Arc<dyn crate::compute::SimcProvider>,
+    /// Provider registry — cloud-streaming resume resolves the concrete Simmit
+    /// provider from it. Triage/staged resume ignore it.
+    pub registry: Arc<crate::compute::ProviderRegistry>,
+    /// Server-side provider settings store — cloud-streaming resume reads the
+    /// Simmit API key from it (no request headers exist at resume time).
+    pub settings_repo: crate::db::SettingsRepo,
 }
 
 /// Resume a paused job. Reads checkpoint + request_json, validates, and
@@ -64,7 +70,14 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
             resume_staged(job_id, &job, request_json, &checkpoint, inputs).await
         }
         CheckpointPhase::CloudStreaming(_) => {
-            Err("Cloud-streaming resume not yet implemented".to_string())
+            crate::server::cloud_streaming::resume_cloud_streaming(
+                job_id,
+                &job,
+                request_json,
+                &checkpoint,
+                inputs,
+            )
+            .await
         }
     }
 }

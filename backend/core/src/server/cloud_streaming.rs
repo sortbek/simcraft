@@ -520,6 +520,47 @@ impl CloudStreamingRun {
         first: GeneratedChunk,
         runner: ChunkRunner,
     ) {
+        // Fresh run: empty accumulator, allocator + combo ids start at 0, and the
+        // already-generated chunk 0 is the first pending chunk.
+        self.run_chunk_loop(
+            cloud_repo,
+            it,
+            runner,
+            ChunkAccumulator::new(),
+            /*start_chunk_idx=*/ 0,
+            /*combo_id_base=*/ 0,
+            Some(first),
+        )
+        .await;
+    }
+
+    /// The shared chunked submit/merge loop, used by BOTH the fresh multi-chunk
+    /// path and `resume_cloud_streaming`. The caller pre-seeds:
+    /// - `acc`: an accumulator already folded with any completed/re-polled chunks
+    ///   (empty for a fresh run),
+    /// - `start_chunk_idx`: the next `cloud_chunks.chunk_idx` to allocate (0 fresh;
+    ///   the checkpoint's `next_chunk_idx` on resume),
+    /// - `combo_id_base`: the running `combo_metadata.combo_id` offset so ids stay
+    ///   globally unique across already-persisted chunks,
+    /// - `pending`: an optional already-generated first chunk (fresh run only; on
+    ///   resume this is `None` and generation pulls straight from the sought
+    ///   iterator).
+    ///
+    /// The iterator MUST already be positioned (fresh: `new`; resume: `new` +
+    /// `seek` + `set_next_name_idx`) so generation continues with non-colliding
+    /// `Combo N` names. Concurrency, retry, cancel, pause, checkpoint and finalize
+    /// are identical on both paths — there is no parallel orchestration copy.
+    #[allow(clippy::too_many_arguments)]
+    async fn run_chunk_loop(
+        &self,
+        cloud_repo: &CloudChunksRepo,
+        it: &mut ProfilesetIterator,
+        runner: ChunkRunner,
+        seed_acc: ChunkAccumulator,
+        start_chunk_idx: usize,
+        start_combo_id_base: i64,
+        first: Option<GeneratedChunk>,
+    ) {
         // K = min(CONFIG_MAX_INFLIGHT, max_active_jobs). Unknown limit → config.
         let k = self
             .max_active_jobs
@@ -527,20 +568,21 @@ impl CloudStreamingRun {
             .unwrap_or(CONFIG_MAX_INFLIGHT)
             .max(1);
 
-        let mut acc = ChunkAccumulator::new();
+        let mut acc = seed_acc;
         // Each task returns its ORIGINAL chunk_idx + the retry outcome (which may
         // carry several sub-chunk results). Out-of-order completion is fine — the
         // accumulator merges by profileset name.
         let mut join: tokio::task::JoinSet<(usize, ChunkOutcome)> = tokio::task::JoinSet::new();
 
         // ONE shared chunk-idx allocator for BOTH generation AND retry sub-chunks,
-        // so a retry's tail rows never collide with a freshly generated chunk.
-        let next_chunk_idx = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        // so a retry's tail rows never collide with a freshly generated chunk. On
+        // resume this starts past the already-persisted chunks.
+        let next_chunk_idx = Arc::new(std::sync::atomic::AtomicUsize::new(start_chunk_idx));
         use std::sync::atomic::Ordering;
         // Running count of combos written across chunks, so combo_metadata.combo_id
         // stays globally unique (the table PK is `(job_id, combo_id)`).
-        let mut combo_id_base: i64 = 0;
-        let mut pending: Option<GeneratedChunk> = Some(first);
+        let mut combo_id_base: i64 = start_combo_id_base;
+        let mut pending: Option<GeneratedChunk> = first;
         // True once the iterator has yielded its final chunk (the partial tail).
         let mut generation_done = false;
         // Set when a pause was honored at a chunk boundary — finalize is skipped.
@@ -848,6 +890,361 @@ pub async fn finalize_cloud_result(
         if let Err(e) = repo.set_report_files(job_id, None, None).await {
             eprintln!("[{job_id}] Failed to clear merged report files: {e}");
         }
+    }
+}
+
+// ── Production chunk-runner (the live Simmit path) ────────────────────────────
+
+/// Build the PRODUCTION [`ChunkRunner`] that talks to live Simmit. Each invocation:
+/// `submit_chunk_for_id` (records `cloud_chunks.remote_job_id` immediately so a
+/// crash mid-poll leaves a re-pollable `submitted` row) → `poll_and_fetch_chunk`
+/// → returns the adapted SimC-shaped `.json`. Cancel/log/progress are wired into a
+/// per-chunk [`RunCtx`]. Used by BOTH the fresh run (Task 12) and resume.
+///
+/// `provider` MUST be the concrete `SimmitProvider` (the chunk methods are
+/// inherent, not on the `SimcProvider` trait). The caller resolves it from the
+/// registry + downcast.
+pub fn build_production_chunk_runner(
+    provider: Arc<crate::compute::simmit::SimmitProvider>,
+    cloud_repo: CloudChunksRepo,
+    auth: crate::compute::ProviderAuth,
+    cancel: Option<CancelToken>,
+) -> ChunkRunner {
+    Arc::new(move |req: ChunkRequest| {
+        let provider = provider.clone();
+        let cloud_repo = cloud_repo.clone();
+        let auth = auth.clone();
+        let cancel = cancel.clone();
+        Box::pin(async move {
+            // 1. Submit and capture the remote job id BEFORE it runs, so a crash
+            // mid-poll leaves a `submitted` cloud_chunks row that resume re-polls.
+            let remote_id = provider
+                .submit_chunk_for_id(&auth, &req.job_id, &req.simc_input)
+                .await?;
+            let now = chrono::Utc::now().to_rfc3339();
+            let _ = cloud_repo
+                .mark_submitted(&req.job_id, req.chunk_idx as i64, &remote_id, &now)
+                .await;
+
+            // 2. Poll to terminal + fetch. A per-chunk RunCtx carries cancel; the
+            // streaming path has no per-chunk progress/log fan-out (the orchestrator
+            // reports at chunk boundaries), so those callbacks are no-ops.
+            let ctx = crate::compute::RunCtx {
+                job_id: &req.job_id,
+                on_progress: Arc::new(|_, _, _| {}),
+                on_stage_complete: Arc::new(|_| {}),
+                on_log: Arc::new(|_| {}),
+                cancel,
+                auth: auth.clone(),
+            };
+            let out = provider.poll_and_fetch_chunk(ctx, &remote_id).await?;
+            Ok(out.json)
+        }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+    })
+}
+
+// ── Resume ───────────────────────────────────────────────────────────────────
+
+/// Resume a paused/crashed cloud-streaming run. Mirrors `resume_triage`/
+/// `resume_staged`: reads the `CloudStreaming` checkpoint + the `cloud_chunks`
+/// rows, reloads completed chunks into the accumulator (NEVER re-billed),
+/// re-polls in-flight (`submitted`) chunks via their `remote_job_id`
+/// (terminal → fold + complete; lost/expired → reset to `pending`), rebuilds the
+/// iterator from the stored request and `seek`s it to `iterator_cursor` while
+/// restoring `next_name_idx` (so resumed chunks keep the global `Combo N` naming
+/// and never collide with completed chunks), then continues the SAME chunked
+/// submit/merge loop from `next_chunk_idx` and finalizes.
+///
+/// Auth: on resume there are no request headers, so the Simmit key must come from
+/// server-side settings (`provider.simmit.api_key`). Desktop stores it; web works
+/// only if the key is in Settings. Without it, resume FAILS CLEAN — it never fakes
+/// a run it cannot bill.
+pub async fn resume_cloud_streaming(
+    job_id: &str,
+    job: &crate::models::Job,
+    request_json: &str,
+    checkpoint: &crate::profileset_generator::checkpoint::Checkpoint,
+    inputs: crate::profileset_generator::ResumeInputs,
+) -> Result<(), String> {
+    // ── 1. Resolve the concrete Simmit provider + server-side auth. ──────────
+    let provider_id = if job.provider_id.is_empty() {
+        "simmit"
+    } else {
+        job.provider_id.as_str()
+    };
+    let provider = inputs
+        .registry
+        .get(provider_id)
+        .ok_or_else(|| format!("cloud resume: provider '{provider_id}' is not registered"))?;
+    let simmit = provider
+        .as_any()
+        .downcast_ref::<crate::compute::simmit::SimmitProvider>()
+        .ok_or_else(|| {
+            "cloud resume is only supported for the Simmit provider".to_string()
+        })?;
+    // `downcast_ref` is a borrow; clone the concrete provider (cheap — it wraps an
+    // Arc-internal reqwest::Client) so the runner/re-poll closures can own an
+    // `Arc<SimmitProvider>` with a `'static` lifetime.
+    let simmit_owned = Arc::new(simmit.clone());
+
+    // Server-side key only (no request headers on resume). FAIL CLEAN when absent
+    // — never fake a run we cannot bill (web-without-key case).
+    let settings = crate::compute::ProviderSettings::load(
+        &inputs.settings_repo,
+        &inputs.registry.remote_ids(),
+    )
+    .await
+    .map_err(|e| format!("cloud resume: failed to load provider settings: {e}"))?;
+    let api_key = settings.get_api_key(provider_id).ok_or_else(|| {
+        "Cloud resume needs the Simmit API key configured in Settings. \
+         (Web per-request keys are not available at resume time.)"
+            .to_string()
+    })?;
+    let auth = crate::compute::ProviderAuth::BearerToken(secrecy::SecretString::new(
+        api_key.to_string().into(),
+    ));
+
+    let cloud_repo = CloudChunksRepo::new(inputs.pool.clone());
+
+    // Production chunk-runner (live Simmit) for the remaining chunks.
+    let cancel = Some(CancelToken::new(inputs.repo.clone(), job_id.to_string()));
+    let runner = build_production_chunk_runner(
+        simmit_owned.clone(),
+        cloud_repo.clone(),
+        auth.clone(),
+        cancel.clone(),
+    );
+
+    // Production re-poll: poll an in-flight chunk's `remote_job_id` to terminal +
+    // fetch via the concrete provider.
+    let repoll: RepollFn = {
+        let simmit_owned = simmit_owned.clone();
+        let auth = auth.clone();
+        let job_id = job_id.to_string();
+        Arc::new(move |remote_id: String| {
+            let simmit_owned = simmit_owned.clone();
+            let auth = auth.clone();
+            let job_id = job_id.clone();
+            Box::pin(async move {
+                let ctx = crate::compute::RunCtx {
+                    job_id: &job_id,
+                    on_progress: Arc::new(|_, _, _| {}),
+                    on_stage_complete: Arc::new(|_| {}),
+                    on_log: Arc::new(|_| {}),
+                    cancel: None,
+                    auth,
+                };
+                simmit_owned
+                    .poll_and_fetch_chunk(ctx, &remote_id)
+                    .await
+                    .map(|out| out.json)
+            }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+        })
+    };
+
+    // Spawn the continuation so the HTTP resume handler returns promptly, mirroring
+    // resume_triage/resume_staged. Any clean failure inside (e.g. an invalid stored
+    // cursor) is written to the job's error.
+    let repo = inputs.repo.clone();
+    let pool = inputs.pool.clone();
+    let request_json = request_json.to_string();
+    let checkpoint = checkpoint.clone();
+    let job_id_owned = job_id.to_string();
+    tokio::spawn(async move {
+        if let Err(e) = resume_cloud_streaming_inner(
+            &job_id_owned,
+            &request_json,
+            &checkpoint,
+            repo.clone(),
+            pool,
+            cloud_repo,
+            runner,
+            repoll,
+            cancel,
+        )
+        .await
+        {
+            let _ = repo
+                .set_error(&job_id_owned, &format!("Cloud-streaming resume failed: {e}"))
+                .await;
+        }
+    });
+
+    Ok(())
+}
+
+/// In-flight chunk re-poll boundary (the Simmit-mock seam for resume). Given a
+/// chunk's `remote_job_id`, polls to terminal + returns the adapted SimC JSON.
+/// Production wraps `SimmitProvider::poll_and_fetch_chunk`; tests inject a fake.
+pub type RepollFn = Arc<
+    dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>> + Send + Sync,
+>;
+
+/// The HTTP-free resume core, reused by the production path and TDD'd against
+/// fakes. Reloads completed chunks into the accumulator (never re-billed),
+/// re-polls in-flight chunks through `repoll`, rebuilds + seeks the iterator with
+/// restored `next_name_idx`, then continues the SAME `run_chunk_loop` from
+/// `next_chunk_idx`. The `runner`/`repoll` are injected so no live Simmit HTTP
+/// happens in tests.
+#[allow(clippy::too_many_arguments)]
+async fn resume_cloud_streaming_inner(
+    job_id: &str,
+    request_json: &str,
+    checkpoint: &crate::profileset_generator::checkpoint::Checkpoint,
+    repo: JobRepo,
+    pool: sqlx::AnyPool,
+    cloud_repo: CloudChunksRepo,
+    runner: ChunkRunner,
+    repoll: RepollFn,
+    cancel: Option<CancelToken>,
+) -> Result<(), String> {
+    use crate::profileset_generator::checkpoint::CheckpointPhase;
+
+    let cloud_cp = match &checkpoint.phase {
+        CheckpointPhase::CloudStreaming(cc) => cc,
+        _ => return Err("resume_cloud_streaming called with non-CloudStreaming checkpoint".into()),
+    };
+
+    // ── 2. Load cloud_chunks; seed the accumulator; re-poll in-flight chunks. ─
+    let rows = cloud_repo
+        .list_for_job(job_id)
+        .await
+        .map_err(|e| format!("cloud resume: failed to list chunks: {e}"))?;
+
+    let mut acc = ChunkAccumulator::new();
+    // The base actor is whichever completed/re-polled chunk carries one (chunk 0).
+    // The accumulator already takes base_player from the FIRST envelope that has
+    // it, so ordered iteration (list_for_job is ORDER BY chunk_idx) is sufficient.
+    for row in &rows {
+        match row.status.as_str() {
+            "completed" => {
+                if let Some(json) = &row.results_json {
+                    if let Ok(env) =
+                        serde_json::from_str::<ChunkResultEnvelope>(json)
+                    {
+                        // Credits were already billed/recorded when the chunk first
+                        // completed; do not re-add on resume (avoid double-count).
+                        acc.add_envelope(env, 0);
+                    }
+                }
+            }
+            "submitted" => {
+                // In-flight at crash time: re-poll via remote_job_id.
+                let Some(remote_id) = row.remote_job_id.as_deref().filter(|s| !s.is_empty())
+                else {
+                    // No usable remote id → treat as lost; regenerate from cursor.
+                    let _ = cloud_repo.reset_to_pending(job_id, row.chunk_idx).await;
+                    continue;
+                };
+                match repoll(remote_id.to_string()).await {
+                    Ok(json) => {
+                        // Terminal on Simmit: fold + complete (never re-submit).
+                        let include_base = acc.needs_base();
+                        let env =
+                            ChunkAccumulator::envelope_from_simc_json(&json, include_base);
+                        let credits = ChunkAccumulator::credits_from_simc_json(&json);
+                        let completed_at = chrono::Utc::now().to_rfc3339();
+                        let _ = cloud_repo
+                            .mark_completed(job_id, row.chunk_idx, &env, &completed_at)
+                            .await;
+                        acc.add_envelope(env, credits);
+                    }
+                    Err(RunError::Paused) | Err(RunError::Cancelled) => {
+                        // Terminal state already set elsewhere; stop cleanly.
+                        return Ok(());
+                    }
+                    Err(RunError::Other(_)) => {
+                        // Lost / expired remote job → reset so it regenerates.
+                        let _ = cloud_repo.reset_to_pending(job_id, row.chunk_idx).await;
+                    }
+                }
+            }
+            // pending / failed → regenerated from the iterator cursor below.
+            _ => {}
+        }
+    }
+
+    // ── 3. Rebuild the iterator, seek, and RESTORE next_name_idx. ────────────
+    let iter_cfg =
+        crate::profileset_generator::iterator_from_request::build_iterator_from_request_json(
+            request_json,
+        )?;
+    let envelope: crate::server::request_json::NormalizedRequest =
+        serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {e}"))?;
+    let payload = &envelope.payload;
+    let base_profile = payload
+        .get("base_profile")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "request_json missing base_profile".to_string())?
+        .to_string();
+
+    let mut it = ProfilesetIterator::new(iter_cfg.clone());
+    if !it.seek(cloud_cp.iterator_cursor.clone()) {
+        return Err(format!(
+            "cloud resume: stored iterator cursor {:?} is invalid for the rebuilt iterator",
+            cloud_cp.iterator_cursor
+        ));
+    }
+    // CRITICAL: seek leaves next_name_idx at 1; restore the checkpointed global
+    // counter so resumed chunks continue "Combo N" naming without colliding.
+    it.set_next_name_idx(cloud_cp.next_name_idx.max(1));
+
+    // combo_metadata.combo_id must stay globally unique across already-persisted
+    // chunks; seed the offset from the existing row count.
+    let meta_repo = crate::db::ComboMetadataRepo::new(pool.clone());
+    let combo_id_base = meta_repo
+        .count_for_job(job_id)
+        .await
+        .map_err(|e| format!("cloud resume: failed to count combo metadata: {e}"))?;
+
+    // ── 4. Clear pause_requested + flip back to Running. ─────────────────────
+    repo.set_pause_requested(job_id, false)
+        .await
+        .map_err(|e| format!("Failed to clear pause_requested: {e}"))?;
+    repo.update_status(job_id, crate::models::JobStatus::Running)
+        .await
+        .map_err(|e| format!("Failed to set Running status: {e}"))?;
+
+    // ── 5. Continue the SAME chunked loop from next_chunk_idx, then finalize. ─
+    let start_chunk_idx = cloud_cp.next_chunk_idx;
+    let run = CloudStreamingRun {
+        repo: repo.clone(),
+        pool: pool.clone(),
+        iter_cfg,
+        base_profile,
+        job_id: job_id.to_string(),
+        sim_type: "top_gear".to_string(),
+        ceiling: cloud_cp.chunk_size.max(1),
+        max_active_jobs: None,
+        cancel,
+        affordability: None,
+        est_credits_needed: 0,
+    };
+
+    // `run_chunk_loop` is the SAME loop the fresh multi-chunk path uses — no
+    // parallel orchestration copy. It pre-seeds the accumulator (completed +
+    // re-polled chunks), the chunk-idx allocator (`start_chunk_idx`), and the
+    // combo-id offset, then continues generating + submitting the remaining chunks
+    // and finalizes.
+    run.run_chunk_loop(
+        &cloud_repo,
+        &mut it,
+        runner,
+        acc,
+        start_chunk_idx,
+        combo_id_base,
+        None,
+    )
+    .await;
+
+    Ok(())
+}
+
+impl ChunkAccumulator {
+    /// `true` while the accumulator has not yet captured a base actor — the next
+    /// folded envelope should carry `base_player` (extracted with `include_base`).
+    fn needs_base(&self) -> bool {
+        self.base_player.is_none()
     }
 }
 
@@ -1740,5 +2137,249 @@ mod orchestrator_tests {
         assert_eq!(calls.lock().unwrap().len(), 1);
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
+    }
+
+    // ── Task 10: resume ──────────────────────────────────────────────────────
+
+    /// A `request_json` envelope whose rebuilt iterator yields exactly FIVE combos
+    /// ("Combo 1".."Combo 5") — the same product space as `five_combo_cfg`, but
+    /// reconstructed through `build_iterator_from_request_json` (one varying head
+    /// slot: equipped + 5 alternatives, all selected). Mirrors the envelope
+    /// `streaming_top_gear.rs` persists.
+    fn five_combo_request_json() -> String {
+        let item = |id: u64, equipped: bool| {
+            let origin = if equipped { "equipped" } else { "bags" };
+            json!({
+                "item_id": id,
+                "slot": "head",
+                "simc_string": format!(",id={}", id),
+                "is_equipped": equipped,
+                "sockets": 0,
+                "bonus_ids": [],
+                "enchant_id": 0,
+                "gem_id": 0,
+                "ilevel": 0,
+                "name": format!("Item {}", id),
+                "origin": origin,
+            })
+        };
+        let items_by_slot = json!({
+            "head": [
+                item(100, true),
+                item(201, false), item(202, false), item(203, false),
+                item(204, false), item(205, false),
+            ]
+        });
+        // UIDs are `{item_id}:{bonus_key}:{origin}:{slot}` — select all 5 alts.
+        let selected = json!({
+            "head": [
+                "201::bags:head", "202::bags:head", "203::bags:head",
+                "204::bags:head", "205::bags:head"
+            ]
+        });
+        let envelope = crate::server::request_json::NormalizedRequest::new(
+            "top_gear",
+            json!({
+                "base_profile": "",
+                "items_by_slot": items_by_slot,
+                "selected_items": selected,
+                "options": { "iterations": 100, "target_error": 0.1, "fight_style": "patchwerk" },
+            }),
+        );
+        envelope.to_json_string().unwrap()
+    }
+
+    /// Resume a cloud run: 1 completed chunk (folded, NOT re-submitted), 1 in-flight
+    /// `submitted` chunk (re-polled, folded), and the remaining tail regenerated
+    /// from the checkpoint cursor with a RESTORED `next_name_idx` so names continue
+    /// without colliding. Asserts the job finalizes with ALL 5 combos.
+    #[tokio::test]
+    async fn resume_loads_completed_and_continues_from_cursor() {
+        use crate::profileset_generator::checkpoint::{
+            Checkpoint, CheckpointPhase, CloudStreamingCheckpoint,
+        };
+        use crate::profileset_generator::triage::TriageConstants;
+        crate::test_support::ensure_game_data_loaded();
+
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+
+        let request_json = five_combo_request_json();
+
+        // Derive the cursor + name index AFTER the first 4 combos (chunks 0 and 1,
+        // ceiling 2) by replaying the rebuilt iterator — exactly what the original
+        // run would have checkpointed at the chunk-1 boundary.
+        let cfg = crate::profileset_generator::iterator_from_request::
+            build_iterator_from_request_json(&request_json)
+            .expect("rebuild iterator");
+        let mut probe = ProfilesetIterator::new(cfg);
+        let mut emitted = Vec::new();
+        for _ in 0..4 {
+            emitted.push(probe.next().expect("combo").profileset_name);
+        }
+        assert_eq!(
+            emitted,
+            vec!["Combo 1", "Combo 2", "Combo 3", "Combo 4"],
+            "the rebuilt iterator must reproduce the original naming"
+        );
+        let cursor_after_4 = probe.cursor().to_vec();
+        let next_name_idx_after_4 = probe.next_name_idx(); // == 5
+
+        // ── Seed a Paused job with the CloudStreaming checkpoint. ────────────
+        let mut job = crate::models::Job::new_with_provider(
+            String::new(),
+            "top_gear".to_string(),
+            100,
+            "patchwerk".to_string(),
+            0.1,
+            "simmit".to_string(),
+        );
+        job.simc_input_mode = crate::models::SimcInputMode::Streamed;
+        job.request_json = Some(request_json.clone());
+        let checkpoint = Checkpoint {
+            phase: CheckpointPhase::CloudStreaming(CloudStreamingCheckpoint {
+                next_chunk_idx: 2,
+                iterator_cursor: cursor_after_4.clone(),
+                chunk_size: 2,
+                total_chunks_estimate: 3,
+                next_name_idx: next_name_idx_after_4,
+            }),
+            constants: TriageConstants::default(),
+        };
+        job.checkpoint = Some(checkpoint.to_json_string().unwrap());
+        job.status = crate::models::JobStatus::Paused;
+        let job_id = job.id.clone();
+        repo.insert(&job).await.unwrap();
+
+        // ── Seed cloud_chunks: chunk 0 completed; chunk 1 submitted (re-poll). ─
+        cloud_repo.insert_pending(&job_id, 0, 2).await.unwrap();
+        cloud_repo
+            .mark_submitted(&job_id, 0, "remote-0", "2026-05-30T00:00:00Z")
+            .await
+            .unwrap();
+        let c0_env = ChunkResultEnvelope {
+            profilesets: vec![
+                json!({ "name": "Combo 1", "mean": 1100.0 }),
+                json!({ "name": "Combo 2", "mean": 1050.0 }),
+            ],
+            base_player: Some(json!({
+                "name": "Hero",
+                "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+            })),
+        };
+        cloud_repo
+            .mark_completed(&job_id, 0, &c0_env, "2026-05-30T00:01:00Z")
+            .await
+            .unwrap();
+        cloud_repo.insert_pending(&job_id, 1, 2).await.unwrap();
+        cloud_repo
+            .mark_submitted(&job_id, 1, "remote-1", "2026-05-30T00:00:30Z")
+            .await
+            .unwrap();
+
+        // Seed combo_metadata for the already-persisted chunks (Combo 1..4) so the
+        // resume combo_id_base offset is non-zero and the finalize join is faithful.
+        super::super::helpers::write_combo_metadata_table_raw(
+            &repo,
+            &job_id,
+            &[
+                ("Combo 1".into(), "[]".into()),
+                ("Combo 2".into(), "[]".into()),
+                ("Combo 3".into(), "[]".into()),
+                ("Combo 4".into(), "[]".into()),
+            ],
+        )
+        .await;
+
+        // ── Fakes: the new-chunk runner + the in-flight re-poll. ─────────────
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner: ChunkRunner = {
+            let calls = calls.clone();
+            std::sync::Arc::new(move |req: ChunkRequest| {
+                calls.lock().unwrap().push(req.clone());
+                let names = combo_names(&req.simc_input);
+                Box::pin(async move { Ok(result_for(&names)) })
+                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+            })
+        };
+        let repoll_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let repoll: RepollFn = {
+            let repoll_calls = repoll_calls.clone();
+            std::sync::Arc::new(move |remote_id: String| {
+                repoll_calls.lock().unwrap().push(remote_id.clone());
+                // The in-flight chunk 1 carried Combo 3 + Combo 4.
+                Box::pin(async move {
+                    Ok(result_for(&["Combo 3".to_string(), "Combo 4".to_string()]))
+                })
+                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+            })
+        };
+
+        // ── Drive the resume core directly (HTTP-free). ─────────────────────
+        resume_cloud_streaming_inner(
+            &job_id,
+            &request_json,
+            &checkpoint,
+            repo.clone(),
+            pool.clone(),
+            cloud_repo.clone(),
+            runner,
+            repoll,
+            None,
+        )
+        .await
+        .expect("resume succeeds");
+
+        // (a) The completed chunk 0 was NOT re-submitted — the only new-chunk
+        // runner call is the regenerated tail (Combo 5).
+        let recorded = calls.lock().unwrap();
+        assert_eq!(
+            recorded.len(),
+            1,
+            "only the remaining tail chunk should be submitted, got {recorded:?}"
+        );
+        let tail_names = combo_names(&recorded[0].simc_input);
+        assert_eq!(
+            tail_names,
+            vec!["Combo 5".to_string()],
+            "restored next_name_idx must continue naming at Combo 5 (no collision)"
+        );
+        drop(recorded);
+
+        // (b) The in-flight chunk 1 was re-polled exactly once.
+        assert_eq!(repoll_calls.lock().unwrap().as_slice(), &["remote-1"]);
+
+        // (c) All chunk rows are completed (chunk 1 flipped from submitted→completed
+        // via re-poll; the new tail chunk recorded + completed).
+        let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
+        assert!(
+            rows.iter().all(|r| r.status == "completed"),
+            "all chunks should be completed: {rows:?}"
+        );
+        assert!(rows.len() >= 3, "0,1 + tail: {rows:?}");
+
+        // (d) The job finalized Done and the merged result carries ALL 5 combos.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
+        let result: Value =
+            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let names: Vec<String> = result["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect();
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert!(names.iter().any(|x| x == n), "missing {n} in {names:?}");
+        }
+        // No name collisions: each Combo N appears exactly once.
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert_eq!(
+                names.iter().filter(|x| *x == n).count(),
+                1,
+                "{n} must appear exactly once (no resume name collision): {names:?}"
+            );
+        }
     }
 }
