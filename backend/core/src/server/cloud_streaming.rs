@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
+use crate::cancel::CancelToken;
 use crate::compute::RunError;
 use crate::db::cloud_chunks_repo::ChunkResultEnvelope;
 use crate::db::{CloudChunksRepo, JobRepo};
@@ -134,13 +135,28 @@ pub type ChunkRunner = Arc<
         + Sync,
 >;
 
+/// Submit-time affordability re-check. The FE `cloud-estimate` is advisory; the
+/// orchestrator re-validates authoritatively BEFORE the first chunk submits.
+/// Injected (like [`ChunkRunner`]) so the orchestrator core stays HTTP-free and
+/// unit-testable with a fake — production wraps `provider.test_credential` +
+/// `get_usage`. Returns the account's currently-available credits:
+/// `Ok(Some(n))` to gate against `est_credits_needed`, `Ok(None)` when the
+/// provider reports no credit concept / unknown limit (treated as affordable),
+/// `Err` on a fetch failure (treated as fatal — we cannot confirm affordability).
+pub type AffordabilityCheck =
+    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Result<Option<u64>, String>> + Send>> + Send + Sync>;
+
 // ── Chunk generation ─────────────────────────────────────────────────────────
 
 /// One generated chunk: the combined simc input + the per-combo metadata rows
 /// (to persist to `ComboMetadataRepo`, exactly as local triage does) + the
 /// profileset count, plus the iterator cursor AFTER this chunk (for checkpoint).
 pub struct GeneratedChunk {
-    pub combined_input: String,
+    /// The individual `profileset."Combo N"+=...` lines for this chunk, in
+    /// generation order. Kept so a `timed_out`/errored chunk can be SPLIT into
+    /// smaller sub-chunks (same lines, same names, same `target_error`) on retry
+    /// without re-running the iterator or rewriting any combo-metadata rows.
+    pub profileset_lines: Vec<String>,
     /// `(combo_name, metadata_json)` pairs, ordered, for `combo_metadata`.
     pub metadata: Vec<(String, String)>,
     pub profileset_count: usize,
@@ -160,7 +176,9 @@ pub struct GeneratedChunk {
 /// after the loop is the resume point.
 pub fn build_chunk(
     it: &mut ProfilesetIterator,
-    base_profile: &str,
+    // The base actor is recombined per (sub-)chunk at submit time via
+    // `combine_chunk_input`, so generation only needs the profileset lines.
+    _base_profile: &str,
     ceiling: usize,
 ) -> GeneratedChunk {
     let mut lines: Vec<String> = Vec::new();
@@ -189,13 +207,129 @@ pub fn build_chunk(
             }
         }
     }
-    let combined_input = format!("# Base Actor\n{}\n{}", base_profile, lines.join("\n"));
     GeneratedChunk {
-        combined_input,
+        profileset_lines: lines,
         metadata,
         profileset_count: count,
         cursor_after: it.cursor().to_vec(),
         exhausted,
+    }
+}
+
+/// Assemble a chunk's submitted simc input from the base actor + its profileset
+/// lines. The single source of truth for the chunk wire format, shared by
+/// `build_chunk` and the retry sub-chunk splitter so a split sub-chunk is
+/// byte-for-byte the same shape as a freshly generated chunk.
+pub fn combine_chunk_input(base_profile: &str, lines: &[String]) -> String {
+    format!("# Base Actor\n{}\n{}", base_profile, lines.join("\n"))
+}
+
+// ── Retry-by-subchunk ────────────────────────────────────────────────────────
+
+/// Outcome of running ONE logical chunk through the runner with a single round
+/// of split-retry on failure.
+enum ChunkOutcome {
+    /// One or more `(execution_chunk_idx, adapted_json)` results to fold. A
+    /// retried chunk yields its sub-chunks' results; an un-retried chunk yields
+    /// one. The accumulator merges by profileset NAME, so which `cloud_chunks`
+    /// row produced a row is irrelevant to the ranking.
+    Done(Vec<(usize, Value)>),
+    /// A clean terminal abort (Paused / Cancelled) — status already set
+    /// elsewhere; the orchestrator must stop without writing an error.
+    Terminal,
+    /// The chunk (and its retry, if any) failed; the message names the chunk.
+    Failed(String),
+}
+
+/// Run ONE logical chunk through `runner`, retrying ONCE on an errored/timed_out
+/// chunk by SPLITTING it into two smaller sub-chunks at the SAME `target_error`
+/// (the lines carry no target_error; nothing is loosened) — NEVER by degrading
+/// precision. Sub-chunks keep the original `Combo N` names (the lines are moved
+/// verbatim), so the merge join and the existing `combo_metadata` rows stay
+/// stable; each sub-chunk only gets its OWN `cloud_chunks` execution row,
+/// allocated at the tail via `next_chunk_idx`. A sub-chunk that still fails
+/// (including the minimal 1-profileset floor that cannot split) fails the whole
+/// sim cleanly, naming the original chunk.
+#[allow(clippy::too_many_arguments)]
+async fn run_chunk_with_retry(
+    runner: &ChunkRunner,
+    cloud_repo: &CloudChunksRepo,
+    job_id: &str,
+    base_profile: &str,
+    chunk_idx: usize,
+    profileset_lines: &[String],
+    profileset_count: usize,
+    next_chunk_idx: &std::sync::atomic::AtomicUsize,
+) -> ChunkOutcome {
+    let req = ChunkRequest {
+        chunk_idx,
+        job_id: job_id.to_string(),
+        simc_input: combine_chunk_input(base_profile, profileset_lines),
+        profileset_count,
+    };
+    match runner(req).await {
+        Ok(json) => ChunkOutcome::Done(vec![(chunk_idx, json)]),
+        Err(RunError::Paused) | Err(RunError::Cancelled) => ChunkOutcome::Terminal,
+        Err(RunError::Other(_e)) => {
+            // First failure: flip the original chunk's row to failed and try a
+            // single split-retry round.
+            let _ = cloud_repo.mark_failed(job_id, chunk_idx as i64).await;
+
+            // A minimal chunk cannot be split smaller → fail naming the chunk.
+            if profileset_lines.len() <= 1 {
+                return ChunkOutcome::Failed(format!(
+                    "Cloud chunk {chunk_idx} failed at minimal size (cannot split \
+                     further without loosening target_error)."
+                ));
+            }
+
+            // Split the lines in half — SAME target_error, SAME combo names.
+            let mid = profileset_lines.len() / 2;
+            let halves = [&profileset_lines[..mid], &profileset_lines[mid..]];
+
+            use std::sync::atomic::Ordering;
+            let mut results: Vec<(usize, Value)> = Vec::new();
+            for half in halves {
+                if half.is_empty() {
+                    continue;
+                }
+                // Allocate this sub-chunk's OWN execution row at the tail.
+                let sub_idx = next_chunk_idx.fetch_add(1, Ordering::SeqCst);
+                if cloud_repo
+                    .insert_pending(job_id, sub_idx as i64, half.len() as i64)
+                    .await
+                    .is_err()
+                {
+                    return ChunkOutcome::Failed(format!(
+                        "Cloud chunk {chunk_idx}: failed to record retry sub-chunk."
+                    ));
+                }
+                let now = chrono::Utc::now().to_rfc3339();
+                let _ = cloud_repo.mark_submitted(job_id, sub_idx as i64, "", &now).await;
+
+                let sub_req = ChunkRequest {
+                    chunk_idx: sub_idx,
+                    job_id: job_id.to_string(),
+                    simc_input: combine_chunk_input(base_profile, half),
+                    profileset_count: half.len(),
+                };
+                match runner(sub_req).await {
+                    Ok(json) => results.push((sub_idx, json)),
+                    Err(RunError::Paused) | Err(RunError::Cancelled) => {
+                        return ChunkOutcome::Terminal
+                    }
+                    Err(RunError::Other(_e)) => {
+                        let _ = cloud_repo.mark_failed(job_id, sub_idx as i64).await;
+                        // One retry round only — a sub-chunk failure is terminal.
+                        return ChunkOutcome::Failed(format!(
+                            "Cloud chunk {chunk_idx} still failed after splitting into \
+                             smaller sub-chunks at the same target_error."
+                        ));
+                    }
+                }
+            }
+            ChunkOutcome::Done(results)
+        }
     }
 }
 
@@ -221,6 +355,18 @@ pub struct CloudStreamingRun {
     /// in-flight concurrency bound is `min(CONFIG_MAX_INFLIGHT, this)`. `None`
     /// (unknown limit) falls back to `CONFIG_MAX_INFLIGHT`.
     pub max_active_jobs: Option<usize>,
+    /// Cooperative cancellation token (DB-backed status is the source of truth).
+    /// Checked at every chunk boundary; also propagated into each runner via the
+    /// production chunk-runner so an in-flight Simmit job is aborted. `None`
+    /// disables cancellation (tests that don't exercise it).
+    pub cancel: Option<CancelToken>,
+    /// Submit-time affordability gate. Run BEFORE the first chunk is submitted.
+    /// `None` skips the gate (the estimate path already approved, or tests).
+    pub affordability: Option<AffordabilityCheck>,
+    /// The reservation estimate (credits) this run needs, computed by the caller
+    /// via `cloud_estimate::est_credits` on the known combo count. Compared
+    /// against the value [`AffordabilityCheck`] returns. `0` ⇒ no gate.
+    pub est_credits_needed: u64,
 }
 
 impl CloudStreamingRun {
@@ -237,6 +383,20 @@ impl CloudStreamingRun {
     /// fast path (no spawning).
     pub async fn execute(self, runner: ChunkRunner) {
         let cloud_repo = CloudChunksRepo::new(self.pool.clone());
+
+        // ── Submit-time guards (BEFORE any chunk is generated/submitted). ────
+        // Cancel that landed between job creation and execution: never submit.
+        if self.is_cancelled().await {
+            return;
+        }
+        // Authoritative affordability re-validation. The FE estimate is advisory;
+        // if the account can no longer cover the reservation, FAIL cleanly with
+        // ZERO chunks submitted (no metadata, no cloud_chunks rows).
+        if let Err(msg) = self.check_affordable().await {
+            let _ = self.repo.set_error(&self.job_id, &msg).await;
+            return;
+        }
+
         let mut it = ProfilesetIterator::new(self.iter_cfg.clone());
 
         // ── Generate the FIRST chunk. ────────────────────────────────────────
@@ -265,13 +425,19 @@ impl CloudStreamingRun {
     }
 
     /// The "whole set fits in one chunk" path: one submission, accumulate,
-    /// finalize. `reports_merged` stays false (single chunk).
+    /// finalize. `reports_merged` stays false UNLESS a retry split the chunk into
+    /// sub-chunks (then there's no single authoritative report).
     async fn run_single_chunk(
         &self,
         cloud_repo: &CloudChunksRepo,
         chunk: GeneratedChunk,
         runner: ChunkRunner,
     ) {
+        // Cancel that landed before submission: stop, write nothing.
+        if self.is_cancelled().await {
+            return;
+        }
+
         super::helpers::write_combo_metadata_table_raw(&self.repo, &self.job_id, &chunk.metadata)
             .await;
 
@@ -287,44 +453,51 @@ impl CloudStreamingRun {
             return;
         }
 
-        let req = ChunkRequest {
-            chunk_idx: 0,
-            job_id: self.job_id.clone(),
-            simc_input: chunk.combined_input,
-            profileset_count: chunk.profileset_count,
-        };
-
         // The production runner records `remote_job_id` itself before returning;
         // the fake runner exposes none, so mark_submitted carries an empty id.
         let now = chrono::Utc::now().to_rfc3339();
         let _ = cloud_repo.mark_submitted(&self.job_id, 0, "", &now).await;
 
-        let chunk_json = match runner(req).await {
-            Ok(json) => json,
-            Err(RunError::Paused) | Err(RunError::Cancelled) => {
-                // Terminal state already set elsewhere; nothing to finalize.
-                return;
-            }
-            Err(RunError::Other(e)) => {
-                let _ = cloud_repo.mark_failed(&self.job_id, 0).await;
-                let _ = self.repo.set_error(&self.job_id, &e).await;
+        // Retry-by-subchunk: a `next_chunk_idx` allocator that starts past this
+        // chunk so any split sub-chunks get fresh tail execution rows.
+        let next_idx = std::sync::atomic::AtomicUsize::new(1);
+        let outcome = run_chunk_with_retry(
+            &runner,
+            cloud_repo,
+            &self.job_id,
+            &self.base_profile,
+            0,
+            &chunk.profileset_lines,
+            chunk.profileset_count,
+            &next_idx,
+        )
+        .await;
+
+        let results = match outcome {
+            ChunkOutcome::Done(r) => r,
+            ChunkOutcome::Terminal => return,
+            ChunkOutcome::Failed(msg) => {
+                let _ = self.repo.set_error(&self.job_id, &msg).await;
                 return;
             }
         };
 
-        let envelope =
-            ChunkAccumulator::envelope_from_simc_json(&chunk_json, /*include_base=*/ true);
-        let credits = ChunkAccumulator::credits_from_simc_json(&chunk_json);
-
-        let completed_at = chrono::Utc::now().to_rfc3339();
-        let _ = cloud_repo
-            .mark_completed(&self.job_id, 0, &envelope, &completed_at)
-            .await;
-
         let mut acc = ChunkAccumulator::new();
-        acc.add_envelope(envelope, credits);
+        for (i, (idx, chunk_json)) in results.iter().enumerate() {
+            // Take the base actor from the FIRST result only (chunk 0 or, if it
+            // split, its first sub-chunk — both carry the same base actor).
+            let include_base = i == 0;
+            let envelope = ChunkAccumulator::envelope_from_simc_json(chunk_json, include_base);
+            let credits = ChunkAccumulator::credits_from_simc_json(chunk_json);
+            let completed_at = chrono::Utc::now().to_rfc3339();
+            let _ = cloud_repo
+                .mark_completed(&self.job_id, *idx as i64, &envelope, &completed_at)
+                .await;
+            acc.add_envelope(envelope, credits);
+        }
 
-        // Single chunk → reports stay normal (not a multi-chunk merge).
+        // A retry that split the chunk yields >1 result ⇒ no single report.
+        let multi_chunk = results.len() > 1;
         let merged = acc.into_merged_simc_json();
         finalize_cloud_result(
             &self.repo,
@@ -332,7 +505,7 @@ impl CloudStreamingRun {
             &merged,
             &self.base_profile,
             &self.sim_type,
-            /*multi_chunk=*/ false,
+            multi_chunk,
         )
         .await;
     }
@@ -355,51 +528,45 @@ impl CloudStreamingRun {
             .max(1);
 
         let mut acc = ChunkAccumulator::new();
-        // chunk_idx → completed (so out-of-order completion is order-independent).
-        let mut join: tokio::task::JoinSet<(usize, Result<Value, RunError>)> =
-            tokio::task::JoinSet::new();
+        // Each task returns its ORIGINAL chunk_idx + the retry outcome (which may
+        // carry several sub-chunk results). Out-of-order completion is fine — the
+        // accumulator merges by profileset name.
+        let mut join: tokio::task::JoinSet<(usize, ChunkOutcome)> = tokio::task::JoinSet::new();
 
-        let mut chunk_idx: usize = 0;
+        // ONE shared chunk-idx allocator for BOTH generation AND retry sub-chunks,
+        // so a retry's tail rows never collide with a freshly generated chunk.
+        let next_chunk_idx = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        use std::sync::atomic::Ordering;
         // Running count of combos written across chunks, so combo_metadata.combo_id
         // stays globally unique (the table PK is `(job_id, combo_id)`).
         let mut combo_id_base: i64 = 0;
         let mut pending: Option<GeneratedChunk> = Some(first);
         // True once the iterator has yielded its final chunk (the partial tail).
         let mut generation_done = false;
-
-        // Drains one completed runner into the accumulator + cloud_chunks. Returns
-        // Err with a message to abort the whole job on a chunk failure.
-        async fn drain_one(
-            acc: &mut ChunkAccumulator,
-            cloud_repo: &CloudChunksRepo,
-            job_id: &str,
-            idx: usize,
-            result: Result<Value, RunError>,
-        ) -> Result<(), Option<String>> {
-            match result {
-                Ok(json) => {
-                    let envelope = ChunkAccumulator::envelope_from_simc_json(
-                        &json,
-                        /*include_base=*/ idx == 0,
-                    );
-                    let credits = ChunkAccumulator::credits_from_simc_json(&json);
-                    let completed_at = chrono::Utc::now().to_rfc3339();
-                    let _ = cloud_repo
-                        .mark_completed(job_id, idx as i64, &envelope, &completed_at)
-                        .await;
-                    acc.add_envelope(envelope, credits);
-                    Ok(())
-                }
-                // Terminal state already set elsewhere; abort without an error.
-                Err(RunError::Paused) | Err(RunError::Cancelled) => Err(None),
-                Err(RunError::Other(e)) => {
-                    let _ = cloud_repo.mark_failed(job_id, idx as i64).await;
-                    Err(Some(e))
-                }
-            }
-        }
+        // Set when a pause was honored at a chunk boundary — finalize is skipped.
+        let mut paused = false;
 
         loop {
+            // ── 0. Cancel / pause at the chunk boundary (only meaningful with
+            // chunk_count > 1, which this path always is). ───────────────────
+            if self.is_cancelled().await {
+                // Stop submitting; abort in-flight runners (they also observe
+                // ctx.cancel via the production runner). Terminal Cancelled status
+                // is already set — set_error/update_status no-op on it.
+                join.shutdown().await;
+                return;
+            }
+            if !generation_done {
+                let next_idx = next_chunk_idx.load(Ordering::SeqCst);
+                if self.check_and_honor_pause(it, next_idx).await {
+                    // Stop generating new chunks but DRAIN the in-flight ones so
+                    // their completed results are checkpointed (not re-billed on
+                    // resume).
+                    generation_done = true;
+                    paused = true;
+                }
+            }
+
             // ── 1. Generate + spawn while there's work and capacity. ──────────
             while !generation_done && join.len() < k {
                 let chunk = match pending.take() {
@@ -413,6 +580,8 @@ impl CloudStreamingRun {
                     generation_done = true;
                     break;
                 }
+
+                let chunk_idx = next_chunk_idx.fetch_add(1, Ordering::SeqCst);
 
                 // Persist this chunk's combo metadata + cloud_chunks row BEFORE
                 // submission (crash-recovery oracle). combo_id_base keeps ids
@@ -447,21 +616,32 @@ impl CloudStreamingRun {
                     .mark_submitted(&self.job_id, chunk_idx as i64, "", &now)
                     .await;
 
-                let req = ChunkRequest {
-                    chunk_idx,
-                    job_id: self.job_id.clone(),
-                    simc_input: chunk.combined_input,
-                    profileset_count: chunk.profileset_count,
-                };
                 let runner = runner.clone();
-                let idx = chunk_idx;
-                join.spawn(async move { (idx, runner(req).await) });
+                let cloud_repo = cloud_repo.clone();
+                let job_id = self.job_id.clone();
+                let base_profile = self.base_profile.clone();
+                let lines = chunk.profileset_lines;
+                let count = chunk.profileset_count;
+                let alloc = next_chunk_idx.clone();
+                join.spawn(async move {
+                    let outcome = run_chunk_with_retry(
+                        &runner,
+                        &cloud_repo,
+                        &job_id,
+                        &base_profile,
+                        chunk_idx,
+                        &lines,
+                        count,
+                        &alloc,
+                    )
+                    .await;
+                    (chunk_idx, outcome)
+                });
 
                 // The chunk that just reported `exhausted` is the final one.
                 if chunk.exhausted {
                     generation_done = true;
                 }
-                chunk_idx += 1;
             }
 
             // ── 2. Nothing left to generate AND nothing in flight → finish. ──
@@ -471,7 +651,7 @@ impl CloudStreamingRun {
 
             // ── 3. Await one completion (order-independent accumulation). ────
             if let Some(joined) = join.join_next().await {
-                let (idx, result) = match joined {
+                let (orig_idx, outcome) = match joined {
                     Ok(pair) => pair,
                     Err(join_err) => {
                         // A spawned task panicked/aborted: fail the job cleanly.
@@ -483,20 +663,44 @@ impl CloudStreamingRun {
                         return;
                     }
                 };
-                match drain_one(&mut acc, cloud_repo, &self.job_id, idx, result).await {
-                    Ok(()) => {}
-                    Err(None) => {
+                match outcome {
+                    ChunkOutcome::Done(results) => {
+                        for (i, (exec_idx, json)) in results.iter().enumerate() {
+                            // Base actor comes from chunk 0's FIRST result only.
+                            let include_base = orig_idx == 0 && i == 0;
+                            let envelope =
+                                ChunkAccumulator::envelope_from_simc_json(json, include_base);
+                            let credits = ChunkAccumulator::credits_from_simc_json(json);
+                            let completed_at = chrono::Utc::now().to_rfc3339();
+                            let _ = cloud_repo
+                                .mark_completed(
+                                    &self.job_id,
+                                    *exec_idx as i64,
+                                    &envelope,
+                                    &completed_at,
+                                )
+                                .await;
+                            acc.add_envelope(envelope, credits);
+                        }
+                    }
+                    ChunkOutcome::Terminal => {
                         // Paused/Cancelled: terminal state already set elsewhere.
                         join.shutdown().await;
                         return;
                     }
-                    Err(Some(e)) => {
-                        let _ = self.repo.set_error(&self.job_id, &e).await;
+                    ChunkOutcome::Failed(msg) => {
+                        let _ = self.repo.set_error(&self.job_id, &msg).await;
                         join.shutdown().await;
                         return;
                     }
                 }
             }
+        }
+
+        // A pause was honored at a boundary: leave the job Paused, do NOT finalize
+        // (resume continues from the checkpointed next_chunk_idx).
+        if paused {
+            return;
         }
 
         // ── 4. Finalize the merged multi-chunk result. ──────────────────────
@@ -510,6 +714,61 @@ impl CloudStreamingRun {
             /*multi_chunk=*/ true,
         )
         .await;
+    }
+
+    /// Honor a pending pause request at a chunk boundary: if `pause_requested`,
+    /// clear the flag, write the cloud-streaming checkpoint at the current cursor,
+    /// flip status to `Paused`, and return `true` (caller stops generating). The
+    /// checkpoint mirrors `run_simc_staged::write_staged_checkpoint_and_check_pause`.
+    async fn check_and_honor_pause(&self, it: &ProfilesetIterator, next_chunk_idx: usize) -> bool {
+        match self.repo.get_pause_requested(&self.job_id).await {
+            Ok(true) => {
+                let _ = self.repo.set_pause_requested(&self.job_id, false).await;
+                // Checkpoint at the CURRENT generation cursor; `next_chunk_idx` is
+                // the index of the next chunk resume should generate.
+                self.write_checkpoint(it, next_chunk_idx, false).await;
+                let _ = self
+                    .repo
+                    .update_status(&self.job_id, crate::models::JobStatus::Paused)
+                    .await;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// True if the job has been cancelled (DB-backed status is the source of
+    /// truth). `None` token ⇒ never cancelled. Mirrors `run_simc_staged`.
+    async fn is_cancelled(&self) -> bool {
+        match self.cancel.as_ref() {
+            Some(tok) => tok.is_cancelled().await,
+            None => false,
+        }
+    }
+
+    /// Submit-time affordability gate. `Ok(())` means proceed; `Err(msg)` means
+    /// fail the job cleanly with no chunks submitted. No gate (`None` check or
+    /// `est_credits_needed == 0`) always proceeds. A fetch error is fatal — we
+    /// must not start billing a job we cannot confirm the user can afford.
+    async fn check_affordable(&self) -> Result<(), String> {
+        let Some(check) = self.affordability.as_ref() else {
+            return Ok(());
+        };
+        if self.est_credits_needed == 0 {
+            return Ok(());
+        }
+        match check().await {
+            // Provider reports a credit balance: hard-gate the reservation.
+            Ok(Some(available)) if available < self.est_credits_needed => Err(format!(
+                "Insufficient credits at submit: need ~{} but only {} available \
+                 (the estimate was affordable a moment ago).",
+                self.est_credits_needed, available
+            )),
+            // Affordable, or no credit concept / unknown limit → proceed.
+            Ok(_) => Ok(()),
+            // Could not confirm affordability → fail clean rather than risk a bill.
+            Err(e) => Err(format!("Could not verify credits at submit: {e}")),
+        }
     }
 
     /// Persist the cloud-streaming checkpoint at a chunk boundary. `next_chunk_idx`
@@ -861,6 +1120,9 @@ mod orchestrator_tests {
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
             max_active_jobs: None,
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
         };
         run.execute(runner).await;
 
@@ -944,6 +1206,9 @@ mod orchestrator_tests {
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
             max_active_jobs: None,
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
         };
         run.execute(runner).await;
 
@@ -1038,6 +1303,9 @@ mod orchestrator_tests {
             sim_type: "top_gear".to_string(),
             ceiling: 2,
             max_active_jobs: Some(2),
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
         };
         run.execute(runner).await;
 
@@ -1101,5 +1369,376 @@ mod orchestrator_tests {
             }
             _ => panic!("expected CloudStreaming checkpoint phase"),
         }
+    }
+
+    // ── Task 9 helpers ───────────────────────────────────────────────────────
+
+    /// Extract the `Combo N` names from a chunk's simc_input (the profileset
+    /// lines), so a fake runner can echo back exactly the combos it was handed.
+    fn combo_names(simc_input: &str) -> Vec<String> {
+        simc_input
+            .match_indices("profileset.\"")
+            .filter_map(|(i, _)| {
+                let rest = &simc_input[i + "profileset.\"".len()..];
+                rest.split('"').next().map(|s| s.to_string())
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    /// Build an adapted Simmit-shaped result that echoes the combos in `names`.
+    fn result_for(names: &[String]) -> Value {
+        let results: Vec<Value> = names
+            .iter()
+            .map(|n| json!({ "name": n, "mean": 1000.0 }))
+            .collect();
+        json!({
+            "sim": {
+                "players": [{
+                    "name": "Hero",
+                    "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+                }],
+                "profilesets": { "results": results }
+            },
+            "simmit": { "credits_consumed": 100 }
+        })
+    }
+
+    async fn streamed_top_gear_job(repo: &JobRepo) -> String {
+        let mut job = crate::models::Job::new_with_provider(
+            String::new(),
+            "top_gear".to_string(),
+            100,
+            "patchwerk".to_string(),
+            0.1,
+            "simmit".to_string(),
+        );
+        job.simc_input_mode = crate::models::SimcInputMode::Streamed;
+        let id = job.id.clone();
+        repo.insert(&job).await.unwrap();
+        id
+    }
+
+    // (c) Credit re-check returns unaffordable → job fails, ZERO runner calls.
+    #[tokio::test]
+    async fn unaffordable_at_submit_fails_clean_zero_chunks() {
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let job_id = streamed_top_gear_job(&repo).await;
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = fake_runner(calls.clone());
+
+        // Affordability check reports 0 credits available; need > 0.
+        let affordability: AffordabilityCheck = std::sync::Arc::new(|| {
+            Box::pin(async { Ok(Some(0u64)) })
+                as Pin<Box<dyn Future<Output = Result<Option<u64>, String>> + Send>>
+        });
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: one_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
+            max_active_jobs: None,
+            cancel: None,
+            affordability: Some(affordability),
+            est_credits_needed: 500,
+        };
+        run.execute(runner).await;
+
+        // ZERO runner calls — the gate fired before any submission.
+        assert_eq!(calls.lock().unwrap().len(), 0, "no chunk may be submitted");
+        // No cloud_chunks rows at all (nothing inserted past the gate).
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        assert!(cloud_repo.list_for_job(&job_id).await.unwrap().is_empty());
+        // Job failed cleanly with the submit-time message.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Failed);
+        assert!(
+            finished
+                .error_message
+                .as_deref()
+                .unwrap_or("")
+                .contains("Insufficient credits at submit"),
+            "msg: {:?}",
+            finished.error_message
+        );
+    }
+
+    /// A runner that fails the FIRST call for `fail_chunk_idx` (when it carries
+    /// more than one profileset) and otherwise echoes the combos it was handed.
+    /// Sub-chunks (smaller) therefore succeed → exercises split-retry.
+    fn retry_runner(
+        calls: std::sync::Arc<Mutex<Vec<ChunkRequest>>>,
+        fail_chunk_idx: usize,
+    ) -> ChunkRunner {
+        std::sync::Arc::new(move |req: ChunkRequest| {
+            calls.lock().unwrap().push(req.clone());
+            let should_fail = req.chunk_idx == fail_chunk_idx && req.profileset_count > 1;
+            let names = combo_names(&req.simc_input);
+            Box::pin(async move {
+                if should_fail {
+                    Err(RunError::Other("Simmit job timed_out".to_string()))
+                } else {
+                    Ok(result_for(&names))
+                }
+            })
+                as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+        })
+    }
+
+    // (a) First call for a chunk errors, then the retry sub-chunks succeed → the
+    // job completes; the original chunk's combos still appear; metadata names
+    // unchanged.
+    #[tokio::test]
+    async fn timed_out_chunk_retries_as_subchunks_same_target_error() {
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let job_id = streamed_top_gear_job(&repo).await;
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        // 5 combos, ceiling 2 → chunks (2,2,1). Fail chunk 1 (size 2) → splits to
+        // two size-1 sub-chunks that succeed.
+        let runner = retry_runner(calls.clone(), 1);
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: five_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: 2,
+            max_active_jobs: Some(1), // serialize so chunk_idx assignment is stable
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
+        };
+        run.execute(runner).await;
+
+        // The job completed and merges ALL 5 original combos (sub-chunks kept the
+        // Combo N names — no metadata rewrite).
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
+        let result: Value =
+            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let names: Vec<String> = result["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect();
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert!(names.iter().any(|x| x == n), "missing {n} in {names:?}");
+        }
+
+        // Submission accounting: 3 original chunk calls + 2 retry sub-chunk calls.
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 5, "3 chunks + 2 retry sub-chunks");
+        drop(recorded);
+
+        // The original chunk-1 row is failed; its two sub-chunk rows are completed.
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
+        assert!(rows.iter().any(|r| r.chunk_idx == 1 && r.status == "failed"));
+        let completed = rows.iter().filter(|r| r.status == "completed").count();
+        // chunk 0, chunk 2, + 2 retry sub-chunks = 4 completed.
+        assert_eq!(completed, 4, "rows: {rows:?}");
+    }
+
+    /// A runner that ALWAYS fails any request touching the failing chunk's combos
+    /// (Combo 3 / Combo 4), including its split sub-chunks at minimal size.
+    fn always_fail_runner(calls: std::sync::Arc<Mutex<Vec<ChunkRequest>>>) -> ChunkRunner {
+        std::sync::Arc::new(move |req: ChunkRequest| {
+            calls.lock().unwrap().push(req.clone());
+            let names = combo_names(&req.simc_input);
+            let touches_failing = names.iter().any(|n| n == "Combo 3" || n == "Combo 4");
+            Box::pin(async move {
+                if touches_failing {
+                    Err(RunError::Other("Simmit job timed_out".to_string()))
+                } else {
+                    Ok(result_for(&names))
+                }
+            })
+                as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+        })
+    }
+
+    // (b) A sub-chunk that still fails at minimal size → job fails cleanly,
+    // naming the chunk, no panic.
+    #[tokio::test]
+    async fn subchunk_still_timing_out_fails_job_cleanly() {
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let job_id = streamed_top_gear_job(&repo).await;
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = always_fail_runner(calls.clone());
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: five_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: 2,
+            max_active_jobs: Some(1),
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
+        };
+        run.execute(runner).await;
+
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Failed);
+        let msg = finished.error_message.unwrap_or_default();
+        assert!(
+            msg.contains("chunk 1"),
+            "error should name the failing chunk: {msg}"
+        );
+    }
+
+    // (d) Cancel mid-run → stops submitting, does not resurrect a Cancelled job.
+    #[tokio::test]
+    async fn cancel_stops_submitting_and_respects_terminal_state() {
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let job_id = streamed_top_gear_job(&repo).await;
+
+        // A runner that cancels the job from inside the FIRST chunk's execution,
+        // then returns Cancelled — modelling Simmit's cancel acceptance.
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let repo_for_runner = repo.clone();
+        let job_for_runner = job_id.clone();
+        let runner: ChunkRunner = {
+            let calls = calls.clone();
+            std::sync::Arc::new(move |req: ChunkRequest| {
+                calls.lock().unwrap().push(req.clone());
+                let repo = repo_for_runner.clone();
+                let jid = job_for_runner.clone();
+                Box::pin(async move {
+                    // Flip the job to Cancelled (terminal) then report Cancelled
+                    // so the orchestrator stops.
+                    repo.update_status(&jid, crate::models::JobStatus::Cancelled)
+                        .await
+                        .unwrap();
+                    Err(RunError::Cancelled)
+                })
+                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+            })
+        };
+
+        let cancel = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: five_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: 2,
+            max_active_jobs: Some(1),
+            cancel: Some(cancel),
+            affordability: None,
+            est_credits_needed: 0,
+        };
+        run.execute(runner).await;
+
+        // Did NOT submit all 3 chunks (stopped after the cancel).
+        assert!(
+            calls.lock().unwrap().len() < 3,
+            "cancel must stop further submission, got {} calls",
+            calls.lock().unwrap().len()
+        );
+        // Terminal Cancelled status was NOT overwritten with Done/Failed.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Cancelled);
+    }
+
+    // (d) Pause at a chunk boundary → checkpoints + stays Paused (chunk_count>1).
+    #[tokio::test]
+    async fn pause_at_chunk_boundary_checkpoints_and_stays_paused() {
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let job_id = streamed_top_gear_job(&repo).await;
+
+        // Request pause up-front; it is honored at the FIRST chunk boundary.
+        repo.set_pause_requested(&job_id, true).await.unwrap();
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = fake_runner(calls.clone());
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: five_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: 2,
+            max_active_jobs: Some(1),
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
+        };
+        run.execute(runner).await;
+
+        // Stopped before submitting all 3 chunks.
+        assert!(
+            calls.lock().unwrap().len() < 3,
+            "pause must stop at a boundary, got {} calls",
+            calls.lock().unwrap().len()
+        );
+        // Status is Paused (no error), and a CloudStreaming checkpoint was written.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Paused);
+        assert!(finished.error_message.is_none(), "pause is not an error");
+        let cp_json = finished.checkpoint.expect("pause writes a checkpoint");
+        let cp = crate::profileset_generator::checkpoint::Checkpoint::from_json_str(&cp_json)
+            .expect("checkpoint parses");
+        assert!(matches!(
+            cp.phase,
+            crate::profileset_generator::checkpoint::CheckpointPhase::CloudStreaming(_)
+        ));
+    }
+
+    // Single-chunk pause is a no-op: the run completes (pause only matters for
+    // chunk_count > 1).
+    #[tokio::test]
+    async fn pause_is_noop_for_single_chunk() {
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let job_id = streamed_top_gear_job(&repo).await;
+        repo.set_pause_requested(&job_id, true).await.unwrap();
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = fake_runner(calls.clone());
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: one_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
+            max_active_jobs: None,
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
+        };
+        run.execute(runner).await;
+
+        // Single chunk completes despite the pause request.
+        assert_eq!(calls.lock().unwrap().len(), 1);
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
     }
 }
