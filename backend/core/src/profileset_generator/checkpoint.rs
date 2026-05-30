@@ -13,6 +13,11 @@ use super::triage::TriageConstants;
 pub enum CheckpointPhase {
     Triage(TriageCheckpoint),
     Staged(StagedCheckpoint),
+    /// Cloud-streaming (Simmit) phase: the high-level chunk cursor. The
+    /// per-chunk source of truth lives in the `cloud_chunks` table; this blob
+    /// only carries what's needed to deterministically regenerate the
+    /// not-yet-submitted chunks.
+    CloudStreaming(CloudStreamingCheckpoint),
 }
 
 /// Full checkpoint blob persisted to `jobs.checkpoint`.
@@ -68,6 +73,34 @@ pub struct StagedCheckpoint {
     /// drive end-of-stage pruning.
     #[serde(default)]
     pub batch_results: Vec<Value>,
+}
+
+/// Cloud-streaming-phase resume data. Written at each chunk boundary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudStreamingCheckpoint {
+    /// 0-based index of the next chunk to generate/submit (matches
+    /// cloud_chunks.chunk_idx).
+    pub next_chunk_idx: usize,
+    /// The `ProfilesetIterator` cursor to seek to before pulling the next
+    /// chunk's candidates. Regenerates un-submitted chunks deterministically.
+    pub iterator_cursor: Vec<usize>,
+    /// Profilesets-per-chunk ceiling this run used (so resume rebuilds the same
+    /// chunk boundaries even if the default constant changes between versions).
+    pub chunk_size: usize,
+    /// Estimated total chunk count; drives the progress reporter.
+    pub total_chunks_estimate: usize,
+    /// The `ProfilesetIterator::next_name_idx` at the chunk boundary. Persisting
+    /// this fixes a resume name-collision bug: constructing a new iterator + seek
+    /// always resets next_name_idx to 1, causing resumed chunks to re-emit
+    /// "Combo 1", "Combo 2", … and collide with names from earlier chunks.
+    /// Older checkpoints without this field default to 1 (safe: only a fresh
+    /// cloud run would ever resume without it, and it won't have prior chunks).
+    #[serde(default = "default_next_name_idx")]
+    pub next_name_idx: usize,
+}
+
+fn default_next_name_idx() -> usize {
+    1
 }
 
 impl Checkpoint {
@@ -207,5 +240,59 @@ mod tests {
             "expected phase tag in JSON: {}",
             json
         );
+    }
+
+    #[test]
+    fn round_trip_cloud_streaming_phase() {
+        let cp = Checkpoint {
+            phase: CheckpointPhase::CloudStreaming(CloudStreamingCheckpoint {
+                next_chunk_idx: 3,
+                iterator_cursor: vec![2, 0, 5, 0],
+                chunk_size: 5000,
+                total_chunks_estimate: 12,
+                next_name_idx: 15001,
+            }),
+            constants: TriageConstants::default(),
+        };
+        let json = cp.to_json_string().unwrap();
+        assert!(
+            json.contains("\"phase\":\"cloudstreaming\""),
+            "expected cloudstreaming tag in JSON: {json}"
+        );
+        let parsed = Checkpoint::from_json_str(&json).unwrap();
+        match parsed.phase {
+            CheckpointPhase::CloudStreaming(cc) => {
+                assert_eq!(cc.next_chunk_idx, 3);
+                assert_eq!(cc.iterator_cursor, vec![2, 0, 5, 0]);
+                assert_eq!(cc.chunk_size, 5000);
+                assert_eq!(cc.total_chunks_estimate, 12);
+                assert_eq!(cc.next_name_idx, 15001);
+            }
+            _ => panic!("expected CloudStreaming phase"),
+        }
+    }
+
+    /// Old cloud-streaming checkpoints written before `next_name_idx` was added
+    /// should deserialize without error, defaulting to 1 (which is safe: only a
+    /// fresh cloud run could lack the field, and it won't have prior chunks whose
+    /// names could collide).
+    #[test]
+    fn legacy_cloud_streaming_checkpoint_deserializes_with_default_next_name_idx() {
+        let constants_json = serde_json::to_string(&TriageConstants::default()).unwrap();
+        let legacy = format!(
+            r#"{{"phase":{{"phase":"cloudstreaming","next_chunk_idx":2,"iterator_cursor":[1,0],"chunk_size":5000,"total_chunks_estimate":10}},"constants":{}}}"#,
+            constants_json
+        );
+        let parsed = Checkpoint::from_json_str(&legacy).unwrap();
+        match parsed.phase {
+            CheckpointPhase::CloudStreaming(cc) => {
+                assert_eq!(cc.next_chunk_idx, 2);
+                assert_eq!(cc.iterator_cursor, vec![1, 0]);
+                assert_eq!(cc.chunk_size, 5000);
+                assert_eq!(cc.total_chunks_estimate, 10);
+                assert_eq!(cc.next_name_idx, 1, "missing next_name_idx should default to 1");
+            }
+            _ => panic!("expected CloudStreaming phase"),
+        }
     }
 }

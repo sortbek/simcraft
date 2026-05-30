@@ -63,6 +63,9 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
         CheckpointPhase::Staged(_) => {
             resume_staged(job_id, &job, request_json, &checkpoint, inputs).await
         }
+        CheckpointPhase::CloudStreaming(_) => {
+            Err("Cloud-streaming resume not yet implemented".to_string())
+        }
     }
 }
 
