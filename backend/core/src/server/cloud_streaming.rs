@@ -15,11 +15,11 @@ use crate::db::cloud_chunks_repo::ChunkResultEnvelope;
 /// is no documented Simmit max-profileset/payload cap. Start conservative and
 /// tune against real runs (see spec Risk #1). Treat as tunable, not load-bearing
 /// correctness.
-pub const REMOTE_MAX_PROFILESETS_PER_JOB: usize = 5_000;
+pub const REMOTE_MAX_PROFILESETS_PER_JOB: usize = 2_000;
 
 /// Max concurrent in-flight Simmit chunk submissions. The effective bound is
 /// `min(CONFIG_MAX_INFLIGHT, usage.limits.maxActiveJobs)`. Conservative default.
-pub const CONFIG_MAX_INFLIGHT: usize = 3;
+pub const CONFIG_MAX_INFLIGHT: usize = 4;
 
 /// Folds per-chunk Simmit results into one SimC-shaped JSON document compatible
 /// with `result_parser::parse_gear_comparison_result`. Small: one base actor +
