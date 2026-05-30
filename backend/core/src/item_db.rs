@@ -148,14 +148,23 @@ fn build_void_forge_map() -> HashMap<u64, u64> {
     map
 }
 
-pub fn load(data_dir: &Path) {
+fn read_json_vec(path: &std::path::Path) -> Result<Vec<Value>, String> {
+    let file = fs::File::open(path).map_err(|e| format!("open {}: {}", path.display(), e))?;
+    serde_json::from_reader(std::io::BufReader::new(file))
+        .map_err(|e| format!("parse {}: {}", path.display(), e))
+}
+
+fn read_json_map_str(path: &std::path::Path) -> Result<HashMap<String, Value>, String> {
+    let file = fs::File::open(path).map_err(|e| format!("open {}: {}", path.display(), e))?;
+    serde_json::from_reader(std::io::BufReader::new(file))
+        .map_err(|e| format!("parse {}: {}", path.display(), e))
+}
+
+pub fn load(data_dir: &Path) -> Result<(), String> {
     // equippable-items-full.json
     let items_path = data_dir.join("equippable-items-full.json");
     if items_path.exists() {
-        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&items_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: Vec<Value> = read_json_vec(&items_path)?;
         let map: HashMap<u64, Value> = data
             .into_iter()
             .filter_map(|v| {
@@ -170,10 +179,7 @@ pub fn load(data_dir: &Path) {
     // enchantments.json
     let enchants_path = data_dir.join("enchantments.json");
     if enchants_path.exists() {
-        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&enchants_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: Vec<Value> = read_json_vec(&enchants_path)?;
         let by_id: HashMap<u64, Value> = data
             .iter()
             .filter_map(|v| {
@@ -196,10 +202,7 @@ pub fn load(data_dir: &Path) {
     // bonuses.json
     let bonuses_path = data_dir.join("bonuses.json");
     if bonuses_path.exists() {
-        let raw: HashMap<String, Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&bonuses_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let raw: HashMap<String, Value> = read_json_map_str(&bonuses_path)?;
         let map: HashMap<u64, Value> = raw
             .into_iter()
             .filter_map(|(k, v)| {
@@ -255,16 +258,16 @@ pub fn load(data_dir: &Path) {
     let bus_path = data_dir.join("bonus-upgrade-sets.json");
     let seasons_path = data_dir.join("seasons.json");
     if bus_path.exists() {
-        let bus_raw: HashMap<String, Vec<Value>> =
-            serde_json::from_reader(std::io::BufReader::new(fs::File::open(&bus_path).unwrap()))
-                .unwrap_or_default();
+        let bus_raw: HashMap<String, Vec<Value>> = {
+            let file = fs::File::open(&bus_path)
+                .map_err(|e| format!("open {}: {}", bus_path.display(), e))?;
+            serde_json::from_reader(std::io::BufReader::new(file))
+                .map_err(|e| format!("parse {}: {}", bus_path.display(), e))?
+        };
 
         let mut active_groups: Option<Vec<u64>> = None;
         if seasons_path.exists() {
-            let seasons: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-                fs::File::open(&seasons_path).unwrap(),
-            ))
-            .unwrap_or_default();
+            let seasons: Vec<Value> = read_json_vec(&seasons_path)?;
             if let Some(active) = seasons
                 .iter()
                 .find(|s| s.get("active").and_then(|a| a.as_bool()).unwrap_or(false))
@@ -352,10 +355,7 @@ pub fn load(data_dir: &Path) {
     // instances.json
     let instances_path = data_dir.join("instances.json");
     if instances_path.exists() {
-        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&instances_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: Vec<Value> = read_json_vec(&instances_path)?;
         println!("Loaded {} instances", data.len());
         let _ = INSTANCES.set(data);
     }
@@ -366,10 +366,7 @@ pub fn load(data_dir: &Path) {
     let encounter_items_path = data_dir.join("encounter-items.json");
     let mut drops: HashMap<i64, Vec<Value>> = HashMap::new();
     if encounter_items_path.exists() {
-        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&encounter_items_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: Vec<Value> = read_json_vec(&encounter_items_path)?;
         println!("Loaded {} encounter items", data.len());
         for item in &data {
             if let Some(sources) = item.get("sources").and_then(|s| s.as_array()) {
@@ -399,10 +396,10 @@ pub fn load(data_dir: &Path) {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("season-config.json")
     };
     if season_path.exists() {
-        let cfg: Value = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&season_path).unwrap(),
-        ))
-        .unwrap_or(Value::Null);
+        let file = fs::File::open(&season_path)
+            .map_err(|e| format!("open {}: {}", season_path.display(), e))?;
+        let cfg: Value = serde_json::from_reader(std::io::BufReader::new(file))
+            .map_err(|e| format!("parse {}: {}", season_path.display(), e))?;
         let name = cfg
             .get("season")
             .and_then(|s| s.as_str())
@@ -414,10 +411,7 @@ pub fn load(data_dir: &Path) {
     // item-limit-categories.json — build bonus_id → (category_id, max_quantity) lookup
     let limit_cats_path = data_dir.join("item-limit-categories.json");
     if limit_cats_path.exists() {
-        let raw: HashMap<String, Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&limit_cats_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let raw: HashMap<String, Value> = read_json_map_str(&limit_cats_path)?;
         let cats: HashMap<u64, u64> = raw
             .into_iter()
             .filter_map(|(k, v)| {
@@ -444,10 +438,7 @@ pub fn load(data_dir: &Path) {
     // talents.json
     let talents_path = data_dir.join("talents.json");
     if talents_path.exists() {
-        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&talents_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: Vec<Value> = read_json_vec(&talents_path)?;
         let map: HashMap<u64, Value> = data
             .into_iter()
             .filter_map(|v| {
@@ -462,10 +453,7 @@ pub fn load(data_dir: &Path) {
     // item-squish-era.json — squish era → curve ID mapping
     let squish_path = data_dir.join("item-squish-era.json");
     if squish_path.exists() {
-        let data: Vec<Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&squish_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: Vec<Value> = read_json_vec(&squish_path)?;
         let map: HashMap<u64, u64> = data
             .iter()
             .filter_map(|entry| {
@@ -485,10 +473,7 @@ pub fn load(data_dir: &Path) {
     // item-curves.json — curve ID → points for ilevel conversion
     let curves_path = data_dir.join("item-curves.json");
     if curves_path.exists() {
-        let data: HashMap<String, Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&curves_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: HashMap<String, Value> = read_json_map_str(&curves_path)?;
         let map: HashMap<u64, Vec<(u64, u64)>> = data
             .into_iter()
             .filter_map(|(key, val)| {
@@ -513,10 +498,7 @@ pub fn load(data_dir: &Path) {
     // item-conversions.json — catalyst tier items
     let conversions_path = data_dir.join("item-conversions.json");
     if conversions_path.exists() {
-        let data: HashMap<String, Value> = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&conversions_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let data: HashMap<String, Value> = read_json_map_str(&conversions_path)?;
 
         // Find the latest conversion group (highest numeric key)
         let latest_group = data.keys().filter_map(|k| k.parse::<u64>().ok()).max();
@@ -600,10 +582,10 @@ pub fn load(data_dir: &Path) {
     // item-names.json — localized item names
     let names_path = data_dir.join("item-names.json");
     if names_path.exists() {
-        let raw: Value = serde_json::from_reader(std::io::BufReader::new(
-            fs::File::open(&names_path).unwrap(),
-        ))
-        .unwrap_or_default();
+        let file = fs::File::open(&names_path)
+            .map_err(|e| format!("open {}: {}", names_path.display(), e))?;
+        let raw: Value = serde_json::from_reader(std::io::BufReader::new(file))
+            .map_err(|e| format!("parse {}: {}", names_path.display(), e))?;
         let mut map: HashMap<u64, HashMap<String, String>> = HashMap::new();
         if let Some(sparse) = raw.get("ItemSparse").and_then(|v| v.as_object()) {
             for (id_str, locales) in sparse {
@@ -634,13 +616,13 @@ pub fn load(data_dir: &Path) {
     ] {
         let path = data_dir.join(filename);
         if path.exists() {
-            let data: Vec<Value> =
-                serde_json::from_reader(std::io::BufReader::new(fs::File::open(&path).unwrap()))
-                    .unwrap_or_default();
+            let data: Vec<Value> = read_json_vec(&path)?;
             println!("Loaded {} entries from {}", data.len(), filename);
             let _ = cell.set(data);
         }
     }
+
+    Ok(())
 }
 
 // ---- Accessors ----
@@ -1698,5 +1680,22 @@ mod tests {
         ensure_game_data_loaded();
         let cats = get_item_limit_categories(&[]);
         assert!(cats.is_empty());
+    }
+
+    #[test]
+    fn load_reports_malformed_json_instead_of_silent_empty() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("simhammer_loadtest_malformed");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut f = std::fs::File::create(dir.join("equippable-items-full.json")).unwrap();
+        f.write_all(b"{ this is not json ]").unwrap();
+
+        let result = load(&dir);
+        assert!(
+            result.is_err(),
+            "malformed data file must surface an error, not load empty"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

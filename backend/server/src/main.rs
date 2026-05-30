@@ -63,7 +63,10 @@ async fn main() {
     .expect("PORT must be a number");
 
     println!("Loading game data from {:?}", data_dir);
-    game_data::load(&data_dir);
+    if let Err(e) = game_data::load(&data_dir) {
+        eprintln!("FATAL: failed to load game data: {}", e);
+        std::process::exit(1);
+    }
 
     // Database URL: auto-prefix sqlite:// if no scheme is present
     let db_url = env_or("DATABASE_URL", "simhammer.db");

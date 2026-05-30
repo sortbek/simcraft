@@ -41,7 +41,9 @@ pub(crate) mod test_support {
                  backend/resources/data backend/resources/data-compacted` first",
                 data_dir.display()
             );
-            crate::item_db::load(&data_dir);
+            if let Err(e) = crate::item_db::load(&data_dir) {
+                panic!("FATAL: failed to load game data: {}", e);
+            }
         });
     }
 
