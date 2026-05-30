@@ -38,6 +38,7 @@ export function useResolvedGear(
   useEffect(() => {
     if (simcInput.trim().length < minLength) {
       setResolved(null);
+      setResolving(false);
       return;
     }
     setResolving(true);
