@@ -77,13 +77,20 @@ export default function RunButton({
     </>
   );
 
+  // Synchronous guard complementing the self-heal effect above: the primary
+  // action is disabled while the selected remote is unavailable (a stale
+  // persisted choice pending coercion to auto), so neither the collapsed plain
+  // button nor the split primary button can submit a stale/disabled target in
+  // the render before the effect fires.
+  const runDisabled = disabled || submitting || selectedRemoteUnavailable;
+
   // No usable remote → no real choice → plain Run button (collapse rule).
   if (readyRemotes.length === 0) {
     return (
       <button
         type="button"
         onClick={onRun}
-        disabled={disabled || submitting}
+        disabled={runDisabled}
         className={`${GOLD} rounded-lg`}
       >
         {submitting ? spinner : buttonLabel}
@@ -117,7 +124,7 @@ export default function RunButton({
       <button
         type="button"
         onClick={onRun}
-        disabled={disabled || submitting}
+        disabled={runDisabled}
         className={`${GOLD} rounded-l-lg`}
       >
         {submitting ? (
