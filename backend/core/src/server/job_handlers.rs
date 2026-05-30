@@ -250,7 +250,11 @@ pub(super) async fn pause_sim(path: web::Path<String>, repo: web::Data<JobRepo>)
     }))
 }
 
+// actix extractors are one-per-param; the added HttpRequest (for per-request
+// provider-key headers) pushes this to 8 — can't be collapsed.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn resume_sim(
+    http_req: actix_web::HttpRequest,
     path: web::Path<String>,
     repo: web::Data<JobRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
@@ -269,6 +273,41 @@ pub(super) async fn resume_sim(
         }
     };
 
+    // Build the per-request provider auth EXACTLY as submit does
+    // (`resolve_provider_for_request`): merge server-side ProviderSettings with
+    // the request's `X-Provider-<id>-Key` headers into a ProviderAvailability,
+    // then resolve the auth for THIS job's provider. A web BYO-key caller's key
+    // arrives only on this request; threading it lets a cloud-streaming run
+    // resume instead of being stuck paused. Best-effort: if settings can't load
+    // or the job is gone, fall through with no per-request auth and let
+    // resume_job surface the real error.
+    let request_auth = match crate::compute::ProviderSettings::load(
+        settings_repo.get_ref(),
+        &registry.remote_ids(),
+    )
+    .await
+    {
+        Ok(settings) => {
+            let avail = crate::compute::ProviderAvailability::build(
+                &settings,
+                registry.get_ref(),
+                http_req.headers(),
+            );
+            match repo.get(&job_id).await {
+                Ok(Some(job)) => {
+                    let provider_id = if job.provider_id.is_empty() {
+                        "simmit"
+                    } else {
+                        job.provider_id.as_str()
+                    };
+                    avail.auth_for(provider_id)
+                }
+                _ => crate::compute::ProviderAuth::None,
+            }
+        }
+        Err(_) => crate::compute::ProviderAuth::None,
+    };
+
     let inputs = crate::profileset_generator::ResumeInputs {
         pool,
         repo: repo.get_ref().clone(),
@@ -280,6 +319,7 @@ pub(super) async fn resume_sim(
             .expect("local provider always registered"),
         registry: registry.get_ref().clone(),
         settings_repo: settings_repo.get_ref().clone(),
+        request_auth,
     };
 
     match crate::profileset_generator::resume_job(&job_id, inputs).await {

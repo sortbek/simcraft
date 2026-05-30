@@ -1161,6 +1161,22 @@ pub fn build_production_chunk_runner(
 /// server-side settings (`provider.simmit.api_key`). Desktop stores it; web works
 /// only if the key is in Settings. Without it, resume FAILS CLEAN — it never fakes
 /// a run it cannot bill.
+/// Resolve the bearer used to bill a cloud-streaming resume, mirroring submit's
+/// header→auth precedence: a per-request `BearerToken` (web BYO key) WINS;
+/// otherwise the server-side Settings key; `None` when neither is present (caller
+/// fails clean). Pure so the precedence is unit-tested without touching HTTP/DB.
+fn resolve_resume_auth(
+    request_auth: &crate::compute::ProviderAuth,
+    settings_key: Option<&str>,
+) -> Option<crate::compute::ProviderAuth> {
+    if let crate::compute::ProviderAuth::BearerToken(_) = request_auth {
+        return Some(request_auth.clone());
+    }
+    settings_key.map(|k| {
+        crate::compute::ProviderAuth::BearerToken(secrecy::SecretString::new(k.to_string().into()))
+    })
+}
+
 pub async fn resume_cloud_streaming(
     job_id: &str,
     job: &crate::models::Job,
@@ -1183,22 +1199,23 @@ pub async fn resume_cloud_streaming(
         .get(provider_id)
         .ok_or_else(|| format!("cloud resume: provider '{provider_id}' is not registered"))?;
 
-    // Server-side key only (no request headers on resume). FAIL CLEAN when absent
-    // — never fake a run we cannot bill (web-without-key case).
+    // Auth precedence: a per-request bearer (web BYO key, threaded from the
+    // resume request's `X-Provider-<id>-Key` headers exactly as submit builds it)
+    // WINS; otherwise fall back to the server-side Settings key (desktop, or web
+    // with the key saved in Settings). FAIL CLEAN only when NEITHER is available —
+    // never fake a run we cannot bill.
     let settings = crate::compute::ProviderSettings::load(
         &inputs.settings_repo,
         &inputs.registry.remote_ids(),
     )
     .await
     .map_err(|e| format!("cloud resume: failed to load provider settings: {e}"))?;
-    let api_key = settings.get_api_key(provider_id).ok_or_else(|| {
-        "Cloud resume needs the Simmit API key configured in Settings. \
-         (Web per-request keys are not available at resume time.)"
-            .to_string()
-    })?;
-    let auth = crate::compute::ProviderAuth::BearerToken(secrecy::SecretString::new(
-        api_key.to_string().into(),
-    ));
+    let auth = resolve_resume_auth(&inputs.request_auth, settings.get_api_key(provider_id))
+        .ok_or_else(|| {
+            "Cloud resume needs the Simmit API key — supply it via the request \
+             (BYO key) or configure it in Settings."
+                .to_string()
+        })?;
 
     let cloud_repo = CloudChunksRepo::new(inputs.pool.clone());
 
@@ -1588,6 +1605,39 @@ mod tests {
 
         // Each chunk_json has credits_consumed=100, so total should be 300.
         assert_eq!(merged["simmit"]["credits_consumed"], 300);
+    }
+
+    fn bearer(s: &str) -> crate::compute::ProviderAuth {
+        crate::compute::ProviderAuth::BearerToken(secrecy::SecretString::new(s.to_string().into()))
+    }
+
+    fn expose(auth: &crate::compute::ProviderAuth) -> Option<String> {
+        use secrecy::ExposeSecret;
+        match auth {
+            crate::compute::ProviderAuth::BearerToken(s) => Some(s.expose_secret().to_string()),
+            crate::compute::ProviderAuth::None => None,
+        }
+    }
+
+    #[test]
+    fn resume_auth_prefers_request_over_settings() {
+        // Web BYO key: a per-request bearer wins even when Settings also has one.
+        let resolved = resolve_resume_auth(&bearer("req-key"), Some("settings-key")).unwrap();
+        assert_eq!(expose(&resolved).as_deref(), Some("req-key"));
+    }
+
+    #[test]
+    fn resume_auth_falls_back_to_settings_when_no_request_auth() {
+        // Desktop / web-with-Settings-key: no per-request auth → use Settings.
+        let resolved =
+            resolve_resume_auth(&crate::compute::ProviderAuth::None, Some("settings-key")).unwrap();
+        assert_eq!(expose(&resolved).as_deref(), Some("settings-key"));
+    }
+
+    #[test]
+    fn resume_auth_errors_when_neither_present() {
+        // Web BYO-key with no key supplied AND none in Settings → fail clean.
+        assert!(resolve_resume_auth(&crate::compute::ProviderAuth::None, None).is_none());
     }
 }
 

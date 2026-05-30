@@ -24,8 +24,15 @@ pub struct ResumeInputs {
     /// provider from it. Triage/staged resume ignore it.
     pub registry: Arc<crate::compute::ProviderRegistry>,
     /// Server-side provider settings store — cloud-streaming resume reads the
-    /// Simmit API key from it (no request headers exist at resume time).
+    /// Simmit API key from it when no per-request key was supplied.
     pub settings_repo: crate::db::SettingsRepo,
+    /// Per-request provider auth derived from the resume request's
+    /// `X-Provider-<id>-Key` headers (exactly as submit builds it). Present for a
+    /// web BYO-key caller; `None`/`ProviderAuth::None` for desktop or when the key
+    /// only lives in server-side Settings. Cloud-streaming resume PREFERS this
+    /// over the server-side Settings key so a web BYO-key cloud run can resume,
+    /// not just be paused. Triage/staged resume ignore it (local-only).
+    pub request_auth: crate::compute::ProviderAuth,
 }
 
 /// Resume a paused job. Reads checkpoint + request_json, validates, and
