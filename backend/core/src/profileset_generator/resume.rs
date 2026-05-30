@@ -203,17 +203,14 @@ async fn resume_triage(
         already_collected_survivors,
     };
 
-    // 5. Flip status back to Running and clear pause_requested.
+    // 5. Clear pause_requested. Running status is set inside the spawn after
+    //    the queue permit is acquired, so the UI correctly shows Queued while
+    //    the job waits for the semaphore (mirrors streaming_top_gear.rs).
     inputs
         .repo
         .set_pause_requested(job_id, false)
         .await
         .map_err(|e| format!("Failed to clear pause_requested: {}", e))?;
-    inputs
-        .repo
-        .update_status(job_id, crate::models::JobStatus::Running)
-        .await
-        .map_err(|e| format!("Failed to set Running: {}", e))?;
 
     // 6. Resolve the simc binary using the original branch from request_json
     // (an empty string falls back to the default branch).
@@ -260,6 +257,15 @@ async fn resume_triage(
                 Err(_) => return,
             }
         };
+
+        // Flip status to Running now that the permit is held and the sim is
+        // about to start. Mirrors the fresh streaming path in streaming_top_gear.rs.
+        if let Err(e) = repo_for_task
+            .update_status(&job_id_owned, crate::models::JobStatus::Running)
+            .await
+        {
+            eprintln!("[{}] Failed to set Running status: {}", job_id_owned, e);
+        }
 
         let on_progress = {
             let repo = repo_for_task.clone();
