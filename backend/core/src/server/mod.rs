@@ -13,6 +13,7 @@ pub mod request_json;
 mod provider_handlers;
 mod route_handlers;
 mod sim_handlers;
+mod cloud_estimate;
 mod cloud_streaming;
 mod streaming_top_gear;
 mod system_handlers;
