@@ -127,12 +127,38 @@ pub trait SimcProvider: Send + Sync {
         Ok(ProviderUsage::default())
     }
 
-    /// Downcast hook. The cloud-streaming orchestrator/resume needs the concrete
-    /// `SimmitProvider` (its chunk-submit/poll methods are inherent, not on this
-    /// trait). Default: no downcast (suitable for `local`); `SimmitProvider`
-    /// overrides to return `self`.
-    fn as_any(&self) -> &dyn std::any::Any {
-        &()
+    /// Submit ONE chunk of profilesets and return the provider's remote job id
+    /// immediately (before it runs), so the cloud-streaming orchestrator can
+    /// persist it to `cloud_chunks.remote_job_id` for resume re-polling. Pair
+    /// with [`poll_and_fetch_chunk`](Self::poll_and_fetch_chunk).
+    ///
+    /// Default: the provider does not support cloud chunk streaming. Providers
+    /// that drive the cloud-streaming orchestrator (e.g. Simmit) override this.
+    async fn submit_chunk_for_id(
+        &self,
+        _auth: &ProviderAuth,
+        _job_id: &str,
+        _input: &str,
+    ) -> Result<String, RunError> {
+        Err(RunError::Other(
+            "provider does not support cloud chunk streaming".into(),
+        ))
+    }
+
+    /// Poll an already-submitted remote chunk to terminal and fetch its result,
+    /// adapted to the SimC-shaped [`SimcOutput`]. Used both for the live submit
+    /// path and for resume re-polling.
+    ///
+    /// Default: the provider does not support cloud chunk streaming. Providers
+    /// that drive the cloud-streaming orchestrator (e.g. Simmit) override this.
+    async fn poll_and_fetch_chunk(
+        &self,
+        _ctx: RunCtx<'_>,
+        _remote_job_id: &str,
+    ) -> Result<SimcOutput, RunError> {
+        Err(RunError::Other(
+            "provider does not support cloud chunk streaming".into(),
+        ))
     }
 }
 

@@ -117,8 +117,38 @@ impl SimcProvider for SimmitProvider {
         Ok(parse_usage(&body))
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    /// Submit a chunk and return Simmit's remote job id immediately (before it
+    /// runs), so the orchestrator can persist it to `cloud_chunks.remote_job_id`
+    /// for resume re-polling. Pair with `poll_and_fetch_chunk`.
+    async fn submit_chunk_for_id(
+        &self,
+        auth: &crate::compute::ProviderAuth,
+        job_id: &str,
+        input: &str,
+    ) -> Result<String, RunError> {
+        let bearer = match auth {
+            crate::compute::ProviderAuth::BearerToken(s) => {
+                use secrecy::ExposeSecret;
+                s.expose_secret().to_string()
+            }
+            crate::compute::ProviderAuth::None => {
+                return Err(RunError::Other("Simmit requires a configured API key".into()))
+            }
+        };
+        let stripped = strip_simmit_blocked_directives(input);
+        self.submit(&bearer, job_id, &stripped, true).await
+    }
+
+    /// Poll an already-submitted remote chunk to terminal and fetch its result.
+    /// Used both for the live submit path and for resume re-polling.
+    async fn poll_and_fetch_chunk(
+        &self,
+        ctx: RunCtx<'_>,
+        remote_job_id: &str,
+    ) -> Result<SimcOutput, RunError> {
+        let bearer = Self::bearer(&ctx)?;
+        let _final = self.poll_to_terminal(&bearer, remote_job_id, &ctx).await?;
+        self.fetch_result(&bearer, remote_job_id).await
     }
 }
 
@@ -523,40 +553,6 @@ impl SimmitProvider {
         let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;
         let _final = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
-    }
-
-    /// Submit a chunk and return Simmit's remote job id immediately (before it
-    /// runs), so the orchestrator can persist it to `cloud_chunks.remote_job_id`
-    /// for resume re-polling. Pair with `poll_and_fetch_chunk`.
-    pub async fn submit_chunk_for_id(
-        &self,
-        auth: &crate::compute::ProviderAuth,
-        job_id: &str,
-        input: &str,
-    ) -> Result<String, RunError> {
-        let bearer = match auth {
-            crate::compute::ProviderAuth::BearerToken(s) => {
-                use secrecy::ExposeSecret;
-                s.expose_secret().to_string()
-            }
-            crate::compute::ProviderAuth::None => {
-                return Err(RunError::Other("Simmit requires a configured API key".into()))
-            }
-        };
-        let stripped = strip_simmit_blocked_directives(input);
-        self.submit(&bearer, job_id, &stripped, true).await
-    }
-
-    /// Poll an already-submitted remote chunk to terminal and fetch its result.
-    /// Used both for the live submit path and for resume re-polling.
-    pub async fn poll_and_fetch_chunk(
-        &self,
-        ctx: RunCtx<'_>,
-        remote_job_id: &str,
-    ) -> Result<SimcOutput, RunError> {
-        let bearer = Self::bearer(&ctx)?;
-        let _final = self.poll_to_terminal(&bearer, remote_job_id, &ctx).await?;
-        self.fetch_result(&bearer, remote_job_id).await
     }
 
     async fn cancel_remote(&self, bearer: &str, remote_job_id: &str) {

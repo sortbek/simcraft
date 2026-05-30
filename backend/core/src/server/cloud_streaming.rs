@@ -934,20 +934,10 @@ pub(super) async fn start_cloud_streaming(
         local_provider: _local_provider,
     } = start;
 
-    // ── Downcast to the concrete Simmit provider. The chunk methods
-    // (`submit_chunk_for_id`/`poll_and_fetch_chunk`) are inherent, not on the
-    // `SimcProvider` trait, so resolve them through `as_any`. SimmitProvider is
-    // `#[derive(Clone)]` (wraps a cheap-clone reqwest::Client); clone it out of
-    // the borrow so the spawned runner can own an `Arc<SimmitProvider>`. ───────
-    let Some(simmit) = provider
-        .as_any()
-        .downcast_ref::<crate::compute::simmit::SimmitProvider>()
-    else {
-        return actix_web::HttpResponse::BadRequest().json(json!({
-            "detail": "cloud streaming is only supported for the Simmit provider"
-        }));
-    };
-    let simmit_owned = Arc::new(simmit.clone());
+    // The chunk submit/fetch methods are on the `SimcProvider` trait now (with
+    // default "unsupported" impls), so the orchestrator drives the provider
+    // through `Arc<dyn SimcProvider>` directly — no downcast. A provider that
+    // doesn't override them fails at the first chunk submission, not here.
 
     // ── Build the iterator config exactly as the local triage path does. ──────
     let gem_opts = profileset_generator::GemEnchantOptions {
@@ -1067,7 +1057,7 @@ pub(super) async fn start_cloud_streaming(
     let cloud_repo = CloudChunksRepo::new(pool.clone());
     let cancel = Some(CancelToken::new(repo.get_ref().clone(), job_id.clone()));
     let runner = build_production_chunk_runner(
-        simmit_owned,
+        provider.clone(),
         cloud_repo,
         provider_auth,
         cancel.clone(),
@@ -1112,11 +1102,12 @@ pub(super) async fn start_cloud_streaming(
 /// → returns the adapted SimC-shaped `.json`. Cancel/log/progress are wired into a
 /// per-chunk [`RunCtx`]. Used by BOTH the fresh run (Task 12) and resume.
 ///
-/// `provider` MUST be the concrete `SimmitProvider` (the chunk methods are
-/// inherent, not on the `SimcProvider` trait). The caller resolves it from the
-/// registry + downcast.
+/// `provider` is any `SimcProvider` whose `submit_chunk_for_id`/
+/// `poll_and_fetch_chunk` trait methods are implemented (the default impls
+/// return an "unsupported" error). Driven through the trait object — no
+/// downcast.
 pub fn build_production_chunk_runner(
-    provider: Arc<crate::compute::simmit::SimmitProvider>,
+    provider: Arc<dyn crate::compute::SimcProvider>,
     cloud_repo: CloudChunksRepo,
     auth: crate::compute::ProviderAuth,
     cancel: Option<CancelToken>,
@@ -1177,26 +1168,20 @@ pub async fn resume_cloud_streaming(
     checkpoint: &crate::profileset_generator::checkpoint::Checkpoint,
     inputs: crate::profileset_generator::ResumeInputs,
 ) -> Result<(), String> {
-    // ── 1. Resolve the concrete Simmit provider + server-side auth. ──────────
+    // ── 1. Resolve the provider + server-side auth. ──────────────────────────
     let provider_id = if job.provider_id.is_empty() {
         "simmit"
     } else {
         job.provider_id.as_str()
     };
+    // The chunk submit/fetch methods are on the `SimcProvider` trait, so the
+    // resume runner/re-poll closures drive the provider through the trait object
+    // directly — no downcast. A provider that doesn't override them surfaces an
+    // "unsupported" error at the first chunk re-poll/submit.
     let provider = inputs
         .registry
         .get(provider_id)
         .ok_or_else(|| format!("cloud resume: provider '{provider_id}' is not registered"))?;
-    let simmit = provider
-        .as_any()
-        .downcast_ref::<crate::compute::simmit::SimmitProvider>()
-        .ok_or_else(|| {
-            "cloud resume is only supported for the Simmit provider".to_string()
-        })?;
-    // `downcast_ref` is a borrow; clone the concrete provider (cheap — it wraps an
-    // Arc-internal reqwest::Client) so the runner/re-poll closures can own an
-    // `Arc<SimmitProvider>` with a `'static` lifetime.
-    let simmit_owned = Arc::new(simmit.clone());
 
     // Server-side key only (no request headers on resume). FAIL CLEAN when absent
     // — never fake a run we cannot bill (web-without-key case).
@@ -1220,20 +1205,20 @@ pub async fn resume_cloud_streaming(
     // Production chunk-runner (live Simmit) for the remaining chunks.
     let cancel = Some(CancelToken::new(inputs.repo.clone(), job_id.to_string()));
     let runner = build_production_chunk_runner(
-        simmit_owned.clone(),
+        provider.clone(),
         cloud_repo.clone(),
         auth.clone(),
         cancel.clone(),
     );
 
     // Production re-poll: poll an in-flight chunk's `remote_job_id` to terminal +
-    // fetch via the concrete provider.
+    // fetch via the provider's trait methods.
     let repoll: RepollFn = {
-        let simmit_owned = simmit_owned.clone();
+        let provider = provider.clone();
         let auth = auth.clone();
         let job_id = job_id.to_string();
         Arc::new(move |remote_id: String| {
-            let simmit_owned = simmit_owned.clone();
+            let provider = provider.clone();
             let auth = auth.clone();
             let job_id = job_id.clone();
             Box::pin(async move {
@@ -1245,7 +1230,7 @@ pub async fn resume_cloud_streaming(
                     cancel: None,
                     auth,
                 };
-                simmit_owned
+                provider
                     .poll_and_fetch_chunk(ctx, &remote_id)
                     .await
                     .map(|out| out.json)
