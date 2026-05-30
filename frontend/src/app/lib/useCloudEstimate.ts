@@ -9,6 +9,10 @@ export interface CloudEstimate {
   available_credits: number | null;
   affordable: boolean;
   ceiling: number;
+  /** True only when combos ≥ TRIAGE_THRESHOLD: the job streams via the chunk
+   * orchestrator. Below the threshold a cloud run is a single eager Simmit job,
+   * so the chunked credit/chunk estimate doesn't describe it. */
+  would_stream: boolean;
   error?: string;
 }
 

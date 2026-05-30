@@ -10,6 +10,7 @@ import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { postJson } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
+import { useSharedSimPayload } from '../lib/useSharedSimPayload';
 import { useComboCount } from '../lib/useComboCount';
 import { useCloudEstimate } from '../lib/useCloudEstimate';
 import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
@@ -87,7 +88,8 @@ function Toggle({
 }
 
 export default function TopGearScreen() {
-  const { simcInput, talentBuilds } = useSimContext();
+  const { simcInput, talentBuilds, fightStyle, targetCount, fightLength } = useSimContext();
+  const sharedSimPayload = useSharedSimPayload();
   const { t } = useLanguage();
   const [compute, setCompute] = useComputeChoice('top_gear');
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
@@ -356,9 +358,21 @@ export default function TopGearScreen() {
     '/api/top-gear/cloud-estimate',
     () => {
       const body = buildComboBody();
-      return body === null ? null : { ...body, compute_provider: compute };
+      if (body === null) return null;
+      // Mirror EXACTLY what a single submit config POSTs (see useSimSubmit): the
+      // page payload, the shared SimContext options, and the base fight params
+      // (added per-scenario in submit). target_error etc. must match so the
+      // backend's credit estimate matches the eventual run.
+      return {
+        ...body,
+        ...sharedSimPayload,
+        fight_style: fightStyle,
+        desired_targets: targetCount,
+        max_time: fightLength,
+        compute_provider: compute,
+      };
     },
-    [buildComboBody, compute],
+    [buildComboBody, sharedSimPayload, fightStyle, targetCount, fightLength, compute],
     { enabled: isCloudCompute, computeChoice: compute }
   );
 
@@ -527,7 +541,7 @@ export default function TopGearScreen() {
             comboCount={comboCount}
             comboError={comboError}
           />
-          {isCloudCompute && cloudEstimate && cloudEstimate.combos > 0 && (
+          {isCloudCompute && cloudEstimate && cloudEstimate.would_stream && cloudEstimate.combos > 0 && (
             <p
               className={`text-xs ${
                 cloudEstimate.affordable ? 'text-muted' : 'text-amber-400'
