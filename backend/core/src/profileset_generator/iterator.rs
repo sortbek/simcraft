@@ -10,7 +10,7 @@
 //! `cursor[gear+enchant]`                      — gem combo index
 //! `cursor[gear+enchant+1]`                    — talent build index
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -259,18 +259,129 @@ impl ProfilesetIterator {
             talent_string: &talent_string,
         });
 
-        // ── 9. Format simc lines ─────────────────────────────────────────────
+        // ── 9. Format simc lines + build metadata ───────────────────────────
         let profileset_name = format!("Combo {}", self.next_name_idx);
-        let profileset_simc = format_streaming_profileset_lines(
-            &profileset_name,
-            &gear_set,
-            &effective_enchants_map,
-            &eff_gems,
-            &talent_string,
-        );
 
-        // ── 10. Build metadata ───────────────────────────────────────────────
-        let metadata = build_streaming_metadata(&gear_set, &effective_enchants_map, &eff_gems);
+        // Build slot_simc: apply enchant and gem overrides to each gear slot.
+        let slot_simc: HashMap<String, String> = GEAR_SLOTS
+            .iter()
+            .filter_map(|slot| {
+                let item = gear_set.get(*slot)?;
+                let base_simc = item
+                    .get("simc_string")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("");
+                let with_enchant = if let Some(&eid) = effective_enchants_map.get(*slot) {
+                    crate::simc_string::set_enchant_id(base_simc, eid)
+                } else {
+                    base_simc.to_string()
+                };
+                let with_gem = if let Some(gids) = eff_gems.get(*slot) {
+                    if gids.is_empty() {
+                        with_enchant
+                    } else {
+                        crate::simc_string::set_gem_ids(&with_enchant, gids)
+                    }
+                } else {
+                    with_enchant
+                };
+                Some((slot.to_string(), with_gem))
+            })
+            .collect();
+
+        // Talent spec for spec= override line (streaming doesn't vary specs but
+        // keep the call consistent with the eager path).
+        let talent_spec_name: Option<&str> = if talent_string.is_empty() {
+            None
+        } else {
+            super::simc::extract_spec_id_from_talent_string(&talent_string)
+                .and_then(crate::types::class_data::spec_id_to_name)
+        };
+
+        let profileset_simc = super::emit::emit_profileset(
+            &profileset_name,
+            &slot_simc,
+            &talent_string,
+            talent_spec_name,
+            &self.cfg.spec,
+        )
+        .join("\n");
+
+        // Build gear-item rows: non-equipped items (streaming has no paired
+        // display slot distinction — all non-equipped items appear).
+        let gear_item_rows: Vec<(String, bool, &Value)> = GEAR_SLOTS
+            .iter()
+            .filter_map(|slot| {
+                let item = gear_set.get(*slot)?;
+                let is_equipped = item
+                    .get("is_equipped")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if !is_equipped {
+                    Some((slot.to_string(), false, item.as_ref()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Enchant delta entries.
+        let enchant_entries: Vec<serde_json::Value> = effective_enchants_map
+            .iter()
+            .filter(|(slot, _)| {
+                // Only emit an enchant entry when there is no gear-swap for
+                // that slot (the gear item entry already carries enchant_id).
+                !gear_item_rows.iter().any(|(s, _, _)| s == *slot)
+            })
+            .map(|(slot, &eid)| {
+                let info = crate::item_db::get_enchant_info(eid);
+                let ename = info
+                    .as_ref()
+                    .and_then(|v| v.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                serde_json::json!({
+                    "slot": slot,
+                    "type": "enchant",
+                    "enchant_id": eid,
+                    "name": ename,
+                })
+            })
+            .collect();
+
+        // Gem delta entries (one per socket per slot).
+        let gem_entries: Vec<serde_json::Value> = eff_gems
+            .iter()
+            .flat_map(|(slot, gids)| {
+                gids.iter().map(move |&gid| {
+                    let info = crate::item_db::get_gem_info(gid);
+                    let gname = info
+                        .as_ref()
+                        .and_then(|v| v.get("name"))
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    serde_json::json!({
+                        "slot": slot,
+                        "type": "gem",
+                        "gem_id": gid,
+                        "name": gname,
+                    })
+                })
+            })
+            .collect();
+
+        let include_off_hand_synthetic = !gear_set.contains_key("off_hand");
+
+        let meta_items = super::emit::build_combo_metadata(
+            &gear_item_rows,
+            &enchant_entries,
+            &gem_entries,
+            None, // no talent tagging in streaming path
+            include_off_hand_synthetic,
+        );
+        let metadata = serde_json::json!(meta_items);
 
         Some(ProfilesetCandidate {
             cursor_at_emission: self.cursor.clone(),
@@ -296,169 +407,6 @@ impl Iterator for ProfilesetIterator {
         }
         None
     }
-}
-
-// ── Internal helpers ─────────────────────────────────────────────────────────
-
-/// Produce simc profileset lines for one candidate.
-///
-/// Known duplication: the eager path in `top_gear.rs` has equivalent inline
-/// logic. Consolidation pending calibration work.
-fn format_streaming_profileset_lines(
-    name: &str,
-    gear_set: &HashMap<String, Arc<Value>>,
-    effective_enchants: &HashMap<String, u64>,
-    effective_gems: &HashMap<String, Vec<u64>>,
-    talent_string: &str,
-) -> String {
-    let mut lines: Vec<String> = Vec::new();
-
-    for slot in GEAR_SLOTS {
-        if let Some(item) = gear_set.get(*slot) {
-            let base_simc = item
-                .get("simc_string")
-                .and_then(|s| s.as_str())
-                .unwrap_or("");
-
-            // Apply enchant override if any.
-            let with_enchant = if let Some(&eid) = effective_enchants.get(*slot) {
-                crate::simc_string::set_enchant_id(base_simc, eid)
-            } else {
-                base_simc.to_string()
-            };
-
-            // Apply gems. `set_gem_ids` handles both single- and multi-socket
-            // cases by emitting `gem_id=A/B` for multi-gem lists; an empty
-            // list leaves the line untouched.
-            let with_gem = if let Some(gids) = effective_gems.get(*slot) {
-                if gids.is_empty() {
-                    with_enchant
-                } else {
-                    crate::simc_string::set_gem_ids(&with_enchant, gids)
-                }
-            } else {
-                with_enchant
-            };
-
-            lines.push(format!("profileset.\"{}\"+={}={}", name, slot, with_gem));
-        } else if *slot == "off_hand" {
-            // Emit explicit empty off_hand when main_hand is 2H (gear_set won't have it).
-            lines.push(format!("profileset.\"{}\"+=off_hand=,", name));
-        }
-    }
-
-    if !talent_string.is_empty() {
-        lines.push(format!(
-            "profileset.\"{}\"+=talents={}",
-            name, talent_string
-        ));
-    }
-
-    lines.join("\n")
-}
-
-/// Build a minimal metadata Value for one candidate.
-///
-/// Returns a JSON object (not array) with the key fields the Triage layer
-/// needs. The eager path returns `Vec<Value>` per combo; for the streaming
-/// path a single object is simpler and sufficient.
-///
-/// Known duplication with the eager path's inline metadata building.
-fn build_streaming_metadata(
-    gear_set: &HashMap<String, Arc<Value>>,
-    effective_enchants: &HashMap<String, u64>,
-    effective_gems: &HashMap<String, Vec<u64>>,
-) -> Value {
-    let mut items: Vec<Value> = Vec::new();
-    for slot in GEAR_SLOTS {
-        if let Some(item) = gear_set.get(*slot) {
-            let is_equipped = item
-                .get("is_equipped")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            if !is_equipped {
-                let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-                let ilevel = item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0);
-                let name = item
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let bonus_ids = item.get("bonus_ids").cloned().unwrap_or(json!([]));
-                let enchant_id = effective_enchants.get(*slot).copied().unwrap_or_else(|| {
-                    item.get("enchant_id").and_then(|v| v.as_u64()).unwrap_or(0)
-                });
-                let gem_ids_vec: Vec<u64> = effective_gems
-                    .get(*slot)
-                    .cloned()
-                    .or_else(|| {
-                        item.get("gem_id")
-                            .and_then(|v| v.as_u64())
-                            .filter(|g| *g > 0)
-                            .map(|g| vec![g])
-                    })
-                    .unwrap_or_default();
-                // Keep `gem_id` populated for downstream consumers that read
-                // the single-gem field; emit the full list under `gem_ids`.
-                let gem_id_first = gem_ids_vec.first().copied().unwrap_or(0);
-                let origin = item
-                    .get("origin")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("bags")
-                    .to_string();
-                items.push(json!({
-                    "slot": slot,
-                    "item_id": item_id,
-                    "ilevel": ilevel,
-                    "name": name,
-                    "bonus_ids": bonus_ids,
-                    "enchant_id": enchant_id,
-                    "gem_id": gem_id_first,
-                    "gem_ids": gem_ids_vec,
-                    "is_kept": false,
-                    "origin": origin,
-                }));
-            }
-        }
-    }
-    // Enchant overrides that don't correspond to a gear swap.
-    for (slot, &eid) in effective_enchants {
-        if !items.iter().any(|i| i["slot"] == *slot) {
-            let info = crate::item_db::get_enchant_info(eid);
-            let ename = info
-                .as_ref()
-                .and_then(|v| v.get("name"))
-                .and_then(|n| n.as_str())
-                .unwrap_or("")
-                .to_string();
-            items.push(json!({
-                "slot": slot,
-                "type": "enchant",
-                "enchant_id": eid,
-                "name": ename,
-            }));
-        }
-    }
-    // Gem overrides — emit one entry per socket so a 2-gem neck produces
-    // two metadata rows (matches the eager-path shape).
-    for (slot, gids) in effective_gems {
-        for &gid in gids {
-            let info = crate::item_db::get_gem_info(gid);
-            let gname = info
-                .as_ref()
-                .and_then(|v| v.get("name"))
-                .and_then(|n| n.as_str())
-                .unwrap_or("")
-                .to_string();
-            items.push(json!({
-                "slot": slot,
-                "type": "gem",
-                "gem_id": gid,
-                "name": gname,
-            }));
-        }
-    }
-    json!(items)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -603,6 +551,55 @@ mod tests {
             without_budget - with_budget,
             1,
             "budget=1 must filter exactly the double-catalyst combo that budget=None admits"
+        );
+    }
+
+    /// Shape-parity test (Task D2): after convergence, streaming metadata must
+    /// match the eager metadata shape for a single gear-swap combo.
+    #[test]
+    fn streaming_metadata_matches_eager_shape_for_single_swap() {
+        // make_cfg() has head: equipped 100 + alt 200, no gems/enchants/talents.
+        let cfg = make_cfg();
+        let mut it = ProfilesetIterator::new(cfg);
+        let cand = it.next().expect("one candidate from single-slot config");
+
+        let items = cand
+            .metadata
+            .as_array()
+            .expect("metadata must be a JSON array");
+
+        // Head item must appear with correct eager-shape fields.
+        let head = items
+            .iter()
+            .find(|v| v["slot"] == "head")
+            .expect("head entry required");
+        assert_eq!(head["item_id"], json!(200), "head item_id mismatch");
+        assert_eq!(head["is_kept"], json!(false), "head is_kept must be false");
+        assert!(
+            head.get("origin").is_some(),
+            "origin field required by eager shape; got: {head:?}"
+        );
+        assert!(
+            head.get("ilevel").is_some(),
+            "ilevel field required by eager shape"
+        );
+        assert!(
+            head.get("bonus_ids").is_some(),
+            "bonus_ids field required by eager shape"
+        );
+        assert!(
+            head.get("enchant_id").is_some(),
+            "enchant_id field required by eager shape"
+        );
+        assert!(
+            head.get("gem_id").is_some(),
+            "gem_id field required by eager shape"
+        );
+
+        // Synthetic off_hand entry must be present (eager shape).
+        assert!(
+            items.iter().any(|v| v["slot"] == "off_hand"),
+            "synthetic off_hand entry required by eager shape; got: {items:?}"
         );
     }
 }
