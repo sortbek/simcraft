@@ -383,6 +383,19 @@ fn is_terminal(status: &str) -> bool {
     matches!(status, "completed" | "failed" | "cancelled" | "timed_out")
 }
 
+/// Poll cadence (ms) by Simmit job status. A queued job won't change for a while,
+/// so we back off to spare Simmit's API read limit (a 60s queue at 1.5s is ~40
+/// pointless reads); once it's starting/running we poll faster to keep progress
+/// and logs live. Cancel latency is bounded by this interval too, but a queued
+/// job is fine to cancel a few seconds late.
+fn poll_interval_ms(status: &str) -> u64 {
+    match status {
+        "queued" | "pending" => 5000,
+        "starting" => 2000,
+        _ => 1500, // running, etc. — keep progress/logs responsive
+    }
+}
+
 impl SimmitProvider {
     async fn poll_to_terminal(
         &self,
@@ -483,7 +496,7 @@ impl SimmitProvider {
                 }
                 return Ok(s);
             }
-            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(poll_interval_ms(&s.status))).await;
         }
     }
 
@@ -704,6 +717,16 @@ fn simmit_result_to_simc_output(body: &ResultBody) -> SimcOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn poll_interval_backs_off_while_queued() {
+        // Queued/pending back off to spare Simmit's read limit; active states stay snappy.
+        assert_eq!(poll_interval_ms("queued"), 5000);
+        assert_eq!(poll_interval_ms("pending"), 5000);
+        assert_eq!(poll_interval_ms("starting"), 2000);
+        assert_eq!(poll_interval_ms("running"), 1500);
+        assert_eq!(poll_interval_ms("anything-else"), 1500);
+    }
 
     #[test]
     fn drops_threads_directive() {
