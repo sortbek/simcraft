@@ -104,6 +104,14 @@ pub fn build_iterator_from_request_json(json: &str) -> Result<ProfilesetIterator
         })
         .unwrap_or_default();
 
+    // Catalyst budget is stored in the streaming envelope under "catalyst_charges"
+    // (written by streaming_top_gear.rs). `None` is preserved when the original
+    // request had no catalyst budget so the resumed job is identical.
+    let catalyst_charges: Option<u32> = payload
+        .get("catalyst_charges")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u32);
+
     // Delegate to the shared builder in top_gear.rs.
     // build_iterator_config takes a GemEnchantOptions struct (not flat args), so
     // we construct one here — Option A: match the existing signature unchanged.
@@ -122,6 +130,7 @@ pub fn build_iterator_from_request_json(json: &str) -> Result<ProfilesetIterator
         &selected_items,
         &talent_builds,
         &gem_opts,
+        catalyst_charges,
     ))
 }
 
@@ -176,5 +185,52 @@ mod tests {
         });
         let err = unwrap_err(build_iterator_from_request_json(&envelope.to_string()));
         assert!(err.contains("base_profile"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn resume_rebuild_carries_catalyst_budget() {
+        use crate::test_support::ensure_game_data_loaded;
+        ensure_game_data_loaded();
+
+        // Minimal valid envelope with a catalyst budget of 2.
+        let envelope = json!({
+            "sim_type": "top_gear",
+            "version": 1,
+            "payload": {
+                "base_profile": "",
+                "items_by_slot": {},
+                "catalyst_charges": 2u32,
+            }
+        });
+        let cfg = build_iterator_from_request_json(&envelope.to_string())
+            .expect("rebuild should succeed");
+        assert_eq!(
+            cfg.max_catalyst_charges,
+            Some(2),
+            "resumed config must carry the catalyst budget from the stored envelope"
+        );
+    }
+
+    #[test]
+    fn resume_rebuild_no_catalyst_budget_is_none() {
+        use crate::test_support::ensure_game_data_loaded;
+        ensure_game_data_loaded();
+
+        // Envelope with no catalyst_charges key at all.
+        let envelope = json!({
+            "sim_type": "top_gear",
+            "version": 1,
+            "payload": {
+                "base_profile": "",
+                "items_by_slot": {},
+            }
+        });
+        let cfg = build_iterator_from_request_json(&envelope.to_string())
+            .expect("rebuild should succeed");
+        assert_eq!(
+            cfg.max_catalyst_charges,
+            None,
+            "resumed config without catalyst_charges must be None"
+        );
     }
 }

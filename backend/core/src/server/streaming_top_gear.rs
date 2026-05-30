@@ -65,6 +65,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         &req.selected_items,
         &talent_builds,
         &gem_opts,
+        catalyst_charges,
     );
 
     if let Some(resp) = validate_batch(&req.options.batch_id, repo.get_ref()).await {

@@ -82,6 +82,9 @@ pub struct ProfilesetIteratorConfig {
     pub socketed_item_ids: HashSet<u64>,
     /// `(name, talent_string)` pairs. Empty → treated as a single pass with no talent override.
     pub talent_builds: Vec<(String, String)>,
+    /// Catalyst budget for the streaming gear-validator. `None` = the request
+    /// doesn't deal in catalyst (mirrors the eager path's `GearSetContext`).
+    pub max_catalyst_charges: Option<u32>,
 }
 
 // ── Iterator ─────────────────────────────────────────────────────────────────
@@ -189,17 +192,14 @@ impl ProfilesetIterator {
             gear_set.remove("off_hand");
         }
 
-        // ── 3. Validate constraints ──────────────────────────────────────────
-        if !super::constraints::validate_unique_equipped(&gear_set) {
-            return None;
-        }
-        if !super::constraints::validate_vault_constraint(&gear_set) {
-            return None;
-        }
-        if !super::constraints::validate_weapon_constraint(&gear_set, &self.cfg.spec) {
-            return None;
-        }
-        if !super::constraints::validate_item_limits(&gear_set) {
+        // ── 3. Validate constraints (shared funnel — see constraints.rs) ──────
+        if !super::constraints::is_legal_gear_set(
+            &gear_set,
+            &super::constraints::GearSetContext {
+                spec: &self.cfg.spec,
+                max_catalyst_charges: self.cfg.max_catalyst_charges,
+            },
+        ) {
             return None;
         }
 
@@ -503,6 +503,7 @@ mod tests {
             gem_combos_resolver: GemCombosResolver::new(vec![]),
             socketed_item_ids: HashSet::new(),
             talent_builds: vec![],
+            max_catalyst_charges: None,
         }
     }
 
@@ -518,6 +519,7 @@ mod tests {
             gem_combos_resolver: GemCombosResolver::new(vec![]),
             socketed_item_ids: HashSet::new(),
             talent_builds: vec![],
+            max_catalyst_charges: None,
         };
         let iter = ProfilesetIterator::new(cfg);
         assert_eq!(iter.count(), 0);
@@ -549,5 +551,58 @@ mod tests {
         // axis_sizes = [2(head), 1(gem), 1(talent)] = 3 axes.
         // cursor [0, 0, 0] is valid (all within bounds).
         assert!(iter.seek(vec![0, 0, 0]));
+    }
+
+    #[test]
+    fn streaming_iterator_enforces_catalyst_budget() {
+        use crate::test_support::{ensure_game_data_loaded, TestItem};
+        ensure_game_data_loaded();
+
+        let make_cfg = |budget: Option<u32>| {
+            let mut slot_item_lists: HashMap<String, Vec<Arc<Value>>> = HashMap::new();
+            slot_item_lists.insert(
+                "head".into(),
+                vec![
+                    Arc::new(TestItem::new(102).build()),
+                    Arc::new(TestItem::new(101).catalyst().build()),
+                ],
+            );
+            slot_item_lists.insert(
+                "chest".into(),
+                vec![
+                    Arc::new(TestItem::new(202).build()),
+                    Arc::new(TestItem::new(201).catalyst().build()),
+                ],
+            );
+            ProfilesetIteratorConfig {
+                spec: "arms".into(),
+                base_profile: Arc::from(""),
+                slot_item_lists,
+                varying_slots: vec!["chest".into(), "head".into()],
+                enchant_axes: vec![],
+                gem_combo_count: 0,
+                gem_combos_resolver: GemCombosResolver::new(vec![]),
+                socketed_item_ids: HashSet::new(),
+                talent_builds: vec![],
+                max_catalyst_charges: budget,
+            }
+        };
+
+        let count = |budget| {
+            let mut it = ProfilesetIterator::new(make_cfg(budget));
+            let mut n = 0usize;
+            while it.next().is_some() {
+                n += 1;
+            }
+            n
+        };
+
+        let with_budget = count(Some(1));
+        let without_budget = count(None);
+        assert_eq!(
+            without_budget - with_budget,
+            1,
+            "budget=1 must filter exactly the double-catalyst combo that budget=None admits"
+        );
     }
 }

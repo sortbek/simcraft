@@ -95,6 +95,7 @@ pub(crate) fn build_iterator_config(
     selected_items: &HashMap<String, Vec<String>>,
     talent_builds: &[(String, String)],
     gem_opts: &GemEnchantOptions,
+    catalyst_charges: Option<u32>,
 ) -> super::iterator::ProfilesetIteratorConfig {
     use super::iterator::{EnchantAxis, GemCombosResolver, ProfilesetIteratorConfig};
 
@@ -256,6 +257,7 @@ pub(crate) fn build_iterator_config(
         gem_combos_resolver,
         socketed_item_ids: socketed_ids_owned,
         talent_builds: talent_builds_owned,
+        max_catalyst_charges: catalyst_charges,
     }
 }
 
