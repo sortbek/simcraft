@@ -123,3 +123,24 @@ export function useProviderReady(id: string): boolean {
   if (id === 'local') return true;
   return !!(meta?.server_configured || localKey);
 }
+
+/** Remote providers (id !== 'local') that are READY — server-configured (desktop)
+ *  or holding a localStorage key (web). Used to decide whether the compute picker
+ *  is worth showing at all. Recomputes when a provider key is added/removed. */
+export function useReadyRemoteProviders(): ProviderMeta[] {
+  const all = useProviders();
+  const [keyTick, setKeyTick] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => setKeyTick((n) => n + 1);
+    window.addEventListener('storage', handler);
+    window.addEventListener(LOCAL_KEY_EVENT, handler);
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener(LOCAL_KEY_EVENT, handler);
+    };
+  }, []);
+  void keyTick; // referenced so the recompute on key change is intentional
+  if (!all) return [];
+  return all.filter((p) => p.id !== 'local' && (p.server_configured || !!getLocalKey(p.id)));
+}
