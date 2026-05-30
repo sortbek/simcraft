@@ -451,6 +451,11 @@ impl<'a> SimcInputBuild<'a> {
 /// `Value`. Single source of truth for defaults so the various entry points
 /// (`build_simc_input_from_options`, `run_simc`, `run_simc_staged`,
 /// `run_simc_triage_batch`) can no longer drift apart.
+///
+/// The `unwrap_or` defaults here (0.1 target_error, 10_000 iterations, etc.)
+/// are a safety net only: every production caller populates these via
+/// `SimOptions::to_json()`, so the defaults are not normally reached. They are
+/// chosen to match `build_simc_input_from_options`' historical values.
 #[derive(Debug, Clone)]
 pub struct SimParams {
     pub fight_style: String,
@@ -1609,6 +1614,9 @@ pub async fn run_simc_triage_batch(
     log_buffer: std::sync::Arc<crate::log_buffer::LogBuffer>,
     on_profileset_progress: impl Fn(usize, usize),
 ) -> Result<Vec<Value>, String> {
+    // Only the execution-context fields (desired_targets/max_time/single_actor_batch)
+    // come from options here. fight_style, target_error, and iterations are
+    // stage-driven and arrive as explicit fn parameters — do NOT read them from `p`.
     let p = SimParams::from_options(options);
     let threads = resolve_threads(options);
     let desired_targets = p.desired_targets;
