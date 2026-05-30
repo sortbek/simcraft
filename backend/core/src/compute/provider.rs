@@ -138,6 +138,7 @@ pub trait SimcProvider: Send + Sync {
         &self,
         _auth: &ProviderAuth,
         _job_id: &str,
+        _idempotency_key: &str,
         _input: &str,
     ) -> Result<String, RunError> {
         Err(RunError::Other(

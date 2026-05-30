@@ -1141,8 +1141,13 @@ pub fn build_production_chunk_runner(
         Box::pin(async move {
             // 1. Submit and capture the remote job id BEFORE it runs, so a crash
             // mid-poll leaves a `submitted` cloud_chunks row that resume re-polls.
+            // Unique idempotency key per chunk — Simmit rejects key reuse (409),
+            // and every chunk (incl. retry sub-chunks, which get fresh chunk_idx)
+            // is a distinct submission. `chunk_idx` is unique per job by the
+            // `cloud_chunks` PK, so this never collides within a run or on resume.
+            let idem_key = format!("{}-c{}", req.job_id, req.chunk_idx);
             let remote_id = provider
-                .submit_chunk_for_id(&auth, &req.job_id, &req.simc_input)
+                .submit_chunk_for_id(&auth, &req.job_id, &idem_key, &req.simc_input)
                 .await?;
             let now = chrono::Utc::now().to_rfc3339();
             let _ = cloud_repo

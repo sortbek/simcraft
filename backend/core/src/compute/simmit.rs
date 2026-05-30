@@ -40,7 +40,8 @@ impl SimcProvider for SimmitProvider {
         // We only strip Simmit-forbidden directives (threads=, output=, ...).
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
-        let remote_id = self.submit(&bearer, ctx.job_id, &stripped, false).await?;
+        // One submission per job → idempotency key = job_id (dedups a network retry).
+        let remote_id = self.submit(&bearer, ctx.job_id, ctx.job_id, &stripped, false).await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
     }
@@ -58,7 +59,7 @@ impl SimcProvider for SimmitProvider {
         // Input is pre-built by the handler.
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
-        let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;
+        let remote_id = self.submit(&bearer, ctx.job_id, ctx.job_id, &stripped, true).await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
     }
@@ -124,6 +125,7 @@ impl SimcProvider for SimmitProvider {
         &self,
         auth: &crate::compute::ProviderAuth,
         job_id: &str,
+        idempotency_key: &str,
         input: &str,
     ) -> Result<String, RunError> {
         let bearer = match auth {
@@ -136,7 +138,10 @@ impl SimcProvider for SimmitProvider {
             }
         };
         let stripped = strip_simmit_blocked_directives(input);
-        self.submit(&bearer, job_id, &stripped, true).await
+        // Each chunk is a DISTINCT Simmit job, so it needs its own idempotency key
+        // (Simmit rejects key reuse with 409). `simhammer_job_id` metadata still
+        // carries the real job id for mapping.
+        self.submit(&bearer, job_id, idempotency_key, &stripped, true).await
     }
 
     /// Poll an already-submitted remote chunk to terminal and fetch its result.
@@ -240,6 +245,7 @@ impl SimmitProvider {
         &self,
         bearer: &str,
         job_id: &str,
+        idempotency_key: &str,
         input: &str,
         enable_multistage: bool,
     ) -> Result<String, RunError> {
@@ -259,7 +265,7 @@ impl SimmitProvider {
         let resp = self.http
             .post(format!("{}/v1/simc/jobs", SIMMIT_BASE_URL))
             .bearer_auth(bearer)
-            .header("idempotency-key", job_id)
+            .header("idempotency-key", idempotency_key)
             .json(&body)
             .send()
             .await
@@ -563,7 +569,7 @@ impl SimmitProvider {
     ) -> Result<SimcOutput, RunError> {
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
-        let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;
+        let remote_id = self.submit(&bearer, ctx.job_id, ctx.job_id, &stripped, true).await?;
         let _final = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
     }
