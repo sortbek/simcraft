@@ -150,7 +150,8 @@ pub type AffordabilityCheck =
 
 /// One generated chunk: the combined simc input + the per-combo metadata rows
 /// (to persist to `ComboMetadataRepo`, exactly as local triage does) + the
-/// profileset count, plus the iterator cursor AFTER this chunk (for checkpoint).
+/// profileset count. The checkpoint reads the iterator cursor directly via
+/// `it.cursor()` at the generation boundary, so this struct carries no cursor.
 pub struct GeneratedChunk {
     /// The individual `profileset."Combo N"+=...` lines for this chunk, in
     /// generation order. Kept so a `timed_out`/errored chunk can be SPLIT into
@@ -160,7 +161,6 @@ pub struct GeneratedChunk {
     /// `(combo_name, metadata_json)` pairs, ordered, for `combo_metadata`.
     pub metadata: Vec<(String, String)>,
     pub profileset_count: usize,
-    pub cursor_after: Vec<usize>,
     /// `true` when the iterator yielded `None` before hitting `ceiling` — i.e.
     /// the whole product space fit in this chunk (the single-chunk fast path).
     pub exhausted: bool,
@@ -211,7 +211,6 @@ pub fn build_chunk(
         profileset_lines: lines,
         metadata,
         profileset_count: count,
-        cursor_after: it.cursor().to_vec(),
         exhausted,
     }
 }
@@ -564,7 +563,7 @@ impl CloudStreamingRun {
         // K = min(CONFIG_MAX_INFLIGHT, max_active_jobs). Unknown limit → config.
         let k = self
             .max_active_jobs
-            .map(|m| m.max(1).min(CONFIG_MAX_INFLIGHT))
+            .map(|m| m.clamp(1, CONFIG_MAX_INFLIGHT))
             .unwrap_or(CONFIG_MAX_INFLIGHT)
             .max(1);
 
@@ -650,8 +649,12 @@ impl CloudStreamingRun {
 
                 // Checkpoint the GENERATION cursor at this boundary: the cursor
                 // AFTER this chunk so resume regenerates only un-generated chunks.
-                // next_chunk_idx points at the NEXT chunk to generate.
-                self.write_checkpoint(it, chunk_idx + 1, chunk.exhausted).await;
+                // Store the shared allocator's CURRENT value (not a `chunk_idx + 1`
+                // literal) so the checkpoint reflects any tail indices a concurrent
+                // retry-split already claimed — keeping it consistent with the
+                // pause-path checkpoint, which also loads the atomic.
+                let next_idx_cp = next_chunk_idx.load(Ordering::SeqCst);
+                self.write_checkpoint(it, next_idx_cp, chunk.exhausted).await;
 
                 let now = chrono::Utc::now().to_rfc3339();
                 let _ = cloud_repo
@@ -1139,6 +1142,11 @@ async fn resume_cloud_streaming_inner(
                 match repoll(remote_id.to_string()).await {
                     Ok(json) => {
                         // Terminal on Simmit: fold + complete (never re-submit).
+                        // Adopt base_player on the FIRST envelope that lacks one
+                        // (iteration order), not strictly chunk_idx==0. This is safe
+                        // because the Top Gear base actor is the SAME unmodified
+                        // character in every chunk, so players[0]/base_dps is
+                        // invariant — whichever chunk supplies it yields the same base.
                         let include_base = acc.needs_base();
                         let env =
                             ChunkAccumulator::envelope_from_simc_json(&json, include_base);
@@ -1206,7 +1214,23 @@ async fn resume_cloud_streaming_inner(
         .map_err(|e| format!("Failed to set Running status: {e}"))?;
 
     // ── 5. Continue the SAME chunked loop from next_chunk_idx, then finalize. ─
-    let start_chunk_idx = cloud_cp.next_chunk_idx;
+    // Reconcile the chunk-idx allocator against what's actually persisted. A
+    // retry-split allocates tail `cloud_chunks` rows AFTER the per-generation
+    // checkpoint was written; if a crash landed between that allocation and the
+    // next generation-boundary checkpoint, `cloud_cp.next_chunk_idx` can LAG the
+    // highest existing chunk_idx. Seeding the allocator from the checkpoint alone
+    // would then re-issue an index that already exists and collide on the
+    // `(job_id, chunk_idx)` PK. Seed past BOTH the checkpoint and the max existing
+    // row so the next generated chunk always lands on a fresh index.
+    let max_existing_next = rows
+        .iter()
+        .map(|r| r.chunk_idx + 1)
+        .max()
+        .map(|n| n as usize);
+    let start_chunk_idx = match max_existing_next {
+        Some(n) => cloud_cp.next_chunk_idx.max(n),
+        None => cloud_cp.next_chunk_idx,
+    };
     let run = CloudStreamingRun {
         repo: repo.clone(),
         pool: pool.clone(),
@@ -2379,6 +2403,199 @@ mod orchestrator_tests {
                 names.iter().filter(|x| *x == n).count(),
                 1,
                 "{n} must appear exactly once (no resume name collision): {names:?}"
+            );
+        }
+    }
+
+    /// Finding 1 regression: a retry-split persisted tail `cloud_chunks` rows at
+    /// indices >= the checkpoint's `next_chunk_idx`, then a crash landed before the
+    /// next generation-boundary checkpoint advanced. On resume the chunk-idx
+    /// allocator must be seeded PAST the max existing row (not blindly from the
+    /// lagging checkpoint), so the next real chunk gets a fresh index and does NOT
+    /// collide on the `(job_id, chunk_idx)` PK.
+    #[tokio::test]
+    async fn resume_seeds_allocator_past_retry_tail_rows_without_pk_collision() {
+        use crate::profileset_generator::checkpoint::{
+            Checkpoint, CheckpointPhase, CloudStreamingCheckpoint,
+        };
+        use crate::profileset_generator::triage::TriageConstants;
+        crate::test_support::ensure_game_data_loaded();
+
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+
+        let request_json = five_combo_request_json();
+
+        // Cursor + name index AFTER the first 4 combos (chunks 0 and 1, ceiling 2).
+        let cfg = crate::profileset_generator::iterator_from_request::
+            build_iterator_from_request_json(&request_json)
+            .expect("rebuild iterator");
+        let mut probe = ProfilesetIterator::new(cfg);
+        for _ in 0..4 {
+            probe.next().expect("combo");
+        }
+        let cursor_after_4 = probe.cursor().to_vec();
+        let next_name_idx_after_4 = probe.next_name_idx(); // == 5
+
+        // Checkpoint LAGS at next_chunk_idx = 2: it was written at the chunk-1
+        // generation boundary, BEFORE chunk 1's retry-split claimed tail indices.
+        let checkpoint = Checkpoint {
+            phase: CheckpointPhase::CloudStreaming(CloudStreamingCheckpoint {
+                next_chunk_idx: 2,
+                iterator_cursor: cursor_after_4.clone(),
+                chunk_size: 2,
+                total_chunks_estimate: 3,
+                next_name_idx: next_name_idx_after_4,
+            }),
+            constants: TriageConstants::default(),
+        };
+
+        let mut job = crate::models::Job::new_with_provider(
+            String::new(),
+            "top_gear".to_string(),
+            100,
+            "patchwerk".to_string(),
+            0.1,
+            "simmit".to_string(),
+        );
+        job.simc_input_mode = crate::models::SimcInputMode::Streamed;
+        job.request_json = Some(request_json.clone());
+        job.checkpoint = Some(checkpoint.to_json_string().unwrap());
+        job.status = crate::models::JobStatus::Paused;
+        let job_id = job.id.clone();
+        repo.insert(&job).await.unwrap();
+
+        // ── cloud_chunks state at crash time ────────────────────────────────
+        // chunk 0 completed (Combo 1,2). chunk 1 FAILED (Combo 3,4) and was
+        // retry-split into two size-1 sub-chunks at TAIL indices 2 and 3 — both
+        // COMPLETED — but the checkpoint never advanced past next_chunk_idx = 2.
+        cloud_repo.insert_pending(&job_id, 0, 2).await.unwrap();
+        cloud_repo
+            .mark_submitted(&job_id, 0, "remote-0", "2026-05-30T00:00:00Z")
+            .await
+            .unwrap();
+        let c0_env = ChunkResultEnvelope {
+            profilesets: vec![
+                json!({ "name": "Combo 1", "mean": 1100.0 }),
+                json!({ "name": "Combo 2", "mean": 1050.0 }),
+            ],
+            base_player: Some(json!({
+                "name": "Hero",
+                "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+            })),
+        };
+        cloud_repo
+            .mark_completed(&job_id, 0, &c0_env, "2026-05-30T00:01:00Z")
+            .await
+            .unwrap();
+        // The original chunk-1 row, flipped to failed by the retry path.
+        cloud_repo.insert_pending(&job_id, 1, 2).await.unwrap();
+        cloud_repo.mark_failed(&job_id, 1).await.unwrap();
+        // Retry sub-chunk rows at tail indices 2 and 3 (>= checkpoint next=2).
+        for (idx, combo) in [(2i64, "Combo 3"), (3i64, "Combo 4")] {
+            cloud_repo.insert_pending(&job_id, idx, 1).await.unwrap();
+            cloud_repo
+                .mark_submitted(&job_id, idx, &format!("remote-{idx}"), "2026-05-30T00:00:10Z")
+                .await
+                .unwrap();
+            cloud_repo
+                .mark_completed(
+                    &job_id,
+                    idx,
+                    &ChunkResultEnvelope {
+                        profilesets: vec![json!({ "name": combo, "mean": 1000.0 })],
+                        base_player: None,
+                    },
+                    "2026-05-30T00:01:10Z",
+                )
+                .await
+                .unwrap();
+        }
+
+        super::super::helpers::write_combo_metadata_table_raw(
+            &repo,
+            &job_id,
+            &[
+                ("Combo 1".into(), "[]".into()),
+                ("Combo 2".into(), "[]".into()),
+                ("Combo 3".into(), "[]".into()),
+                ("Combo 4".into(), "[]".into()),
+            ],
+        )
+        .await;
+
+        // New-chunk runner (echoes its combos); the resume insert_pending for the
+        // tail chunk MUST NOT hit a PK collision with the existing rows 2/3.
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner: ChunkRunner = {
+            let calls = calls.clone();
+            std::sync::Arc::new(move |req: ChunkRequest| {
+                calls.lock().unwrap().push(req.clone());
+                let names = combo_names(&req.simc_input);
+                Box::pin(async move { Ok(result_for(&names)) })
+                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+            })
+        };
+        // No `submitted` rows here, so re-poll is never exercised.
+        let repoll: RepollFn = std::sync::Arc::new(move |remote_id: String| {
+            Box::pin(async move {
+                Err(RunError::Other(format!("unexpected re-poll of {remote_id}")))
+            }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+        });
+
+        resume_cloud_streaming_inner(
+            &job_id,
+            &request_json,
+            &checkpoint,
+            repo.clone(),
+            pool.clone(),
+            cloud_repo.clone(),
+            runner,
+            repoll,
+            None,
+        )
+        .await
+        .expect("resume succeeds without a PK collision");
+
+        // The tail chunk (Combo 5) was generated and submitted at a FRESH index
+        // past the existing max (3), i.e. >= 4 — no PK collision.
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "only the tail chunk should submit: {recorded:?}");
+        assert_eq!(combo_names(&recorded[0].simc_input), vec!["Combo 5".to_string()]);
+        assert!(
+            recorded[0].chunk_idx >= 4,
+            "tail chunk_idx must be past the retry-tail rows (>=4), got {}",
+            recorded[0].chunk_idx
+        );
+        drop(recorded);
+
+        // All rows completed; the tail row exists at the reconciled index.
+        let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
+        let completed = rows.iter().filter(|r| r.status == "completed").count();
+        // chunk 0 + two retry sub-chunks (2,3) + the new tail = 4 completed.
+        assert_eq!(completed, 4, "rows: {rows:?}");
+        assert!(
+            rows.iter().any(|r| r.chunk_idx >= 4 && r.status == "completed"),
+            "the tail chunk row must land past index 3: {rows:?}"
+        );
+
+        // The job finalized Done with all 5 combos, each exactly once.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
+        let result: Value =
+            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let names: Vec<String> = result["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect();
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert_eq!(
+                names.iter().filter(|x| *x == n).count(),
+                1,
+                "{n} must appear exactly once: {names:?}"
             );
         }
     }
