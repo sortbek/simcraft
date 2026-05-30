@@ -588,23 +588,13 @@ pub fn generate_top_gear_input_with_talents(
 
     if !count_only {
         // Write clean base profile (non-gear lines + equipped gear)
-        lines.push("# Base Actor".to_string());
-        lines.extend(base_lines.clone());
-        lines.push("### Combo 1".to_string());
-        for slot in GEAR_SLOTS {
-            if let Some(gear_val) = equipped_gear.get(*slot) {
-                lines.push(format!("{}={}", slot, gear_val));
-            } else if *slot == "off_hand" {
-                lines.push("off_hand=,".to_string());
-            }
-        }
-        if !base_talent.is_empty() {
-            lines.push(format!("talents={}", base_talent));
-            if base_actor_spec != spec {
-                lines.push(format!("spec={}", base_actor_spec));
-            }
-        }
-        lines.push(String::new());
+        lines.extend(super::emit::emit_base_actor(
+            &base_lines,
+            &equipped_gear,
+            base_talent,
+            &base_actor_spec,
+            &spec,
+        ));
     }
 
     // Build baseline metadata for "Currently Equipped"
@@ -802,19 +792,22 @@ pub fn generate_top_gear_input_with_talents(
                 if any_gem_change {
                     if !count_only {
                         let combo_name = format!("Combo {}", combo_number);
-                        lines.push(format!("### {}", combo_name));
-                        for slot in GEAR_SLOTS {
-                            if let Some(gear_val) = equipped_gear.get(*slot) {
-                                let val = gem_simc(slot, gear_val);
-                                lines.push(format!(
-                                    "profileset.\"{}\"+={}={}",
-                                    combo_name, slot, val
-                                ));
-                            } else if *slot == "off_hand" {
-                                lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
-                            }
-                        }
-                        lines.push(String::new());
+                        // Build slot_simc map: equipped gear with gem combo applied.
+                        let slot_simc: HashMap<String, String> = GEAR_SLOTS
+                            .iter()
+                            .filter_map(|slot| {
+                                equipped_gear
+                                    .get(*slot)
+                                    .map(|gear_val| (slot.to_string(), gem_simc(slot, gear_val)))
+                            })
+                            .collect();
+                        lines.extend(super::emit::emit_profileset(
+                            &combo_name,
+                            &slot_simc,
+                            "",
+                            None,
+                            &base_actor_spec,
+                        ));
                         let mut combo_items: Vec<Value> = Vec::new();
                         if let Some(gc) = gem_combo_opt {
                             let socketed: HashSet<String> = GEAR_SLOTS
@@ -848,22 +841,25 @@ pub fn generate_top_gear_input_with_talents(
 
                     if !count_only {
                         let combo_name = format!("Combo {}", combo_number);
-                        lines.push(format!("### {}", combo_name));
-
-                        for slot in GEAR_SLOTS {
-                            if let Some(gear_val) = equipped_gear.get(*slot) {
-                                let modified = apply_enchant_combo(slot, gear_val, enchant_idx);
-                                let val = gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
-                                lines.push(format!(
-                                    "profileset.\"{}\"+={}={}",
-                                    combo_name, slot, val
-                                ));
-                            } else if *slot == "off_hand" {
-                                lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
-                            }
-                        }
-                        lines.push(String::new());
-
+                        // Build slot_simc: equipped gear with enchant + gem applied.
+                        let slot_simc: HashMap<String, String> = GEAR_SLOTS
+                            .iter()
+                            .filter_map(|slot| {
+                                equipped_gear.get(*slot).map(|gear_val| {
+                                    let modified = apply_enchant_combo(slot, gear_val, enchant_idx);
+                                    let val =
+                                        gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
+                                    (slot.to_string(), val)
+                                })
+                            })
+                            .collect();
+                        lines.extend(super::emit::emit_profileset(
+                            &combo_name,
+                            &slot_simc,
+                            "",
+                            None,
+                            &base_actor_spec,
+                        ));
                         let mut combo_items: Vec<Value> = build_enchant_meta(enchant_idx);
                         if let Some(gc) = gem_combo_opt {
                             let socketed: HashSet<String> = GEAR_SLOTS
@@ -946,25 +942,33 @@ pub fn generate_top_gear_input_with_talents(
                     }
 
                     let combo_name = format!("Combo {}", combo_number);
-                    lines.push(format!("### {}", combo_name));
 
-                    if *is_equipped_with_new_talent {
-                        // Same gear as base actor (possibly with enchant/gem overrides)
-                        for slot in GEAR_SLOTS {
-                            if let Some(gear_val) = equipped_gear.get(*slot) {
-                                let modified = apply_enchant_combo(slot, gear_val, enchant_idx);
-                                let val = gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
-                                lines.push(format!(
-                                    "profileset.\"{}\"+={}={}",
-                                    combo_name, slot, val
-                                ));
-                            } else if *slot == "off_hand" {
-                                lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
-                            }
-                        }
+                    // Resolve talent spec for spec= override line.
+                    let combo_talent_spec: Option<&str> =
+                        extract_spec_id_from_talent_string(talent_str)
+                            .and_then(class_data::spec_id_to_name);
+
+                    // Build slot_simc map for simc line emit.
+                    let slot_simc: HashMap<String, String> = if *is_equipped_with_new_talent {
+                        // Same gear as base actor with enchant/gem overrides.
+                        GEAR_SLOTS
+                            .iter()
+                            .filter_map(|slot| {
+                                equipped_gear.get(*slot).map(|gear_val| {
+                                    let modified =
+                                        apply_enchant_combo(slot, gear_val, enchant_idx);
+                                    let val =
+                                        gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
+                                    (slot.to_string(), val)
+                                })
+                            })
+                            .collect()
                     } else {
-                        // Different gear combination (possibly with enchant/gem overrides)
+                        // Different gear combination with enchant/gem overrides.
+                        // Detect 2H main_hand to force empty off_hand (kept out of
+                        // slot_simc so emit_profileset emits the empty fallback).
                         let mut combo_mh_is_two_hand = false;
+                        let mut map: HashMap<String, String> = HashMap::new();
                         for slot in GEAR_SLOTS {
                             if let Some(item) = gear_set.get(*slot) {
                                 if *slot == "main_hand" {
@@ -977,94 +981,41 @@ pub fn generate_top_gear_input_with_talents(
                                     }
                                 }
                                 if *slot == "off_hand" && combo_mh_is_two_hand {
-                                    lines
-                                        .push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
+                                    // Force empty off_hand — do NOT add a value so the
+                                    // emit fallback fires (same as absent from gear_set).
+                                    // But we must still mark it absent for the fallback to
+                                    // work. Don't insert — emit_profileset handles it.
                                 } else {
                                     let simc_str = item
                                         .get("simc_string")
                                         .and_then(|s| s.as_str())
                                         .unwrap_or("");
-                                    let modified = apply_enchant_combo(slot, simc_str, enchant_idx);
+                                    let modified =
+                                        apply_enchant_combo(slot, simc_str, enchant_idx);
                                     let val =
                                         gem_simc(slot, modified.as_deref().unwrap_or(simc_str));
-                                    lines.push(format!(
-                                        "profileset.\"{}\"+={}={}",
-                                        combo_name, slot, val
-                                    ));
+                                    map.insert(slot.to_string(), val);
                                 }
-                            } else if *slot == "off_hand" {
-                                lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
                             }
+                            // off_hand absent → emit_profileset emits empty fallback line.
                         }
-                    }
+                        map
+                    };
+                    lines.extend(super::emit::emit_profileset(
+                        &combo_name,
+                        &slot_simc,
+                        talent_str,
+                        combo_talent_spec,
+                        &base_actor_spec,
+                    ));
 
-                    if !talent_str.is_empty() {
-                        lines.push(format!(
-                            "profileset.\"{}\"+=talents={}",
-                            combo_name, talent_str
-                        ));
-                        if let Some(talent_spec_id) = extract_spec_id_from_talent_string(talent_str)
-                        {
-                            if let Some(talent_spec_name) =
-                                class_data::spec_id_to_name(talent_spec_id)
-                            {
-                                if talent_spec_name != base_actor_spec {
-                                    lines.push(format!(
-                                        "profileset.\"{}\"+=spec={}",
-                                        combo_name, talent_spec_name
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    lines.push(String::new());
-
-                    // Build metadata
-                    let mut combo_items: Vec<Value> = Vec::new();
-                    if *is_equipped_with_new_talent {
-                        for slot in &paired_display_slots {
-                            let slot = slot.to_string();
-                            if let Some(items) = slot_item_lists.get(&slot) {
-                                if !items.is_empty() {
-                                    let mut meta = item_meta(&items[0], &slot);
-                                    meta["is_kept"] = json!(true);
-                                    combo_items.push(meta);
-                                }
-                            }
-                        }
+                    // Build metadata for this combo using the shared builder.
+                    let enchant_entries: Vec<Value> = if !is_enchant_baseline {
+                        build_enchant_meta(enchant_idx)
                     } else {
-                        for slot in &paired_display_slots {
-                            let slot = slot.to_string();
-                            if let Some(item) = gear_set.get(&slot) {
-                                let mut meta = item_meta(item, &slot);
-                                meta["is_kept"] = json!(item
-                                    .get("is_equipped")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false));
-                                combo_items.push(meta);
-                            }
-                        }
-                        for slot in GEAR_SLOTS {
-                            if paired_display_slots.contains(slot) {
-                                continue;
-                            }
-                            if let Some(item) = gear_set.get(*slot) {
-                                let is_equipped = item
-                                    .get("is_equipped")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(true);
-                                if !is_equipped {
-                                    combo_items.push(item_meta(item, slot));
-                                }
-                            }
-                        }
-                    }
-
-                    // Add enchant/gem change metadata
-                    if !is_enchant_baseline {
-                        combo_items.extend(build_enchant_meta(enchant_idx));
-                    }
-                    if let Some(gc) = gem_combo_opt {
+                        Vec::new()
+                    };
+                    let gem_entries: Vec<Value> = if let Some(gc) = gem_combo_opt {
                         // Cache key: (gear_set ptr, enchant_idx). Valid because every
                         // gear_set in gear_iter references either empty_gear_set
                         // (stack-stable within this fn) or a valid_combos entry
@@ -1082,41 +1033,69 @@ pub fn generate_top_gear_input_with_talents(
                                 .map(|s| s.to_string())
                                 .collect()
                         });
-                        combo_items.extend(build_gem_meta(gc, Some(socketed)));
-                    }
+                        build_gem_meta(gc, Some(socketed))
+                    } else {
+                        Vec::new()
+                    };
 
-                    // Tag with talent build name and spec if comparing talents
-                    if has_talent_variants {
-                        let talent_spec: Option<&str> =
-                            extract_spec_id_from_talent_string(talent_str)
-                                .and_then(class_data::spec_id_to_name);
-                        if combo_items.is_empty() {
-                            combo_items.push(json!({
-                                "talent_build": talent_name,
-                                "talent_spec": talent_spec,
-                                "is_kept": true,
-                            }));
+                    // Build the gear-item rows for the metadata.
+                    let gear_item_rows: Vec<(String, bool, &Value)> =
+                        if *is_equipped_with_new_talent {
+                            paired_display_slots
+                                .iter()
+                                .filter_map(|slot| {
+                                    let slot = slot.to_string();
+                                    slot_item_lists
+                                        .get(&slot)
+                                        .and_then(|items| items.first())
+                                        .map(|item| (slot, true, item.as_ref()))
+                                })
+                                .collect()
                         } else {
-                            for item in &mut combo_items {
-                                item["talent_build"] = json!(talent_name);
-                                item["talent_spec"] = json!(talent_spec);
+                            let mut rows: Vec<(String, bool, &Value)> = Vec::new();
+                            // Paired display slots first.
+                            for slot in &paired_display_slots {
+                                let slot = slot.to_string();
+                                if let Some(item) = gear_set.get(&slot) {
+                                    let is_kept = item
+                                        .get("is_equipped")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false);
+                                    rows.push((slot, is_kept, item.as_ref()));
+                                }
                             }
-                        }
-                    }
+                            // Non-paired non-equipped items.
+                            for slot in GEAR_SLOTS {
+                                if paired_display_slots.contains(slot) {
+                                    continue;
+                                }
+                                if let Some(item) = gear_set.get(*slot) {
+                                    let is_equipped = item
+                                        .get("is_equipped")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(true);
+                                    if !is_equipped {
+                                        rows.push((slot.to_string(), false, item.as_ref()));
+                                    }
+                                }
+                            }
+                            rows
+                        };
 
-                    if !gear_set.contains_key("off_hand") {
-                        combo_items.push(json!({
-                            "slot": "off_hand",
-                            "item_id": 0,
-                            "ilevel": 0,
-                            "name": "",
-                            "bonus_ids": [],
-                            "enchant_id": 0,
-                            "gem_id": 0,
-                            "is_kept": false,
-                            "origin": "system",
-                        }));
-                    }
+                    let talent_info: Option<(&str, Option<&str>)> = if has_talent_variants {
+                        Some((talent_name, combo_talent_spec))
+                    } else {
+                        None
+                    };
+                    let include_off_hand_synthetic = !gear_set.contains_key("off_hand");
+
+                    let combo_items = super::emit::build_combo_metadata(
+                        &gear_item_rows,
+                        &enchant_entries,
+                        &gem_entries,
+                        talent_info,
+                        include_off_hand_synthetic,
+                    );
 
                     combo_metadata.insert(combo_name, combo_items);
                     combo_number += 1;

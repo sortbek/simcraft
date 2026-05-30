@@ -2,6 +2,7 @@ mod base_profile;
 pub mod checkpoint;
 mod constraints;
 mod droptimizer;
+mod emit;
 mod enchant_gem;
 mod estimate;
 pub mod gem_combos;
@@ -1765,5 +1766,74 @@ head=,id=100\n";
         // 3 gems across head (1 socket) + neck (2 sockets) → 18 raw cross-product,
         // then dedupe_gem_assignments collapses slot-order-equivalent combos → 10 unique.
         assert_eq!(module_combos.len(), 10, "module baseline changed: {}", module_combos.len());
+    }
+
+    /// Characterization test — pins the CURRENT eager simc lines + metadata shape
+    /// for a single gear-swap combo. This freezes the contract before the
+    /// emit.rs refactor (Task D1) so any behavior drift is caught immediately.
+    #[test]
+    fn eager_emit_characterization_single_gear_swap() {
+        ensure_game_data_loaded();
+        // mage with main_hand so base profile has two non-varying gear lines.
+        let base_profile = "mage=test\nspec=frost\nhead=,id=100\nmain_hand=,id=200\n";
+
+        let equipped = make_item("head", 100, true, ",id=100", vec![], 0, 0);
+        let alt = make_item("head", 300, false, ",id=300", vec![], 0, 0);
+
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped, alt]);
+
+        let mut selected = HashMap::new();
+        selected.insert("head".to_string(), vec![uid(300, &[], "bags", "head")]);
+
+        let (input, count, metadata) = generate_top_gear_input_with_talents(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(20),
+            &[],
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(count, 1, "expected exactly one combo");
+
+        // Verify simc lines for Combo 2 (the alt head swap).
+        assert!(
+            input.contains("profileset.\"Combo 2\"+=head=,id=300"),
+            "expected head swap simc line; got:\n{input}"
+        );
+        // Synthetic empty off_hand must be emitted (non-Fury, no off_hand in gear_set).
+        assert!(
+            input.contains("profileset.\"Combo 2\"+=off_hand=,"),
+            "expected synthetic empty off_hand line; got:\n{input}"
+        );
+
+        // Verify metadata shape for Combo 2.
+        let combo = metadata.get("Combo 2").expect("Combo 2 metadata must exist");
+
+        // Head item must be present with correct fields.
+        let head = combo
+            .iter()
+            .find(|v| v["slot"] == "head")
+            .expect("head entry missing from Combo 2 metadata");
+        assert_eq!(head["item_id"], json!(300), "item_id mismatch");
+        assert_eq!(head["is_kept"], json!(false), "is_kept must be false for alt");
+        assert_eq!(head["origin"], json!("bags"), "origin mismatch");
+        assert!(head.get("ilevel").is_some(), "ilevel field required");
+        assert!(head.get("name").is_some(), "name field required");
+        assert!(head.get("bonus_ids").is_some(), "bonus_ids field required");
+        assert!(head.get("enchant_id").is_some(), "enchant_id field required");
+        assert!(head.get("gem_id").is_some(), "gem_id field required");
+
+        // Synthetic off_hand entry (item_id=0, is_kept=false, origin="system").
+        let off = combo
+            .iter()
+            .find(|v| v["slot"] == "off_hand")
+            .expect("off_hand synthetic entry missing from Combo 2 metadata");
+        assert_eq!(off["item_id"], json!(0), "off_hand item_id must be 0");
+        assert_eq!(off["is_kept"], json!(false), "off_hand is_kept must be false");
+        assert_eq!(off["origin"], json!("system"), "off_hand origin must be system");
     }
 }
