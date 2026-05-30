@@ -29,16 +29,17 @@ pub(super) async fn create_sim(
     let simc_input = if req.raw {
         req.simc_input.clone()
     } else {
-        let mut input = if req.max_upgrade {
+        let upgraded = if req.max_upgrade {
             game_data::upgrade_simc_input(&req.simc_input)
         } else {
             req.simc_input.clone()
         };
-        input = apply_talent_override(&input, &req.options.talents);
-        input = apply_spec_override(&input, &req.options.spec_override);
-        input = crate::talent_normalize::normalize_simc_talents(&input);
-        input = inject_expert_fields(&input, &req.options);
-        input
+        let preprocessed = super::handler_prep::preprocess_simc_input(
+            &upgraded,
+            &req.options.talents,
+            &req.options.spec_override,
+        );
+        inject_expert_fields(&preprocessed, &req.options)
     };
 
     if let Some(resp) = validate_batch(&req.options.batch_id, repo.get_ref()).await {

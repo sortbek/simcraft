@@ -2,6 +2,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::json;
 use std::sync::Arc;
 
+use super::handler_prep::{preprocess_simc_input, serialize_combo_metadata_value};
 use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
@@ -20,11 +21,7 @@ pub(super) async fn create_droptimizer_sim(
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
-    let simc_input = apply_spec_override(
-        &apply_talent_override(&req.simc_input, &req.options.talents),
-        &req.options.spec_override,
-    );
-    let simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
+    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let base_profile = parse_result.base_profile.clone();
 
@@ -61,15 +58,7 @@ pub(super) async fn create_droptimizer_sim(
         "options": req.options.to_json(),
     });
 
-    let combo_metadata_serialized: Vec<(String, String)> = combo_metadata
-        .iter()
-        .map(|(name, val)| {
-            (
-                name.clone(),
-                serde_json::to_string(val).unwrap_or_else(|_| "null".to_string()),
-            )
-        })
-        .collect();
+    let combo_metadata_serialized = serialize_combo_metadata_value(&combo_metadata);
 
     submit_profileset_sim(
         ProfilesetSubmission {

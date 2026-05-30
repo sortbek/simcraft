@@ -1,8 +1,9 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::handler_prep::{capped_max_combinations, preprocess_simc_input, serialize_combo_metadata_vec, socketed_item_ids};
 use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
@@ -28,36 +29,6 @@ fn normalized_talent_builds(talent_builds: &[TalentBuild]) -> Vec<(String, Strin
                 .unwrap_or(&tb.talent_string)
                 .to_string();
             (tb.name.clone(), ts)
-        })
-        .collect()
-}
-
-fn capped_max_combinations(requested: Option<usize>) -> Option<usize> {
-    let server_max = crate::db::MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed);
-    match (requested, server_max) {
-        (Some(client), max) if max > 0 => Some(client.min(max)),
-        (None, max) if max > 0 => Some(max),
-        (client, _) => client,
-    }
-}
-
-fn socketed_item_ids(resolved: &crate::types::ResolveGearResponse) -> HashSet<u64> {
-    resolved
-        .slots
-        .values()
-        .flat_map(|res| {
-            let mut ids = Vec::new();
-            if let Some(eq) = &res.equipped {
-                if eq.sockets > 0 {
-                    ids.push(eq.item_id);
-                }
-            }
-            for alt in &res.alternatives {
-                if alt.sockets > 0 {
-                    ids.push(alt.item_id);
-                }
-            }
-            ids
         })
         .collect()
 }
@@ -93,16 +64,12 @@ pub(super) async fn create_top_gear_sim(
     registry: web::Data<Arc<ProviderRegistry>>,
     local_queue: web::Data<crate::compute::local::LocalSimQueue>,
 ) -> HttpResponse {
-    let mut simc_input = if req.max_upgrade {
+    let raw_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
     } else {
         req.simc_input.clone()
     };
-    simc_input = apply_spec_override(
-        &apply_talent_override(&simc_input, &req.options.talents),
-        &req.options.spec_override,
-    );
-    simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
+    let simc_input = preprocess_simc_input(&raw_input, &req.options.talents, &req.options.spec_override);
 
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let currency_id_sim = crate::item_db::catalyst_currency_id();
@@ -237,15 +204,7 @@ pub(super) async fn create_top_gear_sim(
         "options": req.options.to_json(),
     });
 
-    let combo_metadata_serialized: Vec<(String, String)> = combo_metadata
-        .iter()
-        .map(|(name, deltas)| {
-            (
-                name.clone(),
-                serde_json::to_string(deltas).unwrap_or_else(|_| "[]".to_string()),
-            )
-        })
-        .collect();
+    let combo_metadata_serialized = serialize_combo_metadata_vec(&combo_metadata);
 
     submit_profileset_sim(
         ProfilesetSubmission {
@@ -265,16 +224,12 @@ pub(super) async fn create_top_gear_sim(
     .await
 }
 pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> HttpResponse {
-    let mut simc_input = if req.max_upgrade {
+    let raw_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
     } else {
         req.simc_input.clone()
     };
-    simc_input = apply_spec_override(
-        &apply_talent_override(&simc_input, &req.options.talents),
-        &req.options.spec_override,
-    );
-    simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
+    let simc_input = preprocess_simc_input(&raw_input, &req.options.talents, &req.options.spec_override);
 
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let currency_id = crate::item_db::catalyst_currency_id();

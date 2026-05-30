@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::handler_prep::{preprocess_simc_input, serialize_combo_metadata_vec};
 use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
@@ -338,10 +339,7 @@ pub(super) async fn get_upgrade_compare_combo_count(
     // Apply both talent AND spec override, matching every other sim handler.
     // Without the spec_override pass, a cross-spec talent build would sim
     // the wrong profile silently.
-    let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_spec_override(
-        &apply_talent_override(&req.simc_input, &req.options.talents),
-        &req.options.spec_override,
-    ));
+    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
 
     let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
         Ok(v) => v,
@@ -374,10 +372,7 @@ pub(super) async fn create_upgrade_compare_sim(
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
-    let simc_input = crate::talent_normalize::normalize_simc_talents(&apply_spec_override(
-        &apply_talent_override(&req.simc_input, &req.options.talents),
-        &req.options.spec_override,
-    ));
+    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
 
     let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
         Ok(v) => v,
@@ -430,15 +425,7 @@ pub(super) async fn create_upgrade_compare_sim(
         "options": req.options.to_json(),
     });
 
-    let combo_metadata_serialized: Vec<(String, String)> = combo_metadata
-        .iter()
-        .map(|(name, deltas)| {
-            (
-                name.clone(),
-                serde_json::to_string(deltas).unwrap_or_else(|_| "[]".to_string()),
-            )
-        })
-        .collect();
+    let combo_metadata_serialized = serialize_combo_metadata_vec(&combo_metadata);
 
     submit_profileset_sim(
         ProfilesetSubmission {

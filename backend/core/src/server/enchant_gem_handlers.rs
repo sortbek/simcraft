@@ -1,8 +1,8 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::json;
-use std::collections::HashSet;
 use std::sync::Arc;
 
+use super::handler_prep::{capped_max_combinations, preprocess_simc_input, serialize_combo_metadata_vec, socketed_item_ids};
 use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
@@ -13,36 +13,6 @@ use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::profileset_generator;
 
-fn capped_max_combinations(requested: Option<usize>) -> Option<usize> {
-    let server_max = crate::db::MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed);
-    match (requested, server_max) {
-        (Some(client), max) if max > 0 => Some(client.min(max)),
-        (None, max) if max > 0 => Some(max),
-        (client, _) => client,
-    }
-}
-
-fn socketed_item_ids(resolved: &crate::types::ResolveGearResponse) -> HashSet<u64> {
-    resolved
-        .slots
-        .values()
-        .flat_map(|res| {
-            let mut ids = Vec::new();
-            if let Some(eq) = &res.equipped {
-                if eq.sockets > 0 {
-                    ids.push(eq.item_id);
-                }
-            }
-            for alt in &res.alternatives {
-                if alt.sockets > 0 {
-                    ids.push(alt.item_id);
-                }
-            }
-            ids
-        })
-        .collect()
-}
-
 pub(super) async fn create_enchant_gem_sim(
     http_req: HttpRequest,
     req: web::Json<EnchantGemSimRequest>,
@@ -52,11 +22,7 @@ pub(super) async fn create_enchant_gem_sim(
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
-    let simc_input = apply_spec_override(
-        &apply_talent_override(&req.simc_input, &req.options.talents),
-        &req.options.spec_override,
-    );
-    let simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
+    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let resolved = gear_resolver::resolve_gear(&parse_result);
     let base_profile = resolved.base_profile.clone();
@@ -110,15 +76,7 @@ pub(super) async fn create_enchant_gem_sim(
         "options": req.options.to_json(),
     });
 
-    let combo_metadata_serialized: Vec<(String, String)> = combo_metadata
-        .iter()
-        .map(|(name, deltas)| {
-            (
-                name.clone(),
-                serde_json::to_string(deltas).unwrap_or_else(|_| "[]".to_string()),
-            )
-        })
-        .collect();
+    let combo_metadata_serialized = serialize_combo_metadata_vec(&combo_metadata);
 
     submit_profileset_sim(
         ProfilesetSubmission {
@@ -141,11 +99,7 @@ pub(super) async fn create_enchant_gem_sim(
 pub(super) async fn get_enchant_gem_combo_count(
     req: web::Json<EnchantGemSimRequest>,
 ) -> HttpResponse {
-    let simc_input = apply_spec_override(
-        &apply_talent_override(&req.simc_input, &req.options.talents),
-        &req.options.spec_override,
-    );
-    let simc_input = crate::talent_normalize::normalize_simc_talents(&simc_input);
+    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let resolved = gear_resolver::resolve_gear(&parse_result);
     let base_profile = resolved.base_profile.clone();
