@@ -174,6 +174,7 @@ pub(super) async fn cloud_estimate_top_gear(
                 "available_credits": serde_json::Value::Null,
                 "affordable": false,
                 "ceiling": REMOTE_MAX_PROFILESETS_PER_JOB,
+                "would_stream": false,
                 "error": e,
             }));
         }
@@ -218,6 +219,11 @@ pub(super) async fn cloud_estimate_top_gear(
         "available_credits": available_credits,
         "affordable": affordable,
         "ceiling": ceiling,
+        // True iff this workload takes the chunked cloud-streaming path (combos ≥
+        // the triage threshold). Below it, an explicit cloud run is a single eager
+        // Simmit job, so the chunk/credit model here doesn't describe it — the FE
+        // gates the chunked estimate display on this flag.
+        "would_stream": combos >= crate::profileset_generator::triage::TRIAGE_THRESHOLD,
     }))
 }
 
