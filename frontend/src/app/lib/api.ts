@@ -45,6 +45,27 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
   return res.json();
 }
 
+/** Prefix a path with the resolved API base. Centralizes the `${API_URL}${path}`
+ *  pattern so call sites stop hand-concatenating. */
+export function apiUrl(path: string): string {
+  return `${API_URL}${path}`;
+}
+
+/** POST a JSON body and parse a JSON response, with the shared `fetchJson`
+ *  error handling (throws `Error(detail || 'Server error N')` on non-ok). */
+export function postJson<T>(
+  path: string,
+  body: unknown,
+  init?: Omit<RequestInit, 'method' | 'body'>
+): Promise<T> {
+  return fetchJson<T>(apiUrl(path), {
+    ...init,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    body: JSON.stringify(body),
+  });
+}
+
 /** The shape returned by GET /api/sim/:id/input/preview */
 export type SimInputPreview =
   | { mode: 'inline'; input: string }

@@ -1,12 +1,13 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import GearItemRow from '../components/gear/GearItemRow';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from '../lib/api';
+import { useComboCount } from '../lib/useComboCount';
 import { SLOT_LABELS } from '../lib/types';
 import { QUALITY_COLORS, getIconUrl, useItemInfo, type ItemQuery } from '../lib/useItemInfo';
 import { useSimSubmit } from '../lib/useSimSubmit';
@@ -107,7 +108,6 @@ export default function UpgradeComparePage() {
 
   const { data, loading } = useUpgradeData(simcInput);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
-  const [comboCount, setComboCount] = useState(0);
 
   const candidates = useMemo(() => data?.candidates ?? [], [data]);
   const currencies = useMemo(() => data?.currencies ?? {}, [data]);
@@ -116,7 +116,6 @@ export default function UpgradeComparePage() {
   // Reset selection when candidates change
   useEffect(() => {
     setSelectedSlots(new Set());
-    setComboCount(0);
   }, [data]);
 
   // Item info for display
@@ -127,34 +126,12 @@ export default function UpgradeComparePage() {
   const itemInfo = useItemInfo(infoQueries);
   useWowheadTooltips([itemInfo]);
 
-  // Debounced combo count
-  const comboTimer = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => {
-    if (selectedSlots.size === 0 || !simcInput.trim()) {
-      setComboCount(0);
-      return;
-    }
-
-    clearTimeout(comboTimer.current);
-    comboTimer.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/upgrade-compare/combo-count`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            simc_input: simcInput,
-            selected_slots: [...selectedSlots],
-          }),
-        });
-        const result = await res.json();
-        setComboCount(result.combo_count ?? 0);
-      } catch {
-        setComboCount(0);
-      }
-    }, 300);
-
-    return () => clearTimeout(comboTimer.current);
-  }, [simcInput, selectedSlots]);
+  const { comboCount } = useComboCount(
+    '/api/upgrade-compare/combo-count',
+    () => ({ simc_input: simcInput, selected_slots: [...selectedSlots] }),
+    [simcInput, selectedSlots],
+    { enabled: selectedSlots.size > 0 && !!simcInput.trim() }
+  );
 
   // Sim submission
   const buildPayload = useCallback(() => {

@@ -9,8 +9,9 @@ import TalentPicker from '../components/talents/TalentPicker';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
-import { API_URL } from '../lib/api';
+import { postJson } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
+import { useComboCount } from '../lib/useComboCount';
 import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useLanguage } from '../lib/i18n';
 import { clearTopGearState, getTopGearState, storeTopGearState } from '../lib/topgear-state';
@@ -98,8 +99,6 @@ export default function TopGearScreen() {
   const [catalystCharges, setCatalystCharges] = useState<number | null>(null);
   const [voidForge, _setVoidForge] = useState(false);
   const [resolving, setResolving] = useState(false);
-  const [comboCount, setComboCount] = useState(0);
-  const [comboError, setComboError] = useState('');
   const [enchantSelections, setEnchantSelections] = useState<Record<string, Set<number>>>({});
   const [gemSelections, setGemSelections] = useState<Set<number>>(new Set());
   const [replaceGems, setReplaceGems] = useState(false);
@@ -178,24 +177,12 @@ export default function TopGearScreen() {
 
         try {
           const resolveInput = appendLocalItems(simcInput, localItemsRef.current);
-          const response = await fetch(`${API_URL}/api/gear/resolve`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              simc_input: resolveInput,
-              max_upgrade: maxUpgrade,
-              catalyst,
-              void_forge: voidForge,
-            }),
+          const data = await postJson<ResolveGearResponse>('/api/gear/resolve', {
+            simc_input: resolveInput,
+            max_upgrade: maxUpgrade,
+            catalyst,
+            void_forge: voidForge,
           });
-
-          if (!response.ok) {
-            setResolved(null);
-            setSelectedUids({});
-            return;
-          }
-
-          const data: ResolveGearResponse = await response.json();
           setResolved(data);
 
           if (inputChanged && data.catalyst_charges != null && !restoringRef.current) {
@@ -303,89 +290,59 @@ export default function TopGearScreen() {
     );
   }, [resolved]);
 
-  useEffect(() => {
-    const hasGearSelection = Object.values(selectedUids).some((values) => values.size > 0);
-    const hasTalentCompare = talentBuilds.length > 1;
-    const hasEnchantGem =
-      Object.values(enchantSelectionsArray).some((values) => values.length > 0) ||
-      gemOptionsArray.length > 0;
-
-    if (!resolved || (!hasGearSelection && !hasTalentCompare && !hasEnchantGem)) {
-      setComboCount(0);
-      setComboError('');
-      return;
-    }
-
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/top-gear/combo-count`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            simc_input: submitInput,
-            selected_items: selectedItemsJson,
-            items_by_slot: null,
-            max_upgrade: maxUpgrade,
-            copy_enchants: copyEnchants,
-            ...(talentBuilds.length > 1
-              ? {
-                  talent_builds: talentBuilds.map((build) => ({
-                    name: build.name,
-                    talent_string: build.talentString,
-                  })),
-                }
-              : {}),
-            catalyst,
-            ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
-            enchant_selections: enchantSelectionsArray,
-            gem_options: gemOptionsArray,
-            replace_gems: replaceGems,
-            diamond_always_use: diamondAlwaysUse,
-            max_colors: maxColors,
-            ...(voidForge || hasVoidForgeItems ? { void_forge: true } : {}),
-          }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          setComboCount(0);
-          setComboError(t('validation.tooManyCombinations'));
-          return;
-        }
-
-        const data = await response.json();
-        setComboCount(data.combo_count ?? 0);
-        setComboError(data.error ?? '');
-      } catch (error: unknown) {
-        if (error instanceof Error && error.name !== 'AbortError') {
-          setComboCount(0);
-          setComboError(t('validation.tooManyCombinations'));
-        }
-      }
-    })();
-
-    return () => controller.abort();
-  }, [
-    resolved,
-    selectedUids,
-    submitInput,
-    selectedItemsJson,
-    maxUpgrade,
-    copyEnchants,
-
-    talentBuilds,
-    catalyst,
-    catalystCharges,
-    enchantSelectionsArray,
-    gemOptionsArray,
-    replaceGems,
-    diamondAlwaysUse,
-    maxColors,
-    voidForge,
-    hasVoidForgeItems,
-    t,
-  ]);
+  const { comboCount, error: comboError } = useComboCount(
+    '/api/top-gear/combo-count',
+    () => {
+      const hasGearSelection = Object.values(selectedUids).some((v) => v.size > 0);
+      const hasTalentCompare = talentBuilds.length > 1;
+      const hasEnchantGem =
+        Object.values(enchantSelectionsArray).some((v) => v.length > 0) ||
+        gemOptionsArray.length > 0;
+      if (!resolved || (!hasGearSelection && !hasTalentCompare && !hasEnchantGem)) return null;
+      return {
+        simc_input: submitInput,
+        selected_items: selectedItemsJson,
+        items_by_slot: null,
+        max_upgrade: maxUpgrade,
+        copy_enchants: copyEnchants,
+        ...(talentBuilds.length > 1
+          ? {
+              talent_builds: talentBuilds.map((build) => ({
+                name: build.name,
+                talent_string: build.talentString,
+              })),
+            }
+          : {}),
+        catalyst,
+        ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
+        enchant_selections: enchantSelectionsArray,
+        gem_options: gemOptionsArray,
+        replace_gems: replaceGems,
+        diamond_always_use: diamondAlwaysUse,
+        max_colors: maxColors,
+        ...(voidForge || hasVoidForgeItems ? { void_forge: true } : {}),
+      };
+    },
+    [
+      resolved,
+      selectedUids,
+      submitInput,
+      selectedItemsJson,
+      maxUpgrade,
+      copyEnchants,
+      talentBuilds,
+      catalyst,
+      catalystCharges,
+      enchantSelectionsArray,
+      gemOptionsArray,
+      replaceGems,
+      diamondAlwaysUse,
+      maxColors,
+      voidForge,
+      hasVoidForgeItems,
+    ],
+    { enabled: true, debounceMs: 0, tooManyMessage: t('validation.tooManyCombinations') }
+  );
 
   const buildPayload = useCallback(
     () => ({
