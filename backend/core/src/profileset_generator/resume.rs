@@ -18,6 +18,7 @@ pub struct ResumeInputs {
     pub repo: JobRepo,
     pub log_buffer: Arc<LogBuffer>,
     pub simc_bins: Arc<SimcBinaries>,
+    pub queue: crate::compute::local::LocalSimQueue,
 }
 
 /// Resume a paused job. Reads checkpoint + request_json, validates, and
@@ -225,6 +226,7 @@ async fn resume_triage(
     let pool_for_task = inputs.pool.clone();
     let repo_for_task = inputs.repo.clone();
     let log_buffer_for_task = inputs.log_buffer.clone();
+    let queue_for_task = inputs.queue.clone();
     let job_id_owned = job_id.to_string();
     let fight_style = job.fight_style.clone();
     let constants_for_task = checkpoint.constants;
@@ -275,6 +277,8 @@ async fn resume_triage(
                     &result.survivor_combo_ids,
                     &log_buffer_for_task,
                     constants_for_task,
+                    queue_for_task.clone(),
+                    None,
                 )
                 .await;
             }
@@ -386,6 +390,8 @@ async fn resume_staged(
         SimcInputMode::Streamed,
         resume_state,
         checkpoint.constants,
+        inputs.queue.clone(),
+        None,
     );
 
     Ok(())

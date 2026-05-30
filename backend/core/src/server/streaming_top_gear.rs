@@ -133,7 +133,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         // Streaming Top Gear shares the local sim queue with eager local jobs
         // — hold a permit for the duration of triage + staged handoff so we
         // don't fight a Quick Sim for the CPU.
-        let _permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
+        let permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
             p
         } else {
             let _ = repo_for_queue_wait
@@ -223,6 +223,8 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
                     &result.survivor_combo_ids,
                     &log_buffer_owned,
                     triage_constants,
+                    queue_for_task.clone(),
+                    Some(permit),
                 )
                 .await;
             }

@@ -5,12 +5,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::types::SimOptions;
+use crate::compute::local::{await_local_queue_permit, LocalSimQueue};
 use crate::db::{self, ComboMetadataInsert, ComboMetadataRepo, JobRepo, SettingsRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::{JobStatus, SimcInputMode};
 use crate::result_parser;
 use crate::simc_runner;
 use crate::types::ResolveGearResponse;
+use tokio::sync::OwnedSemaphorePermit;
 
 /// Write the terminal state for a simulation job (success or failure).
 ///
@@ -378,6 +380,8 @@ pub(crate) fn spawn_staged_sim(
     simc_input_mode: SimcInputMode,
     resume_state: crate::simc_runner::StagedResumeState,
     constants: crate::profileset_generator::triage::TriageConstants,
+    queue: LocalSimQueue,
+    held_permit: Option<OwnedSemaphorePermit>,
 ) {
     tokio::spawn(async move {
         // update_status now honors the terminal-state invariant: if the job
@@ -386,6 +390,26 @@ pub(crate) fn spawn_staged_sim(
         if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
             eprintln!("[{}] Failed to set Running status: {}", job_id, e);
         }
+
+        // Hold a queue permit for the entire staged run so a Quick Sim or eager
+        // Top Gear can't oversubscribe the CPU against us. The streaming handoff
+        // transfers the permit it already holds (continuous ownership); resume
+        // has none, so we acquire one here.
+        let _permit: OwnedSemaphorePermit = match held_permit {
+            Some(p) => p,
+            None => {
+                let wait_cancel = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
+                match await_local_queue_permit(&queue, Some(&wait_cancel)).await {
+                    Ok(p) => p,
+                    Err(_) => {
+                        // Cancelled while queued — nothing to run.
+                        log_buffer.remove(&job_id);
+                        return;
+                    }
+                }
+            }
+        };
+
         let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
 
         // Channel for ordered progress/stage writes
@@ -868,6 +892,8 @@ pub(crate) async fn handoff_streamed_top_gear_to_staged(
     survivor_combo_ids: &[i64],
     log_buffer: &Arc<LogBuffer>,
     constants: crate::profileset_generator::triage::TriageConstants,
+    queue: LocalSimQueue,
+    permit: Option<OwnedSemaphorePermit>,
 ) {
     if survivor_combo_ids.is_empty() {
         let _ = repo
@@ -932,6 +958,8 @@ pub(crate) async fn handoff_streamed_top_gear_to_staged(
         SimcInputMode::Streamed,
         crate::simc_runner::StagedResumeState::default(),
         constants,
+        queue,
+        permit,
     );
 }
 
