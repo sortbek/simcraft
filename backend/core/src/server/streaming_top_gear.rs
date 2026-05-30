@@ -134,9 +134,13 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     let jid_for_queue_wait = job_id_task.clone();
     let local_provider_for_task = local_provider;
     tokio::spawn(async move {
-        // Streaming Top Gear shares the local sim queue with eager local jobs
-        // — hold a permit for the duration of triage + staged handoff so we
-        // don't fight a Quick Sim for the CPU.
+        // Streaming Top Gear shares the local sim queue with eager local jobs.
+        // Hold a permit for the duration of TRIAGE so we don't fight a Quick Sim
+        // for the CPU. The permit is then released before the staged handoff (the
+        // provider re-acquires it for the staged phase — see the `drop(permit)` on
+        // the Completed arm below). This opens a brief queue gap at the
+        // triage→staged boundary, accepted to avoid deadlocking the single-permit
+        // queue; the two phases are no longer one contiguous reservation.
         let permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
             p
         } else {
