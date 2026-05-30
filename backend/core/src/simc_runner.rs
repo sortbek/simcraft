@@ -447,34 +447,38 @@ impl<'a> SimcInputBuild<'a> {
     }
 }
 
+/// The user-controlled simulation parameters parsed once from the options
+/// `Value`. Single source of truth for defaults so the various entry points
+/// (`build_simc_input_from_options`, `run_simc`, `run_simc_staged`,
+/// `run_simc_triage_batch`) can no longer drift apart.
+#[derive(Debug, Clone)]
+pub struct SimParams {
+    pub fight_style: String,
+    pub target_error: f64,
+    pub iterations: u32,
+    pub desired_targets: u32,
+    pub max_time: u32,
+    pub single_actor_batch: bool,
+}
+
+impl SimParams {
+    pub fn from_options(options: &Value) -> Self {
+        Self {
+            fight_style: options.get("fight_style").and_then(|v| v.as_str()).unwrap_or("Patchwerk").to_string(),
+            target_error: options.get("target_error").and_then(|v| v.as_f64()).unwrap_or(0.1),
+            iterations: options.get("iterations").and_then(|v| v.as_u64()).unwrap_or(10_000) as u32,
+            desired_targets: options.get("desired_targets").and_then(|v| v.as_u64()).unwrap_or(1) as u32,
+            max_time: options.get("max_time").and_then(|v| v.as_u64()).unwrap_or(300) as u32,
+            single_actor_batch: options.get("single_actor_batch").and_then(|v| v.as_bool()).unwrap_or(true),
+        }
+    }
+}
+
 /// Build the full simc input from the options Value (convenience wrapper).
 pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> String {
-    let fight_style = options
-        .get("fight_style")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Patchwerk");
-    let target_error = options
-        .get("target_error")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.1);
-    let iterations = options
-        .get("iterations")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(10000) as u32;
-    let desired_targets = options
-        .get("desired_targets")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1) as u32;
-    let max_time = options
-        .get("max_time")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(300) as u32;
+    let p = SimParams::from_options(options);
     let calculate_scale_factors =
         options.get("sim_type").and_then(|v| v.as_str()) == Some("stat_weights");
-    let single_actor_batch = options
-        .get("single_actor_batch")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
     let is_dungeon_route = simc_input.lines().any(|l| {
         let t = l.trim();
         t == "fight_style=DungeonRoute" || t == "fight_style=\"DungeonRoute\""
@@ -483,13 +487,13 @@ pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> Strin
     build_full_simc_input(&SimcInputBuild::new(
         simc_input,
         options,
-        fight_style,
-        target_error,
-        iterations,
-        desired_targets,
-        max_time,
+        &p.fight_style,
+        p.target_error,
+        p.iterations,
+        p.desired_targets,
+        p.max_time,
         calculate_scale_factors,
-        single_actor_batch,
+        p.single_actor_batch,
         is_dungeon_route,
     ))
 }
@@ -1031,34 +1035,10 @@ pub async fn run_simc(
     on_log: impl Fn(&str),
     cancel: Option<crate::cancel::CancelToken>,
 ) -> Result<SimcOutput, String> {
-    let fight_style = options
-        .get("fight_style")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Patchwerk");
-    let target_error = options
-        .get("target_error")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.2);
-    let iterations = options
-        .get("iterations")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1000) as u32;
+    let p = SimParams::from_options(options);
     let calculate_scale_factors =
         options.get("sim_type").and_then(|v| v.as_str()) == Some("stat_weights");
     let threads = resolve_threads(options);
-    let desired_targets = options
-        .get("desired_targets")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1) as u32;
-    let max_time = options
-        .get("max_time")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(300) as u32;
-
-    let single_actor_batch = options
-        .get("single_actor_batch")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
 
     let raw = options
         .get("raw")
@@ -1071,14 +1051,14 @@ pub async fn run_simc(
         job_id,
         simc_input,
         options,
-        fight_style,
-        target_error,
-        iterations,
+        &p.fight_style,
+        p.target_error,
+        p.iterations,
         threads,
-        desired_targets,
-        max_time,
+        p.desired_targets,
+        p.max_time,
         calculate_scale_factors,
-        single_actor_batch,
+        p.single_actor_batch,
         "",
         true,      // generate HTML for quick sims
         |_, _| {}, // Quick sim has no profilesets to track
@@ -1197,27 +1177,12 @@ pub async fn run_simc_staged(
     on_log: impl Fn(&str) + Clone,
     cancel: Option<crate::cancel::CancelToken>,
 ) -> Result<SimcOutput, StagedRunError> {
-    let fight_style = options
-        .get("fight_style")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Patchwerk");
-    let user_iterations = options
-        .get("iterations")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1000) as u32;
+    let p = SimParams::from_options(options);
+    let user_iterations = p.iterations;
     let threads = resolve_threads(options);
-    let desired_targets = options
-        .get("desired_targets")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1) as u32;
-    let max_time = options
-        .get("max_time")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(300) as u32;
-    let single_actor_batch = options
-        .get("single_actor_batch")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+    let desired_targets = p.desired_targets;
+    let max_time = p.max_time;
+    let single_actor_batch = p.single_actor_batch;
 
     if combo_count < STAGED_THRESHOLD {
         if let Some(tok) = cancel.as_ref() {
@@ -1226,18 +1191,14 @@ pub async fn run_simc_staged(
             }
         }
         on_progress(5, "Simulating", &format!("{} combos", combo_count));
-        let target_error = options
-            .get("target_error")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.2);
         return run_simc_subprocess(
             simc_path,
             false, // not raw
             job_id,
             simc_input,
             options,
-            fight_style,
-            target_error,
+            &p.fight_style,
+            p.target_error,
             user_iterations,
             threads,
             desired_targets,
@@ -1354,7 +1315,7 @@ pub async fn run_simc_staged(
                 job_id,
                 &final_input,
                 options,
-                fight_style,
+                &p.fight_style,
                 stage.target_error,
                 stage_iters,
                 threads,
@@ -1439,7 +1400,7 @@ pub async fn run_simc_staged(
                 job_id,
                 &batch_input,
                 options,
-                fight_style,
+                &p.fight_style,
                 stage.target_error,
                 stage_iters,
                 threads,
@@ -1648,19 +1609,11 @@ pub async fn run_simc_triage_batch(
     log_buffer: std::sync::Arc<crate::log_buffer::LogBuffer>,
     on_profileset_progress: impl Fn(usize, usize),
 ) -> Result<Vec<Value>, String> {
+    let p = SimParams::from_options(options);
     let threads = resolve_threads(options);
-    let desired_targets = options
-        .get("desired_targets")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1) as u32;
-    let max_time = options
-        .get("max_time")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(300) as u32;
-    let single_actor_batch = options
-        .get("single_actor_batch")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+    let desired_targets = p.desired_targets;
+    let max_time = p.max_time;
+    let single_actor_batch = p.single_actor_batch;
     let is_dungeon_route = fight_style == "DungeonRoute";
     let batch_input = format!("# Base Actor\n{}\n{}", base_profile, profileset_simc_lines);
     let triage_input = build_full_simc_input(&SimcInputBuild {
@@ -1730,6 +1683,32 @@ mod tests {
 
     fn keep_set(names: &[&str]) -> HashSet<String> {
         names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn sim_params_from_options_defaults_and_overrides() {
+        let p = SimParams::from_options(&serde_json::json!({}));
+        assert_eq!(p.fight_style, "Patchwerk");
+        assert!((p.target_error - 0.1).abs() < f64::EPSILON);
+        assert_eq!(p.iterations, 10_000);
+        assert_eq!(p.desired_targets, 1);
+        assert_eq!(p.max_time, 300);
+        assert!(p.single_actor_batch);
+
+        let p2 = SimParams::from_options(&serde_json::json!({
+            "fight_style": "DungeonRoute",
+            "target_error": 0.05,
+            "iterations": 50000,
+            "desired_targets": 3,
+            "max_time": 180,
+            "single_actor_batch": false
+        }));
+        assert_eq!(p2.fight_style, "DungeonRoute");
+        assert!((p2.target_error - 0.05).abs() < f64::EPSILON);
+        assert_eq!(p2.iterations, 50_000);
+        assert_eq!(p2.desired_targets, 3);
+        assert_eq!(p2.max_time, 180);
+        assert!(!p2.single_actor_batch);
     }
 
     #[tokio::test]
