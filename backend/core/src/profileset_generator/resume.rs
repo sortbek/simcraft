@@ -232,6 +232,35 @@ async fn resume_triage(
     let constants_for_task = checkpoint.constants;
 
     tokio::spawn(async move {
+        // Mirror the fresh streaming path: hold a queue permit across the
+        // entire triage run so resumed triage doesn't fight Quick Sim for
+        // the CPU. Emit a Queued banner if we have to wait.
+        let permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
+            p
+        } else {
+            let _ = repo_for_task
+                .update_progress(
+                    &job_id_owned,
+                    0,
+                    "Queued",
+                    "waiting for active local sim to finish",
+                )
+                .await;
+            let cancel_tok = crate::cancel::CancelToken::new(
+                repo_for_task.clone(),
+                job_id_owned.clone(),
+            );
+            match crate::compute::local::await_local_queue_permit(
+                &queue_for_task,
+                Some(&cancel_tok),
+            )
+            .await
+            {
+                Ok(p) => p,
+                Err(_) => return,
+            }
+        };
+
         let on_progress = {
             let repo = repo_for_task.clone();
             let jid = job_id_owned.clone();
@@ -267,6 +296,8 @@ async fn resume_triage(
         .await
         {
             Ok(super::triage::TriageRunOutcome::Completed(result)) => {
+                // Pass Some(permit) so staged phase inherits continuous
+                // ownership without releasing the semaphore between phases.
                 crate::server::helpers::handoff_streamed_top_gear_to_staged(
                     &pool_for_task,
                     &repo_for_task,
@@ -278,7 +309,7 @@ async fn resume_triage(
                     &log_buffer_for_task,
                     constants_for_task,
                     queue_for_task.clone(),
-                    None,
+                    Some(permit),
                 )
                 .await;
             }
@@ -350,17 +381,14 @@ async fn resume_staged(
     let combined = format!("# Base Actor\n{}\n{}", base_profile, survivor_simc);
     let combo_count = rows.len();
 
-    // 2. Flip status back to Running and clear pause_requested.
+    // 2. Clear pause_requested so the job is resumable. Running status is set
+    //    by spawn_staged_sim after it acquires a queue permit, so the UI
+    //    correctly shows Queued while the job waits for the semaphore.
     inputs
         .repo
         .set_pause_requested(job_id, false)
         .await
         .map_err(|e| format!("Failed to clear pause_requested: {}", e))?;
-    inputs
-        .repo
-        .update_status(job_id, crate::models::JobStatus::Running)
-        .await
-        .map_err(|e| format!("Failed to set Running: {}", e))?;
 
     // 3. Resolve the simc binary using the original branch from request_json.
     let simc_bin = inputs

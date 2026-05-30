@@ -384,20 +384,16 @@ pub(crate) fn spawn_staged_sim(
     held_permit: Option<OwnedSemaphorePermit>,
 ) {
     tokio::spawn(async move {
-        // update_status now honors the terminal-state invariant: if the job
-        // was cancelled between create and spawn, this is a no-op and the
-        // staged loop will hit its first cancellation gate and abort cleanly.
-        if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
-            eprintln!("[{}] Failed to set Running status: {}", job_id, e);
-        }
-
-        // Hold a queue permit for the entire staged run so a Quick Sim or eager
-        // Top Gear can't oversubscribe the CPU against us. The streaming handoff
-        // transfers the permit it already holds (continuous ownership); resume
-        // has none, so we acquire one here.
+        // Acquire a queue permit BEFORE flipping status to Running so the UI
+        // correctly shows Queued while we wait. The streaming handoff transfers
+        // the permit it already holds (continuous ownership); the resume path
+        // has none, so we acquire one here — emitting a Queued banner first.
         let _permit: OwnedSemaphorePermit = match held_permit {
             Some(p) => p,
             None => {
+                let _ = repo
+                    .update_progress(&job_id, 0, "Queued", "waiting for active local sim to finish")
+                    .await;
                 let wait_cancel = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
                 match await_local_queue_permit(&queue, Some(&wait_cancel)).await {
                     Ok(p) => p,
@@ -409,6 +405,14 @@ pub(crate) fn spawn_staged_sim(
                 }
             }
         };
+
+        // Permit is now held; flip to Running. This honors the terminal-state
+        // invariant: if the job was cancelled between create and spawn, this is
+        // a no-op and the staged loop will hit its first cancellation gate and
+        // abort cleanly.
+        if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
+            eprintln!("[{}] Failed to set Running status: {}", job_id, e);
+        }
 
         let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
 
