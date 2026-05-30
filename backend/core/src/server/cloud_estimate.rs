@@ -203,10 +203,8 @@ pub(super) async fn cloud_estimate_top_gear(
         Err(resp) => return resp,
     };
 
-    let available_credits = match fetch_available_credits(&provider, &avail).await {
-        Ok(c) => c,
-        Err(_) => None, // credit fetch errors are non-fatal; treat as unknown
-    };
+    // Credit-fetch errors are non-fatal — treat as unknown (None).
+    let available_credits = fetch_available_credits(&provider, &avail).await.unwrap_or_default();
 
     let affordable = available_credits
         .map(|a| estimated_credits <= a)
