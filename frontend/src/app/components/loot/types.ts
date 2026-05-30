@@ -1,4 +1,5 @@
 import type { SlotInherit } from '../../lib/inheritedGear';
+import { QUALITY_TEXT_CLASS } from '../../lib/qualityColors';
 
 export type { SlotInherit };
 
@@ -59,14 +60,8 @@ export interface DropItemPayload extends DropItem {
   bonus_ids: number[];
 }
 
-export const QUALITY_COLORS: Record<number, string> = {
-  1: 'text-gray-400',
-  2: 'text-green-400',
-  3: 'text-blue-400',
-  4: 'text-purple-400',
-  5: 'text-orange-400',
-  6: 'text-amber-300',
-};
+/** @deprecated import `QUALITY_TEXT_CLASS` from `lib/qualityColors`. */
+export const QUALITY_COLORS = QUALITY_TEXT_CLASS;
 
 export function getTrackInfo(
   item: DropItem,

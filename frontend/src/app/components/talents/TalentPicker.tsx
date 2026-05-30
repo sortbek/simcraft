@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Checkbox from '../ui/Checkbox';
 import { useSimContext } from '../sim-config/SimContext';
 import {
   parseTalentLoadouts,
@@ -464,25 +465,7 @@ export default function TalentPicker({
                   </div>
                   {/* Label + checkbox */}
                   <div className="mt-1.5 flex items-center gap-1.5">
-                    <div
-                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                        checked
-                          ? 'border-gold bg-gold'
-                          : 'border-outline-variant group-hover:border-outline-variant/60'
-                      }`}
-                    >
-                      {checked && (
-                        <svg
-                          className="h-2.5 w-2.5 text-black"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path d="M2 6l3 3 5-5" />
-                        </svg>
-                      )}
-                    </div>
+                    <Checkbox checked={checked} size="sm" aria-label={l.name} />
                     <span
                       className={`truncate text-[12px] font-medium ${checked ? 'text-on-surface' : 'text-on-surface-variant/60'}`}
                     >

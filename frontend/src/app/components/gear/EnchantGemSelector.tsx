@@ -5,6 +5,7 @@ import { API_URL } from '../../lib/api';
 import GearItemRow from './GearItemRow';
 import type { ResolvedItem } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
+import Switch from '../ui/Switch';
 
 // Slots that support enchants, in display order
 const ENCHANT_SLOT_ORDER = [
@@ -259,17 +260,12 @@ export default function EnchantGemSelector({
         </div>
         <div className="flex items-center gap-3">
           {hasAnyGemSelected && (
-            <div
-              className="group flex cursor-pointer items-center gap-2"
-              onClick={() => onReplaceGemsChange(!replaceGems)}
-            >
-              <div
-                className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${replaceGems ? 'bg-gold' : 'bg-surface-container-highest'}`}
-              >
-                <div
-                  className={`absolute top-[3px] h-3 w-3 rounded-full transition-all ${replaceGems ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`}
-                />
-              </div>
+            <div className="group flex items-center gap-2">
+              <Switch
+                checked={replaceGems}
+                onChange={onReplaceGemsChange}
+                aria-label={t('enchantGem.replaceGems')}
+              />
               <div className="flex flex-col">
                 <span className="text-[11px] font-semibold leading-tight text-on-surface-variant transition-colors group-hover:text-gold">
                   {t('enchantGem.replaceGems')}
@@ -292,33 +288,25 @@ export default function EnchantGemSelector({
       {/* Diamond toggles bar */}
       {diamonds.length > 0 && diamonds.some((d) => d.itemId && gemSelections.has(d.itemId)) && (
         <div className="flex items-center gap-4 px-1">
-          <div
-            className="group flex cursor-pointer items-center gap-2"
-            onClick={() => onDiamondAlwaysUseChange(!diamondAlwaysUse)}
-          >
-            <div
-              className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${diamondAlwaysUse ? 'bg-amber-500' : 'bg-surface-container-highest'}`}
-            >
-              <div
-                className={`absolute top-[3px] h-3 w-3 rounded-full transition-all ${diamondAlwaysUse ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`}
-              />
-            </div>
+          <div className="group flex items-center gap-2">
+            <Switch
+              checked={diamondAlwaysUse}
+              onChange={onDiamondAlwaysUseChange}
+              onColor="bg-amber-500"
+              aria-label={t('enchantGem.alwaysUse')}
+            />
             <span className="text-[11px] font-semibold text-on-surface-variant transition-colors group-hover:text-amber-400">
               {t('enchantGem.alwaysUse')}
             </span>
           </div>
           {diamondAlwaysUse && (
-            <div
-              className="group flex cursor-pointer items-center gap-2"
-              onClick={() => onMaxColorsChange(!maxColors)}
-            >
-              <div
-                className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${maxColors ? 'bg-amber-500' : 'bg-surface-container-highest'}`}
-              >
-                <div
-                  className={`absolute top-[3px] h-3 w-3 rounded-full transition-all ${maxColors ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'}`}
-                />
-              </div>
+            <div className="group flex items-center gap-2">
+              <Switch
+                checked={maxColors}
+                onChange={onMaxColorsChange}
+                onColor="bg-amber-500"
+                aria-label={t('enchantGem.onlyMaxColors')}
+              />
               <span className="text-[11px] font-semibold text-on-surface-variant transition-colors group-hover:text-amber-400">
                 {t('enchantGem.onlyMaxColors')}
               </span>

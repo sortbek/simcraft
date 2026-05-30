@@ -4,6 +4,8 @@ import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useIte
 import type { DropItem, UpgradeTracks } from './types';
 import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import { resolveInherits, type EquippedGear, type SlotInherit } from '../../lib/inheritedGear';
+import { qualityBorderColor } from '../../lib/qualityColors';
+import Checkbox from '../ui/Checkbox';
 
 const SLOT_ORDER = [
   'Main Hand',
@@ -229,30 +231,15 @@ export default function ItemTable({
       {/* Table Header */}
       <div className="grid grid-cols-12 border-b border-outline-variant/5 bg-surface-container-low px-4 py-2">
         <div className="col-span-5 flex items-center gap-4">
-          <button
-            onClick={() =>
+          <Checkbox
+            variant="primary"
+            size="sm"
+            checked={allSelected}
+            onChange={() =>
               allSelected ? onClearItems(visibleItemIds) : onSelectItems(visibleItemIds)
             }
-            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors ${
-              allSelected
-                ? 'border-primary bg-primary'
-                : 'border-outline-variant/40 bg-transparent hover:border-on-surface-variant/60'
-            }`}
-          >
-            {allSelected && (
-              <svg
-                className="h-3 w-3 text-on-primary"
-                viewBox="0 0 12 12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M2.5 6l2.5 2.5 4.5-5" />
-              </svg>
-            )}
-          </button>
+            aria-label="Select all items"
+          />
           <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
             Item Name
           </span>
@@ -305,33 +292,14 @@ export default function ItemTable({
                 >
                   {/* Checkbox + Icon + Name */}
                   <div className="col-span-5 flex items-center gap-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!embellishDisabled) onToggle(item.item_id);
-                      }}
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors ${
-                        embellishDisabled
-                          ? 'cursor-not-allowed border-outline-variant/20 bg-transparent'
-                          : isSelected
-                            ? 'cursor-pointer border-primary bg-primary'
-                            : 'cursor-pointer border-outline-variant/40 bg-transparent hover:border-on-surface-variant/60'
-                      }`}
-                    >
-                      {isSelected && (
-                        <svg
-                          className="h-3 w-3 text-on-primary"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M2.5 6l2.5 2.5 4.5-5" />
-                        </svg>
-                      )}
-                    </button>
+                    <Checkbox
+                      variant="primary"
+                      size="sm"
+                      checked={isSelected}
+                      disabled={embellishDisabled}
+                      onChange={() => onToggle(item.item_id)}
+                      aria-label={item.name}
+                    />
                     <div className="relative shrink-0">
                       <a
                         href={getWowheadUrl(item.item_id, locale)}
@@ -421,19 +389,4 @@ function buildWowheadAttr(
   if (inherit?.enchant_id) s += `&ench=${inherit.enchant_id}`;
   if (inherit?.gem_id) s += `&gems=${inherit.gem_id}`;
   return s;
-}
-
-function qualityBorderColor(quality: number): string {
-  switch (quality) {
-    case 5:
-      return '#ff8000'; // legendary
-    case 4:
-      return '#a335ee'; // epic
-    case 3:
-      return '#0070dd'; // rare
-    case 2:
-      return '#1eff00'; // uncommon
-    default:
-      return '#9d9d9d'; // common
-  }
 }

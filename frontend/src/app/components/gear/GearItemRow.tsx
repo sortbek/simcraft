@@ -4,6 +4,10 @@
  */
 /* eslint-disable @next/next/no-img-element */
 
+import { cn } from '../../lib/cn';
+import { GEAR_STATUS_STYLES, gearStatusFrom } from '../../lib/statusStyles';
+import Checkbox from '../ui/Checkbox';
+
 interface DetailPart {
   text: string;
   color?: string;
@@ -66,32 +70,14 @@ export default function GearItemRow({
   wowheadData,
   children,
 }: GearItemRowProps) {
+  const status = gearStatusFrom({ vault, loot, catalyst, voidForge });
+  const statusStyle = status ? GEAR_STATUS_STYLES[status] : null;
+
   const content = (
     <>
       {/* Checkbox or equipped indicator */}
       {selectable ? (
-        <>
-          <input type="checkbox" checked={checked} onChange={onToggle} className="peer sr-only" />
-          <div
-            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border transition-all ${
-              checked
-                ? 'border-gold bg-gold'
-                : 'border-outline-variant group-hover:border-outline-variant/40'
-            }`}
-          >
-            {checked && (
-              <svg className="h-3 w-3 text-black" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M12 5L6.5 10.5L4 8"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            )}
-          </div>
-        </>
+        <Checkbox checked={!!checked} onChange={onToggle} aria-label={name} />
       ) : equipped ? (
         <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-white/10">
           <svg className="h-3 w-3 text-white/40" viewBox="0 0 16 16" fill="none">
@@ -110,17 +96,10 @@ export default function GearItemRow({
       <a
         href={href}
         data-wowhead={wowheadData}
-        className={`block h-8 w-8 shrink-0 overflow-hidden rounded ${
-          vault
-            ? 'ring-2 ring-amber-400/70'
-            : loot
-              ? 'ring-2 ring-sky-400/70'
-              : catalyst
-                ? 'ring-2 ring-purple-400/70'
-                : voidForge
-                  ? 'ring-2 ring-violet-400/70'
-                  : 'ring-1 ring-white/5'
-        }`}
+        className={cn(
+          'block h-8 w-8 shrink-0 overflow-hidden rounded',
+          statusStyle ? statusStyle.iconRing : 'ring-1 ring-white/5'
+        )}
         target="_blank"
         rel="noopener noreferrer"
         onClick={href ? (e) => e.preventDefault() : undefined}
@@ -174,27 +153,17 @@ export default function GearItemRow({
   if (selectable) {
     return (
       <label
-        className={`group cursor-pointer ${baseClass} ${
+        className={cn(
+          'group cursor-pointer',
+          baseClass,
           checked
-            ? vault
-              ? 'bg-amber-400/[0.12] ring-2 ring-amber-400/50'
-              : loot
-                ? 'bg-sky-400/[0.12] ring-2 ring-sky-400/50'
-                : catalyst
-                  ? 'bg-purple-400/[0.12] ring-2 ring-purple-400/50'
-                  : voidForge
-                    ? 'bg-violet-400/[0.12] ring-2 ring-violet-400/50'
-                    : 'bg-gold/[0.07]'
-            : vault
-              ? 'bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:bg-amber-400/[0.08] hover:ring-amber-400/50'
-              : loot
-                ? 'bg-sky-400/[0.04] ring-1 ring-sky-400/30 hover:bg-sky-400/[0.08] hover:ring-sky-400/50'
-                : catalyst
-                  ? 'bg-purple-400/[0.04] ring-1 ring-purple-400/30 hover:bg-purple-400/[0.08] hover:ring-purple-400/50'
-                  : voidForge
-                    ? 'bg-violet-400/[0.04] ring-1 ring-violet-400/30 hover:bg-violet-400/[0.08] hover:ring-violet-400/50'
-                    : 'hover:bg-white/[0.02]'
-        }`}
+            ? statusStyle
+              ? statusStyle.rowChecked
+              : 'bg-gold/[0.07]'
+            : statusStyle
+              ? statusStyle.rowUnchecked
+              : 'hover:bg-white/[0.02]'
+        )}
       >
         {content}
       </label>

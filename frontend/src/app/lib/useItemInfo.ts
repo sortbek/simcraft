@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_URL } from './api';
+import { QUALITY_HEX } from './qualityColors';
 
 export interface ItemQuery {
   item_id: number;
@@ -28,16 +29,8 @@ function cacheKey(item_id: number, bonus_ids?: number[]): string {
   return `${item_id}:${[...bonus_ids].sort((a, b) => a - b).join(':')}`;
 }
 
-export const QUALITY_COLORS: Record<number, string> = {
-  0: '#9d9d9d', // Poor
-  1: '#ffffff', // Common
-  2: '#1eff00', // Uncommon
-  3: '#0070dd', // Rare
-  4: '#a335ee', // Epic
-  5: '#ff8000', // Legendary
-  6: '#e6cc80', // Artifact
-  7: '#00ccff', // Heirloom
-};
+/** @deprecated import `QUALITY_HEX` from `lib/qualityColors` instead. */
+export const QUALITY_COLORS = QUALITY_HEX;
 
 export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
   const [items, setItems] = useState<Record<number, ItemInfo>>({});
