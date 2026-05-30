@@ -25,6 +25,7 @@ impl SimcProvider for SimmitProvider {
             pause: false,
             streaming_logs: true,
             server_side_multistage: true,
+            cloud_streaming: true,
         }
     }
     async fn run_quick(
@@ -88,6 +89,31 @@ impl SimcProvider for SimmitProvider {
             .unwrap_or(0);
         let available = purchased.saturating_add(granted).saturating_sub(reserved);
         Ok(crate::compute::CredentialTest { credits_available: Some(available) })
+    }
+
+    async fn get_usage(
+        &self,
+        auth: &crate::compute::ProviderAuth,
+    ) -> Result<crate::compute::ProviderUsage, String> {
+        use secrecy::ExposeSecret;
+        let bearer = match auth {
+            crate::compute::ProviderAuth::BearerToken(s) => s.expose_secret().to_string(),
+            crate::compute::ProviderAuth::None => {
+                return Err("Simmit requires a configured API key".into())
+            }
+        };
+        let resp = self
+            .http
+            .get(format!("{}/v1/simc/usage", SIMMIT_BASE_URL))
+            .bearer_auth(&bearer)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("Simmit usage returned {}", resp.status()));
+        }
+        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
+        Ok(parse_usage(&body))
     }
 }
 
@@ -478,6 +504,56 @@ impl SimmitProvider {
         Ok(simmit_result_to_simc_output(&body))
     }
 
+    /// Submit ONE chunk of profilesets to Simmit with server-side multistage,
+    /// poll to terminal, and return the adapted SimC-shaped output. The
+    /// cloud-streaming orchestrator calls this per chunk. Reuses the same
+    /// submit/poll/fetch path as `run_with_profilesets`.
+    pub async fn submit_profileset_chunk(
+        &self,
+        ctx: RunCtx<'_>,
+        input: &str,
+    ) -> Result<SimcOutput, RunError> {
+        let bearer = Self::bearer(&ctx)?;
+        let stripped = strip_simmit_blocked_directives(input);
+        let remote_id = self.submit(&bearer, ctx.job_id, &stripped, true).await?;
+        let _final = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
+        self.fetch_result(&bearer, &remote_id).await
+    }
+
+    /// Submit a chunk and return Simmit's remote job id immediately (before it
+    /// runs), so the orchestrator can persist it to `cloud_chunks.remote_job_id`
+    /// for resume re-polling. Pair with `poll_and_fetch_chunk`.
+    pub async fn submit_chunk_for_id(
+        &self,
+        auth: &crate::compute::ProviderAuth,
+        job_id: &str,
+        input: &str,
+    ) -> Result<String, RunError> {
+        let bearer = match auth {
+            crate::compute::ProviderAuth::BearerToken(s) => {
+                use secrecy::ExposeSecret;
+                s.expose_secret().to_string()
+            }
+            crate::compute::ProviderAuth::None => {
+                return Err(RunError::Other("Simmit requires a configured API key".into()))
+            }
+        };
+        let stripped = strip_simmit_blocked_directives(input);
+        self.submit(&bearer, job_id, &stripped, true).await
+    }
+
+    /// Poll an already-submitted remote chunk to terminal and fetch its result.
+    /// Used both for the live submit path and for resume re-polling.
+    pub async fn poll_and_fetch_chunk(
+        &self,
+        ctx: RunCtx<'_>,
+        remote_job_id: &str,
+    ) -> Result<SimcOutput, RunError> {
+        let bearer = Self::bearer(&ctx)?;
+        let _final = self.poll_to_terminal(&bearer, remote_job_id, &ctx).await?;
+        self.fetch_result(&bearer, remote_job_id).await
+    }
+
     async fn cancel_remote(&self, bearer: &str, remote_job_id: &str) {
         let url = format!("{}/v1/simc/jobs/{}/cancel", SIMMIT_BASE_URL, remote_job_id);
         let resp = self.http.post(&url).bearer_auth(bearer).send().await;
@@ -557,6 +633,22 @@ struct BuildInfo {
     id: Option<String>,
     #[serde(default)]
     commit: Option<String>,
+}
+
+/// Parse `GET /v1/simc/usage` → ProviderUsage. Shape:
+///   { "limits": { "maxRuntimeSeconds": N, "maxActiveJobs": M, ... }, ... }
+fn parse_usage(body: &serde_json::Value) -> crate::compute::ProviderUsage {
+    let limits = body.get("limits");
+    crate::compute::ProviderUsage {
+        max_runtime_seconds: limits
+            .and_then(|l| l.get("maxRuntimeSeconds"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32),
+        max_active_jobs: limits
+            .and_then(|l| l.get("maxActiveJobs"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32),
+    }
 }
 
 /// Provider metadata block injected into the result JSON. The frontend's
@@ -655,6 +747,29 @@ mod tests {
         let input = "apiKey=secret\napi_key=secret\napikey=secret\nfight_style=Patchwerk";
         let out = strip_simmit_blocked_directives(input);
         assert_eq!(out, "fight_style=Patchwerk");
+    }
+
+    #[test]
+    fn parse_usage_reads_limits() {
+        let body = serde_json::json!({
+            "limits": { "maxRuntimeSeconds": 3600, "maxActiveJobs": 4 }
+        });
+        let u = parse_usage(&body);
+        assert_eq!(u.max_runtime_seconds, Some(3600));
+        assert_eq!(u.max_active_jobs, Some(4));
+    }
+
+    #[test]
+    fn parse_usage_absent_limits_is_none() {
+        let u = parse_usage(&serde_json::json!({}));
+        assert!(u.max_runtime_seconds.is_none());
+        assert!(u.max_active_jobs.is_none());
+    }
+
+    #[test]
+    fn simmit_caps_cloud_streaming_true() {
+        let p = SimmitProvider::new(reqwest::Client::new());
+        assert!(p.capabilities().cloud_streaming);
     }
 
     #[test]

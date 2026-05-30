@@ -94,6 +94,7 @@ impl SimcProvider for LocalSimcProvider {
             pause: true,
             streaming_logs: true,
             server_side_multistage: false,
+            cloud_streaming: false,
         }
     }
 
@@ -173,6 +174,7 @@ mod tests {
         assert!(caps.pause);
         assert!(caps.streaming_logs);
         assert!(!caps.server_side_multistage);
+        assert!(!caps.cloud_streaming);
         assert_eq!(p.id(), "local");
     }
 

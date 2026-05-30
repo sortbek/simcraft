@@ -17,6 +17,11 @@ pub struct ProviderCaps {
     pub pause: bool,
     pub streaming_logs: bool,
     pub server_side_multistage: bool,
+    /// Coarse routing/menu flag: can this provider run a streaming-sized job
+    /// via the cloud-chunking orchestrator? `false` for local (local uses the
+    /// triage path). Per-RUN pause/cancel come from `effective_capabilities`,
+    /// not this static flag.
+    pub cloud_streaming: bool,
 }
 
 /// Callbacks passed through the `SimcProvider` trait. Arc-wrapped so providers
@@ -115,10 +120,25 @@ pub trait SimcProvider: Send + Sync {
     async fn test_credential(&self, _api_key: &str) -> Result<CredentialTest, String> {
         Ok(CredentialTest { credits_available: None })
     }
+
+    /// Fetch per-account runtime/concurrency limits. Default: unknown (no
+    /// limits reported). Remote providers override.
+    async fn get_usage(&self, _auth: &ProviderAuth) -> Result<ProviderUsage, String> {
+        Ok(ProviderUsage::default())
+    }
 }
 
 /// Result of probing a provider credential (the Settings "Test connection" button).
 pub struct CredentialTest {
     /// Credits / quota remaining, if the provider reports one. Display-only.
     pub credits_available: Option<u64>,
+}
+
+/// Per-account runtime/concurrency limits, from `GET /v1/simc/usage`. The
+/// orchestrator uses `max_active_jobs` to bound in-flight chunk submissions and
+/// `max_runtime_seconds` to inform the chunk ceiling / estimate.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProviderUsage {
+    pub max_runtime_seconds: Option<u32>,
+    pub max_active_jobs: Option<u32>,
 }
