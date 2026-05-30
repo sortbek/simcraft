@@ -9,6 +9,34 @@ use crate::models::{JobStatus, SimcInputMode};
 use crate::simc_runner;
 use std::sync::Arc;
 
+/// Per-run effective capabilities. For a cloud-streaming run, pause is only
+/// possible when the run spans more than one chunk.
+pub(super) fn effective_capabilities(provider_id: &str, chunk_count: i64) -> serde_json::Value {
+    let is_cloud = provider_id == "simmit"; // any cloud-streaming provider
+    serde_json::json!({
+        "cancel": true, // both local and cloud runs are cancellable
+        "pause": if is_cloud { chunk_count > 1 } else { true },
+    })
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::*;
+    #[test]
+    fn cloud_single_chunk_cannot_pause() {
+        assert_eq!(effective_capabilities("simmit", 1)["pause"], false);
+        assert_eq!(effective_capabilities("simmit", 1)["cancel"], true);
+    }
+    #[test]
+    fn cloud_multi_chunk_can_pause() {
+        assert_eq!(effective_capabilities("simmit", 3)["pause"], true);
+    }
+    #[test]
+    fn local_can_pause() {
+        assert_eq!(effective_capabilities("local", 0)["pause"], true);
+    }
+}
+
 /// Cap on terminal-state jobs included in the active-sims overview alongside
 /// any in-flight jobs. Tracked by `fetchActiveJobs` docs on the frontend.
 const RECENT_TERMINAL_LIMIT: usize = 20;
@@ -111,6 +139,20 @@ pub(super) async fn get_sim_status(
         .as_ref()
         .and_then(|s| serde_json::from_str(s).ok());
 
+    let chunk_count: i64 = if job.provider_id == "simmit" {
+        if let Some(pool) = repo.pool() {
+            crate::db::CloudChunksRepo::new(pool.clone())
+                .list_for_job(&job.id)
+                .await
+                .map(|rows| rows.len() as i64)
+                .unwrap_or(0)
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
     HttpResponse::Ok().json(json!({
         "id": job.id,
         "status": job.status,
@@ -123,6 +165,7 @@ pub(super) async fn get_sim_status(
         "simc_input_mode": job.simc_input_mode.as_str(),
         "pause_requested": job.pause_requested,
         "provider_id": job.provider_id,
+        "effective_capabilities": effective_capabilities(&job.provider_id, chunk_count),
     }))
 }
 
