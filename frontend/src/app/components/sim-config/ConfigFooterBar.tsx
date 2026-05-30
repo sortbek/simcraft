@@ -2,6 +2,8 @@
 
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
+import RunButton from './RunButton';
+import type { ComputeChoice } from '../../lib/useComputeChoice';
 
 interface ConfigFooterBarProps {
   drawerOpen: boolean;
@@ -13,6 +15,9 @@ interface ConfigFooterBarProps {
   /** Show an inline stat-weights opt-in toggle. Quick Sim only — staged flows
    * (Top Gear, Drop Finder) compute scale factors per-actor which is too expensive. */
   showStatWeightsToggle?: boolean;
+  compute: ComputeChoice;
+  onComputeChange: (v: ComputeChoice) => void;
+  computeTargetDisabledReasons?: Record<string, string>;
 }
 
 export default function ConfigFooterBar({
@@ -23,6 +28,9 @@ export default function ConfigFooterBar({
   buttonLabel,
   disabled,
   showStatWeightsToggle,
+  compute,
+  onComputeChange,
+  computeTargetDisabledReasons,
 }: ConfigFooterBarProps) {
   const { t } = useLanguage();
   const { fightStyle, fightLength, targetCount, statWeights, setStatWeights } = useSimContext();
@@ -86,29 +94,15 @@ export default function ConfigFooterBar({
           {drawerOpen ? t('common.close') : t('common.options')}
         </button>
 
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={disabled || submitting}
-          className="flex items-center gap-3 rounded-lg bg-gradient-to-r from-primary to-primary-container px-12 py-4 font-headline text-sm font-black uppercase tracking-widest text-on-primary shadow-[0_4px_20px_rgba(200,153,42,0.3)] transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
-        >
-          {submitting ? (
-            <>
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                <path
-                  d="M14 8a6 6 0 00-6-6"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-              {t('config.running')}
-            </>
-          ) : (
-            buttonLabel
-          )}
-        </button>
+        <RunButton
+          value={compute}
+          onChange={onComputeChange}
+          onRun={onSubmit}
+          submitting={submitting}
+          buttonLabel={buttonLabel}
+          disabled={disabled}
+          targetDisabledReasons={computeTargetDisabledReasons}
+        />
       </div>
     </div>
   );

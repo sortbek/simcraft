@@ -9,7 +9,6 @@ import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import GearOverview from '../components/gear/GearOverview';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
-import ComputeSelector from '../components/ComputeSelector';
 import { specDisplayName } from '../lib/types';
 import { API_URL } from '../lib/api';
 import { useResolvedGear, equippedGearItems } from '../lib/useResolvedGear';
@@ -168,9 +167,9 @@ export default function QuickSimPage() {
         buttonLabel={buttonLabel(t('button.runSimulation'))}
         disabled={!hasInput}
         showStatWeightsToggle
-      >
-        <ComputeSelector value={compute} onChange={setCompute} />
-      </ConfigFooter>
+        compute={compute}
+        onComputeChange={setCompute}
+      />
     </div>
   );
 }

@@ -13,7 +13,6 @@ import { QUALITY_COLORS, getIconUrl, useItemInfo, type ItemQuery } from '../lib/
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
-import ComputeSelector from '../components/ComputeSelector';
 import { useLanguage } from '../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../lib/useItemInfo';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
@@ -364,9 +363,9 @@ export default function UpgradeComparePage() {
         submitting={submitting}
         buttonLabel={submitLabel}
         disabled={selectedSlots.size === 0 || !hasCurrencies}
-      >
-        <ComputeSelector value={compute} onChange={setCompute} />
-      </ConfigFooter>
+        compute={compute}
+        onComputeChange={setCompute}
+      />
     </div>
   );
 }

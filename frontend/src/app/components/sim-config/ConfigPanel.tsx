@@ -4,6 +4,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import type { ExpertTabKey } from './ExpertToggle';
 import ConfigDrawer from './ConfigDrawer';
 import ConfigFooterBar from './ConfigFooterBar';
+import type { ComputeChoice } from '../../lib/useComputeChoice';
 
 interface ConfigFooterProps {
   children?: ReactNode;
@@ -13,6 +14,9 @@ interface ConfigFooterProps {
   disabled?: boolean;
   /** Render a stat-weights toggle in the footer bar (Quick Sim only). */
   showStatWeightsToggle?: boolean;
+  compute: ComputeChoice;
+  onComputeChange: (v: ComputeChoice) => void;
+  computeTargetDisabledReasons?: Record<string, string>;
 }
 
 export default function ConfigFooter({
@@ -22,6 +26,9 @@ export default function ConfigFooter({
   buttonLabel,
   disabled,
   showStatWeightsToggle,
+  compute,
+  onComputeChange,
+  computeTargetDisabledReasons,
 }: ConfigFooterProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'simulation' | 'buffs'>('simulation');
@@ -55,6 +62,9 @@ export default function ConfigFooter({
         buttonLabel={buttonLabel}
         disabled={disabled}
         showStatWeightsToggle={showStatWeightsToggle}
+        compute={compute}
+        onComputeChange={onComputeChange}
+        computeTargetDisabledReasons={computeTargetDisabledReasons}
       />
     </div>
   );

@@ -8,7 +8,6 @@ import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import { useComputeChoice } from '../lib/useComputeChoice';
-import ComputeSelector from '../components/ComputeSelector';
 import type {
   SeasonConfigResponse,
   DifficultyDef,
@@ -866,9 +865,9 @@ export default function DropFinderContent() {
         submitting={submitting}
         buttonLabel={submitLabel}
         disabled={selected.size === 0 || !hasCharacter}
-      >
-        <ComputeSelector value={compute} onChange={setCompute} />
-      </ConfigFooter>
+        compute={compute}
+        onComputeChange={setCompute}
+      />
     </div>
   );
 }

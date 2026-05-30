@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 const KEY = (simType: string) => `simhammer.compute_choice.${simType}`;
 
 /** Provider id, plus the two special values `"auto"` (let backend decide) and
- *  `"local"`. Any registered remote provider id is also valid; the dropdown
- *  in `ComputeSelector` enumerates them from `useProviders()`. */
+ *  `"local"`. Any registered remote provider id is also valid; the `RunButton`
+ *  menu enumerates them from `useProviders()`. */
 export type ComputeChoice = 'auto' | 'local' | string;
 
 export function useComputeChoice(simType: string): [ComputeChoice, (v: ComputeChoice) => void] {

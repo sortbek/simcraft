@@ -7,7 +7,6 @@ import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
-import ComputeSelector from '../components/ComputeSelector';
 import EnchantGemSelector from '../components/gear/EnchantGemSelector';
 import { useResolvedGear, equippedSlots as mapEquippedSlots } from '../lib/useResolvedGear';
 import { useComboCount } from '../lib/useComboCount';
@@ -184,9 +183,9 @@ export default function EnchantGemPage() {
         submitting={submitting}
         buttonLabel={buttonText}
         disabled={!hasInput || !hasSelections}
-      >
-        <ComputeSelector value={compute} onChange={setCompute} />
-      </ConfigFooter>
+        compute={compute}
+        onComputeChange={setCompute}
+      />
     </div>
   );
 }
