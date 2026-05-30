@@ -26,8 +26,25 @@ pub(super) struct StreamingTopGearStart {
     pub max_combinations: Option<usize>,
     pub estimate: u64,
     pub provider_id: String,
+    /// The resolved compute provider for this request. Local ⇒ existing triage
+    /// path; a cloud-streaming-capable remote (e.g. Simmit) ⇒ the cloud
+    /// orchestrator (`cloud_streaming::start_cloud_streaming`).
+    pub provider: Arc<dyn crate::compute::SimcProvider>,
+    /// Auth derived from settings/headers for `provider` (`avail.auth_for`).
+    pub provider_auth: crate::compute::ProviderAuth,
     pub local_queue: crate::compute::local::LocalSimQueue,
     pub local_provider: Arc<dyn crate::compute::SimcProvider>,
+}
+
+/// Branch-selection predicate for the streaming Top Gear handler: a resolved
+/// provider routes to the cloud orchestrator iff it advertises cloud-streaming
+/// AND is not the local provider. `pick_provider` (routing) already guarantees a
+/// streaming-sized + explicit-cloud request resolves to such a provider; this is
+/// the live dispatch gate. Pure (no I/O) so it is unit-testable.
+pub(super) fn use_cloud_streaming(
+    provider: &Arc<dyn crate::compute::SimcProvider>,
+) -> bool {
+    provider.capabilities().cloud_streaming && provider.id() != "local"
 }
 
 /// Full streaming triage path.
@@ -36,6 +53,15 @@ pub(super) struct StreamingTopGearStart {
 /// staged pipeline. HTTP handlers should stay thin and delegate here once they
 /// have decided that a Top Gear request needs streaming.
 pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -> HttpResponse {
+    // ── Provider branch ──────────────────────────────────────────────────────
+    // A cloud-streaming-capable remote (resolved by `pick_provider` for an
+    // explicit cloud + streaming-sized request) runs through the chunk
+    // orchestrator on the remote (e.g. Simmit). Everything else (local) takes
+    // the existing local triage path below, unchanged.
+    if use_cloud_streaming(&start.provider) {
+        return super::cloud_streaming::start_cloud_streaming(start).await;
+    }
+
     let StreamingTopGearStart {
         req,
         repo,
@@ -49,6 +75,8 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         max_combinations,
         estimate,
         provider_id,
+        provider: _provider,
+        provider_auth: _provider_auth,
         local_queue,
         local_provider,
     } = start;
@@ -252,4 +280,62 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         "created_at": created_at,
         "estimate": estimate,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simmit_provider_routes_to_cloud_streaming() {
+        // A cloud-streaming-capable, non-local provider takes the cloud branch.
+        let provider: Arc<dyn crate::compute::SimcProvider> =
+            Arc::new(crate::compute::simmit::SimmitProvider::new(reqwest::Client::new()));
+        assert!(use_cloud_streaming(&provider));
+    }
+
+    #[test]
+    fn local_provider_stays_on_triage_path() {
+        // A provider that does not advertise cloud-streaming (or is the local
+        // provider) stays on the local triage path.
+        struct NonCloud;
+        #[async_trait::async_trait]
+        impl crate::compute::SimcProvider for NonCloud {
+            fn id(&self) -> &'static str {
+                "local"
+            }
+            fn display_name(&self) -> &'static str {
+                "Local"
+            }
+            fn capabilities(&self) -> crate::compute::ProviderCaps {
+                crate::compute::ProviderCaps {
+                    cancel: true,
+                    pause: true,
+                    streaming_logs: true,
+                    server_side_multistage: false,
+                    cloud_streaming: false,
+                }
+            }
+            async fn run_quick(
+                &self,
+                _ctx: crate::compute::RunCtx<'_>,
+                _input: &str,
+                _opts: &Value,
+            ) -> Result<crate::simc_runner::SimcOutput, crate::compute::RunError> {
+                unreachable!()
+            }
+            async fn run_with_profilesets(
+                &self,
+                _ctx: crate::compute::RunCtx<'_>,
+                _input: &str,
+                _opts: &Value,
+                _combo_count: usize,
+                _staged_ctx: crate::compute::StagedExecutionContext,
+            ) -> Result<crate::simc_runner::SimcOutput, crate::compute::RunError> {
+                unreachable!()
+            }
+        }
+        let provider: Arc<dyn crate::compute::SimcProvider> = Arc::new(NonCloud);
+        assert!(!use_cloud_streaming(&provider));
+    }
 }

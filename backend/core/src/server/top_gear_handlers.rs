@@ -149,6 +149,8 @@ pub(super) async fn create_top_gear_sim(
                 max_combinations,
                 estimate,
                 provider_id: provider_id_str.clone(),
+                provider: provider.clone(),
+                provider_auth: avail.auth_for(provider.id()),
                 local_queue: local_queue.get_ref().clone(),
                 local_provider: registry
                     .get("local")
