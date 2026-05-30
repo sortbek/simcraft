@@ -46,6 +46,7 @@ pub struct EnchantAxis {
 /// Wrapper around a pre-built gem combo list. Each entry maps slot →
 /// `Vec<gem_id>` of length equal to the slot's socket count (1 for
 /// single-socket items, 2+ for crafted/socketed necks etc.).
+#[derive(Clone)]
 pub struct GemCombosResolver {
     inner: Vec<GemCombo>,
 }
@@ -66,6 +67,7 @@ impl GemCombosResolver {
 }
 
 /// Configuration for [`ProfilesetIterator`].
+#[derive(Clone)]
 pub struct ProfilesetIteratorConfig {
     pub spec: String,
     pub base_profile: Arc<str>,
@@ -149,6 +151,14 @@ impl ProfilesetIterator {
     /// Current cursor position.
     pub fn cursor(&self) -> &[usize] {
         &self.cursor
+    }
+
+    /// The next global profileset name index (`Combo {n}`). Monotonic across the
+    /// whole iterator. Cloud-streaming checkpoints persist this so a resumed run
+    /// continues the global naming instead of re-emitting "Combo 1" and colliding
+    /// with earlier chunks.
+    pub fn next_name_idx(&self) -> usize {
+        self.next_name_idx
     }
 
     fn advance(&mut self) {

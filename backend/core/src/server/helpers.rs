@@ -773,6 +773,19 @@ pub(super) async fn write_combo_metadata_table_raw(
     job_id: &str,
     metadata_strs: &[(String, String)],
 ) {
+    write_combo_metadata_table_raw_offset(repo, job_id, metadata_strs, 0).await;
+}
+
+/// As [`write_combo_metadata_table_raw`], but assigns `combo_id = base + i + 1`.
+/// The cloud-streaming path writes one slice per chunk and must keep combo_ids
+/// globally unique across chunks (the table PK is `(job_id, combo_id)`), so each
+/// chunk passes the running count of combos already written as `combo_id_base`.
+pub(super) async fn write_combo_metadata_table_raw_offset(
+    repo: &JobRepo,
+    job_id: &str,
+    metadata_strs: &[(String, String)],
+    combo_id_base: i64,
+) {
     if metadata_strs.is_empty() {
         return;
     }
@@ -796,7 +809,7 @@ pub(super) async fn write_combo_metadata_table_raw(
         .iter()
         .enumerate()
         .map(|(i, (name, meta_json))| ComboMetadataInsert {
-            combo_id: (i as i64) + 1,
+            combo_id: combo_id_base + (i as i64) + 1,
             combo_name: name.as_str(),
             combo_key: "",
             batch_idx: None,

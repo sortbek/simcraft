@@ -217,21 +217,32 @@ pub struct CloudStreamingRun {
     pub sim_type: String,
     /// Profilesets-per-chunk ceiling for this run.
     pub ceiling: usize,
+    /// Per-account `usage.max_active_jobs` (from `get_usage`), if known. The
+    /// in-flight concurrency bound is `min(CONFIG_MAX_INFLIGHT, this)`. `None`
+    /// (unknown limit) falls back to `CONFIG_MAX_INFLIGHT`.
+    pub max_active_jobs: Option<usize>,
 }
 
 impl CloudStreamingRun {
-    /// Drive the run to a terminal state. For Task 7 this handles the common
-    /// "whole set fits in one chunk" case: build one chunk, persist combo
-    /// metadata + a `cloud_chunks` row, submit once via `runner`, accumulate,
-    /// and finalize through the gear-comparison parser. Multi-chunk concurrency
-    /// is Task 8.
+    /// Drive the run to a terminal state.
+    ///
+    /// Chunk GENERATION is sequential (one `&mut` iterator cursor); chunk
+    /// SUBMISSION/COMPLETION is concurrent, bounded to
+    /// `K = min(CONFIG_MAX_INFLIGHT, max_active_jobs)` in-flight runners via a
+    /// [`tokio::task::JoinSet`]. The pattern is: generate chunk N → persist its
+    /// metadata + `cloud_chunks` row → checkpoint the GENERATION cursor → spawn
+    /// its runner (blocking generation while ≥ K are in flight) → as runners
+    /// complete (in any order) fold into the [`ChunkAccumulator`]. When the
+    /// whole product space fits in one chunk this collapses to the single-chunk
+    /// fast path (no spawning).
     pub async fn execute(self, runner: ChunkRunner) {
         let cloud_repo = CloudChunksRepo::new(self.pool.clone());
-        let mut it = ProfilesetIterator::new(self.iter_cfg);
+        let mut it = ProfilesetIterator::new(self.iter_cfg.clone());
 
-        let chunk = build_chunk(&mut it, &self.base_profile, self.ceiling);
+        // ── Generate the FIRST chunk. ────────────────────────────────────────
+        let first = build_chunk(&mut it, &self.base_profile, self.ceiling);
 
-        if chunk.profileset_count == 0 {
+        if first.profileset_count == 0 {
             let _ = self
                 .repo
                 .set_error(
@@ -242,8 +253,25 @@ impl CloudStreamingRun {
             return;
         }
 
-        // Persist per-combo metadata (combo_id = running index, 1-based) so the
-        // finalize parse can join names → metadata, exactly as local triage.
+        // ── Single-chunk fast path: the whole set fit in chunk 0. ────────────
+        if first.exhausted {
+            self.run_single_chunk(&cloud_repo, first, runner).await;
+            return;
+        }
+
+        // ── Multi-chunk path: bounded-concurrency generate/submit loop. ──────
+        self.run_multi_chunk(&cloud_repo, &mut it, first, runner)
+            .await;
+    }
+
+    /// The "whole set fits in one chunk" path: one submission, accumulate,
+    /// finalize. `reports_merged` stays false (single chunk).
+    async fn run_single_chunk(
+        &self,
+        cloud_repo: &CloudChunksRepo,
+        chunk: GeneratedChunk,
+        runner: ChunkRunner,
+    ) {
         super::helpers::write_combo_metadata_table_raw(&self.repo, &self.job_id, &chunk.metadata)
             .await;
 
@@ -269,13 +297,9 @@ impl CloudStreamingRun {
         // The production runner records `remote_job_id` itself before returning;
         // the fake runner exposes none, so mark_submitted carries an empty id.
         let now = chrono::Utc::now().to_rfc3339();
-        let _ = cloud_repo
-            .mark_submitted(&self.job_id, 0, "", &now)
-            .await;
+        let _ = cloud_repo.mark_submitted(&self.job_id, 0, "", &now).await;
 
-        let result = runner(req).await;
-
-        let chunk_json = match result {
+        let chunk_json = match runner(req).await {
             Ok(json) => json,
             Err(RunError::Paused) | Err(RunError::Cancelled) => {
                 // Terminal state already set elsewhere; nothing to finalize.
@@ -288,7 +312,8 @@ impl CloudStreamingRun {
             }
         };
 
-        let envelope = ChunkAccumulator::envelope_from_simc_json(&chunk_json, /*include_base=*/ true);
+        let envelope =
+            ChunkAccumulator::envelope_from_simc_json(&chunk_json, /*include_base=*/ true);
         let credits = ChunkAccumulator::credits_from_simc_json(&chunk_json);
 
         let completed_at = chrono::Utc::now().to_rfc3339();
@@ -299,9 +324,7 @@ impl CloudStreamingRun {
         let mut acc = ChunkAccumulator::new();
         acc.add_envelope(envelope, credits);
 
-        // Single chunk → reports stay normal (the runner returns no html/text in
-        // this path anyway). `reports_merged` is only meaningful for >1 chunk.
-        let reports_merged = false;
+        // Single chunk → reports stay normal (not a multi-chunk merge).
         let merged = acc.into_merged_simc_json();
         finalize_cloud_result(
             &self.repo,
@@ -309,9 +332,214 @@ impl CloudStreamingRun {
             &merged,
             &self.base_profile,
             &self.sim_type,
-            reports_merged,
+            /*multi_chunk=*/ false,
         )
         .await;
+    }
+
+    /// The multi-chunk path: sequential generation interleaved with bounded
+    /// concurrent submission. `first` is the already-generated chunk 0 (which the
+    /// caller confirmed is NOT the last chunk).
+    async fn run_multi_chunk(
+        &self,
+        cloud_repo: &CloudChunksRepo,
+        it: &mut ProfilesetIterator,
+        first: GeneratedChunk,
+        runner: ChunkRunner,
+    ) {
+        // K = min(CONFIG_MAX_INFLIGHT, max_active_jobs). Unknown limit → config.
+        let k = self
+            .max_active_jobs
+            .map(|m| m.max(1).min(CONFIG_MAX_INFLIGHT))
+            .unwrap_or(CONFIG_MAX_INFLIGHT)
+            .max(1);
+
+        let mut acc = ChunkAccumulator::new();
+        // chunk_idx → completed (so out-of-order completion is order-independent).
+        let mut join: tokio::task::JoinSet<(usize, Result<Value, RunError>)> =
+            tokio::task::JoinSet::new();
+
+        let mut chunk_idx: usize = 0;
+        // Running count of combos written across chunks, so combo_metadata.combo_id
+        // stays globally unique (the table PK is `(job_id, combo_id)`).
+        let mut combo_id_base: i64 = 0;
+        let mut pending: Option<GeneratedChunk> = Some(first);
+        // True once the iterator has yielded its final chunk (the partial tail).
+        let mut generation_done = false;
+
+        // Drains one completed runner into the accumulator + cloud_chunks. Returns
+        // Err with a message to abort the whole job on a chunk failure.
+        async fn drain_one(
+            acc: &mut ChunkAccumulator,
+            cloud_repo: &CloudChunksRepo,
+            job_id: &str,
+            idx: usize,
+            result: Result<Value, RunError>,
+        ) -> Result<(), Option<String>> {
+            match result {
+                Ok(json) => {
+                    let envelope = ChunkAccumulator::envelope_from_simc_json(
+                        &json,
+                        /*include_base=*/ idx == 0,
+                    );
+                    let credits = ChunkAccumulator::credits_from_simc_json(&json);
+                    let completed_at = chrono::Utc::now().to_rfc3339();
+                    let _ = cloud_repo
+                        .mark_completed(job_id, idx as i64, &envelope, &completed_at)
+                        .await;
+                    acc.add_envelope(envelope, credits);
+                    Ok(())
+                }
+                // Terminal state already set elsewhere; abort without an error.
+                Err(RunError::Paused) | Err(RunError::Cancelled) => Err(None),
+                Err(RunError::Other(e)) => {
+                    let _ = cloud_repo.mark_failed(job_id, idx as i64).await;
+                    Err(Some(e))
+                }
+            }
+        }
+
+        loop {
+            // ── 1. Generate + spawn while there's work and capacity. ──────────
+            while !generation_done && join.len() < k {
+                let chunk = match pending.take() {
+                    Some(c) => c,
+                    None => build_chunk(it, &self.base_profile, self.ceiling),
+                };
+
+                // A generated chunk with zero profilesets means the iterator was
+                // exhausted exactly on the previous boundary: stop generating.
+                if chunk.profileset_count == 0 {
+                    generation_done = true;
+                    break;
+                }
+
+                // Persist this chunk's combo metadata + cloud_chunks row BEFORE
+                // submission (crash-recovery oracle). combo_id_base keeps ids
+                // unique across chunks.
+                super::helpers::write_combo_metadata_table_raw_offset(
+                    &self.repo,
+                    &self.job_id,
+                    &chunk.metadata,
+                    combo_id_base,
+                )
+                .await;
+                combo_id_base += chunk.metadata.len() as i64;
+                if let Err(e) = cloud_repo
+                    .insert_pending(&self.job_id, chunk_idx as i64, chunk.profileset_count as i64)
+                    .await
+                {
+                    let _ = self
+                        .repo
+                        .set_error(&self.job_id, &format!("Failed to record chunk: {e}"))
+                        .await;
+                    join.shutdown().await;
+                    return;
+                }
+
+                // Checkpoint the GENERATION cursor at this boundary: the cursor
+                // AFTER this chunk so resume regenerates only un-generated chunks.
+                // next_chunk_idx points at the NEXT chunk to generate.
+                self.write_checkpoint(it, chunk_idx + 1, chunk.exhausted).await;
+
+                let now = chrono::Utc::now().to_rfc3339();
+                let _ = cloud_repo
+                    .mark_submitted(&self.job_id, chunk_idx as i64, "", &now)
+                    .await;
+
+                let req = ChunkRequest {
+                    chunk_idx,
+                    job_id: self.job_id.clone(),
+                    simc_input: chunk.combined_input,
+                    profileset_count: chunk.profileset_count,
+                };
+                let runner = runner.clone();
+                let idx = chunk_idx;
+                join.spawn(async move { (idx, runner(req).await) });
+
+                // The chunk that just reported `exhausted` is the final one.
+                if chunk.exhausted {
+                    generation_done = true;
+                }
+                chunk_idx += 1;
+            }
+
+            // ── 2. Nothing left to generate AND nothing in flight → finish. ──
+            if join.is_empty() {
+                break;
+            }
+
+            // ── 3. Await one completion (order-independent accumulation). ────
+            if let Some(joined) = join.join_next().await {
+                let (idx, result) = match joined {
+                    Ok(pair) => pair,
+                    Err(join_err) => {
+                        // A spawned task panicked/aborted: fail the job cleanly.
+                        let _ = self
+                            .repo
+                            .set_error(&self.job_id, &format!("Chunk task failed: {join_err}"))
+                            .await;
+                        join.shutdown().await;
+                        return;
+                    }
+                };
+                match drain_one(&mut acc, cloud_repo, &self.job_id, idx, result).await {
+                    Ok(()) => {}
+                    Err(None) => {
+                        // Paused/Cancelled: terminal state already set elsewhere.
+                        join.shutdown().await;
+                        return;
+                    }
+                    Err(Some(e)) => {
+                        let _ = self.repo.set_error(&self.job_id, &e).await;
+                        join.shutdown().await;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // ── 4. Finalize the merged multi-chunk result. ──────────────────────
+        let merged = acc.into_merged_simc_json();
+        finalize_cloud_result(
+            &self.repo,
+            &self.job_id,
+            &merged,
+            &self.base_profile,
+            &self.sim_type,
+            /*multi_chunk=*/ true,
+        )
+        .await;
+    }
+
+    /// Persist the cloud-streaming checkpoint at a chunk boundary. `next_chunk_idx`
+    /// is the index of the next chunk to generate; the cursor is the iterator's
+    /// position AFTER the just-generated chunk. `final_chunk` marks that the
+    /// iterator is exhausted (resume has nothing left to generate).
+    async fn write_checkpoint(
+        &self,
+        it: &ProfilesetIterator,
+        next_chunk_idx: usize,
+        _final_chunk: bool,
+    ) {
+        use crate::profileset_generator::checkpoint::{
+            Checkpoint, CheckpointPhase, CloudStreamingCheckpoint,
+        };
+        use crate::profileset_generator::triage::TriageConstants;
+
+        let cp = Checkpoint {
+            phase: CheckpointPhase::CloudStreaming(CloudStreamingCheckpoint {
+                next_chunk_idx,
+                iterator_cursor: it.cursor().to_vec(),
+                chunk_size: self.ceiling,
+                total_chunks_estimate: next_chunk_idx,
+                next_name_idx: it.next_name_idx(),
+            }),
+            constants: TriageConstants::default(),
+        };
+        if let Ok(json) = cp.to_json_string() {
+            let _ = self.repo.update_checkpoint(&self.job_id, Some(&json)).await;
+        }
     }
 }
 
@@ -319,16 +547,20 @@ impl CloudStreamingRun {
 /// `helpers::finalize_gear_comparison_result` but consumes the pre-merged JSON
 /// (not a single `SimcOutput`). There is no single `simc_input` for the cloud
 /// path, so realm extraction reads the `base_profile` (it carries the actor
-/// line). When `reports_merged` is true (multi-chunk), per-chunk HTML/text
-/// reports are dropped (`set_report_files(None, None)`) and the flag is stamped
-/// into the parsed result.
+/// line).
+///
+/// For a MULTI-CHUNK run (`multi_chunk == true`) there is no single authoritative
+/// HTML/text report, so we stamp `reports_merged: false` into the parsed result
+/// (the UI hides/disables the report view) and clear the report files
+/// (`set_report_files(None, None)`); `raw_json` is the merged SimC doc. A
+/// single-chunk run leaves reports normal.
 pub async fn finalize_cloud_result(
     repo: &JobRepo,
     job_id: &str,
     merged_json: &Value,
     base_profile: &str,
     sim_type: &str,
-    reports_merged: bool,
+    multi_chunk: bool,
 ) {
     let job_snap = repo.get(job_id).await.ok().flatten();
     let raw_meta = super::helpers::load_combo_metadata(repo, job_id).await;
@@ -344,8 +576,8 @@ pub async fn finalize_cloud_result(
     if let Some(ref snap) = job_snap {
         super::helpers::inject_total_elapsed(&mut parsed, &snap.created_at);
     }
-    if reports_merged {
-        parsed["reports_merged"] = json!(true);
+    if multi_chunk {
+        parsed["reports_merged"] = json!(false);
     }
 
     let result_str = serde_json::to_string(&parsed).unwrap_or_default();
@@ -353,7 +585,7 @@ pub async fn finalize_cloud_result(
     if let Err(e) = repo.set_result(job_id, &result_str, raw_str.as_deref()).await {
         eprintln!("[{job_id}] Failed to set result: {e}");
     }
-    if reports_merged {
+    if multi_chunk {
         if let Err(e) = repo.set_report_files(job_id, None, None).await {
             eprintln!("[{job_id}] Failed to clear merged report files: {e}");
         }
@@ -543,6 +775,37 @@ mod orchestrator_tests {
         }
     }
 
+    /// A single varying gear slot with 6 items (equipped + 5 alternatives). The
+    /// iterator skips the all-equipped baseline, so this yields exactly FIVE real
+    /// profilesets ("Combo 1".."Combo 5"). With `ceiling = 2` it splits into three
+    /// chunks (2, 2, 1) — the multi-chunk path.
+    fn five_combo_cfg() -> ProfilesetIteratorConfig {
+        let mut slot_item_lists = HashMap::new();
+        slot_item_lists.insert(
+            "head".to_string(),
+            vec![
+                arc_item(100, "head", true),
+                arc_item(201, "head", false),
+                arc_item(202, "head", false),
+                arc_item(203, "head", false),
+                arc_item(204, "head", false),
+                arc_item(205, "head", false),
+            ],
+        );
+        ProfilesetIteratorConfig {
+            spec: "mistweaver".to_string(),
+            base_profile: std::sync::Arc::from(""),
+            slot_item_lists,
+            varying_slots: vec!["head".to_string()],
+            enchant_axes: vec![],
+            gem_combo_count: 0,
+            gem_combos_resolver: GemCombosResolver::new(vec![]),
+            socketed_item_ids: HashSet::new(),
+            talent_builds: vec![],
+            max_catalyst_charges: None,
+        }
+    }
+
     /// A fake chunk-runner that records the requests it received and returns
     /// canned SimC-shaped JSON for two combos — NO network.
     fn fake_runner(calls: std::sync::Arc<Mutex<Vec<ChunkRequest>>>) -> ChunkRunner {
@@ -597,6 +860,7 @@ mod orchestrator_tests {
             job_id: job_id.clone(),
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
+            max_active_jobs: None,
         };
         run.execute(runner).await;
 
@@ -679,11 +943,163 @@ mod orchestrator_tests {
             job_id: job_id.clone(),
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
+            max_active_jobs: None,
         };
         run.execute(runner).await;
 
         assert_eq!(calls.lock().unwrap().len(), 0, "no chunk should be submitted");
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Failed);
+    }
+
+    /// Tracks in-flight concurrency + records the requests. Emits one result row
+    /// per `Combo N` name found in the chunk's simc_input (faithful merge), plus a
+    /// base actor in every chunk (the orchestrator only keeps chunk 0's). Yields
+    /// across an await point so concurrent runners actually overlap.
+    fn tracking_runner(
+        calls: std::sync::Arc<Mutex<Vec<ChunkRequest>>>,
+        inflight: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        max_inflight: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> ChunkRunner {
+        use std::sync::atomic::Ordering;
+        std::sync::Arc::new(move |req: ChunkRequest| {
+            calls.lock().unwrap().push(req.clone());
+            let inflight = inflight.clone();
+            let max_inflight = max_inflight.clone();
+            // Extract `Combo N` names from the profileset lines so the merged doc
+            // carries the same combos the iterator generated.
+            let names: Vec<String> = req
+                .simc_input
+                .match_indices("profileset.\"")
+                .filter_map(|(i, _)| {
+                    let rest = &req.simc_input[i + "profileset.\"".len()..];
+                    rest.split('"').next().map(|s| s.to_string())
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            Box::pin(async move {
+                let now = inflight.fetch_add(1, Ordering::SeqCst) + 1;
+                max_inflight.fetch_max(now, Ordering::SeqCst);
+                // Force overlap: yield so other spawned runners get to run.
+                tokio::task::yield_now().await;
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                inflight.fetch_sub(1, Ordering::SeqCst);
+
+                let results: Vec<Value> = names
+                    .iter()
+                    .map(|n| json!({ "name": n, "mean": 1000.0 }))
+                    .collect();
+                Ok(json!({
+                    "sim": {
+                        "players": [{
+                            "name": "Hero",
+                            "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+                        }],
+                        "profilesets": { "results": results }
+                    },
+                    "simmit": { "credits_consumed": 100 }
+                }))
+            }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+        })
+    }
+
+    #[tokio::test]
+    async fn multi_chunk_run_bounds_concurrency_and_merges() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+
+        let mut job = crate::models::Job::new_with_provider(
+            String::new(),
+            "top_gear".to_string(),
+            100,
+            "patchwerk".to_string(),
+            0.1,
+            "simmit".to_string(),
+        );
+        job.simc_input_mode = crate::models::SimcInputMode::Streamed;
+        let job_id = job.id.clone();
+        repo.insert(&job).await.unwrap();
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let inflight = std::sync::Arc::new(AtomicUsize::new(0));
+        let max_inflight = std::sync::Arc::new(AtomicUsize::new(0));
+        let runner = tracking_runner(calls.clone(), inflight.clone(), max_inflight.clone());
+
+        // 5 candidates, ceiling=2 -> chunks of 2,2,1 (3 chunks). K = min(4, 2) = 2.
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: five_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: 2,
+            max_active_jobs: Some(2),
+        };
+        run.execute(runner).await;
+
+        // Exactly 3 chunks submitted, with the expected per-chunk sizes.
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 3, "expected 3 chunk submissions");
+        let mut by_idx: Vec<(usize, usize)> = recorded
+            .iter()
+            .map(|r| (r.chunk_idx, r.profileset_count))
+            .collect();
+        by_idx.sort();
+        assert_eq!(by_idx, vec![(0, 2), (1, 2), (2, 1)]);
+        drop(recorded);
+
+        // Concurrency was bounded to K=2 (no more than 2 runners ever in flight).
+        assert!(
+            max_inflight.load(Ordering::SeqCst) <= 2,
+            "max in-flight {} exceeded K=2",
+            max_inflight.load(Ordering::SeqCst)
+        );
+        // And we DID overlap (proves the bound is real, not just sequential).
+        assert!(
+            max_inflight.load(Ordering::SeqCst) >= 2,
+            "expected concurrency >= 2, got {}",
+            max_inflight.load(Ordering::SeqCst)
+        );
+
+        // All 3 cloud_chunks rows are completed.
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().all(|r| r.status == "completed"));
+
+        // The finalized job result merges all 5 combos (+ the baseline row), and
+        // multi-chunk stamps reports_merged:false on the parsed result.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
+        let result: Value =
+            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        assert_eq!(result["reports_merged"], false);
+        let names: Vec<String> = result["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect();
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert!(names.iter().any(|x| x == n), "missing {n} in {names:?}");
+        }
+
+        // A CloudStreaming checkpoint was written at a chunk boundary.
+        let cp_json = finished.checkpoint.expect("checkpoint written");
+        let cp = crate::profileset_generator::checkpoint::Checkpoint::from_json_str(&cp_json)
+            .expect("checkpoint parses");
+        match cp.phase {
+            crate::profileset_generator::checkpoint::CheckpointPhase::CloudStreaming(cc) => {
+                assert_eq!(cc.chunk_size, 2);
+                assert!(cc.next_chunk_idx >= 1);
+                // next_name_idx is the global combo counter (>= number generated).
+                assert!(cc.next_name_idx >= 1);
+            }
+            _ => panic!("expected CloudStreaming checkpoint phase"),
+        }
     }
 }
