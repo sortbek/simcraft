@@ -213,6 +213,7 @@ pub(super) async fn resume_sim(
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     local_queue: web::Data<crate::compute::local::LocalSimQueue>,
+    registry: web::Data<Arc<crate::compute::ProviderRegistry>>,
 ) -> HttpResponse {
     let job_id = path.into_inner();
     let pool = match repo.pool() {
@@ -230,6 +231,9 @@ pub(super) async fn resume_sim(
         log_buffer: log_buffer.get_ref().clone(),
         simc_bins: simc_bins.get_ref().clone(),
         queue: local_queue.get_ref().clone(),
+        local_provider: registry
+            .get("local")
+            .expect("local provider always registered"),
     };
 
     match crate::profileset_generator::resume_job(&job_id, inputs).await {

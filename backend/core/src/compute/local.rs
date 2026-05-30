@@ -190,7 +190,7 @@ mod tests {
     #[tokio::test]
     async fn staged_permit_transfer_serializes_against_new_acquire() {
         // Models Task 1: a transferred/held permit must keep a second waiter
-        // out until it is dropped (mirrors what spawn_staged_sim now guarantees).
+        // out until it is dropped (mirrors what the provider path guarantees).
         let q = new_local_sim_queue();
         let held = q
             .clone()
@@ -208,5 +208,24 @@ mod tests {
         drop(held);
         let got = waiter.await.expect("join ok");
         assert!(got.is_ok(), "waiter acquires after held permit drops");
+    }
+
+    #[tokio::test]
+    async fn permit_blocks_then_releases_for_next_staged_run() {
+        // Models Task C: routing staged runs through run_with_profilesets means
+        // exactly one permit gates them. While held, a second waiter blocks;
+        // after drop, it proceeds. (run_with_profilesets acquires/holds/drops
+        // this same permit internally.)
+        let q = new_local_sim_queue();
+        let held = q.clone().try_acquire_owned().expect("first permit available");
+
+        let q2 = q.clone();
+        let waiter = tokio::spawn(async move { await_local_queue_permit(&q2, None).await });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(!waiter.is_finished(), "waiter must block while a staged run holds the permit");
+
+        drop(held);
+        let got = waiter.await.expect("join ok");
+        assert!(got.is_ok(), "next staged run acquires after the prior one releases");
     }
 }

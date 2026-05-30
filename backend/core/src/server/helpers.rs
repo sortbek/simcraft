@@ -1,18 +1,15 @@
 use actix_web::HttpResponse;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::types::SimOptions;
-use crate::compute::local::{await_local_queue_permit, LocalSimQueue};
 use crate::db::{self, ComboMetadataInsert, ComboMetadataRepo, JobRepo, SettingsRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::{JobStatus, SimcInputMode};
 use crate::result_parser;
 use crate::simc_runner;
 use crate::types::ResolveGearResponse;
-use tokio::sync::OwnedSemaphorePermit;
 
 /// Write the terminal state for a simulation job (success or failure).
 ///
@@ -337,229 +334,6 @@ enum JobUpdate {
     },
 }
 
-fn enqueue_job_update(
-    tx: &tokio::sync::mpsc::UnboundedSender<JobUpdate>,
-    update: JobUpdate,
-    job_id: &str,
-) {
-    if tx.send(update).is_err() {
-        eprintln!(
-            "[{}] Failed to enqueue job update: writer task is closed",
-            job_id
-        );
-    }
-}
-
-/// Spawn a staged (top-gear / droptimizer) simulation in a background task.
-/// Progress and stage writes are serialized through an mpsc channel to prevent
-/// racing. An unbounded channel keeps these callbacks lossless because staged
-/// sim runs emit a finite burst of updates and we always await the writer drain
-/// before persisting terminal state.
-///
-/// `base_start` is the lower bound of the progress-bar range for the staged
-/// pipeline: 10 for inline/eager jobs (progress spans 10-95%), 50 for streamed
-/// jobs that ran Triage first (Triage consumed 5-50%, staged pipeline uses 50-95%).
-///
-/// `simc_input_mode` controls whether checkpoint writes and pause polling are
-/// active. Inline-mode jobs skip those paths; only Streamed-mode jobs support pause/resume.
-///
-/// `constants` are the TriageConstants used for this job. Passed through to
-/// checkpoint writes so resume can reconstruct the exact same calibration.
-/// Eager (Inline) callers pass `TriageConstants::default()`; Streamed callers
-/// pass the constants from the Triage checkpoint.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn spawn_staged_sim(
-    repo: JobRepo,
-    simc: PathBuf,
-    options: Value,
-    job_id: String,
-    simc_input: String,
-    combo_count: usize,
-    log_buffer: Arc<LogBuffer>,
-    base_start: u8,
-    simc_input_mode: SimcInputMode,
-    resume_state: crate::simc_runner::StagedResumeState,
-    constants: crate::profileset_generator::triage::TriageConstants,
-    queue: LocalSimQueue,
-    held_permit: Option<OwnedSemaphorePermit>,
-) {
-    tokio::spawn(async move {
-        // Acquire a queue permit BEFORE flipping status to Running so the UI
-        // correctly shows Queued while we wait. The streaming handoff transfers
-        // the permit it already holds (continuous ownership); the resume path
-        // has none, so we acquire one here — emitting a Queued banner first.
-        let _permit: OwnedSemaphorePermit = match held_permit {
-            Some(p) => p,
-            None => {
-                let _ = repo
-                    .update_progress(&job_id, 0, "Queued", "waiting for active local sim to finish")
-                    .await;
-                let wait_cancel = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
-                match await_local_queue_permit(&queue, Some(&wait_cancel)).await {
-                    Ok(p) => p,
-                    Err(_) => {
-                        // Cancelled while queued — nothing to run.
-                        log_buffer.remove(&job_id);
-                        return;
-                    }
-                }
-            }
-        };
-
-        // Permit is now held; flip to Running. This honors the terminal-state
-        // invariant: if the job was cancelled between create and spawn, this is
-        // a no-op and the staged loop will hit its first cancellation gate and
-        // abort cleanly.
-        if let Err(e) = repo.update_status(&job_id, JobStatus::Running).await {
-            eprintln!("[{}] Failed to set Running status: {}", job_id, e);
-        }
-
-        let cancel_token = crate::cancel::CancelToken::new(repo.clone(), job_id.clone());
-
-        // Channel for ordered progress/stage writes
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<JobUpdate>();
-        let writer_repo = repo.clone();
-        let writer_jid = job_id.clone();
-        let writer_handle = tokio::spawn(async move {
-            while let Some(update) = rx.recv().await {
-                match update {
-                    JobUpdate::Progress { pct, stage, detail } => {
-                        if let Err(e) = writer_repo
-                            .update_progress(&writer_jid, pct, &stage, &detail)
-                            .await
-                        {
-                            eprintln!("[{}] Failed to update progress: {}", writer_jid, e);
-                        }
-                    }
-                    JobUpdate::StageComplete { summary } => {
-                        if let Err(e) = writer_repo.complete_stage(&writer_jid, &summary).await {
-                            eprintln!("[{}] Failed to complete stage: {}", writer_jid, e);
-                        }
-                    }
-                }
-            }
-        });
-
-        let tx_progress = tx.clone();
-        let tx_stages = tx.clone();
-        let progress_log_jid = job_id.clone();
-        let stages_log_jid = job_id.clone();
-        let logs = log_buffer.clone();
-        let jid_logs = job_id.clone();
-        let pool_opt = repo.pool().cloned();
-
-        let result = simc_runner::run_simc_staged(
-            &simc,
-            &job_id,
-            &simc_input,
-            &options,
-            combo_count,
-            base_start,
-            simc_input_mode,
-            pool_opt,
-            resume_state,
-            constants,
-            move |pct, stage, detail| {
-                enqueue_job_update(
-                    &tx_progress,
-                    JobUpdate::Progress {
-                        pct,
-                        stage: stage.to_string(),
-                        detail: detail.to_string(),
-                    },
-                    &progress_log_jid,
-                );
-            },
-            move |summary| {
-                enqueue_job_update(
-                    &tx_stages,
-                    JobUpdate::StageComplete {
-                        summary: summary.to_string(),
-                    },
-                    &stages_log_jid,
-                );
-            },
-            move |line| {
-                logs.push_line(&jid_logs, line.to_string());
-            },
-            Some(cancel_token),
-        )
-        .await;
-
-        // Close channel and wait for all queued writes to finish
-        drop(tx);
-        if let Err(e) = writer_handle.await {
-            eprintln!("[{}] Job update writer task failed: {}", job_id, e);
-        }
-
-        // Terminal writes — after all progress is flushed. The branch's
-        // staged runner returns StagedRunError::Paused for mid-pipeline
-        // pauses, which finalize_job_outcome (single-error) can't model,
-        // so the per-variant match stays inline here.
-        match result {
-            Ok(output) => {
-                let job_snap = repo.get(&job_id).await.ok().flatten();
-                let raw_meta = load_combo_metadata(&repo, &job_id).await;
-                let meta: Option<HashMap<String, Vec<Value>>> = if raw_meta.is_empty() {
-                    None
-                } else {
-                    Some(raw_meta)
-                };
-
-                let mut parsed = result_parser::parse_gear_comparison_result(
-                    &output.json,
-                    meta.as_ref(),
-                    "top_gear",
-                );
-                inject_realm(&mut parsed, &simc_input);
-                if let Some(ref snap) = job_snap {
-                    inject_total_elapsed(&mut parsed, &snap.created_at);
-                }
-                let result_str = serde_json::to_string(&parsed).unwrap_or_default();
-                let raw_str = serde_json::to_string(&output.json).ok();
-                // set_result/set_report_files both honor the terminal-state
-                // invariant: writes are skipped when the job is already
-                // cancelled, so a late-arriving result can't resurrect it.
-                if let Err(e) = repo
-                    .set_result(&job_id, &result_str, raw_str.as_deref())
-                    .await
-                {
-                    eprintln!("[{}] Failed to set result: {}", job_id, e);
-                }
-                if let Err(e) = repo
-                    .set_report_files(
-                        &job_id,
-                        output.html_report.as_deref(),
-                        output.text_output.as_deref(),
-                    )
-                    .await
-                {
-                    eprintln!("[{}] Failed to set report files: {}", job_id, e);
-                }
-            }
-            Err(simc_runner::StagedRunError::Paused) => {
-                // Job was paused mid-pipeline. Status is already set to Paused
-                // inside run_simc_staged — nothing more to do here.
-            }
-            Err(simc_runner::StagedRunError::Other(e)) => {
-                let is_cancelled = repo
-                    .get(&job_id)
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|j| j.status == JobStatus::Cancelled)
-                    .unwrap_or(false);
-                if !is_cancelled {
-                    if let Err(db_err) = repo.set_error(&job_id, &e).await {
-                        eprintln!("[{}] Failed to set error: {}", job_id, db_err);
-                    }
-                }
-            }
-        }
-        log_buffer.remove(&job_id);
-    });
-}
-
 /// Provider-agnostic profileset spawner. Used by Top Gear, Drop Finder,
 /// Upgrade Compare, and Enchant/Gem handlers — they pass the resolved
 /// `Arc<dyn SimcProvider>` directly and never branch on `provider.id()`.
@@ -569,8 +343,8 @@ pub(crate) fn spawn_staged_sim(
 ///   - `run_profileset_job_task` owns the spawn + execute path
 ///   - `finalize_gear_comparison_result` writes the parsed result + report files
 ///
-/// Streaming Top Gear's post-triage handoff still calls `spawn_staged_sim`
-/// directly because the streaming pipeline is local-only by routing rule.
+/// Streaming Top Gear's post-triage handoff and resume's staged path also use
+/// this spawner, routing through `LocalSimcProvider` (local-only by rule).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_profileset_sim(
     repo: JobRepo,
@@ -885,19 +659,16 @@ pub(crate) async fn submit_profileset_sim(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handoff_streamed_top_gear_to_staged(
     pool: &sqlx::AnyPool,
     repo: &JobRepo,
-    simc_bin: &std::path::Path,
+    provider: Arc<dyn crate::compute::SimcProvider>,
     job_id: &str,
     base_profile: &str,
     options: &Value,
     survivor_combo_ids: &[i64],
     log_buffer: &Arc<LogBuffer>,
     constants: crate::profileset_generator::triage::TriageConstants,
-    queue: LocalSimQueue,
-    permit: Option<OwnedSemaphorePermit>,
 ) {
     if survivor_combo_ids.is_empty() {
         let _ = repo
@@ -950,20 +721,23 @@ pub(crate) async fn handoff_streamed_top_gear_to_staged(
         crate::simc_runner::build_simc_input_from_options(&combined_input, options);
     let mut staged_options = options.clone();
     staged_options["prebuilt"] = serde_json::json!(true);
-    spawn_staged_sim(
+
+    spawn_profileset_sim(
         repo.clone(),
-        simc_bin.to_path_buf(),
+        provider,
+        crate::compute::ProviderAuth::None, // local provider ignores auth
         staged_options,
         job_id.to_string(),
+        "top_gear".to_string(),
         prebuilt_input,
         survivor_simc_lines.len(),
         log_buffer.clone(),
-        50,
-        SimcInputMode::Streamed,
-        crate::simc_runner::StagedResumeState::default(),
-        constants,
-        queue,
-        permit,
+        crate::compute::StagedExecutionContext {
+            base_start: 50, // Triage consumed 5-50%; staged pipeline spans 50-95%
+            simc_input_mode: SimcInputMode::Streamed,
+            resume_state: crate::simc_runner::StagedResumeState::default(),
+            triage_constants: constants,
+        },
     );
 }
 

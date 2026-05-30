@@ -27,6 +27,7 @@ pub(super) struct StreamingTopGearStart {
     pub estimate: u64,
     pub provider_id: String,
     pub local_queue: crate::compute::local::LocalSimQueue,
+    pub local_provider: Arc<dyn crate::compute::SimcProvider>,
 }
 
 /// Full streaming triage path.
@@ -49,6 +50,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         estimate,
         provider_id,
         local_queue,
+        local_provider,
     } = start;
 
     let gem_opts = profileset_generator::GemEnchantOptions {
@@ -130,6 +132,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     let queue_for_task = local_queue.clone();
     let repo_for_queue_wait = repo_for_task.clone();
     let jid_for_queue_wait = job_id_task.clone();
+    let local_provider_for_task = local_provider;
     tokio::spawn(async move {
         // Streaming Top Gear shares the local sim queue with eager local jobs
         // — hold a permit for the duration of triage + staged handoff so we
@@ -205,6 +208,10 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         .await
         {
             Ok(crate::profileset_generator::triage::TriageRunOutcome::Completed(result)) => {
+                // Release the triage permit so the provider-driven staged run
+                // can acquire it itself (single-permit queue → holding it here
+                // while the provider re-acquires would deadlock).
+                drop(permit);
                 let _ = repo_for_task
                     .update_progress(
                         &job_id_task,
@@ -217,15 +224,13 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
                 handoff_streamed_top_gear_to_staged(
                     &pool,
                     &repo_for_task,
-                    &simc_bin_for_task,
+                    local_provider_for_task,
                     &job_id_task,
                     &base_profile_owned,
                     &options_for_task,
                     &result.survivor_combo_ids,
                     &log_buffer_owned,
                     triage_constants,
-                    queue_for_task.clone(),
-                    Some(permit),
                 )
                 .await;
             }
