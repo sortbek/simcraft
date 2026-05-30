@@ -218,12 +218,21 @@ pub fn build_chunk(
     }
 }
 
-/// Assemble a chunk's submitted simc input from the base actor + its profileset
-/// lines. The single source of truth for the chunk wire format, shared by
-/// `build_chunk` and the retry sub-chunk splitter so a split sub-chunk is
-/// byte-for-byte the same shape as a freshly generated chunk.
-pub fn combine_chunk_input(base_profile: &str, lines: &[String]) -> String {
-    format!("# Base Actor\n{}\n{}", base_profile, lines.join("\n"))
+/// Assemble a chunk's COMPLETE submitted simc input: the base actor + its
+/// profileset lines, run through `build_simc_input_from_options` so the
+/// `# Simulation Options` section (target_error, iterations, fight_style,
+/// desired_targets, max_time, consumables, …) is present — exactly like every
+/// other Simmit submission (quick sim / eager profilesets / local staged
+/// handoff). Submitting WITHOUT this section fails on Simmit: chunks go up with
+/// `multiStage:true`, which needs a `target_error` to tune toward, so a bare
+/// `# Base Actor` + profilesets is rejected regardless of chunk size.
+///
+/// Single source of truth for the chunk wire format, shared by `build_chunk` and
+/// the retry sub-chunk splitter so a split sub-chunk is byte-for-byte the same
+/// shape as a freshly generated chunk.
+pub fn combine_chunk_input(base_profile: &str, lines: &[String], options: &Value) -> String {
+    let combined = format!("# Base Actor\n{}\n{}", base_profile, lines.join("\n"));
+    crate::simc_runner::build_simc_input_from_options(&combined, options)
 }
 
 // ── Retry-by-subchunk ────────────────────────────────────────────────────────
@@ -258,6 +267,7 @@ async fn run_chunk_with_retry(
     cloud_repo: &CloudChunksRepo,
     job_id: &str,
     base_profile: &str,
+    options: &Value,
     chunk_idx: usize,
     profileset_lines: &[String],
     profileset_count: usize,
@@ -266,22 +276,23 @@ async fn run_chunk_with_retry(
     let req = ChunkRequest {
         chunk_idx,
         job_id: job_id.to_string(),
-        simc_input: combine_chunk_input(base_profile, profileset_lines),
+        simc_input: combine_chunk_input(base_profile, profileset_lines, options),
         profileset_count,
     };
     match runner(req).await {
         Ok(json) => ChunkOutcome::Done(vec![(chunk_idx, json)]),
         Err(RunError::Paused) | Err(RunError::Cancelled) => ChunkOutcome::Terminal,
-        Err(RunError::Other(_e)) => {
+        Err(RunError::Other(e)) => {
             // First failure: flip the original chunk's row to failed and try a
             // single split-retry round.
             let _ = cloud_repo.mark_failed(job_id, chunk_idx as i64).await;
 
-            // A minimal chunk cannot be split smaller → fail naming the chunk.
+            // A minimal chunk cannot be split smaller → fail naming the chunk AND
+            // surfacing the underlying Simmit error (never swallow the cause).
             if profileset_lines.len() <= 1 {
                 return ChunkOutcome::Failed(format!(
                     "Cloud chunk {chunk_idx} failed at minimal size (cannot split \
-                     further without loosening target_error)."
+                     further without loosening target_error). Simmit error: {e}"
                 ));
             }
 
@@ -312,7 +323,7 @@ async fn run_chunk_with_retry(
                 let sub_req = ChunkRequest {
                     chunk_idx: sub_idx,
                     job_id: job_id.to_string(),
-                    simc_input: combine_chunk_input(base_profile, half),
+                    simc_input: combine_chunk_input(base_profile, half, options),
                     profileset_count: half.len(),
                 };
                 match runner(sub_req).await {
@@ -320,12 +331,14 @@ async fn run_chunk_with_retry(
                     Err(RunError::Paused) | Err(RunError::Cancelled) => {
                         return ChunkOutcome::Terminal
                     }
-                    Err(RunError::Other(_e)) => {
+                    Err(RunError::Other(e)) => {
                         let _ = cloud_repo.mark_failed(job_id, sub_idx as i64).await;
                         // One retry round only — a sub-chunk failure is terminal.
+                        // Surface the underlying Simmit error so a size-independent
+                        // failure (bad input, rate limit, auth) is diagnosable.
                         return ChunkOutcome::Failed(format!(
                             "Cloud chunk {chunk_idx} still failed after splitting into \
-                             smaller sub-chunks at the same target_error."
+                             smaller sub-chunks at the same target_error. Simmit error: {e}"
                         ));
                     }
                 }
@@ -348,6 +361,10 @@ pub struct CloudStreamingRun {
     pub pool: sqlx::AnyPool,
     pub iter_cfg: ProfilesetIteratorConfig,
     pub base_profile: String,
+    /// The request's sim options (`SimOptions::to_json()`). Injected into every
+    /// chunk's input via `build_simc_input_from_options` so each chunk carries
+    /// `target_error`/`iterations`/`fight_style`/… like every working Simmit path.
+    pub options: Value,
     pub job_id: String,
     /// Wire sim-type string ("top_gear"), stamped into the parsed result.
     pub sim_type: String,
@@ -468,6 +485,7 @@ impl CloudStreamingRun {
             cloud_repo,
             &self.job_id,
             &self.base_profile,
+            &self.options,
             0,
             &chunk.profileset_lines,
             chunk.profileset_count,
@@ -668,6 +686,7 @@ impl CloudStreamingRun {
                 let cloud_repo = cloud_repo.clone();
                 let job_id = self.job_id.clone();
                 let base_profile = self.base_profile.clone();
+                let options = self.options.clone();
                 let lines = chunk.profileset_lines;
                 let count = chunk.profileset_count;
                 let alloc = next_chunk_idx.clone();
@@ -677,6 +696,7 @@ impl CloudStreamingRun {
                         &cloud_repo,
                         &job_id,
                         &base_profile,
+                        &options,
                         chunk_idx,
                         &lines,
                         count,
@@ -1068,6 +1088,7 @@ pub(super) async fn start_cloud_streaming(
         pool,
         iter_cfg,
         base_profile,
+        options: options_json.clone(),
         job_id: job_id.clone(),
         sim_type: "top_gear".to_string(),
         ceiling,
@@ -1395,6 +1416,10 @@ async fn resume_cloud_streaming_inner(
         .and_then(|v| v.as_str())
         .ok_or_else(|| "request_json missing base_profile".to_string())?
         .to_string();
+    // The request envelope persists the sim options (start_cloud_streaming writes
+    // `"options"`); resumed chunks must carry them through build_simc_input_from_options
+    // exactly like the fresh path, or the resumed chunk submits a malformed input.
+    let options = payload.get("options").cloned().unwrap_or_else(|| serde_json::json!({}));
 
     let mut it = ProfilesetIterator::new(iter_cfg.clone());
     if !it.seek(cloud_cp.iterator_cursor.clone()) {
@@ -1446,6 +1471,7 @@ async fn resume_cloud_streaming_inner(
         pool: pool.clone(),
         iter_cfg,
         base_profile,
+        options,
         job_id: job_id.to_string(),
         sim_type: "top_gear".to_string(),
         ceiling: cloud_cp.chunk_size.max(1),
@@ -1502,6 +1528,26 @@ mod tests {
             },
             "simmit": { "credits_consumed": 100 }
         })
+    }
+
+    #[test]
+    fn chunk_input_includes_simulation_options() {
+        // Regression: a cloud chunk's submitted input MUST carry the
+        // `# Simulation Options` section (target_error/iterations/...). Chunks go
+        // up with multiStage:true, which needs a target_error to tune toward — a
+        // bare "# Base Actor" + profilesets is rejected by Simmit regardless of
+        // size (which is why splitting never helped). This asserts the input runs
+        // through build_simc_input_from_options, not just combine.
+        let opts = serde_json::json!({ "target_error": 0.05, "iterations": 20000 });
+        let input = combine_chunk_input(
+            "mage=test\nspec=frost",
+            &["profileset.\"Combo 1\"+=head=,id=200".to_string()],
+            &opts,
+        );
+        assert!(input.contains("# Base Actor"), "keeps base actor:\n{input}");
+        assert!(input.contains("target_error=0.05"), "injects target_error:\n{input}");
+        assert!(input.contains("iterations=20000"), "injects iterations:\n{input}");
+        assert!(input.contains("profileset.\"Combo 1\""), "keeps profileset line:\n{input}");
     }
 
     #[test]
@@ -1781,6 +1827,7 @@ mod orchestrator_tests {
             iter_cfg: one_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
             max_active_jobs: None,
@@ -1867,6 +1914,7 @@ mod orchestrator_tests {
             iter_cfg: empty_cfg,
             base_profile: String::new(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
             max_active_jobs: None,
@@ -1964,6 +2012,7 @@ mod orchestrator_tests {
             iter_cfg: five_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: 2,
             max_active_jobs: Some(2),
@@ -2106,6 +2155,7 @@ mod orchestrator_tests {
             iter_cfg: one_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
             max_active_jobs: None,
@@ -2176,6 +2226,7 @@ mod orchestrator_tests {
             iter_cfg: five_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: 2,
             max_active_jobs: Some(1), // serialize so chunk_idx assignment is stable
@@ -2250,6 +2301,7 @@ mod orchestrator_tests {
             iter_cfg: five_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: 2,
             max_active_jobs: Some(1),
@@ -2306,6 +2358,7 @@ mod orchestrator_tests {
             iter_cfg: five_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: 2,
             max_active_jobs: Some(1),
@@ -2345,6 +2398,7 @@ mod orchestrator_tests {
             iter_cfg: five_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: 2,
             max_active_jobs: Some(1),
@@ -2391,6 +2445,7 @@ mod orchestrator_tests {
             iter_cfg: one_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
+            options: serde_json::json!({}),
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
             max_active_jobs: None,
