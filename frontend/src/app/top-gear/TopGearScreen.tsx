@@ -11,6 +11,7 @@ import { useSimContext } from '../components/sim-config/SimContext';
 import { postJson } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import { useComboCount } from '../lib/useComboCount';
+import { useCloudEstimate } from '../lib/useCloudEstimate';
 import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useLanguage } from '../lib/i18n';
 import { clearTopGearState, getTopGearState, storeTopGearState } from '../lib/topgear-state';
@@ -289,58 +290,76 @@ export default function TopGearScreen() {
     );
   }, [resolved]);
 
+  // Shared gear body for the combo-count + cloud-estimate preflight POSTs.
+  // Returns null when there's nothing to count (no selection / unresolved gear).
+  const buildComboBody = useCallback(() => {
+    const hasGearSelection = Object.values(selectedUids).some((v) => v.size > 0);
+    const hasTalentCompare = talentBuilds.length > 1;
+    const hasEnchantGem =
+      Object.values(enchantSelectionsArray).some((v) => v.length > 0) ||
+      gemOptionsArray.length > 0;
+    if (!resolved || (!hasGearSelection && !hasTalentCompare && !hasEnchantGem)) return null;
+    return {
+      simc_input: submitInput,
+      selected_items: selectedItemsJson,
+      items_by_slot: null,
+      max_upgrade: maxUpgrade,
+      copy_enchants: copyEnchants,
+      ...(talentBuilds.length > 1
+        ? {
+            talent_builds: talentBuilds.map((build) => ({
+              name: build.name,
+              talent_string: build.talentString,
+            })),
+          }
+        : {}),
+      catalyst,
+      ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
+      enchant_selections: enchantSelectionsArray,
+      gem_options: gemOptionsArray,
+      replace_gems: replaceGems,
+      diamond_always_use: diamondAlwaysUse,
+      max_colors: maxColors,
+      ...(voidForge || hasVoidForgeItems ? { void_forge: true } : {}),
+    };
+  }, [
+    resolved,
+    selectedUids,
+    submitInput,
+    selectedItemsJson,
+    maxUpgrade,
+    copyEnchants,
+    talentBuilds,
+    catalyst,
+    catalystCharges,
+    enchantSelectionsArray,
+    gemOptionsArray,
+    replaceGems,
+    diamondAlwaysUse,
+    maxColors,
+    voidForge,
+    hasVoidForgeItems,
+  ]);
+
   const { comboCount, error: comboError } = useComboCount(
     '/api/top-gear/combo-count',
-    () => {
-      const hasGearSelection = Object.values(selectedUids).some((v) => v.size > 0);
-      const hasTalentCompare = talentBuilds.length > 1;
-      const hasEnchantGem =
-        Object.values(enchantSelectionsArray).some((v) => v.length > 0) ||
-        gemOptionsArray.length > 0;
-      if (!resolved || (!hasGearSelection && !hasTalentCompare && !hasEnchantGem)) return null;
-      return {
-        simc_input: submitInput,
-        selected_items: selectedItemsJson,
-        items_by_slot: null,
-        max_upgrade: maxUpgrade,
-        copy_enchants: copyEnchants,
-        ...(talentBuilds.length > 1
-          ? {
-              talent_builds: talentBuilds.map((build) => ({
-                name: build.name,
-                talent_string: build.talentString,
-              })),
-            }
-          : {}),
-        catalyst,
-        ...(catalystCharges != null ? { catalyst_charges: catalystCharges } : {}),
-        enchant_selections: enchantSelectionsArray,
-        gem_options: gemOptionsArray,
-        replace_gems: replaceGems,
-        diamond_always_use: diamondAlwaysUse,
-        max_colors: maxColors,
-        ...(voidForge || hasVoidForgeItems ? { void_forge: true } : {}),
-      };
-    },
-    [
-      resolved,
-      selectedUids,
-      submitInput,
-      selectedItemsJson,
-      maxUpgrade,
-      copyEnchants,
-      talentBuilds,
-      catalyst,
-      catalystCharges,
-      enchantSelectionsArray,
-      gemOptionsArray,
-      replaceGems,
-      diamondAlwaysUse,
-      maxColors,
-      voidForge,
-      hasVoidForgeItems,
-    ],
+    buildComboBody,
+    [buildComboBody],
     { enabled: true, debounceMs: 0, tooManyMessage: t('validation.tooManyCombinations') }
+  );
+
+  // Cloud-streaming preflight: when a remote (non-local) provider is selected,
+  // fetch an advisory credit/chunk estimate. Advisory only — submit is hard-gated
+  // server-side, so this never blocks submission.
+  const isCloudCompute = compute !== 'auto' && compute !== 'local';
+  const { estimate: cloudEstimate } = useCloudEstimate(
+    '/api/top-gear/cloud-estimate',
+    () => {
+      const body = buildComboBody();
+      return body === null ? null : { ...body, compute_provider: compute };
+    },
+    [buildComboBody, compute],
+    { enabled: isCloudCompute, computeChoice: compute }
   );
 
   const buildPayload = useCallback(
@@ -508,6 +527,20 @@ export default function TopGearScreen() {
             comboCount={comboCount}
             comboError={comboError}
           />
+          {isCloudCompute && cloudEstimate && cloudEstimate.combos > 0 && (
+            <p
+              className={`text-xs ${
+                cloudEstimate.affordable ? 'text-muted' : 'text-amber-400'
+              }`}
+            >
+              ~{cloudEstimate.est_credits.toLocaleString()} credits ·{' '}
+              {cloudEstimate.chunks.toLocaleString()} chunk
+              {cloudEstimate.chunks !== 1 ? 's' : ''}
+              {!cloudEstimate.affordable && (
+                <span className="ml-1 font-semibold">· insufficient credits</span>
+              )}
+            </p>
+          )}
           <EnchantGemSelector
             equippedSlots={equippedSlots}
             enchantSelections={enchantSelections}

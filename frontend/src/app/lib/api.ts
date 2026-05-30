@@ -89,9 +89,15 @@ export async function pauseSim(jobId: string): Promise<void> {
   await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/pause`, { method: 'POST' });
 }
 
-/** Resume a paused sim. Delegates to backend resume_job which dispatches by phase. */
+/** Resume a paused sim. Delegates to backend resume_job which dispatches by phase.
+ *  Attaches all configured provider keys (resume doesn't know the user's original
+ *  compute choice, so 'auto' sends every key — same behavior the submit path uses)
+ *  so a BYO-key web user can resume a cloud run. */
 export async function resumeSim(jobId: string): Promise<void> {
-  await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/resume`, { method: 'POST' });
+  await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/resume`, {
+    method: 'POST',
+    headers: providerKeyHeaders(),
+  });
 }
 
 /** Re-run a single Top Gear result row as a high-precision Quick Sim.
