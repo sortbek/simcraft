@@ -21,7 +21,9 @@ export default function SettingsPage() {
       <ComputeProvidersSection />
       {isDesktop && (
         <>
-          <section className="space-y-4"><SimcEngineSection /></section>
+          <section className="space-y-4">
+            <SimcEngineSection />
+          </section>
           <GeneralSettingsSection />
         </>
       )}

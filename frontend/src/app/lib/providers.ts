@@ -53,7 +53,9 @@ export function useProviders(): ProviderMeta[] | null {
   useEffect(() => {
     providerListeners.add(setV);
     if (v === null) {
-      fetchProviders().then(setV).catch(() => setV([]));
+      fetchProviders()
+        .then(setV)
+        .catch(() => setV([]));
     }
     return () => {
       providerListeners.delete(setV);

@@ -11,7 +11,11 @@ import {
 } from '../lib/providers';
 import { useIsDesktop } from '../lib/useIsDesktop';
 
-interface TestResult { ok: boolean; credits_available?: number | null; detail?: string; }
+interface TestResult {
+  ok: boolean;
+  credits_available?: number | null;
+  detail?: string;
+}
 
 function ProviderRow({ providerId, displayName }: { providerId: string; displayName: string }) {
   const isDesktop = useIsDesktop();
@@ -131,7 +135,11 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
       <div className="mt-3 flex gap-2">
         <input
           type="password"
-          placeholder={stored ? 'Key on file — paste a new key to replace' : `Paste your ${displayName} API key`}
+          placeholder={
+            stored
+              ? 'Key on file — paste a new key to replace'
+              : `Paste your ${displayName} API key`
+          }
           value={key}
           onChange={(e) => setKey(e.target.value)}
           className="flex-1 rounded border border-outline-variant/20 bg-surface-container-lowest px-3 py-1.5 text-xs placeholder:text-on-surface-variant/50 focus:border-primary/40 focus:outline-none"

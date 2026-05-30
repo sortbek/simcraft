@@ -113,9 +113,13 @@ export default function SimStatus({
       )}
 
       <div className="relative">
-        <div className={`h-12 w-12 animate-spin rounded-full border-2 border-surface-container-highest ${isQueued ? 'border-t-amber-400' : 'border-t-primary'}`} />
+        <div
+          className={`h-12 w-12 animate-spin rounded-full border-2 border-surface-container-highest ${isQueued ? 'border-t-amber-400' : 'border-t-primary'}`}
+        />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className={`h-2 w-2 animate-pulse rounded-full ${isQueued ? 'bg-amber-400/60' : 'bg-primary/60'}`} />
+          <div
+            className={`h-2 w-2 animate-pulse rounded-full ${isQueued ? 'bg-amber-400/60' : 'bg-primary/60'}`}
+          />
         </div>
       </div>
 
