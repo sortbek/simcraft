@@ -23,11 +23,6 @@ import {
 import type { TopGearLocalItem } from './topGearTypes';
 import { useComputeChoice } from '../lib/useComputeChoice';
 
-// Mirrors backend TRIAGE_THRESHOLD. Until Plan B2 (cloud streaming) ships, large
-// Top Gear jobs can't run on a remote provider, so the Cloud menu option is
-// disabled once the workload would take the streaming path. Remove when B2 lands.
-const STREAMING_THRESHOLD = 500;
-
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (
     <span
@@ -543,9 +538,6 @@ export default function TopGearScreen() {
         disabled={!resolved}
         compute={compute}
         onComputeChange={setCompute}
-        computeTargetDisabledReasons={
-          comboCount >= STREAMING_THRESHOLD ? { simmit: 'too large for cloud' } : undefined
-        }
       />
     </div>
   );

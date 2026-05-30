@@ -51,6 +51,22 @@ export default function RunButton({
     };
   }, [open]);
 
+  // Self-heal a stale/unavailable selection. A persisted `compute` (localStorage)
+  // can name a remote that is no longer configured, or one the page marks disabled.
+  // Coerce it back to "auto" so the primary action — and the collapsed plain button
+  // — never submit a target the menu would show disabled or a stale cloud choice.
+  const selectedRemoteUnavailable =
+    value !== 'auto' &&
+    value !== 'local' &&
+    (!readyRemotes.some((p) => p.id === value) || !!targetDisabledReasons[value]);
+  useEffect(() => {
+    if (providers === null) return; // wait for providers to load before coercing
+    if (selectedRemoteUnavailable) onChange('auto');
+    // onChange is a per-render setter (unstable identity); gate on the primitives
+    // that actually determine availability.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers, value, selectedRemoteUnavailable]);
+
   const spinner = (
     <>
       <svg className="h-4 w-4 animate-spin" viewBox="0 0 16 16" fill="none">
