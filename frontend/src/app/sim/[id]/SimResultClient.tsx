@@ -4,7 +4,6 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DpsHeroCard from '../../components/results/DpsHeroCard';
 import GearOverview from '../../components/gear/GearOverview';
-import type { GearItem } from '../../components/gear/GearOverview';
 import ResultsChart from '../../components/results/ResultsChart';
 import SimStatus from '../../components/results/SimStatus';
 import StatWeightsTable from '../../components/results/StatWeightsTable';
@@ -27,7 +26,7 @@ import {
 } from '../../lib/scenario-siblings';
 import { getTopGearState } from '../../lib/topgear-state';
 import { ROUTES } from '../../lib/routes';
-import { GEAR_COMPARISON_SIM_TYPES } from '../../lib/simTypes';
+import { isGearComparisonResult, type SimResult } from '../../lib/simResultTypes';
 
 interface JobData {
   id: string;
@@ -36,7 +35,7 @@ interface JobData {
   progress_stage?: string;
   progress_detail?: string;
   stages_completed?: string[];
-  result: Record<string, unknown> | null;
+  result: SimResult | null;
   error: string | null;
   simc_input_mode?: 'inline' | 'streamed';
   pause_requested?: boolean;
@@ -322,9 +321,7 @@ export default function SimResultClient() {
   }
 
   const r = job.result;
-  const isTopGear =
-    r.result_kind === 'gear_comparison' ||
-    (GEAR_COMPARISON_SIM_TYPES as readonly string[]).includes(r.type as string);
+  const isTopGear = isGearComparisonResult(r);
   const hasTopGearState = isTopGear && getTopGearState() !== null;
 
   return (
@@ -356,51 +353,21 @@ export default function SimResultClient() {
         </div>
       )}
 
-      {isTopGear ? (
+      {isGearComparisonResult(r) ? (
         <>
           <TopGearResults
-            playerName={r.player_name as string}
-            playerClass={r.player_class as string}
-            playerRealm={r.realm as string | undefined}
-            playerRegion={r.region as string | undefined}
-            baseDps={r.base_dps as number}
-            results={
-              r.results as Array<{
-                name: string;
-                items: Array<{
-                  slot: string;
-                  item_id: number;
-                  ilevel: number;
-                  name: string;
-                  bonus_ids?: number[];
-                  enchant_id?: number;
-                  gem_id?: number;
-                  is_kept?: boolean;
-                  encounter?: string;
-                }>;
-                dps: number;
-                delta: number;
-              }>
-            }
-            equippedGear={
-              r.equipped_gear as Record<
-                string,
-                {
-                  slot: string;
-                  item_id: number;
-                  ilevel: number;
-                  name: string;
-                  bonus_ids?: number[];
-                  enchant_id?: number;
-                  gem_id?: number;
-                }
-              >
-            }
-            fightLength={r.fight_length as number | undefined}
-            desiredTargets={r.desired_targets as number | undefined}
-            iterations={r.iterations as number | undefined}
-            targetError={r.target_error as number | undefined}
-            elapsedTime={(r.total_elapsed_seconds ?? r.elapsed_time_seconds) as number | undefined}
+            playerName={r.player_name}
+            playerClass={r.player_class}
+            playerRealm={r.realm}
+            playerRegion={r.region}
+            baseDps={r.base_dps}
+            results={r.results}
+            equippedGear={r.equipped_gear}
+            fightLength={r.fight_length}
+            desiredTargets={r.desired_targets}
+            iterations={r.iterations}
+            targetError={r.target_error}
+            elapsedTime={r.total_elapsed_seconds ?? r.elapsed_time_seconds}
             sourceJobId={typeof id === 'string' ? id : undefined}
             sourceIsStreamed={job?.simc_input_mode === 'streamed'}
             backLink={
@@ -426,51 +393,36 @@ export default function SimResultClient() {
               ) : undefined
             }
           />
-          {typeof r.talent_string === 'string' && r.talent_string && (
-            <TalentTree talentString={r.talent_string as string} />
-          )}
+          {r.talent_string && <TalentTree talentString={r.talent_string} />}
         </>
       ) : (
         <>
           <DpsHeroCard
-            playerName={r.player_name as string}
-            playerClass={r.player_class as string}
-            playerRealm={r.realm as string | undefined}
-            playerRegion={r.region as string | undefined}
-            dps={r.dps as number}
-            fightLength={r.fight_length as number}
-            desiredTargets={r.desired_targets as number | undefined}
-            iterations={r.iterations as number | undefined}
-            targetError={r.target_error as number | undefined}
-            elapsedTime={(r.total_elapsed_seconds ?? r.elapsed_time_seconds) as number | undefined}
-            baseDps={r.base_dps as number | undefined}
+            playerName={r.player_name}
+            playerClass={r.player_class}
+            playerRealm={r.realm}
+            playerRegion={r.region}
+            dps={r.dps}
+            fightLength={r.fight_length}
+            desiredTargets={r.desired_targets}
+            iterations={r.iterations}
+            targetError={r.target_error}
+            elapsedTime={r.total_elapsed_seconds ?? r.elapsed_time_seconds}
+            baseDps={r.base_dps}
           />
-          {r.equipped_gear && Object.keys(r.equipped_gear as Record<string, unknown>).length > 0 ? (
+          {r.equipped_gear && Object.keys(r.equipped_gear).length > 0 ? (
             <GearOverview
-              gear={r.equipped_gear as Record<string, GearItem>}
+              gear={r.equipped_gear}
               characterRenderUrl={
                 r.realm && r.player_name
-                  ? `https://simhammer.com/api/blizzard/character/${(r.region as string) || 'eu'}/${encodeURIComponent((r.realm as string).toLowerCase())}/${encodeURIComponent((r.player_name as string).toLowerCase())}/media/render`
+                  ? `https://simhammer.com/api/blizzard/character/${r.region || 'eu'}/${encodeURIComponent(r.realm.toLowerCase())}/${encodeURIComponent(r.player_name.toLowerCase())}/media/render`
                   : null
               }
             />
           ) : null}
-          {r.stat_weights ? (
-            <StatWeightsTable statWeights={r.stat_weights as Record<string, number>} />
-          ) : null}
-          {typeof r.talent_string === 'string' && r.talent_string && (
-            <TalentTree talentString={r.talent_string as string} />
-          )}
-          <ResultsChart
-            dps={r.dps as number}
-            abilities={
-              (r.abilities as Array<{
-                name: string;
-                portion_dps: number;
-                school: string;
-              }>) || []
-            }
-          />
+          {r.stat_weights ? <StatWeightsTable statWeights={r.stat_weights} /> : null}
+          {r.talent_string && <TalentTree talentString={r.talent_string} />}
+          <ResultsChart dps={r.dps} abilities={r.abilities ?? []} />
         </>
       )}
 
@@ -533,19 +485,19 @@ export default function SimResultClient() {
 
       {/* Footer links */}
       <div className="flex items-center justify-center gap-3 pb-4 text-[10px] uppercase tracking-wider text-on-surface-variant/40">
-        {typeof r.simc_version === 'string' && (
+        {r.simc_version && (
           <>
-            {typeof r.simc_git_revision === 'string' && r.simc_git_revision ? (
+            {r.simc_git_revision ? (
               <a
                 href={`https://github.com/simulationcraft/simc/commit/${r.simc_git_revision}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="transition-colors hover:text-white"
               >
-                {r.simc_version as string}
+                {r.simc_version}
               </a>
             ) : (
-              <span>{r.simc_version as string}</span>
+              <span>{r.simc_version}</span>
             )}
             <span className="h-3 w-px bg-border" />
           </>
@@ -598,9 +550,9 @@ export default function SimResultClient() {
       {job.provider_id !== 'local' && (
         <div className="mt-4 text-center text-[11px] uppercase tracking-wider text-on-surface-variant/50">
           {(() => {
-            const sim = (job.result as any)?.simmit ?? {};
-            const credits = sim.credits_consumed;
-            const commit = sim.build_commit;
+            const sim = job.result?.simmit;
+            const credits = sim?.credits_consumed;
+            const commit = sim?.build_commit;
             return (
               <>
                 Ran on {providerMeta?.display_name ?? job.provider_id}
