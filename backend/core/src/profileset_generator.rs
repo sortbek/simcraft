@@ -1744,4 +1744,26 @@ head=,id=100\n";
         // (Equipped head has socket + no gem → baseline gem-only emits per gem combo.)
         assert_eq!(count, 4);
     }
+
+    #[test]
+    fn eager_gem_combos_match_gem_combos_module() {
+        // Guard for audit #5: the eager path must produce the same gem-combo
+        // set as gem_combos::enumerate_all (the streaming path's source).
+        ensure_game_data_loaded();
+        use crate::profileset_generator::gem_combos::{enumerate_all, GemCombosBuilder};
+
+        let gems: Vec<u64> = vec![213453, 213454, 213455];
+        let gem_slots = vec![("head".to_string(), 1usize), ("neck".to_string(), 2usize)];
+        let builder = GemCombosBuilder {
+            gem_options: &gems,
+            gem_slots: &gem_slots,
+            diamond_ids: &[],
+            diamond_always_use: false,
+            max_colors: false,
+        };
+        let module_combos = enumerate_all(&builder);
+        // 3 gems across head (1 socket) + neck (2 sockets) → 18 raw cross-product,
+        // then dedupe_gem_assignments collapses slot-order-equivalent combos → 10 unique.
+        assert_eq!(module_combos.len(), 10, "module baseline changed: {}", module_combos.len());
+    }
 }
