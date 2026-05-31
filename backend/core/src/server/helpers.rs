@@ -631,7 +631,9 @@ pub(crate) async fn submit_profileset_sim(
         return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
     }
 
-    write_combo_metadata_table_raw(repo, &job_id, &submission.combo_metadata_serialized).await;
+    // Non-streamed (eager) jobs never sim-row, so no per-combo override lines are
+    // persisted here (`&[]` → profileset_simc stays empty).
+    write_combo_metadata_table_raw(repo, &job_id, &submission.combo_metadata_serialized, &[]).await;
 
     let sim_type = submission.sim_type.to_string();
     let auth = avail.auth_for(provider.id());
@@ -772,8 +774,9 @@ pub(super) async fn write_combo_metadata_table_raw(
     repo: &JobRepo,
     job_id: &str,
     metadata_strs: &[(String, String)],
+    profileset_simc_lines: &[String],
 ) {
-    write_combo_metadata_table_raw_offset(repo, job_id, metadata_strs, 0).await;
+    write_combo_metadata_table_raw_offset(repo, job_id, metadata_strs, profileset_simc_lines, 0).await;
 }
 
 /// As [`write_combo_metadata_table_raw`], but assigns `combo_id = base + i + 1`.
@@ -784,6 +787,10 @@ pub(super) async fn write_combo_metadata_table_raw_offset(
     repo: &JobRepo,
     job_id: &str,
     metadata_strs: &[(String, String)],
+    // Per-combo simc override lines (parallel to `metadata_strs`), persisted so
+    // `sim_row` can reconstruct the row's gear. Pass `&[]` when unavailable (the
+    // row then stores `""` — fine for non-streamed jobs, which never sim-row).
+    profileset_simc_lines: &[String],
     combo_id_base: i64,
 ) {
     if metadata_strs.is_empty() {
@@ -814,7 +821,7 @@ pub(super) async fn write_combo_metadata_table_raw_offset(
             combo_key: "",
             batch_idx: None,
             cursor_json: "[]",
-            profileset_simc: "",
+            profileset_simc: profileset_simc_lines.get(i).map(String::as_str).unwrap_or(""),
             metadata_json: meta_json.as_str(),
         })
         .collect();

@@ -457,8 +457,13 @@ impl CloudStreamingRun {
             return;
         }
 
-        super::helpers::write_combo_metadata_table_raw(&self.repo, &self.job_id, &chunk.metadata)
-            .await;
+        super::helpers::write_combo_metadata_table_raw(
+            &self.repo,
+            &self.job_id,
+            &chunk.metadata,
+            &chunk.profileset_lines,
+        )
+        .await;
 
         // Record the chunk row before submission (the crash-recovery oracle).
         if let Err(e) = cloud_repo
@@ -656,6 +661,7 @@ impl CloudStreamingRun {
                     &self.repo,
                     &self.job_id,
                     &chunk.metadata,
+                    &chunk.profileset_lines,
                     combo_id_base,
                 )
                 .await;
@@ -2102,6 +2108,21 @@ mod orchestrator_tests {
             .collect();
         assert!(names.iter().any(|n| n == "Combo 1"), "names: {names:?}");
         assert!(names.iter().any(|n| n == "Combo 2"), "names: {names:?}");
+
+        // (c) The per-combo simc override line is persisted to combo_metadata so
+        // sim-row can rebuild the row's gear. Without it the cloud path stored an
+        // empty profileset_simc and sim-row re-ran the equipped set instead.
+        let meta_repo = crate::db::ComboMetadataRepo::new(pool.clone());
+        let combo1 = meta_repo
+            .get_by_name(&job_id, "Combo 1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            combo1.profileset_simc.contains("id=200"),
+            "profileset_simc must carry the override line: {:?}",
+            combo1.profileset_simc
+        );
     }
 
     #[tokio::test]
@@ -2839,6 +2860,7 @@ mod orchestrator_tests {
                 ("Combo 3".into(), "[]".into()),
                 ("Combo 4".into(), "[]".into()),
             ],
+            &[],
         )
         .await;
 
@@ -3048,6 +3070,7 @@ mod orchestrator_tests {
                 ("Combo 3".into(), "[]".into()),
                 ("Combo 4".into(), "[]".into()),
             ],
+            &[],
         )
         .await;
 
