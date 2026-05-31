@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { simRow } from '../../lib/api';
 import { SLOT_LABELS, specDisplayName } from '../../lib/types';
 import {
@@ -39,6 +40,66 @@ function precisionDotTone(pct: number): string {
   if (pct <= 2.0) return 'bg-yellow-400';
   if (pct <= 4.0) return 'bg-orange-400';
   return 'bg-red-500';
+}
+
+/** Short band name shown as the precision tooltip header (mirrors the dot tone). */
+function precisionBandLabel(pct: number): string {
+  if (pct <= 0.5) return 'Final-pass precision';
+  if (pct <= 1.0) return 'Refine band';
+  if (pct <= 2.0) return 'Coarse band';
+  if (pct <= 4.0) return 'Probe / rough';
+  return 'Early-stage prune';
+}
+
+/** A precision dot with a styled hover card. The card is portal-rendered at a
+ * fixed position so it escapes the row's `overflow-hidden` (the DPS bar clip);
+ * a plain CSS popover would be cropped at the row edge. */
+function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [tip, setTip] = useState<{ top: number; left: number } | null>(null);
+
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r) setTip({ top: r.top, left: r.right });
+  };
+
+  return (
+    <span
+      ref={ref}
+      onMouseEnter={show}
+      onMouseLeave={() => setTip(null)}
+      className="flex items-center"
+    >
+      <span
+        className={`h-2 w-2 shrink-0 rounded-full ${precisionDotTone(pct)}`}
+        aria-label={`accuracy ±${pct.toFixed(2)} percent`}
+      />
+      {tip &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{ position: 'fixed', top: tip.top - 8, left: tip.left }}
+            className="pointer-events-none z-[60] -translate-x-full -translate-y-full rounded-lg border border-outline-variant/20 bg-surface-container-highest px-3 py-2 shadow-xl"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${precisionDotTone(pct)}`} />
+              <span className="whitespace-nowrap text-[11px] font-semibold text-on-surface">
+                {precisionBandLabel(pct)}
+              </span>
+            </div>
+            <div className="mt-1 whitespace-nowrap font-mono text-[11px] leading-tight tabular-nums text-on-surface-variant">
+              ±{pct.toFixed(2)}% <span className="text-on-surface-variant/50">· 95% CI</span>
+            </div>
+            {targetError != null && (
+              <div className="whitespace-nowrap font-mono text-[11px] leading-tight tabular-nums text-on-surface-variant/60">
+                target {targetError.toFixed(2)}%
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
+    </span>
+  );
 }
 
 /** The result page only ever surfaces the top N rows — past ~10 the deltas
@@ -420,13 +481,7 @@ function ResultRow({
               {Math.round(result.dps).toLocaleString()}
             </span>
             {result.precision_pct != null && (
-              <span
-                className={`h-2 w-2 shrink-0 rounded-full ${precisionDotTone(result.precision_pct)}`}
-                title={`Accuracy: ±${result.precision_pct.toFixed(2)}% (95% CI)${
-                  targetError != null ? ` · target ${targetError.toFixed(2)}%` : ''
-                }`}
-                aria-label={`accuracy ±${result.precision_pct.toFixed(2)} percent`}
-              />
+              <PrecisionDot pct={result.precision_pct} targetError={targetError} />
             )}
           </span>
           {showVerifyButton && (
