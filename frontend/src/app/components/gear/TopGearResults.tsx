@@ -127,6 +127,7 @@ export default function TopGearResults({
         results={activeResults}
         maxDps={maxDps}
         baseDps={baseDps}
+        targetError={targetError}
         hasEncounterData={hasEncounterData}
         groupMode={groupMode}
         onGroupModeChange={setGroupMode}

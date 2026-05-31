@@ -26,19 +26,19 @@ function comboIdFromName(name: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/** Color band for a precision value (95% CI half-width as % of mean).
- * Reflects how trustworthy the displayed DPS is, not what was targeted.
- *   ≤0.5% → green     (Final-pass precision)
- *   ≤1.0% → emerald   (Refine band)
- *   ≤2.0% → yellow    (Coarse band)
- *   ≤4.0% → orange    (Probe / rough)
+/** Dot fill for a precision value (95% CI half-width as % of mean) — how
+ * trustworthy the displayed DPS is, not what was targeted. Greener = tighter.
+ *   ≤0.5% → green     (final-pass precision)
+ *   ≤1.0% → emerald   (refine band)
+ *   ≤2.0% → yellow    (coarse band)
+ *   ≤4.0% → orange    (probe / rough)
  *   >4.0% → red       (early-stage prune, treat with caution) */
-function precisionTone(pct: number): string {
-  if (pct <= 0.5) return 'text-emerald-300/80';
-  if (pct <= 1.0) return 'text-emerald-400/70';
-  if (pct <= 2.0) return 'text-yellow-300/80';
-  if (pct <= 4.0) return 'text-orange-300/80';
-  return 'text-red-400/80';
+function precisionDotTone(pct: number): string {
+  if (pct <= 0.5) return 'bg-emerald-400';
+  if (pct <= 1.0) return 'bg-emerald-500';
+  if (pct <= 2.0) return 'bg-yellow-400';
+  if (pct <= 4.0) return 'bg-orange-400';
+  return 'bg-red-500';
 }
 
 /** The result page only ever surfaces the top N rows — past ~10 the deltas
@@ -51,6 +51,8 @@ interface TopGearRankingsProps {
   results: TopGearResult[];
   maxDps: number;
   baseDps: number;
+  /** Configured target_error (%), shown in the per-row precision tooltip. */
+  targetError?: number;
   hasEncounterData: boolean;
   groupMode: GroupMode;
   onGroupModeChange: (mode: GroupMode) => void;
@@ -67,6 +69,7 @@ export default function TopGearRankings({
   results,
   maxDps,
   baseDps,
+  targetError,
   hasEncounterData,
   groupMode,
   onGroupModeChange,
@@ -171,6 +174,7 @@ export default function TopGearRankings({
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
+                      targetError={targetError}
                       sourceJobId={verifyEnabled ? sourceJobId : undefined}
                     />
                   ))}
@@ -184,6 +188,7 @@ export default function TopGearRankings({
           results={results}
           maxDps={maxDps}
           baseDps={baseDps}
+          targetError={targetError}
           itemInfoMap={itemInfoMap}
           enchantInfoMap={enchantInfoMap}
           gemInfoMap={gemInfoMap}
@@ -200,6 +205,7 @@ function RankedResults({
   results,
   maxDps,
   baseDps,
+  targetError,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -210,6 +216,7 @@ function RankedResults({
   results: TopGearResult[];
   maxDps: number;
   baseDps: number;
+  targetError?: number;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -228,6 +235,7 @@ function RankedResults({
           rank={idx + 1}
           maxDps={maxDps}
           baseDps={baseDps}
+          targetError={targetError}
           isBest={idx === 0 && result.delta > 0}
           isSelected={result.name === (selectedResultName || results[0]?.name)}
           onSelect={() => onSelectResult(result.name)}
@@ -246,6 +254,7 @@ function ResultRow({
   rank,
   maxDps,
   baseDps,
+  targetError,
   isBest,
   isSelected,
   onSelect,
@@ -258,6 +267,7 @@ function ResultRow({
   rank?: number;
   maxDps: number;
   baseDps: number;
+  targetError?: number;
   isBest: boolean;
   isSelected?: boolean;
   onSelect?: () => void;
@@ -405,17 +415,18 @@ function ResultRow({
               </span>
             )}
           </span>
-          <span className="flex w-16 flex-col items-end">
+          <span className="flex w-20 items-center justify-end gap-1.5">
             <span className="font-mono text-sm tabular-nums text-on-surface">
               {Math.round(result.dps).toLocaleString()}
             </span>
             {result.precision_pct != null && (
               <span
-                className={`font-mono text-[10px] tabular-nums leading-none ${precisionTone(result.precision_pct)}`}
-                title={`95% confidence interval: ±${result.precision_pct.toFixed(2)}% of mean DPS`}
-              >
-                ±{result.precision_pct.toFixed(result.precision_pct >= 1 ? 1 : 2)}%
-              </span>
+                className={`h-2 w-2 shrink-0 rounded-full ${precisionDotTone(result.precision_pct)}`}
+                title={`Accuracy: ±${result.precision_pct.toFixed(2)}% (95% CI)${
+                  targetError != null ? ` · target ${targetError.toFixed(2)}%` : ''
+                }`}
+                aria-label={`accuracy ±${result.precision_pct.toFixed(2)} percent`}
+              />
             )}
           </span>
           {showVerifyButton && (
