@@ -1076,11 +1076,15 @@ pub(super) async fn start_cloud_streaming(
     // ── Production chunk runner + cancel token; spawn the orchestrator. ───────
     let cloud_repo = CloudChunksRepo::new(pool.clone());
     let cancel = Some(CancelToken::new(repo.get_ref().clone(), job_id.clone()));
+    // Run-scoped job-level progress bar: weights each chunk's live percent
+    // against the known total combo count (`estimate`). Zero extra Simmit calls.
+    let progress = CloudProgress::new(repo.get_ref().clone(), job_id.clone(), estimate as usize);
     let runner = build_production_chunk_runner(
         provider.clone(),
         cloud_repo,
         provider_auth,
         cancel.clone(),
+        Some(progress),
     );
 
     let run = CloudStreamingRun {
@@ -1115,6 +1119,95 @@ pub(super) async fn start_cloud_streaming(
     }))
 }
 
+// ── Job-level progress aggregation ───────────────────────────────────────────
+
+/// Run-scoped, job-level progress aggregator for the cloud-streaming path.
+///
+/// The loading page renders ONE percent per job, but a streamed run is many
+/// concurrent Simmit chunk jobs. Each chunk already reports its own `0..=100`
+/// fraction on every status poll the runner makes (`poll_to_terminal` →
+/// `on_progress`); we weight those by chunk size against the known total combo
+/// count to produce a single job percent. A finished chunk banks its full
+/// weight; a failed chunk drops its live weight (a retry re-adds it under a
+/// fresh `chunk_idx`), so a split never double-counts. NO extra Simmit calls —
+/// this piggybacks on the polls the runner already does.
+pub struct CloudProgress {
+    repo: JobRepo,
+    job_id: String,
+    total_combos: usize,
+    inner: std::sync::Mutex<ProgressInner>,
+}
+
+#[derive(Default)]
+struct ProgressInner {
+    /// Combos in chunks that finished successfully (full weight, monotonic).
+    completed_combos: usize,
+    /// `chunk_idx` → (live fraction `0..=1`, chunk size in combos) for in-flight
+    /// chunks.
+    inflight: std::collections::HashMap<usize, (f32, usize)>,
+    /// Last job percent pushed to the DB. Throttles writes (≤ 100 total) and
+    /// keeps the bar monotonic — a cloud fraction can momentarily dip (e.g. the
+    /// queued-floor of 5% giving way to a real 0% once a worker starts).
+    last_pct: u8,
+}
+
+impl CloudProgress {
+    pub fn new(repo: JobRepo, job_id: String, total_combos: usize) -> Arc<Self> {
+        Arc::new(Self {
+            repo,
+            job_id,
+            total_combos,
+            inner: std::sync::Mutex::new(ProgressInner::default()),
+        })
+    }
+
+    /// A chunk reported live progress (`0..=100`). Stash its fraction + push.
+    fn report(&self, chunk_idx: usize, count: usize, pct: u8) {
+        let mut g = self.inner.lock().unwrap();
+        g.inflight.insert(chunk_idx, (pct.min(100) as f32 / 100.0, count));
+        self.maybe_push(&mut g);
+    }
+
+    /// A chunk finished successfully: bank its full weight permanently.
+    fn complete(&self, chunk_idx: usize, count: usize) {
+        let mut g = self.inner.lock().unwrap();
+        g.inflight.remove(&chunk_idx);
+        g.completed_combos += count;
+        self.maybe_push(&mut g);
+    }
+
+    /// A chunk failed/aborted: drop its live weight. A retry re-adds the work
+    /// under a fresh `chunk_idx`; no push (a hard failure ends the job next).
+    fn drop_inflight(&self, chunk_idx: usize) {
+        let mut g = self.inner.lock().unwrap();
+        g.inflight.remove(&chunk_idx);
+    }
+
+    /// Recompute the job percent; if it advanced, spawn a throttled DB write.
+    fn maybe_push(&self, g: &mut ProgressInner) {
+        if self.total_combos == 0 {
+            return;
+        }
+        let live: f32 = g.inflight.values().map(|(f, c)| f * *c as f32).sum();
+        let done = g.completed_combos as f32 + live;
+        let pct = ((done / self.total_combos as f32) * 100.0).clamp(0.0, 100.0) as u8;
+        // Monotonic forward only — never rewind the bar on a transient dip.
+        if pct <= g.last_pct {
+            return;
+        }
+        g.last_pct = pct;
+        let detail = format!("{} / {} combinations", done as usize, self.total_combos);
+        let repo = self.repo.clone();
+        let job_id = self.job_id.clone();
+        tokio::spawn(async move {
+            let _ = repo.update_progress(&job_id, pct, "Cloud", &detail).await;
+        });
+    }
+}
+
+/// A `RunCtx::on_progress` callback, boxed for assignment from `match` arms.
+type ProgressCb = Arc<dyn Fn(u8, &str, &str) + Send + Sync>;
+
 // ── Production chunk-runner (the live Simmit path) ────────────────────────────
 
 /// Build the PRODUCTION [`ChunkRunner`] that talks to live Simmit. Each invocation:
@@ -1132,13 +1225,18 @@ pub fn build_production_chunk_runner(
     cloud_repo: CloudChunksRepo,
     auth: crate::compute::ProviderAuth,
     cancel: Option<CancelToken>,
+    progress: Option<Arc<CloudProgress>>,
 ) -> ChunkRunner {
     Arc::new(move |req: ChunkRequest| {
         let provider = provider.clone();
         let cloud_repo = cloud_repo.clone();
         let auth = auth.clone();
         let cancel = cancel.clone();
+        let progress = progress.clone();
         Box::pin(async move {
+            let chunk_idx = req.chunk_idx;
+            let count = req.profileset_count;
+
             // 1. Submit and capture the remote job id BEFORE it runs, so a crash
             // mid-poll leaves a `submitted` cloud_chunks row that resume re-polls.
             // Unique idempotency key per chunk — Simmit rejects key reuse (409),
@@ -1154,19 +1252,36 @@ pub fn build_production_chunk_runner(
                 .mark_submitted(&req.job_id, req.chunk_idx as i64, &remote_id, &now)
                 .await;
 
-            // 2. Poll to terminal + fetch. A per-chunk RunCtx carries cancel; the
-            // streaming path has no per-chunk progress/log fan-out (the orchestrator
-            // reports at chunk boundaries), so those callbacks are no-ops.
+            // 2. Poll to terminal + fetch. A per-chunk RunCtx carries cancel and,
+            // when a run-scoped aggregator is present, fans this chunk's live
+            // percent (delivered on every poll) into the job-level bar keyed by
+            // THIS chunk's idx — so concurrent chunks weight independently.
+            let on_progress: ProgressCb = match &progress {
+                Some(p) => {
+                    let p = p.clone();
+                    Arc::new(move |pct, _label: &str, _sub: &str| p.report(chunk_idx, count, pct))
+                }
+                None => Arc::new(|_, _, _| {}),
+            };
             let ctx = crate::compute::RunCtx {
                 job_id: &req.job_id,
-                on_progress: Arc::new(|_, _, _| {}),
+                on_progress,
                 on_stage_complete: Arc::new(|_| {}),
                 on_log: Arc::new(|_| {}),
                 cancel,
                 auth: auth.clone(),
             };
-            let out = provider.poll_and_fetch_chunk(ctx, &remote_id).await?;
-            Ok(out.json)
+            let result = provider.poll_and_fetch_chunk(ctx, &remote_id).await;
+            // Bank this chunk's full weight on success; drop its live weight on
+            // failure so a retry-split re-adds the work under fresh idxs without
+            // double-counting.
+            if let Some(p) = &progress {
+                match &result {
+                    Ok(_) => p.complete(chunk_idx, count),
+                    Err(_) => p.drop_inflight(chunk_idx),
+                }
+            }
+            Ok(result?.json)
         }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
     })
 }
@@ -1245,13 +1360,16 @@ pub async fn resume_cloud_streaming(
 
     let cloud_repo = CloudChunksRepo::new(inputs.pool.clone());
 
-    // Production chunk-runner (live Simmit) for the remaining chunks.
+    // Production chunk-runner (live Simmit) for the remaining chunks. Resume does
+    // not drive the job-level progress bar yet (it would need to seed completed
+    // weight from the reloaded chunks) — pass `None` to keep current behavior.
     let cancel = Some(CancelToken::new(inputs.repo.clone(), job_id.to_string()));
     let runner = build_production_chunk_runner(
         provider.clone(),
         cloud_repo.clone(),
         auth.clone(),
         cancel.clone(),
+        None,
     );
 
     // Production re-poll: poll an in-flight chunk's `remote_job_id` to terminal +
@@ -1747,6 +1865,101 @@ mod orchestrator_tests {
             talent_builds: vec![],
             max_catalyst_charges: None,
         }
+    }
+
+    // ── CloudProgress (job-level progress aggregation) ──────────────────────
+
+    /// Insert a bare streamed top_gear job and return (repo, job_id).
+    async fn progress_job(pool: &sqlx::AnyPool) -> (JobRepo, String) {
+        let repo = JobRepo::new(pool.clone());
+        let mut job = crate::models::Job::new_with_provider(
+            String::new(),
+            "top_gear".to_string(),
+            100,
+            "patchwerk".to_string(),
+            0.1,
+            "simmit".to_string(),
+        );
+        job.simc_input_mode = crate::models::SimcInputMode::Streamed;
+        let job_id = job.id.clone();
+        repo.insert(&job).await.unwrap();
+        (repo, job_id)
+    }
+
+    /// Poll the job until `progress_pct >= want` (the DB write is spawned), then
+    /// return the observed percent. Fails the test on timeout.
+    async fn wait_pct(repo: &JobRepo, job_id: &str, want: u8) -> u8 {
+        for _ in 0..200 {
+            let pct = repo.get(job_id).await.unwrap().unwrap().progress_pct;
+            if pct >= want {
+                return pct;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        panic!("timed out waiting for progress_pct >= {want}");
+    }
+
+    #[tokio::test]
+    async fn cloud_progress_weights_inflight_and_completed() {
+        let pool = pool().await;
+        let (repo, job_id) = progress_job(&pool).await;
+        let progress = CloudProgress::new(repo.clone(), job_id.clone(), 100);
+
+        // Two in-flight chunks of 50 combos each, both at 50% → 25 + 25 = 50%.
+        progress.report(0, 50, 50);
+        progress.report(1, 50, 50);
+        assert_eq!(wait_pct(&repo, &job_id, 50).await, 50);
+
+        // Chunk 0 finishes: full 50 banked + chunk 1 still at 25 → 75%.
+        progress.complete(0, 50);
+        assert_eq!(wait_pct(&repo, &job_id, 75).await, 75);
+
+        // Chunk 1 finishes → 100%.
+        progress.complete(1, 50);
+        assert_eq!(wait_pct(&repo, &job_id, 100).await, 100);
+
+        let job = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(job.progress_stage.as_deref(), Some("Cloud"));
+        assert_eq!(job.progress_detail.as_deref(), Some("100 / 100 combinations"));
+    }
+
+    #[tokio::test]
+    async fn cloud_progress_bar_never_rewinds_on_dip() {
+        let pool = pool().await;
+        let (repo, job_id) = progress_job(&pool).await;
+        let progress = CloudProgress::new(repo.clone(), job_id.clone(), 100);
+
+        // One chunk reaches 60%.
+        progress.report(0, 100, 60);
+        assert_eq!(wait_pct(&repo, &job_id, 60).await, 60);
+
+        // A transient dip to 10% (e.g. queued-floor → real 0% on a worker start)
+        // must NOT rewind the bar.
+        progress.report(0, 100, 10);
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert_eq!(repo.get(&job_id).await.unwrap().unwrap().progress_pct, 60);
+    }
+
+    #[tokio::test]
+    async fn cloud_progress_split_does_not_double_count() {
+        let pool = pool().await;
+        let (repo, job_id) = progress_job(&pool).await;
+        let progress = CloudProgress::new(repo.clone(), job_id.clone(), 100);
+
+        // Chunk 0 (50) completes → 50%.
+        progress.complete(0, 50);
+        assert_eq!(wait_pct(&repo, &job_id, 50).await, 50);
+
+        // Chunk 1 (50) reports progress then FAILS → its live weight is dropped.
+        progress.report(1, 50, 80);
+        progress.drop_inflight(1);
+
+        // Its two retry sub-chunks (25 + 25) complete under fresh idxs → exactly
+        // 100%, not 100 + the dropped chunk-1 weight.
+        progress.complete(2, 25);
+        progress.complete(3, 25);
+        assert_eq!(wait_pct(&repo, &job_id, 100).await, 100);
+        assert_eq!(repo.get(&job_id).await.unwrap().unwrap().progress_pct, 100);
     }
 
     /// A single varying gear slot with 6 items (equipped + 5 alternatives). The
