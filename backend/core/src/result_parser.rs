@@ -595,10 +595,14 @@ pub fn parse_gear_comparison_result(
         .get("elapsed_time_seconds")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
+    // Cloud-merged results carry no `sim.statistics`; fall back to the configured
+    // `max_time` (a fixed-length fight's mean ≈ max_time) so the footer shows the
+    // fight length instead of 0. Local always has statistics, so this is a no-op.
     let fight_length = statistics
         .get("simulation_length")
         .and_then(|sl| sl.get("mean"))
         .and_then(|m| m.as_f64())
+        .or_else(|| options.get("max_time").and_then(|v| v.as_f64()))
         .unwrap_or(0.0);
     let target_error = options
         .get("target_error")
@@ -734,5 +738,21 @@ mod tests {
         let parsed = parse_gear_comparison_result(&raw, None, "top_gear");
         // 2.8 / 400 * 100 = 0.70%
         assert_eq!(find_row(&parsed, "Combo 1")["precision_pct"].as_f64(), Some(0.70));
+    }
+
+    /// Cloud-merged results carry `sim.options` but no `sim.statistics`; the
+    /// footer's fight length falls back to the configured `max_time` instead of 0.
+    #[test]
+    fn fight_length_falls_back_to_max_time_without_statistics() {
+        let raw = json!({
+            "sim": {
+                "players": [{ "name": "Base", "collected_data": { "dps": { "mean": 1000.0 } } }],
+                "profilesets": { "results": [] },
+                "options": { "max_time": 300.0, "target_error": 0.1 }
+            }
+        });
+        let parsed = parse_gear_comparison_result(&raw, None, "top_gear");
+        assert_eq!(parsed["fight_length"].as_f64(), Some(300.0));
+        assert_eq!(parsed["target_error"].as_f64(), Some(0.1));
     }
 }
