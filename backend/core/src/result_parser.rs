@@ -643,16 +643,29 @@ pub fn parse_gear_comparison_result(
     })
 }
 
-/// 95% CI half-width as a percent of the mean, read from a simc result block
-/// that carries a `mean_std_dev` field (works for both player.collected_data.dps
-/// and individual profileset entries — same shape). Returns `None` when the
-/// input lacks the field or the mean is zero.
+/// 95% CI half-width as a percent of the mean, read from a simc result block.
+///
+/// The two block shapes name the standard error of the mean DIFFERENTLY:
+/// `player.collected_data.dps` uses `mean_std_dev`, while a `profilesets.results`
+/// entry uses `mean_stddev` (and also exposes `mean_error` = 1.96 × that, i.e. the
+/// 95% CI half-width already). Accept all three so the badge renders for both —
+/// reading only `mean_std_dev` silently returned `None` for every profileset row.
+/// Returns `None` when no error field is present or the mean is zero.
 fn precision_pct_from_simc(block: &Value, mean: f64) -> Option<f64> {
     if mean <= 0.0 {
         return None;
     }
-    let mean_std_dev = block.get("mean_std_dev").and_then(|v| v.as_f64())?;
-    Some(1.96 * mean_std_dev / mean * 100.0)
+    // Standard error of the mean, under either field name → 1.96× for 95% CI.
+    if let Some(sem) = block
+        .get("mean_std_dev")
+        .or_else(|| block.get("mean_stddev"))
+        .and_then(|v| v.as_f64())
+    {
+        return Some(1.96 * sem / mean * 100.0);
+    }
+    // `mean_error` is already the 95% half-width (absolute).
+    let mean_error = block.get("mean_error").and_then(|v| v.as_f64())?;
+    Some(mean_error / mean * 100.0)
 }
 
 fn round1(v: f64) -> f64 {
@@ -665,4 +678,61 @@ fn round2(v: f64) -> f64 {
 
 fn round4(v: f64) -> f64 {
     (v * 10000.0).round() / 10000.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn find_row<'a>(parsed: &'a Value, name: &str) -> &'a Value {
+        parsed["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == name)
+            .expect("row present")
+    }
+
+    /// Regression: SimC profileset result rows name the standard error of the
+    /// mean `mean_stddev` (NOT `mean_std_dev`, which is the main-actor spelling),
+    /// so reading only `mean_std_dev` left every per-row precision badge `null`.
+    /// Field values are a real simc profileset row from `simc.exe`.
+    #[test]
+    fn profileset_precision_badge_reads_mean_stddev() {
+        let raw = json!({
+            "sim": {
+                "players": [{
+                    "name": "Base",
+                    "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 2.0 } }
+                }],
+                "profilesets": { "results": [
+                    { "name": "Combo 1", "mean": 399.4572212376752,
+                      "mean_stddev": 1.4333896936395902, "mean_error": 2.809392176589867 }
+                ] }
+            }
+        });
+        let parsed = parse_gear_comparison_result(&raw, None, "top_gear");
+        // 1.96 * 1.43339 / 399.457 * 100 = 0.70%
+        assert_eq!(find_row(&parsed, "Combo 1")["precision_pct"].as_f64(), Some(0.70));
+    }
+
+    /// Rows that carry only `mean_error` (the 95% half-width, absolute) still
+    /// resolve a precision percent.
+    #[test]
+    fn profileset_precision_badge_falls_back_to_mean_error() {
+        let raw = json!({
+            "sim": {
+                "players": [{
+                    "name": "Base",
+                    "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 2.0 } }
+                }],
+                "profilesets": { "results": [
+                    { "name": "Combo 1", "mean": 400.0, "mean_error": 2.8 }
+                ] }
+            }
+        });
+        let parsed = parse_gear_comparison_result(&raw, None, "top_gear");
+        // 2.8 / 400 * 100 = 0.70%
+        assert_eq!(find_row(&parsed, "Combo 1")["precision_pct"].as_f64(), Some(0.70));
+    }
 }
