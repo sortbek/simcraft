@@ -402,6 +402,17 @@ fn poll_interval_ms(status: &str) -> u64 {
     }
 }
 
+/// Max consecutive transient poll failures (network blip, 5xx, 429) tolerated
+/// before a chunk gives up. The remote job keeps running regardless, so a flaky
+/// connection must not abort a chunk (and, via split-retry, the whole sim).
+const MAX_POLL_TRANSIENT_FAILURES: u32 = 5;
+
+/// Backoff (ms) before retrying a transient poll failure. Escalates
+/// 1s → 2s → 4s → 8s and caps there.
+fn poll_retry_backoff_ms(failures: u32) -> u64 {
+    1000u64 * (1u64 << failures.saturating_sub(1).min(3))
+}
+
 impl SimmitProvider {
     async fn poll_to_terminal(
         &self,
@@ -410,6 +421,9 @@ impl SimmitProvider {
         ctx: &RunCtx<'_>,
     ) -> Result<StatusResponse, RunError> {
         let mut last_log_ts: u64 = 0;
+        // Consecutive transient failures (network blip, 5xx, 429). Reset to 0 on
+        // every clean poll; a long-running remote job must survive a flaky link.
+        let mut transient_failures: u32 = 0;
         loop {
             // Cancel between polls.
             if let Some(tok) = ctx.cancel.as_ref() {
@@ -419,21 +433,76 @@ impl SimmitProvider {
                 }
             }
             let url = format!("{}/v1/simc/jobs/{}/status?include=logEntries", SIMMIT_BASE_URL, remote_job_id);
-            let resp = self.http.get(&url).bearer_auth(bearer).send().await
-                .map_err(|e| RunError::Other(format!("Simmit poll: {}", e)))?;
+
+            // ── One poll attempt. Transient transport errors, 5xx and 429 are
+            // retried with backoff instead of aborting the chunk. ────────────
+            let resp = match self.http.get(&url).bearer_auth(bearer).send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    transient_failures += 1;
+                    if transient_failures >= MAX_POLL_TRANSIENT_FAILURES {
+                        return Err(RunError::Other(format!(
+                            "Simmit poll: {} (after {} retries)", e, transient_failures
+                        )));
+                    }
+                    (ctx.on_log)(&format!(
+                        "[simmit] poll network error ({}/{}), retrying: {}",
+                        transient_failures, MAX_POLL_TRANSIENT_FAILURES, e
+                    ));
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        poll_retry_backoff_ms(transient_failures),
+                    )).await;
+                    continue;
+                }
+            };
             if !resp.status().is_success() {
                 let status_code = resp.status();
+                // 5xx and 429 are transient — retry rather than fail the sim.
+                if status_code.is_server_error()
+                    || status_code == reqwest::StatusCode::TOO_MANY_REQUESTS
+                {
+                    transient_failures += 1;
+                    if transient_failures < MAX_POLL_TRANSIENT_FAILURES {
+                        (ctx.on_log)(&format!(
+                            "[simmit] poll {} ({}/{}), retrying",
+                            status_code, transient_failures, MAX_POLL_TRANSIENT_FAILURES
+                        ));
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            poll_retry_backoff_ms(transient_failures),
+                        )).await;
+                        continue;
+                    }
+                }
                 let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
                 return Err(map_simmit_error(status_code, err));
             }
-            let body_text = resp.text().await
-                .map_err(|e| RunError::Other(format!("Simmit poll body read: {}", e)))?;
+            let body_text = match resp.text().await {
+                Ok(t) => t,
+                Err(e) => {
+                    transient_failures += 1;
+                    if transient_failures >= MAX_POLL_TRANSIENT_FAILURES {
+                        return Err(RunError::Other(format!(
+                            "Simmit poll body read: {} (after {} retries)", e, transient_failures
+                        )));
+                    }
+                    (ctx.on_log)(&format!(
+                        "[simmit] poll body read error ({}/{}), retrying: {}",
+                        transient_failures, MAX_POLL_TRANSIENT_FAILURES, e
+                    ));
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        poll_retry_backoff_ms(transient_failures),
+                    )).await;
+                    continue;
+                }
+            };
             let s: StatusResponse = serde_json::from_str(&body_text)
                 .map_err(|e| {
                     let preview: String = body_text.chars().take(400).collect();
                     eprintln!("[simmit] status decode failed: {} | body: {}", e, preview);
                     RunError::Other(format!("Simmit poll decode: {}", e))
                 })?;
+            // A clean poll → connectivity is back; reset the transient counter.
+            transient_failures = 0;
 
             // Stream new log lines, dedup by ts.
             let logs_slice = s.log_entries.as_deref().unwrap_or(&[]);
@@ -732,6 +801,16 @@ mod tests {
         assert_eq!(poll_interval_ms("starting"), 2000);
         assert_eq!(poll_interval_ms("running"), 1500);
         assert_eq!(poll_interval_ms("anything-else"), 1500);
+    }
+
+    #[test]
+    fn poll_retry_backoff_escalates_and_caps() {
+        assert_eq!(poll_retry_backoff_ms(1), 1000);
+        assert_eq!(poll_retry_backoff_ms(2), 2000);
+        assert_eq!(poll_retry_backoff_ms(3), 4000);
+        assert_eq!(poll_retry_backoff_ms(4), 8000);
+        // Caps at 8s for any further failures.
+        assert_eq!(poll_retry_backoff_ms(9), 8000);
     }
 
     #[test]
