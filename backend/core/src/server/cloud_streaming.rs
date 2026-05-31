@@ -518,7 +518,11 @@ impl CloudStreamingRun {
 
         // A retry that split the chunk yields >1 result ⇒ no single report.
         let multi_chunk = results.len() > 1;
-        let merged = acc.into_merged_simc_json();
+        let mut merged = acc.into_merged_simc_json();
+        // Carry the run options so the parser reads real target_error /
+        // desired_targets / max_time instead of its zero defaults — the bare
+        // merge omits `sim.options`, which left target_error showing 0.0%.
+        merged["sim"]["options"] = self.options.clone();
         finalize_cloud_result(
             &self.repo,
             &self.job_id,
@@ -772,7 +776,10 @@ impl CloudStreamingRun {
         }
 
         // ── 4. Finalize the merged multi-chunk result. ──────────────────────
-        let merged = acc.into_merged_simc_json();
+        let mut merged = acc.into_merged_simc_json();
+        // Carry the run options (target_error / desired_targets / max_time) into
+        // the merged doc so the parser reads real values, not its zero defaults.
+        merged["sim"]["options"] = self.options.clone();
         finalize_cloud_result(
             &self.repo,
             &self.job_id,
@@ -2045,7 +2052,7 @@ mod orchestrator_tests {
             iter_cfg: one_combo_cfg(),
             base_profile: "server=tichondrius\nregion=us".to_string(),
             job_id: job_id.clone(),
-            options: serde_json::json!({}),
+            options: serde_json::json!({ "target_error": 0.05, "desired_targets": 1, "max_time": 300 }),
             sim_type: "top_gear".to_string(),
             ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
             max_active_jobs: None,
@@ -2084,6 +2091,9 @@ mod orchestrator_tests {
         assert_eq!(result["base_dps"], 1000.0);
         // Realm came from the base_profile (no single simc_input on cloud path).
         assert_eq!(result["realm"], "tichondrius");
+        // sim.options was injected into the merge, so the parser reports the real
+        // target_error instead of its 0.0 default.
+        assert_eq!(result["target_error"], 0.05);
         let names: Vec<String> = result["results"]
             .as_array()
             .unwrap()
