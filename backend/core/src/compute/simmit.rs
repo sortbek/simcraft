@@ -388,6 +388,26 @@ fn is_terminal(status: &str) -> bool {
     matches!(status, "completed" | "failed" | "cancelled" | "timed_out")
 }
 
+/// Maps a terminal `StatusResponse` to `Ok` (completed) or the appropriate `RunError`.
+/// Extracted as a pure helper so it can be unit-tested without HTTP.
+fn terminal_status_to_result(s: &StatusResponse) -> Result<(), RunError> {
+    if s.status == "completed" {
+        return Ok(());
+    }
+    if s.status == "cancelled" {
+        return Err(RunError::Cancelled);
+    }
+    let reason = s.status_reason.clone().unwrap_or_default();
+    let code = s.error_code.clone().unwrap_or_default();
+    let msg = match (code.is_empty(), reason.is_empty()) {
+        (false, false) => format!("Simmit job {}: {} ({})", s.status, reason, code),
+        (false, true)  => format!("Simmit job {}: {}", s.status, code),
+        (true, false)  => format!("Simmit job {}: {}", s.status, reason),
+        (true, true)   => format!("Simmit job ended with status {}", s.status),
+    };
+    Err(RunError::Other(msg))
+}
+
 /// Poll cadence (ms) by Simmit job status. A queued job won't change for a while,
 /// so we back off to spare Simmit's API read limit (a 60s queue at 1.5s is ~40
 /// pointless reads); once it's starting/running we poll faster to keep progress
@@ -556,18 +576,7 @@ impl SimmitProvider {
             (ctx.on_progress)(display_pct, &label, &sub);
 
             if is_terminal(&s.status) {
-                // Surface error_code / status_reason for non-completed terminal states.
-                if s.status != "completed" {
-                    let reason = s.status_reason.clone().unwrap_or_default();
-                    let code = s.error_code.clone().unwrap_or_default();
-                    let msg = match (code.is_empty(), reason.is_empty()) {
-                        (false, false) => format!("Simmit job {}: {} ({})", s.status, reason, code),
-                        (false, true)  => format!("Simmit job {}: {}", s.status, code),
-                        (true, false)  => format!("Simmit job {}: {}", s.status, reason),
-                        (true, true)   => format!("Simmit job ended with status {}", s.status),
-                    };
-                    return Err(RunError::Other(msg));
-                }
+                terminal_status_to_result(&s)?;
                 return Ok(s);
             }
             tokio::time::sleep(std::time::Duration::from_millis(poll_interval_ms(&s.status))).await;
@@ -937,5 +946,24 @@ mod tests {
         })).unwrap();
         let out = simmit_result_to_simc_output(&body);
         assert_eq!(out.json["sim"]["profilesets"]["results"].as_array().unwrap().len(), 2);
+    }
+
+    fn status_with(status: &str) -> StatusResponse {
+        StatusResponse {
+            status: status.to_string(),
+            error_code: None,
+            status_reason: None,
+            queue: None,
+            progress: None,
+            log_entries: None,
+        }
+    }
+
+    #[test]
+    fn cancelled_terminal_status_maps_to_cancelled() {
+        let s = status_with("cancelled");
+        assert!(matches!(terminal_status_to_result(&s), Err(RunError::Cancelled)));
+        let s2 = status_with("failed");
+        assert!(matches!(terminal_status_to_result(&s2), Err(RunError::Other(_))));
     }
 }
