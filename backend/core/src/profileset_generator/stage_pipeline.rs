@@ -300,7 +300,7 @@ pub async fn run_stage_pipeline(
                         plan.final_single_run_ceiling
                     ));
                 }
-                let output = run_final_stage(
+                match run_final_stage(
                     &inputs,
                     &metadata_repo,
                     &stage_results_repo,
@@ -309,26 +309,17 @@ pub async fn run_stage_pipeline(
                     stage_progress_start,
                     stage_progress_end,
                 )
-                .await?;
-                summaries.push(StageSummary {
-                    stage_name: stage.name.clone(),
-                    target_error: stage.target_error,
-                    input_count: current_survivor_ids.len(),
-                    batch_count: 1,
-                    local_survivor_count: current_survivor_ids.len(),
-                    global_window_survivor_count: current_survivor_ids.len(),
-                    baseline_forced_keep_count: 0,
-                    min_keep_added_count: 0,
-                    global_target_truncated_count: 0,
-                    hard_max_truncated_count: 0,
-                    output_count: current_survivor_ids.len(),
-                    seconds: stage_start.elapsed().as_secs_f64(),
-                });
-                return Ok(StagePipelineOutcome::Completed(StagePipelineCompleted {
-                    output,
-                    final_combo_ids: current_survivor_ids,
-                    stage_summaries: summaries,
-                }));
+                .await?
+                {
+                    None => return Ok(StagePipelineOutcome::Paused),
+                    Some(output) => {
+                        return Ok(StagePipelineOutcome::Completed(StagePipelineCompleted {
+                            output,
+                            final_combo_ids: current_survivor_ids,
+                            stage_summaries: summaries,
+                        }));
+                    }
+                }
             }
         }
     }
@@ -917,7 +908,8 @@ async fn run_final_stage(
     survivor_ids: &[i64],
     stage_progress_start: u8,
     stage_progress_end: u8,
-) -> Result<SimcOutput, String> {
+) -> Result<Option<SimcOutput>, String> {
+    write_stage_entry_checkpoint(inputs.pool, inputs.job_id, stage, survivor_ids, 0).await?;
     let rows = metadata_repo
         .list_for_combo_ids(inputs.job_id, survivor_ids)
         .await
@@ -940,7 +932,7 @@ async fn run_final_stage(
         format!("{}: simc on {} profilesets", stage.name, survivor_ids.len()),
     );
     let progress_buckets = std::sync::atomic::AtomicUsize::new(0);
-    let mut output = simc_runner::run_simc(
+    let mut output = match simc_runner::run_simc(
         inputs.simc_bin,
         inputs.job_id,
         &final_input,
@@ -976,12 +968,22 @@ async fn run_final_stage(
         },
         None,
     )
-    .await?;
+    .await
+    {
+        Ok(o) => o,
+        Err(e) => {
+            if check_pause(inputs.pool, inputs.job_id).await? {
+                mark_paused(inputs.pool, inputs.job_id).await;
+                return Ok(None);
+            }
+            return Err(e);
+        }
+    };
     let final_names = profileset_names_from_json(&output.json);
     output.json["simhammer"]["final_profileset_names"] =
         Value::Array(final_names.iter().cloned().map(Value::String).collect());
     merge_eliminated_latest(&mut output.json, stage_results_repo, inputs.job_id, &final_names).await?;
-    Ok(output)
+    Ok(Some(output))
 }
 
 fn progress_between(start: u8, end: u8, fraction: f64) -> u8 {
