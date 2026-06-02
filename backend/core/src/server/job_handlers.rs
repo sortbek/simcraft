@@ -243,6 +243,7 @@ pub(super) async fn pause_sim(path: web::Path<String>, repo: web::Data<JobRepo>)
     if let Err(e) = repo.set_pause_requested(&job_id, true).await {
         return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
     }
+    simc_runner::kill_job(&job_id);
 
     HttpResponse::Ok().json(json!({
         "status": "pause_requested",

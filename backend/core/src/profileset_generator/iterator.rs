@@ -224,7 +224,7 @@ impl ProfilesetIterator {
             return None;
         }
 
-        // ── 4. Skip baseline (all-equipped gear) ─────────────────────────────
+        // ── 4. Detect baseline gear ──────────────────────────────────────────
         let is_baseline = GEAR_SLOTS.iter().all(|slot| {
             gear_set
                 .get(*slot)
@@ -232,9 +232,6 @@ impl ProfilesetIterator {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true) // absent slot → doesn't count against baseline
         });
-        if is_baseline {
-            return None;
-        }
 
         // ── 5. Resolve enchants ──────────────────────────────────────────────
         let gear_axes_count = self.cfg.varying_slots.len();
@@ -270,6 +267,14 @@ impl ProfilesetIterator {
             .get(talent_idx)
             .cloned()
             .unwrap_or_else(|| ("".to_string(), "".to_string()));
+
+        if is_baseline
+            && effective_enchants_map.is_empty()
+            && eff_gems.is_empty()
+            && talent_string.is_empty()
+        {
+            return None;
+        }
 
         // ── 8. Identity key ──────────────────────────────────────────────────
         let identity_key = compute_identity_key(&IdentityInput {
@@ -502,6 +507,39 @@ mod tests {
         // The equipped variant is baseline (skipped); only the alternative remains.
         assert_eq!(yielded.len(), 1);
         assert_eq!(yielded[0].profileset_name, "Combo 1");
+    }
+
+    #[test]
+    fn gem_only_axis_yields_equipped_gear_with_gem_delta() {
+        crate::test_support::ensure_game_data_loaded();
+
+        let mut slot_item_lists = HashMap::new();
+        slot_item_lists.insert("head".to_string(), vec![arc_item(100, "head", true, 1)]);
+        let mut socketed_item_ids = HashSet::new();
+        socketed_item_ids.insert(100);
+        let mut gem_combo = GemCombo::new();
+        gem_combo.insert("head".to_string(), vec![240898]);
+
+        let cfg = ProfilesetIteratorConfig {
+            spec: "mistweaver".to_string(),
+            base_profile: Arc::from(""),
+            slot_item_lists,
+            varying_slots: vec![],
+            enchant_axes: vec![],
+            gem_combo_count: 1,
+            gem_combos_resolver: GemCombosResolver::new(vec![gem_combo]),
+            socketed_item_ids,
+            talent_builds: vec![],
+            max_catalyst_charges: None,
+        };
+
+        let yielded: Vec<_> = ProfilesetIterator::new(cfg).collect();
+        assert_eq!(yielded.len(), 1);
+        assert!(
+            yielded[0].profileset_simc.contains("gem_id=240898"),
+            "gem-only profileset should be emitted with gem override: {}",
+            yielded[0].profileset_simc
+        );
     }
 
     #[test]

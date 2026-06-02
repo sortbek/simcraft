@@ -1,129 +1,248 @@
-# SimHammer Triage Calibration Harness
+# SimHammer Local Top Gear Calibration / Benchmark Harness
 
-The calibration harness runs the Triage stage across a 3-axis grid of parameters
-(profilesets per SimC invocation, simc iterations, retention cutoff multiplier) against a
-captured Top Gear scenario, and records winner-loss rates vs a reference
-full-precision baseline. The chosen defaults are then locked into
-`backend/core/src/profileset_generator/triage.rs`.
+The calibration harness benchmarks local Top Gear pruning from either captured
+`jobs.request_json` scenarios or raw SimC addon fixtures. It has two modes:
 
-This harness measures Triage only. Intermediate staged evaluation uses the
-separate `STAGED_BATCH_PROFILESETS` setting and should be measured with
-end-to-end application runs after choosing Triage defaults. The final
-precision stage is unbatched, so neither batch knob improves pause latency
-while a job is in Final.
+- `triage`: historical triage grid over profilesets per SimC invocation,
+  triage iterations, and retention cutoff multiplier.
+- `pipeline`: triage plus staged local execution under named stage-bracket
+  strategies, so we can compare production against simpler brackets.
 
-## Process
+The priority is local/self-run SimC behavior. Cloud/Simmit can inform the shape,
+but this bench exists to answer whether SimHammer's own triage/staging pipeline
+is correct, fast, and worth its complexity.
 
-### 1. Capture a reference scenario
+## Canonical Scenarios
 
-The harness reads a `NormalizedRequest` envelope — the same JSON shape stored
-in `jobs.request_json` for streamed-mode jobs. Capturing it:
+Keep at least two captured Top Gear scenarios:
 
-1. Configure and start a Top Gear sim with a substantial combo count (target:
-   >=1M). A real Mistweaver setup with many trinket/weapon/embellishment
-   options is a good baseline.
-2. Let the job hit at least the streaming path (≥`TRIAGE_THRESHOLD` combos).
-   Pausing it immediately after start is fine — we only need the persisted
-   `request_json`.
-3. Pull the envelope out of SQLite (desktop or web):
+1. **High-spread gear scenario**
+   - Many upgrades/downgrades: item-level differences, trinkets, weapons,
+     catalysts, crafted/embellished gear.
+   - Expected: early stages prune aggressively and multi-stage should win.
 
-   ```sql
-   SELECT request_json FROM jobs WHERE id = '<your-job-id>';
-   ```
-4. Save the JSON to
-   `backend/calibration/scenarios/topgear-<spec>-<combo-count>k.json`.
+2. **Low-spread gem/enchant scenario**
+   - Same gear, many gem/enchant permutations with tiny DPS deltas.
+   - Expected: pruning is slow, multiple stages may add overhead, and simpler
+     schedules may win.
 
-### 2. Produce the baseline result
+Suggested names:
 
-Run the same scenario through the EAGER path at full precision to get the
-reference winners. Two ways:
+```text
+backend/calibration/scenarios/topgear-high-spread-<spec>-<count>.json
+backend/calibration/scenarios/topgear-low-spread-gems-<spec>-<count>.json
+```
 
-- **Live app:** Temporarily set `TRIAGE_THRESHOLD` higher than the scenario's
-  combo count in [`triage.rs`](../core/src/profileset_generator/triage.rs), then
-  start the sim with `iterations=50000` and `target_error=0.05`. After it
-  completes, export the result JSON.
-- **Offline:** Run the eager generator + simc directly.
+## Capture A Scenario
 
-Save the top 10 (and ideally all) ranked profilesets to
-`backend/calibration/scenarios/topgear-<spec>-<combo-count>k.baseline.json`:
+The harness reads a `NormalizedRequest` envelope, the same JSON shape stored in
+`jobs.request_json` for streamed-mode jobs.
+
+1. Configure and start a Top Gear sim with a substantial combo count.
+2. Let the job reach the streaming path. Pausing immediately after start is fine.
+3. Pull the envelope from SQLite:
+
+```sql
+SELECT request_json FROM jobs WHERE id = '<job-id>';
+```
+
+4. Save it under `backend/calibration/scenarios/`.
+
+The captured request must include `payload.estimate`; triage uses it for
+survivor budgeting.
+
+## Raw Addon Fixtures
+
+For combination-builder coverage, prefer a raw fixture. This runs the addon
+input through the same parser, resolver, item selection, and generator path
+before benchmarking the triage/pipeline stages.
 
 ```json
 {
-  "scenario": "topgear-mistweaver-5m",
+  "name": "topgear-high-spread-bm-hunter-9k",
+  "simc_input": "<paste SimC addon export here>",
+  "copy_enchants": true,
+  "select_all_alternative_slots": [
+    "neck",
+    "shoulder",
+    "back",
+    "chest",
+    "wrist",
+    "waist",
+    "legs"
+  ],
+  "selected_alternatives": {
+    "feet": [
+      { "item_id": 258582 }
+    ]
+  },
+  "options": {
+    "fight_style": "Patchwerk",
+    "target_error": 0.05,
+    "iterations": 1000,
+    "desired_targets": 1,
+    "max_time": 300,
+    "threads": 0,
+    "single_actor_batch": true
+  }
+}
+```
+
+Use `"simc_input_path": "profile.simc"` instead of `simc_input` to keep large
+addon exports in a separate file next to the fixture JSON.
+
+`selected_alternatives` entries may be a UID string, or an object with
+`item_id`, `name`, `uid`, and/or `bonus_ids`. All fields in an object must
+match. The default `--data-dir` is `resources/data-compacted` when running from
+`backend`; pass another path if needed.
+
+## Baselines
+
+For correctness comparisons, save a baseline JSON next to each scenario:
+
+```json
+{
+  "scenario": "topgear-high-spread-monk-250k",
   "iterations": 50000,
   "target_error": 0.05,
-  "total_profilesets": 5000000,
+  "total_profilesets": 250000,
   "top_10": [
-    { "combo_name": "Combo 12345", "mean": 1234567.8 },
-    ...
+    {
+      "combo_name": "Combo 12345",
+      "combo_key": "optional-content-key",
+      "mean": 1234567.8
+    }
   ]
 }
 ```
 
-### 3. Run the grid
+If baseline entries include `combo_key` or `identity_key`, recall is matched by
+content key. Otherwise it falls back to `combo_name`, which is weaker because
+eager and streaming paths may assign different names to identical effective
+gear.
+
+## Run The Triage Grid
 
 ```powershell
 cd backend
 cargo run --release -p simhammer-calibration -- `
-  calibration/scenarios/topgear-mistweaver-5m.json `
-  --baseline calibration/scenarios/topgear-mistweaver-5m.baseline.json `
+  calibration/scenarios/topgear-high-spread-monk-250k.json `
+  --mode triage `
+  --baseline calibration/scenarios/topgear-high-spread-monk-250k.baseline.json `
+  --runs 3 `
   --simc-bin path/to/simc.exe `
   --batch-profilesets 100,250,500,1000
 ```
 
-This runs Triage 36 times (4 batch sizes x 3 iterations x 3 cutoffs) and writes
-`topgear-mistweaver-5m.calibration.json`.
+This runs 36 grid points per scenario/run by default:
 
-Each batch-size value pins both Triage min/max profilesets for a direct
-comparison; the initial 100-profile probe remains unchanged. Key result
-fields are:
-
-- `end_to_end_seconds`: total Triage time for the grid point.
-- `average_batch_seconds`: mean interval at which Triage can observe a pause request; actual worst case is the longest individual batch.
-- `profilesets_per_second` and `seconds_per_1000_profilesets`: overhead comparison between batch sizes.
-- `total_batches` and `triage_survivors`: invocation count and downstream-work impact.
-- `winner_loss_count`: retained winner correctness against the supplied baseline.
-
-### 4. Lock the defaults
-
-Inspect the grid results. Pick the grid point that **minimizes
-end_to_end_seconds subject to winner_loss_count = 0** on the baseline top-10.
-
-Edit [`triage.rs`](../core/src/profileset_generator/triage.rs) and update
-the module-level `pub const`s to match the chosen grid point. Add a comment:
-
-```rust
-// Locked by calibration on YYYY-MM-DD against scenarios/topgear-<spec>-Nk.json.
-// See scenarios/topgear-<spec>-Nk.calibration.json for the grid results.
-// Winner-loss = 0 on baseline top-10.
+```text
+4 batch sizes x 3 triage iteration values x 3 cutoff multipliers
 ```
 
-### 5. Verify
+Useful fields:
 
-Re-run the captured scenario via the streaming path with the new defaults.
-Confirm the result's top-10 matches the baseline's top-10.
+- `total_seconds`
+- `average_triage_batch_seconds`
+- `profilesets_per_second`
+- `triage_survivors`
+- `total_batches`
+- `total_candidates`
+- `total_accepted`
+- `top_recall_loss_count`
 
-## Notes
+## Run The Pipeline Bench
 
-- The inner loop is wired through
-  [`build_iterator_from_request_json`](../core/src/profileset_generator/iterator_from_request.rs)
-  (also used by the resume path), so the harness reads exactly the same
-  envelope shape stored in `jobs.request_json`.
-- Each grid point runs against a fresh in-memory SQLite DB
-  (`sqlite::memory:`) so combo_metadata / combo_dedup / triage_batches don't
-  leak between points.
-- `TriageConstants` in `triage.rs` exposes all tunable parameters. The three
-  grid axes are pinned `min_batch_profilesets == max_batch_profilesets`,
-  `triage_iterations`, and
-  `triage_cutoff_multiplier`; the rest stay at `Default` during grid search.
-- The captured request must include `payload.estimate`; Triage uses it for
-  survivor budgeting, so substituting an arbitrary estimate invalidates the
-  comparison.
-- **Winner-loss matching limitation:** combos are matched by name across the
-  baseline and the survivors. The streaming iterator assigns names in its own
-  order, so identical *content* may appear under different names across runs
-  (eager-baseline "Combo 12345" likely refers to different gear than
-  streaming "Combo 12345"). For true content-based recall, export the
-  baseline's full `profileset_simc` per top combo and switch the matching to
-  content hashing — see [`identity_key.rs`](../core/src/profileset_generator/identity_key.rs)
-  for the effective-form hash used by the iterator. Filed as a follow-up.
+```powershell
+cd backend
+cargo run --release -p simhammer-calibration -- `
+  calibration/scenarios/topgear-high-spread-monk-250k.json `
+  calibration/scenarios/topgear-low-spread-gems-monk-250k.json `
+  --mode pipeline `
+  --runs 3 `
+  --baseline `
+    calibration/scenarios/topgear-high-spread-monk-250k.baseline.json `
+    calibration/scenarios/topgear-low-spread-gems-monk-250k.baseline.json `
+  --simc-bin path/to/simc.exe `
+  --batch-profilesets 250,1000 `
+  --strategies current,simmit3,broad-final,refine-final `
+  --out calibration/scenarios/local-pipeline-benchmark.json
+```
+
+Built-in strategies:
+
+- `current`: production staged schedule (`1.0 -> 0.5 -> final`).
+- `simmit3`: historical alias for the same Simmit-style ladder.
+- `broad-final`: `1.0 -> final`.
+- `refine-final`: `0.5 -> final`.
+
+Custom brackets use `+` or `/` between target errors because commas are already
+used by the CLI list parser:
+
+```powershell
+--strategies current,custom=1.0+0.5+0.1
+```
+
+Pipeline result fields:
+
+- `total_seconds`, `triage_seconds`, `staged_seconds`
+- `triage_survivors`
+- `stage_summaries`
+- `final_profilesets`
+- `top_recall_loss_count`: missing baseline top entries after triage
+- `dps_regret`: `baseline_best_mean - final_best_mean`, when baseline includes
+  a `mean`
+
+## Reading Results
+
+For local-first tuning, prefer the simplest strategy that satisfies:
+
+```text
+top_recall_loss_count = 0
+dps_regret = 0 or acceptably tiny
+stable performance across repeated runs
+good behavior on both high-spread and low-spread scenarios
+```
+
+The high-spread scenario should reward staging. The low-spread scenario is the
+guardrail against over-staging.
+
+## Run The Decision Benchmark
+
+Use this when changing production pruning/staging defaults. It generates a
+broad all-combo oracle first, reruns the oracle's top candidates at high
+precision, then runs candidate pipeline schedules against that baseline by
+stable combo identity key.
+
+```powershell
+cd backend
+cargo run --release -p simhammer-calibration -- `
+  calibration/scenarios/topgear-high-spread-sortbek-bm-9k.raw.json `
+  calibration/scenarios/topgear-cutting-edge-spread-sortbek-bm-gems.raw.json `
+  --mode decision `
+  --runs 3 `
+  --simc-bin resources/simc/nightly-2026-05-31-13cd910/simc.exe `
+  --batch-profilesets 1000 `
+  --strategies current,broad-final,refine-final `
+  --baseline-prefilter-target-error 1.0 `
+  --baseline-candidate-count 250 `
+  --baseline-target-error 0.05 `
+  --baseline-iterations 50000 `
+  --out calibration/scenarios/sortbek-local-decision-benchmark.json
+```
+
+Decision fields to trust:
+
+- `final_winner_retained`: whether the oracle winner reached the precise
+  Final stage.
+- `final_top_recall_loss_count`: how many oracle top-10 identity keys missed
+  the precise Final stage.
+- `dps_regret`: oracle best mean minus candidate final best mean.
+- `total_seconds`: end-to-end local runtime.
+
+Promote a strategy only when both scenarios have `final_winner_retained=true`,
+`final_top_recall_loss_count=0`, negligible `dps_regret`, and repeated runtime
+is materially better or simpler than the alternative.
+
+If the oracle still runs too long, lower `--baseline-candidate-count` to 100.
+If a result is borderline, raise it to 500 for a confidence pass.

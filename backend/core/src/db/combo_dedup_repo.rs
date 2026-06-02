@@ -71,13 +71,7 @@ impl ComboDedupRepo {
                 continue;
             }
 
-            let values = (0..chunk.len())
-                .map(|i| {
-                    let base = i * 3;
-                    format!("(${}, ${}, ${})", base + 1, base + 2, base + 3)
-                })
-                .collect::<Vec<_>>()
-                .join(",");
+            let values = crate::db::values_placeholders(chunk.len(), 3);
             let sql = format!(
                 "INSERT INTO combo_dedup (job_id, batch_idx, combo_key) VALUES {} ON CONFLICT DO NOTHING",
                 values

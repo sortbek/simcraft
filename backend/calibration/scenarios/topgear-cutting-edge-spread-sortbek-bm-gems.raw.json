@@ -1,0 +1,35 @@
+{
+  "name": "topgear-cutting-edge-spread-sortbek-bm-gems",
+  "simc_input_path": "topgear-high-spread-sortbek-bm-gear.simc",
+  "copy_enchants": true,
+  "replace_gems": true,
+  "diamond_always_use": true,
+  "max_colors": true,
+  "gem_options": [
+    240897,
+    240898,
+    240899,
+    240900,
+    240901,
+    240902,
+    240903,
+    240904,
+    240905,
+    240906,
+    240907,
+    240908,
+    240966,
+    240967,
+    240982,
+    240983
+  ],
+  "options": {
+    "fight_style": "Patchwerk",
+    "target_error": 0.05,
+    "iterations": 1000,
+    "desired_targets": 1,
+    "max_time": 300,
+    "threads": 0,
+    "single_actor_batch": true
+  }
+}

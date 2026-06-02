@@ -962,7 +962,8 @@ pub async fn run_triage_with_constants(
         // sync overhead is negligible per tick.
         let last_logged_progress_bucket = std::sync::atomic::AtomicUsize::new(0);
         let batch_start = std::time::Instant::now();
-        let parsed = crate::simc_runner::run_simc_triage_batch(
+        let pause_check_repo = crate::db::JobRepo::new(inputs.pool.clone());
+        let parsed = match crate::simc_runner::run_simc_triage_batch(
             inputs.base_profile,
             &profileset_simc_block,
             inputs.options,
@@ -1006,7 +1007,24 @@ pub async fn run_triage_with_constants(
                 );
             },
         )
-        .await?;
+        .await
+        {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                match pause_check_repo.get_pause_requested(inputs.job_id).await {
+                    Ok(true) => {
+                        let _ = pause_check_repo
+                            .set_pause_requested(inputs.job_id, false)
+                            .await;
+                        let _ = pause_check_repo
+                            .update_status(inputs.job_id, crate::models::JobStatus::Paused)
+                            .await;
+                        return Ok(TriageRunOutcome::Paused);
+                    }
+                    Ok(false) | Err(_) => return Err(e),
+                }
+            }
+        };
         let batch_secs = batch_start.elapsed().as_secs_f64();
         let batch_per_ps_ms = if pre.accepted.is_empty() {
             0.0

@@ -11,6 +11,8 @@ pub mod iterator;
 pub mod iterator_from_request;
 mod selection;
 mod simc;
+pub mod stage_pipeline;
+pub mod survivor_policy;
 mod top_gear;
 pub mod triage;
 mod upgrade_compare;

@@ -1,73 +1,65 @@
-# SimHammer
+# CLAUDE.md
 
-SimulationCraft web app + desktop app.
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
-## Monorepo Structure
-- **frontend/** — Next.js app (shared by web + desktop)
-- **backend/** — Cargo workspace: core library, standalone server binary
-- **backend/resources/** — Runtime resources: `data/` (game JSON), `simc/` (binary), `frontend/` (static export)
-- **desktop/** — Electron app (main process, preload, build config, scripts)
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
-## Architecture
+## 1. Think Before Coding
 
-### Rust Backend (shared)
-- **Core library** (`backend/core/`): Actix-web routes, game data, addon parser, profileset generator, result parser, simc runner
-- **Storage**: `JobStorage` trait with `MemoryStorage` (desktop) and `SqliteStorage` (web, behind `web` feature flag)
-- **Game Data**: Raidbots static JSON files loaded at startup from `backend/resources/data/`
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
 
-### Desktop
-- **Shell** (`desktop/`): Electron app, spawns Rust backend as child process
-- **Backend**: `simhammer-server --desktop` (port 17384, MemoryStorage, localhost only)
-- **Frontend**: Same Next.js app (static export for Electron, or dev server in dev mode)
-- **Window**: Frameless with custom title bar, uses `-webkit-app-region: drag` + Electron IPC
-- **Auto-updater**: `electron-updater` with GitHub Releases
-- **Sim**: Runs simc directly as subprocess, all CPU cores
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
 
-### Web
-- **Server** (`backend/server/`): Standalone binary, uses `simhammer-core` with `web` feature
-- **Backend**: Rust + Actix-web (port 8000), SQLite job storage
-- **Frontend**: Next.js 14 App Router + TypeScript + Tailwind (port 3000)
+## 2. Simplicity First
 
-## Commands
+**Minimum code that solves the problem. Nothing speculative.**
 
-### Web
-```bash
-docker compose up          # Docker (from repo root)
-# or manually:
-cd backend && cargo run -p simhammer-server
-cd frontend && npm run dev
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
 ```
 
-### Desktop
-```bash
-# Development (start frontend dev server first, then Electron)
-cd frontend && npm run dev
-cd desktop && npm run dev
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-# Build installer
-npm run desktop:build
-```
+---
 
-## Cargo Workspace (`backend/`)
-```
-Cargo.toml          — workspace root (members: core, server)
-core/               — simhammer-core library (features: desktop, web)
-server/             — simhammer-server (standalone binary, features: desktop)
-```
-
-## Key Patterns
-- Frontend shared between web and desktop via `lib/api.ts` (auto-detects API URL via `window.electronAPI`)
-- Desktop detection: `window.electronAPI` in frontend, `html[data-desktop]` CSS attribute
-- All item/enchant/gem/bonus data from local JSON files, no Wowhead API calls
-- Wowhead tooltips loaded client-side (hover popups only)
-- Single Rust backend serves identical API shape for both web and desktop
-- `JobStorage` trait abstracts persistence: `MemoryStorage` (desktop), `SqliteStorage` (web)
-- Desktop build uses `output: "export"` with `generateStaticParams` placeholder for `/sim/[id]`
-- Gold accent color: `#C8992A`
-
-## Pages
-- `/` — Landing page with sim type cards
-- `/quick-sim` — Quick Sim (DPS + stat weights)
-- `/top-gear` — Top Gear (best gear combination)
-- `/drop-finder` — Drop Finder (droptimizer)
-- `/sim/[id]` — Sim results with real-time progress
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

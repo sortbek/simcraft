@@ -1,0 +1,30 @@
+{
+  "name": "topgear-high-spread-sortbek-bm-9k",
+  "simc_input_path": "topgear-high-spread-sortbek-bm-gear.simc",
+  "copy_enchants": true,
+  "select_all_alternative_slots": [
+    "neck",
+    "shoulder",
+    "back",
+    "chest",
+    "wrist",
+    "waist",
+    "legs"
+  ],
+  "selected_alternatives": {
+    "feet": [
+      {
+        "item_id": 258582
+      }
+    ]
+  },
+  "options": {
+    "fight_style": "Patchwerk",
+    "target_error": 0.05,
+    "iterations": 1000,
+    "desired_targets": 1,
+    "max_time": 300,
+    "threads": 0,
+    "single_actor_batch": true
+  }
+}

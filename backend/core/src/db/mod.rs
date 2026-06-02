@@ -5,6 +5,8 @@ pub mod combo_metadata_repo;
 pub mod job_repo;
 pub mod route_repo;
 pub mod settings_repo;
+pub mod stage_batches_repo;
+pub mod stage_results_repo;
 pub mod triage_batches_repo;
 
 pub use character_repo::CharacterRepo;
@@ -14,6 +16,8 @@ pub use combo_metadata_repo::{ComboMetadataInsert, ComboMetadataRepo, ComboMetad
 pub use job_repo::{JobRepo, JobStatusFilter, ListJobsFilter};
 pub use route_repo::RouteRepo;
 pub use settings_repo::SettingsRepo;
+pub use stage_batches_repo::{StageBatchRow, StageBatchesRepo};
+pub use stage_results_repo::{StageResultInsert, StageResultRow, StageResultsRepo};
 pub use triage_batches_repo::{TriageBatchRow, TriageBatchesRepo};
 
 use sqlx::any::AnyPoolOptions;
@@ -56,6 +60,24 @@ pub fn init_limits() {
     MAX_JOBS.store(max_jobs, Ordering::Relaxed);
     MAX_SCENARIOS.store(max_scenarios, Ordering::Relaxed);
     MAX_COMBINATIONS.store(max_combos, Ordering::Relaxed);
+}
+
+/// Build a multi-row `VALUES` placeholder string like `($1, $2),($3, $4)` for
+/// `rows` rows of `cols` contiguous 1-based bind parameters each. Used by the
+/// chunked bulk-insert repos (combo_dedup, combo_metadata, stage_results) so the
+/// placeholder arithmetic lives in one place.
+pub(crate) fn values_placeholders(rows: usize, cols: usize) -> String {
+    (0..rows)
+        .map(|r| {
+            let base = r * cols;
+            let cells = (1..=cols)
+                .map(|c| format!("${}", base + c))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({cells})")
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn is_sqlite_url(url: &str) -> bool {

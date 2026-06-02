@@ -76,6 +76,9 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
         CheckpointPhase::Staged(_) => {
             resume_staged(job_id, &job, request_json, &checkpoint, inputs).await
         }
+        CheckpointPhase::LocalStage(_) => {
+            resume_local_stage(job_id, &job, request_json, &checkpoint, inputs).await
+        }
         CheckpointPhase::CloudStreaming(_) => {
             crate::server::cloud_streaming::resume_cloud_streaming(
                 job_id,
@@ -87,6 +90,159 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
             .await
         }
     }
+}
+
+async fn resume_local_stage(
+    job_id: &str,
+    job: &Job,
+    request_json: &str,
+    _checkpoint: &Checkpoint,
+    inputs: ResumeInputs,
+) -> Result<(), String> {
+    let envelope: crate::server::request_json::NormalizedRequest =
+        serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
+    let payload = &envelope.payload;
+    let options_for_task = payload.get("options").cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "iterations": job.iterations,
+            "target_error": job.target_error,
+            "fight_style": job.fight_style,
+        })
+    });
+    let base_profile_owned = payload
+        .get("base_profile")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "request_json missing base_profile".to_string())?
+        .to_string();
+    let iter_cfg = super::iterator_from_request::build_iterator_from_request_json(request_json)?;
+
+    // The first unified-stage implementation stores scalar stage results outside
+    // the checkpoint, but does not yet replay partially completed stages. Resume
+    // from the original request by clearing local stage state for this job.
+    crate::db::ComboDedupRepo::new(inputs.pool.clone())
+        .delete_for_job(job_id)
+        .await
+        .map_err(|e| format!("Failed to clear dedup state: {e}"))?;
+    crate::db::ComboMetadataRepo::new(inputs.pool.clone())
+        .delete_for_job(job_id)
+        .await
+        .map_err(|e| format!("Failed to clear combo metadata: {e}"))?;
+    crate::db::StageBatchesRepo::new(inputs.pool.clone())
+        .delete_for_job(job_id)
+        .await
+        .map_err(|e| format!("Failed to clear stage batches: {e}"))?;
+    crate::db::StageResultsRepo::new(inputs.pool.clone())
+        .delete_for_job(job_id)
+        .await
+        .map_err(|e| format!("Failed to clear stage results: {e}"))?;
+
+    inputs
+        .repo
+        .set_pause_requested(job_id, false)
+        .await
+        .map_err(|e| format!("Failed to clear pause_requested: {}", e))?;
+
+    let simc_bin_path = inputs
+        .simc_bins
+        .resolve(simc_branch_from_payload(&envelope.payload))
+        .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
+
+    let pool_for_task = inputs.pool.clone();
+    let repo_for_task = inputs.repo.clone();
+    let log_buffer_for_task = inputs.log_buffer.clone();
+    let queue_for_task = inputs.queue.clone();
+    let job_id_owned = job_id.to_string();
+    let fight_style = job.fight_style.clone();
+
+    tokio::spawn(async move {
+        let permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
+            p
+        } else {
+            let _ = repo_for_task
+                .update_progress(
+                    &job_id_owned,
+                    0,
+                    "Queued",
+                    "waiting for active local sim to finish",
+                )
+                .await;
+            let cancel_tok =
+                crate::cancel::CancelToken::new(repo_for_task.clone(), job_id_owned.clone());
+            match crate::compute::local::await_local_queue_permit(
+                &queue_for_task,
+                Some(&cancel_tok),
+            )
+            .await
+            {
+                Ok(p) => p,
+                Err(_) => return,
+            }
+        };
+
+        if let Err(e) = repo_for_task
+            .update_status(&job_id_owned, crate::models::JobStatus::Running)
+            .await
+        {
+            eprintln!("[{}] Failed to set Running status: {}", job_id_owned, e);
+        }
+
+        let on_progress = {
+            let repo = repo_for_task.clone();
+            let jid = job_id_owned.clone();
+            move |pct: u8, detail: String| {
+                let mapped: u8 = 5u8.saturating_add(((pct as f64) * 0.90) as u8);
+                let r = repo.clone();
+                let i = jid.clone();
+                tokio::spawn(async move {
+                    let _ = r.update_progress(&i, mapped, "Staging", &detail).await;
+                });
+            }
+        };
+        let stage_inputs = super::stage_pipeline::StagePipelineInputs {
+            pool: &pool_for_task,
+            job_id: &job_id_owned,
+            simc_bin: &simc_bin_path,
+            fight_style: &fight_style,
+            options: &options_for_task,
+            base_profile: &base_profile_owned,
+            log_buffer: log_buffer_for_task.clone(),
+            simc_input_mode: SimcInputMode::Streamed,
+            on_progress: Box::new(on_progress),
+            on_stage_complete: Box::new({
+                let repo = repo_for_task.clone();
+                let jid = job_id_owned.clone();
+                move |summary| {
+                    let r = repo.clone();
+                    let i = jid.clone();
+                    tokio::spawn(async move {
+                        let _ = r.update_progress(&i, 90, "Staging", &summary).await;
+                    });
+                }
+            }),
+        };
+        let plan = super::stage_pipeline::default_local_topgear_plan(&options_for_task);
+        match super::stage_pipeline::run_stage_pipeline(iter_cfg, stage_inputs, plan).await {
+            Ok(super::stage_pipeline::StagePipelineOutcome::Completed(result)) => {
+                drop(permit);
+                crate::server::helpers::finalize_local_stage_result(
+                    &repo_for_task,
+                    &job_id_owned,
+                    &base_profile_owned,
+                    &result.output.json,
+                    &log_buffer_for_task,
+                )
+                .await;
+            }
+            Ok(super::stage_pipeline::StagePipelineOutcome::Paused) => {}
+            Err(e) => {
+                let _ = repo_for_task
+                    .set_error(&job_id_owned, &format!("Local stage resume failed: {}", e))
+                    .await;
+            }
+        }
+    });
+
+    Ok(())
 }
 
 /// Read `options.simc_branch` from a parsed envelope payload. Returns `""`

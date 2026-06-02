@@ -13,6 +13,7 @@ use super::triage::TriageConstants;
 pub enum CheckpointPhase {
     Triage(TriageCheckpoint),
     Staged(StagedCheckpoint),
+    LocalStage(LocalStageCheckpoint),
     /// Cloud-streaming (Simmit) phase: the high-level chunk cursor. The
     /// per-chunk source of truth lives in the `cloud_chunks` table; this blob
     /// only carries what's needed to deterministically regenerate the
@@ -73,6 +74,26 @@ pub struct StagedCheckpoint {
     /// drive end-of-stage pruning.
     #[serde(default)]
     pub batch_results: Vec<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalStageCheckpoint {
+    pub stage_idx: usize,
+    pub stage_name: String,
+    pub next_batch_idx: usize,
+    pub source: CheckpointSource,
+    pub survivor_combo_ids: Vec<i64>,
+    pub generated_cursor: Option<Vec<usize>>,
+    pub next_combo_id: i64,
+    pub estimated_total_batches: usize,
+    pub avg_bytes_per_profileset: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "source", rename_all = "snake_case")]
+pub enum CheckpointSource {
+    GeneratedCombinations,
+    PreviousStageSurvivors,
 }
 
 /// Cloud-streaming-phase resume data. Written at each chunk boundary.
@@ -194,6 +215,43 @@ mod tests {
                 assert_eq!(sc.batch_results.len(), 2);
             }
             _ => panic!("expected Staged phase"),
+        }
+    }
+
+    #[test]
+    fn round_trip_local_stage_checkpoint() {
+        let cp = Checkpoint {
+            phase: CheckpointPhase::LocalStage(LocalStageCheckpoint {
+                stage_idx: 1,
+                stage_name: "Refine".to_string(),
+                next_batch_idx: 4,
+                source: CheckpointSource::PreviousStageSurvivors,
+                survivor_combo_ids: vec![9, 3, 7],
+                generated_cursor: Some(vec![2, 5, 0]),
+                next_combo_id: 42,
+                estimated_total_batches: 12,
+                avg_bytes_per_profileset: 512,
+            }),
+            constants: TriageConstants::default(),
+        };
+        let json = cp.to_json_string().unwrap();
+        let parsed = Checkpoint::from_json_str(&json).unwrap();
+        match parsed.phase {
+            CheckpointPhase::LocalStage(local) => {
+                assert_eq!(local.stage_idx, 1);
+                assert_eq!(local.stage_name, "Refine");
+                assert_eq!(local.next_batch_idx, 4);
+                assert!(matches!(
+                    local.source,
+                    CheckpointSource::PreviousStageSurvivors
+                ));
+                assert_eq!(local.survivor_combo_ids, vec![9, 3, 7]);
+                assert_eq!(local.generated_cursor, Some(vec![2, 5, 0]));
+                assert_eq!(local.next_combo_id, 42);
+                assert_eq!(local.estimated_total_batches, 12);
+                assert_eq!(local.avg_bytes_per_profileset, 512);
+            }
+            _ => panic!("expected LocalStage phase"),
         }
     }
 

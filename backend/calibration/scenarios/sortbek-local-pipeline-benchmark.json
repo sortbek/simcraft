@@ -1,0 +1,1623 @@
+{
+  "mode": "pipeline",
+  "generated_at": "2026-06-01T12:22:25.349062100+00:00",
+  "scenarios": [
+    "topgear-high-spread-sortbek-bm-9k.raw",
+    "topgear-cutting-edge-spread-sortbek-bm-gems.raw"
+  ],
+  "runs": 3,
+  "results": [
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 246.4183052,
+      "triage_seconds": 170.1616636,
+      "staged_seconds": 76.2566414,
+      "average_triage_batch_seconds": 4.477938515789473,
+      "profilesets_per_second": 37.39576080811386,
+      "seconds_per_1000_profilesets": 26.74099893651655,
+      "triage_survivors": 3870,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · 3870 → 57 combos",
+        "Coarse · 57 → 14 combos",
+        "Refine · 14 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3870,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 257.8843164,
+      "triage_seconds": 180.5010314,
+      "staged_seconds": 77.3832849,
+      "average_triage_batch_seconds": 4.750027142105263,
+      "profilesets_per_second": 35.73307647645687,
+      "seconds_per_1000_profilesets": 27.985275789473683,
+      "triage_survivors": 3874,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 3874 → 9 combos",
+        "Refine · 9 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3874,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 266.4927147,
+      "triage_seconds": 186.0691911,
+      "staged_seconds": 80.4235234,
+      "average_triage_batch_seconds": 4.896557660526316,
+      "profilesets_per_second": 34.57880644269635,
+      "seconds_per_1000_profilesets": 28.919448149755834,
+      "triage_survivors": 3855,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 3855 → 15 combos",
+        "Final · 15 combos · done"
+      ],
+      "final_profilesets": 3855,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 333.5568825,
+      "triage_seconds": 188.2948197,
+      "staged_seconds": 145.2620626,
+      "average_triage_batch_seconds": 4.955126834210526,
+      "profilesets_per_second": 27.626472375367644,
+      "seconds_per_1000_profilesets": 36.197165762344,
+      "triage_survivors": 3853,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 3853 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3853,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 221.6772929,
+      "triage_seconds": 178.8596361,
+      "staged_seconds": 42.8176567,
+      "average_triage_batch_seconds": 16.259966918181817,
+      "profilesets_per_second": 41.56943582018995,
+      "seconds_per_1000_profilesets": 24.056135963103635,
+      "triage_survivors": 1859,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · 1859 → 63 combos",
+        "Coarse · 63 → 12 combos",
+        "Refine · 12 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1859,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 221.7753938,
+      "triage_seconds": 180.5436313,
+      "staged_seconds": 41.2317623,
+      "average_triage_batch_seconds": 16.41305739090909,
+      "profilesets_per_second": 41.55104785118862,
+      "seconds_per_1000_profilesets": 24.06678174715138,
+      "triage_survivors": 1899,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 1899 → 19 combos",
+        "Refine · 19 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1899,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 224.5686724,
+      "triage_seconds": 181.3365604,
+      "staged_seconds": 43.2321118,
+      "average_triage_batch_seconds": 16.485141854545454,
+      "profilesets_per_second": 41.03421862683639,
+      "seconds_per_1000_profilesets": 24.369904763971785,
+      "triage_survivors": 1937,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 1937 → 13 combos",
+        "Final · 13 combos · done"
+      ],
+      "final_profilesets": 1937,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 262.8683965,
+      "triage_seconds": 186.1632025,
+      "staged_seconds": 76.705194,
+      "average_triage_batch_seconds": 16.9239275,
+      "profilesets_per_second": 35.05556439151482,
+      "seconds_per_1000_profilesets": 28.526141779707004,
+      "triage_survivors": 1887,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 1887 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1887,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 274.1304197,
+      "triage_seconds": 191.346019,
+      "staged_seconds": 82.7844005,
+      "average_triage_batch_seconds": 5.035421552631579,
+      "profilesets_per_second": 33.61538646489731,
+      "seconds_per_1000_profilesets": 29.748282116115032,
+      "triage_survivors": 3880,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · 3880 → 61 combos",
+        "Coarse · 61 → 17 combos",
+        "Refine · 17 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3880,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 270.2153632,
+      "triage_seconds": 190.3134413,
+      "staged_seconds": 79.9019217,
+      "average_triage_batch_seconds": 5.008248455263158,
+      "profilesets_per_second": 34.1024281183432,
+      "seconds_per_1000_profilesets": 29.323425198046664,
+      "triage_survivors": 3853,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 3853 → 7 combos",
+        "Refine · 7 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3853,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 280.1388823,
+      "triage_seconds": 198.3459769,
+      "staged_seconds": 81.7929053,
+      "average_triage_batch_seconds": 5.219630971052632,
+      "profilesets_per_second": 32.894398393906926,
+      "seconds_per_1000_profilesets": 30.400312783505154,
+      "triage_survivors": 3842,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 3842 → 12 combos",
+        "Final · 12 combos · done"
+      ],
+      "final_profilesets": 3842,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 345.9353962,
+      "triage_seconds": 194.9082687,
+      "staged_seconds": 151.0271273,
+      "average_triage_batch_seconds": 5.129164965789474,
+      "profilesets_per_second": 26.63792170799549,
+      "seconds_per_1000_profilesets": 37.54046621812263,
+      "triage_survivors": 3883,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 3883 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3883,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 226.8165392,
+      "triage_seconds": 183.4591133,
+      "staged_seconds": 43.3574258,
+      "average_triage_batch_seconds": 16.67810120909091,
+      "profilesets_per_second": 40.6275487338888,
+      "seconds_per_1000_profilesets": 24.61384039066739,
+      "triage_survivors": 1899,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · 1899 → 48 combos",
+        "Coarse · 48 → 12 combos",
+        "Refine · 12 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1899,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 225.6361019,
+      "triage_seconds": 184.7039052,
+      "staged_seconds": 40.9321966,
+      "average_triage_batch_seconds": 16.79126410909091,
+      "profilesets_per_second": 40.84009572228831,
+      "seconds_per_1000_profilesets": 24.485740846446014,
+      "triage_survivors": 1839,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 1839 → 8 combos",
+        "Refine · 8 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1839,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 224.3247547,
+      "triage_seconds": 182.2736464,
+      "staged_seconds": 42.0511081,
+      "average_triage_batch_seconds": 16.57033149090909,
+      "profilesets_per_second": 41.07883685116986,
+      "seconds_per_1000_profilesets": 24.343435127509494,
+      "triage_survivors": 1871,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 1871 → 15 combos",
+        "Final · 15 combos · done"
+      ],
+      "final_profilesets": 1871,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 256.6761884,
+      "triage_seconds": 180.6160168,
+      "staged_seconds": 76.0601714,
+      "average_triage_batch_seconds": 16.41963789090909,
+      "profilesets_per_second": 35.90126554957055,
+      "seconds_per_1000_profilesets": 27.854171285946826,
+      "triage_survivors": 1927,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 1927 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 272.932095,
+      "triage_seconds": 189.3109781,
+      "staged_seconds": 83.6211167,
+      "average_triage_batch_seconds": 4.9818678447368425,
+      "profilesets_per_second": 33.762976831288384,
+      "seconds_per_1000_profilesets": 29.618241454150844,
+      "triage_survivors": 3866,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · 3866 → 54 combos",
+        "Coarse · 54 → 19 combos",
+        "Refine · 19 → 6 combos",
+        "Medium · 6 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3866,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 270.5024104,
+      "triage_seconds": 190.209644,
+      "staged_seconds": 80.2927663,
+      "average_triage_batch_seconds": 5.005516947368421,
+      "profilesets_per_second": 34.06623987702552,
+      "seconds_per_1000_profilesets": 29.354575192620725,
+      "triage_survivors": 3854,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 3854 → 12 combos",
+        "Refine · 12 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3854,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 275.7970076,
+      "triage_seconds": 190.2695148,
+      "staged_seconds": 85.5274926,
+      "average_triage_batch_seconds": 5.007092494736842,
+      "profilesets_per_second": 33.41225519518654,
+      "seconds_per_1000_profilesets": 29.929138100922405,
+      "triage_survivors": 3847,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 3847 → 14 combos",
+        "Final · 14 combos · done"
+      ],
+      "final_profilesets": 3847,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 350.6287431,
+      "triage_seconds": 197.3424041,
+      "staged_seconds": 153.2863388,
+      "average_triage_batch_seconds": 5.193221160526316,
+      "profilesets_per_second": 26.28135936183607,
+      "seconds_per_1000_profilesets": 38.04978221378188,
+      "triage_survivors": 3852,
+      "total_batches": 38,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 3852 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 3852,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 231.7990856,
+      "triage_seconds": 187.4521894,
+      "staged_seconds": 44.3468961,
+      "average_triage_batch_seconds": 17.04110812727273,
+      "profilesets_per_second": 39.75425518244581,
+      "seconds_per_1000_profilesets": 25.15453994574064,
+      "triage_survivors": 1889,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · 1889 → 65 combos",
+        "Coarse · 65 → 17 combos",
+        "Refine · 17 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1889,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 227.934101,
+      "triage_seconds": 186.5710876,
+      "staged_seconds": 41.3630133,
+      "average_triage_batch_seconds": 16.961007963636362,
+      "profilesets_per_second": 40.428351701529735,
+      "seconds_per_1000_profilesets": 24.73511676614216,
+      "triage_survivors": 1823,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 1823 → 16 combos",
+        "Refine · 16 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1823,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 231.0167076,
+      "triage_seconds": 188.1625154,
+      "staged_seconds": 42.854192,
+      "average_triage_batch_seconds": 17.105683218181817,
+      "profilesets_per_second": 39.88888983716085,
+      "seconds_per_1000_profilesets": 25.069637287032013,
+      "triage_survivors": 1804,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 1804 → 14 combos",
+        "Final · 14 combos · done"
+      ],
+      "final_profilesets": 1804,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-high-spread-sortbek-bm-9k.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 261.6148441,
+      "triage_seconds": 188.9179729,
+      "staged_seconds": 72.696871,
+      "average_triage_batch_seconds": 17.174361172727274,
+      "profilesets_per_second": 35.223536461400656,
+      "seconds_per_1000_profilesets": 28.390107878459037,
+      "triage_survivors": 1777,
+      "total_batches": 11,
+      "total_candidates": 9215,
+      "total_accepted": 9215,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 1777 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 1777,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1810.0838577,
+      "triage_seconds": 169.8932397,
+      "staged_seconds": 1640.1906178,
+      "average_triage_batch_seconds": 4.356236915384615,
+      "profilesets_per_second": 4.190413592018854,
+      "seconds_per_1000_profilesets": 238.63992850362558,
+      "triage_survivors": 7585,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7585,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · kept all 7585 combos",
+        "Coarse · 7585 → 7230 combos",
+        "Refine · 7230 → 3783 combos",
+        "Medium · 3783 → 433 combos",
+        "Fine · 433 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 7585,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1337.4009906,
+      "triage_seconds": 166.6033178,
+      "staged_seconds": 1170.7976727,
+      "average_triage_batch_seconds": 4.271879943589744,
+      "profilesets_per_second": 5.671447870393107,
+      "seconds_per_1000_profilesets": 176.3218181410679,
+      "triage_survivors": 7585,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7585,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 7585 → 7349 combos",
+        "Refine · 7349 → 2828 combos",
+        "Final · 2828 combos · done"
+      ],
+      "final_profilesets": 7585,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 2158.0644532,
+      "triage_seconds": 171.6903423,
+      "staged_seconds": 1986.3741107,
+      "average_triage_batch_seconds": 4.402316469230769,
+      "profilesets_per_second": 3.5124066794021367,
+      "seconds_per_1000_profilesets": 284.7050729815304,
+      "triage_survivors": 7580,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7580,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 7580 → 7453 combos",
+        "Final · 7453 combos · done"
+      ],
+      "final_profilesets": 7580,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1570.4145564,
+      "triage_seconds": 167.5407099,
+      "staged_seconds": 1402.8738464,
+      "average_triage_batch_seconds": 4.295915638461539,
+      "profilesets_per_second": 4.829934853245225,
+      "seconds_per_1000_profilesets": 207.0421300461437,
+      "triage_survivors": 7585,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7585,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 7585 → 4485 combos",
+        "Final · 4485 combos · done"
+      ],
+      "final_profilesets": 7585,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1710.5795869,
+      "triage_seconds": 181.4578654,
+      "staged_seconds": 1529.1217213,
+      "average_triage_batch_seconds": 16.496169581818183,
+      "profilesets_per_second": 5.218699011940138,
+      "seconds_per_1000_profilesets": 191.6186386131959,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · kept all 8927 combos",
+        "Coarse · 8927 → 8795 combos",
+        "Refine · 8795 → 3259 combos",
+        "Medium · 3259 → 53 combos",
+        "Fine · 53 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1065.4622927,
+      "triage_seconds": 180.8669658,
+      "staged_seconds": 884.5953266,
+      "average_triage_batch_seconds": 16.442451436363637,
+      "profilesets_per_second": 8.378522694949615,
+      "seconds_per_1000_profilesets": 119.35278287218551,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 8927 → 8831 combos",
+        "Refine · 8831 → 1453 combos",
+        "Final · 1453 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 2333.8144556,
+      "triage_seconds": 180.1869212,
+      "staged_seconds": 2153.6275341,
+      "average_triage_batch_seconds": 16.3806292,
+      "profilesets_per_second": 3.82506843188824,
+      "seconds_per_1000_profilesets": 261.4332312759046,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 8927 → 8328 combos",
+        "Final · 8328 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 1,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1498.7616513,
+      "triage_seconds": 180.9804396,
+      "staged_seconds": 1317.7812114,
+      "average_triage_batch_seconds": 16.452767236363638,
+      "profilesets_per_second": 5.956250610133289,
+      "seconds_per_1000_profilesets": 167.89085373585752,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 8927 → 4045 combos",
+        "Final · 4045 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1992.4550488,
+      "triage_seconds": 163.4440072,
+      "staged_seconds": 1829.0110414,
+      "average_triage_batch_seconds": 4.190871979487179,
+      "profilesets_per_second": 3.804351824431483,
+      "seconds_per_1000_profilesets": 262.8568665963061,
+      "triage_survivors": 7580,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7580,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · kept all 7580 combos",
+        "Coarse · 7580 → 7529 combos",
+        "Refine · 7529 → 4887 combos",
+        "Medium · 4887 → 179 combos",
+        "Fine · 179 → 11 combos",
+        "Final · 11 combos · done"
+      ],
+      "final_profilesets": 7580,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1128.8099563,
+      "triage_seconds": 163.0552836,
+      "staged_seconds": 965.7546725,
+      "average_triage_batch_seconds": 4.180904707692307,
+      "profilesets_per_second": 6.715036448514003,
+      "seconds_per_1000_profilesets": 148.91951930079156,
+      "triage_survivors": 7580,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7580,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 7580 → 7441 combos",
+        "Refine · 7441 → 2179 combos",
+        "Final · 2179 combos · done"
+      ],
+      "final_profilesets": 7580,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": null,
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 0.0,
+      "triage_seconds": 0.0,
+      "staged_seconds": null,
+      "average_triage_batch_seconds": 0.0,
+      "profilesets_per_second": 0.0,
+      "seconds_per_1000_profilesets": 0.0,
+      "triage_survivors": 0,
+      "total_batches": 0,
+      "total_candidates": 0,
+      "total_accepted": 0,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [],
+      "final_profilesets": null,
+      "notes": "FAILED: Triage run failed: Triage post-simc DB phase failed: error returned from database: (code: 1) no such table: combo_metadata"
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1531.898437,
+      "triage_seconds": 152.461686,
+      "staged_seconds": 1379.4367508,
+      "average_triage_batch_seconds": 3.9092739999999995,
+      "profilesets_per_second": 4.948108710682104,
+      "seconds_per_1000_profilesets": 202.09741912928763,
+      "triage_survivors": 7580,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7580,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 7580 → 4660 combos",
+        "Final · 4660 combos · done"
+      ],
+      "final_profilesets": 7580,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1387.672711,
+      "triage_seconds": 183.160148,
+      "staged_seconds": 1204.5125627,
+      "average_triage_batch_seconds": 16.650922545454545,
+      "profilesets_per_second": 6.433073108115622,
+      "seconds_per_1000_profilesets": 155.44670225159626,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · kept all 8927 combos",
+        "Coarse · 8927 → 7676 combos",
+        "Refine · 7676 → 1862 combos",
+        "Medium · 1862 → 224 combos",
+        "Fine · 224 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1272.6612999,
+      "triage_seconds": 188.6289096,
+      "staged_seconds": 1084.0323901,
+      "average_triage_batch_seconds": 17.14808269090909,
+      "profilesets_per_second": 7.014435027372518,
+      "seconds_per_1000_profilesets": 142.56315670437996,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 8927 → 8469 combos",
+        "Refine · 8469 → 2251 combos",
+        "Final · 2251 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 2525.0489795,
+      "triage_seconds": 184.502528,
+      "staged_seconds": 2340.5464514,
+      "average_triage_batch_seconds": 16.77295709090909,
+      "profilesets_per_second": 3.5353769659421377,
+      "seconds_per_1000_profilesets": 282.8552682312087,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 8927 → 8766 combos",
+        "Final · 8766 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 2,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1685.1305486,
+      "triage_seconds": 184.7617857,
+      "staged_seconds": 1500.3687627,
+      "average_triage_batch_seconds": 16.79652597272727,
+      "profilesets_per_second": 5.297512413751277,
+      "seconds_per_1000_profilesets": 188.76784458384677,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 8927 → 4690 combos",
+        "Final · 4690 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1522.5649527,
+      "triage_seconds": 167.7805219,
+      "staged_seconds": 1354.7844305,
+      "average_triage_batch_seconds": 4.302064664102564,
+      "profilesets_per_second": 4.978441140759354,
+      "seconds_per_1000_profilesets": 200.86608874670185,
+      "triage_survivors": 7580,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7580,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · kept all 7580 combos",
+        "Coarse · 7580 → 6063 combos",
+        "Refine · 6063 → 3224 combos",
+        "Medium · 3224 → 5 combos",
+        "Final · 5 combos · done"
+      ],
+      "final_profilesets": 7580,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1675.4647791,
+      "triage_seconds": 167.9030854,
+      "staged_seconds": 1507.5616936,
+      "average_triage_batch_seconds": 4.305207317948718,
+      "profilesets_per_second": 4.527102028414105,
+      "seconds_per_1000_profilesets": 220.89186276862227,
+      "triage_survivors": 7585,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7585,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 7585 → 7426 combos",
+        "Refine · 7426 → 4191 combos",
+        "Final · 4191 combos · done"
+      ],
+      "final_profilesets": 7585,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 2124.0534657,
+      "triage_seconds": 169.1216829,
+      "staged_seconds": 1954.9317825,
+      "average_triage_batch_seconds": 4.336453407692308,
+      "profilesets_per_second": 3.5686483991126594,
+      "seconds_per_1000_profilesets": 280.2181353166227,
+      "triage_survivors": 7580,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7580,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 7580 → 7308 combos",
+        "Final · 7308 combos · done"
+      ],
+      "final_profilesets": 7580,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 250,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1142.3195454,
+      "triage_seconds": 168.1492296,
+      "staged_seconds": 974.1703155,
+      "average_triage_batch_seconds": 4.311518707692308,
+      "profilesets_per_second": 6.635621381533617,
+      "seconds_per_1000_profilesets": 150.70178699208444,
+      "triage_survivors": 7580,
+      "total_batches": 39,
+      "total_candidates": 9408,
+      "total_accepted": 7580,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 7580 → 2728 combos",
+        "Final · 2728 combos · done"
+      ],
+      "final_profilesets": 7580,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "current",
+      "stage_schedule": "current",
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1964.2029865,
+      "triage_seconds": 185.7006442,
+      "staged_seconds": 1778.502342,
+      "average_triage_batch_seconds": 16.881876745454544,
+      "profilesets_per_second": 4.544845956021562,
+      "seconds_per_1000_profilesets": 220.02945967290242,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Probe · kept all 8927 combos",
+        "Coarse · 8927 → 8756 combos",
+        "Refine · 8756 → 3707 combos",
+        "Medium · 3707 → 418 combos",
+        "Fine · 418 → 6 combos",
+        "Final · 6 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "simmit3",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        },
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1903.8506858,
+      "triage_seconds": 189.3172396,
+      "staged_seconds": 1714.5334459,
+      "average_triage_batch_seconds": 17.210658145454545,
+      "profilesets_per_second": 4.688918131333847,
+      "seconds_per_1000_profilesets": 213.26881212053323,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 8927 → 8837 combos",
+        "Refine · 8837 → 4579 combos",
+        "Final · 4579 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "broad-final",
+      "stage_schedule": [
+        {
+          "name": "Broad",
+          "target_error": 1.0
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 2534.2043915,
+      "triage_seconds": 186.8091239,
+      "staged_seconds": 2347.3952673,
+      "average_triage_batch_seconds": 16.982647627272726,
+      "profilesets_per_second": 3.5226045815176312,
+      "seconds_per_1000_profilesets": 283.8808548784586,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Broad · 8927 → 8798 combos",
+        "Final · 8798 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    },
+    {
+      "scenario": "topgear-cutting-edge-spread-sortbek-bm-gems.raw",
+      "run": 3,
+      "mode": "pipeline",
+      "strategy": "refine-final",
+      "stage_schedule": [
+        {
+          "name": "Refine",
+          "target_error": 0.5
+        }
+      ],
+      "batch_profilesets": 1000,
+      "triage_iterations": 10000,
+      "triage_cutoff_multiplier": 3.0,
+      "total_seconds": 1580.4756811,
+      "triage_seconds": 188.3627833,
+      "staged_seconds": 1392.1128975,
+      "average_triage_batch_seconds": 17.12388939090909,
+      "profilesets_per_second": 5.6482995004307,
+      "seconds_per_1000_profilesets": 177.0444361039543,
+      "triage_survivors": 8927,
+      "total_batches": 11,
+      "total_candidates": 9408,
+      "total_accepted": 8927,
+      "top_recall_loss_count": null,
+      "dps_regret": null,
+      "stage_summaries": [
+        "Refine · 8927 → 4138 combos",
+        "Final · 4138 combos · done"
+      ],
+      "final_profilesets": 8927,
+      "notes": ""
+    }
+  ]
+}

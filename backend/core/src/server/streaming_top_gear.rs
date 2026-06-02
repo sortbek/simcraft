@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::helpers::{handoff_streamed_top_gear_to_staged, validate_batch};
+use super::helpers::{finalize_local_stage_result, validate_batch};
 use super::request_json::NormalizedRequest;
 use super::types::TopGearRequest;
 use crate::db::JobRepo;
@@ -78,7 +78,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         provider: _provider,
         provider_auth: _provider_auth,
         local_queue,
-        local_provider,
+        local_provider: _local_provider,
     } = start;
 
     let gem_opts = profileset_generator::GemEnchantOptions {
@@ -103,8 +103,6 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     }
 
     let options_json = req.options.to_json();
-    let triage_constants = crate::profileset_generator::triage::TriageConstants::default()
-        .with_requested_max_batch_profilesets(req.options.triage_max_batch_profilesets);
     let display_input = simc_runner::build_simc_input_from_options(&base_profile, &options_json);
 
     let mut job = Job::new_with_provider(
@@ -160,7 +158,6 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     let queue_for_task = local_queue.clone();
     let repo_for_queue_wait = repo_for_task.clone();
     let jid_for_queue_wait = job_id_task.clone();
-    let local_provider_for_task = local_provider;
     tokio::spawn(async move {
         // Streaming Top Gear shares the local sim queue with eager local jobs.
         // Hold a permit for the duration of TRIAGE so we don't fight a Quick Sim
@@ -204,11 +201,11 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         let jid_progress = job_id_task.clone();
 
         let on_progress = move |pct: u8, detail: String| {
-            let mapped: u8 = 5u8.saturating_add(((pct as f64) * 0.45) as u8);
+            let mapped: u8 = 5u8.saturating_add(((pct as f64) * 0.90) as u8);
             let r = repo_progress.clone();
             let i = jid_progress.clone();
             tokio::spawn(async move {
-                let _ = r.update_progress(&i, mapped, "Triage", &detail).await;
+                let _ = r.update_progress(&i, mapped, "Staging", &detail).await;
             });
         };
 
@@ -219,7 +216,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
             return;
         };
 
-        let inputs = crate::profileset_generator::triage::TriageRunInputs {
+        let stage_inputs = crate::profileset_generator::stage_pipeline::StagePipelineInputs {
             pool: &pool,
             job_id: &job_id_task,
             simc_bin: &simc_bin_for_task,
@@ -227,46 +224,48 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
             options: &options_for_task,
             base_profile: &base_profile_owned,
             log_buffer: log_buffer_owned.clone(),
+            simc_input_mode: SimcInputMode::Streamed,
             on_progress: Box::new(on_progress),
+            on_stage_complete: Box::new({
+                let repo = repo_for_task.clone();
+                let jid = job_id_task.clone();
+                move |summary| {
+                    let r = repo.clone();
+                    let i = jid.clone();
+                    tokio::spawn(async move {
+                        let _ = r.update_progress(&i, 90, "Staging", &summary).await;
+                    });
+                }
+            }),
         };
 
-        match crate::profileset_generator::triage::run_triage_with_constants(
+        let plan = crate::profileset_generator::stage_pipeline::default_local_topgear_plan(
+            &options_for_task,
+        );
+        match crate::profileset_generator::stage_pipeline::run_stage_pipeline(
             iter_cfg,
-            inputs,
-            estimate,
-            triage_constants,
-            None,
+            stage_inputs,
+            plan,
         )
         .await
         {
-            Ok(crate::profileset_generator::triage::TriageRunOutcome::Completed(result)) => {
+            Ok(crate::profileset_generator::stage_pipeline::StagePipelineOutcome::Completed(
+                result,
+            )) => {
                 // Release the triage permit so the provider-driven staged run
                 // can acquire it itself (single-permit queue → holding it here
                 // while the provider re-acquires would deadlock).
                 drop(permit);
-                let _ = repo_for_task
-                    .update_progress(
-                        &job_id_task,
-                        50,
-                        "Staging",
-                        "Building final sim from survivors",
-                    )
-                    .await;
-
-                handoff_streamed_top_gear_to_staged(
-                    &pool,
+                finalize_local_stage_result(
                     &repo_for_task,
-                    local_provider_for_task,
                     &job_id_task,
                     &base_profile_owned,
-                    &options_for_task,
-                    &result.survivor_combo_ids,
+                    &result.output.json,
                     &log_buffer_owned,
-                    triage_constants,
                 )
                 .await;
             }
-            Ok(crate::profileset_generator::triage::TriageRunOutcome::Paused) => {}
+            Ok(crate::profileset_generator::stage_pipeline::StagePipelineOutcome::Paused) => {}
             Err(e) => {
                 let _ = repo_for_task.set_error(&job_id_task, &e).await;
                 log_buffer_owned.remove(&job_id_task);

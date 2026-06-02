@@ -46,28 +46,19 @@ impl ComboMetadataRepo {
             if chunk.is_empty() {
                 continue;
             }
-            let values = (0..chunk.len())
-                .map(|i| {
-                    let base = i * 8;
-                    format!(
-                        "(${}, ${}, ${}, ${}, ${}, ${}, ${}, ${})",
-                        base + 1,
-                        base + 2,
-                        base + 3,
-                        base + 4,
-                        base + 5,
-                        base + 6,
-                        base + 7,
-                        base + 8
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(",");
+            let values = crate::db::values_placeholders(chunk.len(), 8);
             let sql = format!(
                 "INSERT INTO combo_metadata
                  (job_id, combo_id, combo_name, combo_key, batch_idx,
                   cursor_json, profileset_simc, metadata_json)
-                 VALUES {}",
+                 VALUES {}
+                 ON CONFLICT (job_id, combo_id) DO UPDATE SET
+                    combo_name = excluded.combo_name,
+                    combo_key = excluded.combo_key,
+                    batch_idx = excluded.batch_idx,
+                    cursor_json = excluded.cursor_json,
+                    profileset_simc = excluded.profileset_simc,
+                    metadata_json = excluded.metadata_json",
                 values
             );
             let mut q = sqlx::query(&sql);

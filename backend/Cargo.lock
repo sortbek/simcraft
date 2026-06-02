@@ -2296,6 +2296,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simhammer-core",
+ "sqlx",
  "tokio",
 ]
 

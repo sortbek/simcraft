@@ -323,6 +323,35 @@ pub(super) fn inject_realm(parsed: &mut Value, simc_input: &str) {
     }
 }
 
+/// Parse a completed local-stage-pipeline simc result, inject realm/elapsed
+/// metadata, persist it as the job result, and drop the job's log buffer. Shared
+/// by the live streaming Top Gear handler and the resume path so the two stay in
+/// lockstep.
+pub(crate) async fn finalize_local_stage_result(
+    repo: &JobRepo,
+    job_id: &str,
+    base_profile: &str,
+    output_json: &Value,
+    log_buffer: &crate::log_buffer::LogBuffer,
+) {
+    let raw_meta = load_combo_metadata(repo, job_id).await;
+    let meta = if raw_meta.is_empty() {
+        None
+    } else {
+        Some(raw_meta)
+    };
+    let mut parsed =
+        crate::result_parser::parse_gear_comparison_result(output_json, meta.as_ref(), "top_gear");
+    inject_realm(&mut parsed, base_profile);
+    if let Ok(Some(job_snap)) = repo.get(job_id).await {
+        inject_total_elapsed(&mut parsed, &job_snap.created_at);
+    }
+    let result_str = serde_json::to_string(&parsed).unwrap_or_else(|_| "{}".to_string());
+    let raw_str = serde_json::to_string(output_json).ok();
+    let _ = repo.set_result(job_id, &result_str, raw_str.as_deref()).await;
+    log_buffer.remove(job_id);
+}
+
 enum JobUpdate {
     Progress {
         pct: u8,

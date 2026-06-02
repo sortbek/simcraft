@@ -1,6 +1,7 @@
 use crate::types::RotationMode;
 use regex::Regex;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
@@ -136,11 +137,13 @@ fn max_threads() -> u32 {
 }
 
 /// Resolve the thread count from the API options.
-/// A value of 0 (or absent) means use all available threads.
+/// A value of 0 (or absent) means use the local-friendly default: reserve a
+/// couple of logical CPUs for the desktop app/backend. Explicit thread counts
+/// are still honored up to the machine limit.
 fn resolve_threads(options: &Value) -> u32 {
     let requested = options.get("threads").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
     if requested == 0 {
-        max_threads()
+        max_threads().saturating_sub(2).max(1)
     } else {
         requested.min(max_threads()).max(1)
     }
@@ -165,26 +168,18 @@ const EXPANSION_OPTIONS: &[&str] = &[
     "midnight.crucible_of_erratic_energies_predation=1",
 ];
 
+#[derive(Debug, Clone)]
 struct Stage {
-    name: &'static str,
+    name: Cow<'static, str>,
     target_error: f64,
 }
 
 /// Coarse-to-fine candidate stages used to construct the adaptive schedule.
 /// Each entry produces an intermediate stage when its target_error is strictly
-/// looser than the user's requested precision. SimC's per-profileset auto-tuner
-/// decides iteration count from the `target_error`; we no longer cap iterations
-/// per stage so a Probe stage actually delivers its 2.0% precision (a 50-iter
-/// cap previously left it at ~5% noise).
-const STAGE_CANDIDATES: &[(f64, &str)] = &[
-    (2.0, "Probe"),
-    (1.0, "Coarse"),
-    (0.5, "Refine"),
-    (0.2, "Medium"),
-    (0.1, "Fine"),
-    (0.05, "Trace"),
-    (0.02, "Ultra"),
-];
+/// looser than the user's requested precision. The local pipeline benchmark
+/// favored this short Simmit-style ladder: it kept high-spread topgear runs
+/// competitive while avoiding expensive extra passes on low-spread gem cases.
+const STAGE_CANDIDATES: &[(f64, &str)] = &[(1.0, "Broad"), (0.5, "Refine")];
 
 /// Build the staged schedule for the user's requested `target_error`.
 ///
@@ -194,22 +189,94 @@ const STAGE_CANDIDATES: &[(f64, &str)] = &[
 /// `STAGE_CUTOFF_MULTIPLIER * target_error` of the top (and baseline) mean.
 ///
 /// Examples:
-///   0.2  -> Probe, Coarse, Refine, Final(0.2)         (4 stages)
-///   0.05 -> Probe, Coarse, Refine, Medium, Fine, Final(0.05)   (6 stages)
-///   0.01 -> ..., Trace, Ultra, Final(0.01)            (8 stages)
+///   0.2  -> Broad, Refine, Final(0.2)     (3 stages)
+///   0.05 -> Broad, Refine, Final(0.05)    (3 stages)
+///   0.01 -> Broad, Refine, Final(0.01)    (3 stages)
 fn build_stage_schedule(user_target_error: f64) -> Vec<Stage> {
     let mut schedule: Vec<Stage> = STAGE_CANDIDATES
         .iter()
         .filter(|(te, _)| *te > user_target_error)
         .map(|(te, name)| Stage {
-            name,
+            name: Cow::Borrowed(name),
             target_error: *te,
         })
         .collect();
     schedule.push(Stage {
-        name: "Final",
+        name: Cow::Borrowed("Final"),
         target_error: user_target_error,
     });
+    schedule
+}
+
+/// Parse a `stage_schedule` JSON array into `(name, target_error)` pairs,
+/// dropping stages at or below the user's final precision. Each item is either a
+/// bare number (`1.0`) or an object (`{"name":"Broad","target_error":1.0}` /
+/// `{"te":1.0}`); unnamed stages are auto-named `Stage N`. Shared by the staged
+/// runner and the local stage pipeline so the item parsing lives in one place.
+pub(crate) fn parse_stage_schedule_array(
+    arr: &[Value],
+    user_target_error: f64,
+) -> Vec<(String, f64)> {
+    let mut out = Vec::new();
+    for (idx, item) in arr.iter().enumerate() {
+        let Some(target_error) = item.as_f64().or_else(|| {
+            item.get("target_error")
+                .or_else(|| item.get("te"))
+                .and_then(|v| v.as_f64())
+        }) else {
+            continue;
+        };
+        if target_error <= user_target_error {
+            continue;
+        }
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("Stage {}", idx + 1));
+        out.push((name, target_error));
+    }
+    out
+}
+
+/// Test/benchmark override for the staged schedule. Production does not send
+/// this option; the calibration bench uses it to compare alternative brackets
+/// through the same local staged runner. Accepted shapes:
+/// - `"current"` / absent: normal production schedule
+/// - `[1.0, 0.5]`: named automatically as Stage 1, Stage 2
+/// - `[{"name":"Broad","target_error":1.0}]`
+///
+/// The final user target is always appended, unless the override already ends
+/// at that exact target.
+fn build_stage_schedule_from_options(options: &Value, user_target_error: f64) -> Vec<Stage> {
+    let Some(raw) = options.get("stage_schedule") else {
+        return build_stage_schedule(user_target_error);
+    };
+    if raw.as_str() == Some("current") {
+        return build_stage_schedule(user_target_error);
+    }
+    let Some(arr) = raw.as_array() else {
+        return build_stage_schedule(user_target_error);
+    };
+
+    let mut schedule: Vec<Stage> = parse_stage_schedule_array(arr, user_target_error)
+        .into_iter()
+        .map(|(name, target_error)| Stage {
+            name: Cow::Owned(name),
+            target_error,
+        })
+        .collect();
+
+    let append_final = schedule
+        .last()
+        .map(|s| (s.target_error - user_target_error).abs() > f64::EPSILON)
+        .unwrap_or(true);
+    if append_final {
+        schedule.push(Stage {
+            name: Cow::Borrowed("Final"),
+            target_error: user_target_error,
+        });
+    }
     schedule
 }
 
@@ -270,9 +337,9 @@ const SKIP_TO_FINAL_THRESHOLD: usize = 5;
 
 /// Iteration count simc receives for `stage`. Used purely as a safety ceiling
 /// — `target_error` drives the per-profileset iteration count, and simc stops
-/// once that precision is hit. Looser stages converge quickly; tight stages
-/// (Trace / Ultra / Final) can need most of the user's budget. The user's
-/// iteration budget is the right cap for every stage.
+/// once that precision is hit. Looser stages converge quickly; the final stage
+/// can need most of the user's budget. The user's iteration budget is the right
+/// cap for every stage.
 fn iterations_for_stage(_stage: &Stage, user_iters: u32) -> u32 {
     user_iters
 }
@@ -469,12 +536,31 @@ pub struct SimParams {
 impl SimParams {
     pub fn from_options(options: &Value) -> Self {
         Self {
-            fight_style: options.get("fight_style").and_then(|v| v.as_str()).unwrap_or("Patchwerk").to_string(),
-            target_error: options.get("target_error").and_then(|v| v.as_f64()).unwrap_or(0.1),
-            iterations: options.get("iterations").and_then(|v| v.as_u64()).unwrap_or(10_000) as u32,
-            desired_targets: options.get("desired_targets").and_then(|v| v.as_u64()).unwrap_or(1) as u32,
-            max_time: options.get("max_time").and_then(|v| v.as_u64()).unwrap_or(300) as u32,
-            single_actor_batch: options.get("single_actor_batch").and_then(|v| v.as_bool()).unwrap_or(true),
+            fight_style: options
+                .get("fight_style")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Patchwerk")
+                .to_string(),
+            target_error: options
+                .get("target_error")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.1),
+            iterations: options
+                .get("iterations")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(10_000) as u32,
+            desired_targets: options
+                .get("desired_targets")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1) as u32,
+            max_time: options
+                .get("max_time")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(300) as u32,
+            single_actor_batch: options
+                .get("single_actor_batch")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
         }
     }
 }
@@ -683,7 +769,7 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
     //   te=0.2  (≈1.5k iters/profileset)  → roughly equal (within noise)
     //   te=0.05 (≈14k iters/profileset)   → pwt=1 is 12% slower (iter parallelism wins)
     // Cutoff at te > 0.2 enables pwt=1 only for the early staged Top Gear stages
-    // (Probe/Coarse/Refine) where the win is clear. Medium (te=0.2) and below are
+    // (Broad/Refine) where the win is clear. Medium (te=0.2) and below are
     // marginal or slower, so we leave SimC's default sequential mode in place.
     // The `parallel_profilesets` option overrides this for A/B testing.
     let combo_count = simc_input
@@ -1253,7 +1339,7 @@ pub async fn run_simc_staged(
         .get("target_error")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.05);
-    let stages = build_stage_schedule(user_target_error);
+    let stages = build_stage_schedule_from_options(options, user_target_error);
     let total_stages = stages.len();
     let final_idx = total_stages - 1;
     // Clamp start_stage_idx to a valid range. If it's past the last stage the
@@ -1287,7 +1373,7 @@ pub async fn run_simc_staged(
             progress_range_for_stage(stage_idx, total_stages, base_start);
         let stage_iters = iterations_for_stage(stage, user_iterations);
         let stage_label = stage.name.to_lowercase();
-        let stage_name_for_progress = stage.name;
+        let stage_name_for_progress = stage.name.as_ref();
 
         on_progress(
             range_start,
@@ -1307,8 +1393,8 @@ pub async fn run_simc_staged(
         // SKIP_TO_FINAL_THRESHOLD or earlier pruning, so a single run is
         // tractable in practice.
         if is_final {
-            let want_parallel = user_parallel_override
-                .unwrap_or(remaining >= 4 && stage.target_error > 0.2);
+            let want_parallel =
+                user_parallel_override.unwrap_or(remaining >= 4 && stage.target_error > 0.2);
             let final_input = if prebuilt {
                 append_stage_overrides(&current_input, stage.target_error, want_parallel)
             } else {
@@ -1348,6 +1434,10 @@ pub async fn run_simc_staged(
             )
             .await
             .map_err(StagedRunError::from)?;
+            let mut stage_result = stage_result;
+            let final_names = profileset_result_names(&stage_result.json);
+            stage_result.json["simhammer"]["final_profileset_names"] =
+                Value::Array(final_names.into_iter().map(Value::String).collect());
             result = Some(stage_result);
             on_stage_complete(&format!("{} · {} combos · done", stage.name, remaining));
             break;
@@ -1593,6 +1683,22 @@ fn merge_eliminated_into_final(json: &mut Value, eliminated: &HashMap<String, Va
             results_arr.push(ps.clone());
         }
     }
+}
+
+/// Extract every `name` under `/sim/profilesets/results` from a simc result.
+pub(crate) fn profileset_result_names(json: &Value) -> Vec<String> {
+    json.pointer("/sim/profilesets/results")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|ps| {
+                    ps.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Run simc on a single Triage batch's profileset input.
@@ -2093,15 +2199,18 @@ mod tests {
     // ---- iterations_for_stage ----
 
     fn stage(name: &'static str, target_error: f64) -> Stage {
-        Stage { name, target_error }
+        Stage {
+            name: Cow::Borrowed(name),
+            target_error,
+        }
     }
 
     #[test]
     fn iterations_for_stage_returns_user_iters_for_every_stage() {
         // No per-stage caps any more — simc's auto-tuner driven by `target_error`
         // decides actual iteration count. The user's budget is the safety ceiling.
-        assert_eq!(iterations_for_stage(&stage("Probe", 2.0), 10_000), 10_000);
-        assert_eq!(iterations_for_stage(&stage("Coarse", 1.0), 10_000), 10_000);
+        assert_eq!(iterations_for_stage(&stage("Broad", 1.0), 10_000), 10_000);
+        assert_eq!(iterations_for_stage(&stage("Refine", 0.5), 10_000), 10_000);
         assert_eq!(iterations_for_stage(&stage("Final", 0.05), 50_000), 50_000);
         assert_eq!(
             iterations_for_stage(&stage("Final", 0.01), 100_000),
@@ -2208,34 +2317,28 @@ mod tests {
     }
 
     #[test]
-    fn schedule_at_005_matches_legacy_six_stage_schedule() {
-        // Lock the existing production schedule so this refactor is a no-op
-        // for the default user precision.
-        assert_eq!(schedule_targets(0.05), vec![2.0, 1.0, 0.5, 0.2, 0.1, 0.05]);
+    fn schedule_at_005_matches_benchmark_selected_schedule() {
+        assert_eq!(schedule_targets(0.05), vec![1.0, 0.5, 0.05]);
     }
 
     #[test]
     fn schedule_drops_intermediate_stages_tighter_than_user_precision() {
         // user_te=0.2 should not run a 0.1/0.05 intermediate pass — those would
         // be more precise than the user asked for.
-        assert_eq!(schedule_targets(0.2), vec![2.0, 1.0, 0.5, 0.2]);
-        assert_eq!(schedule_targets(0.5), vec![2.0, 1.0, 0.5]);
-        assert_eq!(schedule_targets(1.0), vec![2.0, 1.0]);
+        assert_eq!(schedule_targets(0.2), vec![1.0, 0.5, 0.2]);
+        assert_eq!(schedule_targets(0.5), vec![1.0, 0.5]);
+        assert_eq!(schedule_targets(1.0), vec![1.0]);
     }
 
     #[test]
-    fn schedule_extends_with_extra_intermediates_for_tighter_user_precision() {
-        // user_te=0.01 grows the schedule past the legacy 0.05 floor.
-        assert_eq!(
-            schedule_targets(0.01),
-            vec![2.0, 1.0, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01]
-        );
+    fn schedule_keeps_same_intermediates_for_tighter_user_precision() {
+        assert_eq!(schedule_targets(0.01), vec![1.0, 0.5, 0.01]);
     }
 
     #[test]
     fn schedule_handles_user_target_error_between_candidate_stops() {
         // 0.3 doesn't match a candidate — keeps stages > 0.3 and appends Final(0.3).
-        assert_eq!(schedule_targets(0.3), vec![2.0, 1.0, 0.5, 0.3]);
+        assert_eq!(schedule_targets(0.3), vec![1.0, 0.5, 0.3]);
     }
 
     #[test]
@@ -2245,5 +2348,31 @@ mod tests {
         assert_eq!(stages.len(), 1);
         assert_eq!(stages[0].name, "Final");
         assert_eq!(stages[0].target_error, 3.0);
+    }
+
+    #[test]
+    fn schedule_override_is_only_used_when_option_is_present() {
+        let options = serde_json::json!({});
+        let stages = build_stage_schedule_from_options(&options, 0.05);
+        assert_eq!(
+            stages.iter().map(|s| s.target_error).collect::<Vec<_>>(),
+            vec![1.0, 0.5, 0.05]
+        );
+    }
+
+    #[test]
+    fn schedule_override_appends_user_final_precision() {
+        let options = serde_json::json!({
+            "stage_schedule": [
+                {"name": "Broad", "target_error": 1.0},
+                {"name": "Refine", "target_error": 0.5}
+            ]
+        });
+        let stages = build_stage_schedule_from_options(&options, 0.05);
+        assert_eq!(
+            stages.iter().map(|s| s.target_error).collect::<Vec<_>>(),
+            vec![1.0, 0.5, 0.05]
+        );
+        assert_eq!(stages.last().unwrap().name, "Final");
     }
 }

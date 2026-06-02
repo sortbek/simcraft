@@ -1,0 +1,114 @@
+# Sortbek - Beast Mastery - high-spread Top Gear benchmark fixture
+# Source: user-provided SimC addon export, trimmed to equipped gear plus selected alternatives.
+# Requires SimulationCraft 1000-01 or newer
+
+hunter="Sørtbek"
+level=90
+race=troll
+region=eu
+server=draenor
+role=attack
+professions=engineering=91/skinning=25
+spec=beast_mastery
+
+talents=C0PApei1JmYNvFfEFaN5bWuGKYzsNwAGwMsBZsAAgZGLzMDzwMzMYGzMzwMmZGzMzYbmZYMDLDNDAAAAgZAAAYegxMDzMABMLgtBA
+
+# Primal Sentry's Maw (289)
+head=,id=249988,enchant_id=8015,gem_id=240898,bonus_id=43/13440/13338/13575/13534/12806
+# Amulet of the Abyssal Hymn (276)
+neck=,id=250247,gem_id=240898/240898,bonus_id=6652/13668/13334/12798
+# Primal Sentry's Trophies (289)
+shoulder=,id=249986,enchant_id=8001,bonus_id=43/13440/13340/13574/12806
+# Primal Sentry's Spine (285)
+back=,id=249983,bonus_id=41/13440/12805
+# Voidwarped Oozemail (289)
+chest=,id=251114,enchant_id=7987,bonus_id=13440/6652/13577/12699/12806
+# Primal Sentry's Wound Stanchers (276)
+wrist=,id=249984,bonus_id=6652/12667/13440/12798
+# Primal Sentry's Talonguards (276)
+hands=,id=249989,bonus_id=13334/6652/13337/13574/12798
+# World Tender's Barkclasp (285)
+waist=,id=244611,gem_id=240983,bonus_id=12214/8960/13667/12497/12066/12666/13622,crafting_quality=5
+# Primal Sentry's Legguards (276)
+legs=,id=249987,enchant_id=8159,bonus_id=13334/13339/6652/13575/12798
+# World Tender's Rootslippers (285)
+feet=,id=244610,enchant_id=7992,bonus_id=12214/8960/13667/12497/12066/13622,crafting_quality=5
+# Omission of Light (289)
+finger1=,id=251093,enchant_id=7967,gem_id=240898,bonus_id=13440/6652/13668/12699/12806
+# Occlusion of Void (276)
+finger2=,id=251217,enchant_id=7967,gem_id=240898,bonus_id=13440/6652/13668/12699/12798
+# Gaze of the Alnseer (285)
+trinket1=,id=249343,bonus_id=6652/13334/13653
+# Algeth'ar Puzzle Box (285)
+trinket2=,id=193701,bonus_id=13440/6652/12699/13653
+# Deceiver's Rotbow (298)
+main_hand=,id=251174,enchant_id=8039,bonus_id=13440/6652/12701/13654
+
+### Gear from Bags
+#
+# Ribbon of Coiled Malice (276)
+# neck=,id=249337,gem_id=240900,bonus_id=6652/13668/13334/12798
+#
+# Nocturnal Thorncharm (250)
+# neck=,id=249626,bonus_id=12786/6652/13668
+#
+# Amulet of the Abyssal Hymn (269)
+# neck=,id=250247,bonus_id=42/13668/13334/12796
+#
+# Nocturnal Thorncharm (227)
+# neck=,id=249626,bonus_id=12771/6652/13668
+#
+# Ironshell Pendant (220)
+# neck=,id=133359,bonus_id=12769/7756/13668
+#
+# Galactic Warmonger's Epaulets (237)
+# shoulder=,id=255911,enchant_id=7999,bonus_id=13451/13578/12774
+#
+# Light-Crazed Rutaani's Shoulderguards (183)
+# shoulder=,id=256202,bonus_id=13573/6652,drop_level=88
+#
+# Midnight Herald's Shadowguards (131)
+# shoulder=,id=237644,bonus_id=10353/12233/6652/12675/12289/1501/10255
+#
+# Elder Mossvein Greatleaves (250)
+# shoulder=,id=249650,bonus_id=12786/6652/13577
+#
+# Primal Sentry's Trophies (263)
+# shoulder=,id=249986,enchant_id=8030,bonus_id=13333/13340/6652/13574/12790
+#
+# Pauldrons of the Void Hunter (266)
+# shoulder=,id=151323,bonus_id=12795/13440/6652/13577/12699
+#
+# Preyseeker's Rugged Shoulderguards (246)
+# shoulder=,id=259938,bonus_id=12785/6652/13577
+#
+# Skilled Preyseeker's Knapsack (1)
+# back=,id=258023
+#
+# Reshii Wraps (170)
+# back=,id=235499,enchant_id=7401,gem_id=238045,bonus_id=12401/9893/12258
+#
+# Robes of the Voidbound (276)
+# chest=,id=249310,enchant_id=7987,bonus_id=43/13577/13334/12798
+#
+# Decaying Cuirass (266)
+# chest=,id=251179,bonus_id=12795/13440/6652/13577/12699
+#
+# Preyseeker's Rugged Haubergeon (220)
+# chest=,id=259933,bonus_id=12769/6652/13578
+#
+# Saptorbane Guards (207)
+# wrist=,id=251200,bonus_id=13441/13436/13578,drop_level=90
+#
+# Rampant Thornstrap (237)
+# waist=,id=249659,bonus_id=12778/6652/12667/11215/13577
+#
+# Elder Mosscinch (227)
+# waist=,id=249651,bonus_id=12771/6652/12667/13578
+#
+# Shifting Stalker Hide Pants (253)
+# legs=,id=151314,bonus_id=12787/6652/13577/12699/11215
+#
+# Rigid Scale Boots (266)
+# feet=,id=258582,bonus_id=12795/13440/6652/13577/12699
+
