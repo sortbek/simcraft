@@ -246,6 +246,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
             iter_cfg,
             stage_inputs,
             plan,
+            None,
         )
         .await
         {

@@ -234,21 +234,69 @@ fn clamp_last_pruning_hard_max(stages: &mut [StagePlan], final_ceiling: usize) {
     }
 }
 
+fn generated_stage_count(stages: &[StagePlan]) -> usize {
+    stages
+        .iter()
+        .filter(|s| s.source == CandidateSource::GeneratedCombinations)
+        .count()
+}
+
+/// Mid-stage resume state seeded into `run_stage_pipeline`.
+pub struct StagePipelineResume {
+    pub start_stage_idx: usize,
+    pub start_batch_idx: usize,
+    pub input_survivor_ids: Vec<i64>,
+    pub iterator_cursor: Option<Vec<usize>>,
+    pub next_combo_id: i64,
+}
+
 pub async fn run_stage_pipeline(
     iter_cfg: ProfilesetIteratorConfig,
     inputs: StagePipelineInputs<'_>,
     mut plan: StagePipelinePlan,
+    resume: Option<StagePipelineResume>,
 ) -> Result<StagePipelineOutcome, String> {
     clamp_last_pruning_hard_max(&mut plan.stages, plan.final_single_run_ceiling);
+    let generated_stages = generated_stage_count(&plan.stages);
+    if generated_stages > 1 {
+        return Err(format!(
+            "Stage plan has {generated_stages} generated stages; only one is supported \
+             (combo_dedup is keyed by batch_idx within the single generated stage)"
+        ));
+    }
     let metadata_repo = ComboMetadataRepo::new(inputs.pool.clone());
     let stage_results_repo = StageResultsRepo::new(inputs.pool.clone());
     let mut summaries = Vec::new();
-    let mut current_survivor_ids: Vec<i64> = Vec::new();
     let mut next_combo_id = 1i64;
+    let mut current_survivor_ids: Vec<i64> = Vec::new();
     let mut generated_iter = Some(ProfilesetIterator::new(iter_cfg));
+    let mut start_stage_idx = 0usize;
+    let mut start_batch_idx = 0usize;
+    if let Some(r) = resume {
+        next_combo_id = r.next_combo_id;
+        current_survivor_ids = r.input_survivor_ids;
+        start_stage_idx = r.start_stage_idx;
+        start_batch_idx = r.start_batch_idx;
+        if let (Some(cursor), Some(iter)) = (r.iterator_cursor, generated_iter.as_mut()) {
+            if !iter.seek(cursor) {
+                return Err(
+                    "Resume cursor seek failed — request_json may not match the checkpoint"
+                        .to_string(),
+                );
+            }
+        }
+    }
     let total_stages = plan.stages.len().max(1);
 
     for stage in &plan.stages {
+        if stage.index < start_stage_idx {
+            continue;
+        }
+        let stage_start_batch = if stage.index == start_stage_idx {
+            start_batch_idx
+        } else {
+            0
+        };
         let stage_start = Instant::now();
         let stage_progress_start =
             ((stage.index as f64 / total_stages as f64) * 100.0).min(100.0) as u8;
@@ -273,7 +321,7 @@ pub async fn run_stage_pipeline(
                     generated_iter.as_mut(),
                     &current_survivor_ids,
                     &mut next_combo_id,
-                    0,
+                    stage_start_batch,
                     stage_progress_start,
                     stage_progress_end,
                 )
@@ -1198,5 +1246,35 @@ mod tests {
         clamp_last_pruning_hard_max(&mut stages, 500);
         assert_eq!(stages[0].survivor_policy.hard_max, 500);
         assert_eq!(stages[0].survivor_policy.global_target, 500);
+    }
+
+    fn mk_stage(index: usize, source: CandidateSource) -> StagePlan {
+        StagePlan {
+            index,
+            name: format!("S{index}"),
+            target_error: 1.0,
+            kind: StageKind::Pruning,
+            source,
+            batch_policy: BatchPolicy {
+                max_profilesets: 1,
+                probe_size: 1,
+            },
+            survivor_policy: SurvivorPolicy::default(),
+        }
+    }
+
+    #[test]
+    fn generated_stage_count_counts_generated_sources() {
+        let stages = vec![
+            mk_stage(0, CandidateSource::GeneratedCombinations),
+            mk_stage(1, CandidateSource::GeneratedCombinations),
+            mk_stage(2, CandidateSource::PreviousStageSurvivors),
+        ];
+        assert_eq!(generated_stage_count(&stages), 2);
+        let single = vec![
+            mk_stage(0, CandidateSource::GeneratedCombinations),
+            mk_stage(1, CandidateSource::PreviousStageSurvivors),
+        ];
+        assert_eq!(generated_stage_count(&single), 1);
     }
 }

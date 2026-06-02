@@ -221,7 +221,7 @@ async fn resume_local_stage(
             }),
         };
         let plan = super::stage_pipeline::default_local_topgear_plan(&options_for_task);
-        match super::stage_pipeline::run_stage_pipeline(iter_cfg, stage_inputs, plan).await {
+        match super::stage_pipeline::run_stage_pipeline(iter_cfg, stage_inputs, plan, None).await {
             Ok(super::stage_pipeline::StagePipelineOutcome::Completed(result)) => {
                 drop(permit);
                 crate::server::helpers::finalize_local_stage_result(
