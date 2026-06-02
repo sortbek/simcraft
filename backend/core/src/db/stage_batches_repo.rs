@@ -18,6 +18,14 @@ pub struct StageBatchRow {
     pub status: String,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct StageTotals {
+    pub batch_count: i64,
+    pub candidate_total: i64,
+    pub accepted_total: i64,
+    pub local_survivor_total: i64,
+}
+
 impl StageBatchesRepo {
     pub fn new(pool: AnyPool) -> Self {
         Self { pool }
@@ -116,5 +124,82 @@ impl StageBatchesRepo {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    /// Highest `batch_idx` with status='completed' for a stage, or None.
+    pub async fn max_completed_batch_idx(
+        &self,
+        job_id: &str,
+        stage_idx: i64,
+    ) -> Result<Option<i64>, sqlx::Error> {
+        let row = sqlx::query(
+            "SELECT MAX(batch_idx) AS m FROM stage_batches
+             WHERE job_id = $1 AND stage_idx = $2 AND status = 'completed'",
+        )
+        .bind(job_id)
+        .bind(stage_idx)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.try_get::<i64, _>("m").ok())
+    }
+
+    /// Aggregate counts over a stage's COMPLETED batches (DB-derived summary).
+    pub async fn stage_totals(
+        &self,
+        job_id: &str,
+        stage_idx: i64,
+    ) -> Result<StageTotals, sqlx::Error> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) AS bc,
+                    COALESCE(SUM(candidate_count), 0) AS cc,
+                    COALESCE(SUM(accepted_count), 0) AS ac,
+                    COALESCE(SUM(local_survivor_count), 0) AS lsc
+             FROM stage_batches
+             WHERE job_id = $1 AND stage_idx = $2 AND status = 'completed'",
+        )
+        .bind(job_id)
+        .bind(stage_idx)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(StageTotals {
+            batch_count: row.get("bc"),
+            candidate_total: row.get("cc"),
+            accepted_total: row.get("ac"),
+            local_survivor_total: row.get("lsc"),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn pool() -> sqlx::AnyPool {
+        sqlx::any::install_default_drivers();
+        crate::db::Database::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite")
+            .pool
+    }
+
+    #[tokio::test]
+    async fn max_completed_and_totals_ignore_committed_rows() {
+        let pool = pool().await;
+        let repo = StageBatchesRepo::new(pool.clone());
+        let mut tx = pool.begin().await.unwrap();
+        // completed batch 0: 100 candidates, 80 accepted, 30 survivors
+        repo.insert_committed(&mut tx, "job", 0, 0, "generated", Some("[0]"), Some("[1]"), 100, 80).await.unwrap();
+        // committed-pending batch 1: 50 candidates, 40 accepted
+        repo.insert_committed(&mut tx, "job", 0, 1, "generated", Some("[1]"), Some("[2]"), 50, 40).await.unwrap();
+        tx.commit().await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        repo.mark_completed(&mut tx, "job", 0, 0, 30).await.unwrap();
+        tx.commit().await.unwrap();
+
+        assert_eq!(repo.max_completed_batch_idx("job", 0).await.unwrap(), Some(0));
+        let totals = repo.stage_totals("job", 0).await.unwrap();
+        assert_eq!(totals.batch_count, 1);          // only completed
+        assert_eq!(totals.accepted_total, 80);
+        assert_eq!(totals.local_survivor_total, 30);
     }
 }

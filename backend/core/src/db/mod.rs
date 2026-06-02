@@ -16,7 +16,7 @@ pub use combo_metadata_repo::{ComboMetadataInsert, ComboMetadataRepo, ComboMetad
 pub use job_repo::{JobRepo, JobStatusFilter, ListJobsFilter};
 pub use route_repo::RouteRepo;
 pub use settings_repo::SettingsRepo;
-pub use stage_batches_repo::{StageBatchRow, StageBatchesRepo};
+pub use stage_batches_repo::{StageBatchRow, StageBatchesRepo, StageTotals};
 pub use stage_results_repo::{StageResultInsert, StageResultRow, StageResultsRepo};
 pub use triage_batches_repo::{TriageBatchRow, TriageBatchesRepo};
 
