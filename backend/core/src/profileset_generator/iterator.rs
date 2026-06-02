@@ -268,9 +268,31 @@ impl ProfilesetIterator {
             .cloned()
             .unwrap_or_else(|| ("".to_string(), "".to_string()));
 
+        // Skip combos that reproduce the baseline actor byte-for-byte. The base
+        // case is all-equipped gear with no overrides. But a gem-only combo on
+        // baseline gear whose effective gems EQUAL the already-socketed gems is
+        // also baseline-identical (e.g. replace_gems=true and the user re-picked
+        // an already-equipped gem): `set_gem_ids` with the same gem is a no-op,
+        // so it would waste a sim slot on a zero-delta duplicate of the baseline.
+        // (Enchant overrides always differ from equipped — axis index 0 is the
+        // equipped enchant and never emits an override — so a non-empty enchant
+        // map always changes something.)
+        let gems_match_equipped = eff_gems.iter().all(|(slot, gids)| {
+            let equipped_gems = gear_set
+                .get(slot)
+                .and_then(|item| item.get("simc_string"))
+                .and_then(|s| s.as_str())
+                .map(crate::simc_string::extract_gem_ids)
+                .unwrap_or_default();
+            let mut a = gids.clone();
+            a.sort_unstable();
+            let mut b = equipped_gems;
+            b.sort_unstable();
+            a == b
+        });
         if is_baseline
             && effective_enchants_map.is_empty()
-            && eff_gems.is_empty()
+            && gems_match_equipped
             && talent_string.is_empty()
         {
             return None;
@@ -400,13 +422,44 @@ impl ProfilesetIterator {
 
         let include_off_hand_synthetic = !gear_set.contains_key("off_hand");
 
-        let meta_items = super::emit::build_combo_metadata(
+        let mut meta_items = super::emit::build_combo_metadata(
             &gear_item_rows,
             &enchant_entries,
             &gem_entries,
             None, // no talent tagging in streaming path
             include_off_hand_synthetic,
         );
+
+        // A gear-SWAP slot that ALSO receives an enchant/gem override in this
+        // combo must show the OVERRIDE on its gear row, not the swapped item's
+        // STATIC enchant_id/gem_id (which `item_meta` copied verbatim). Frontend
+        // consumers read the gear row's `enchant_id` directly (TopGearRankings
+        // ItemTag, GearSlotRow), and the enchant delta entry is intentionally
+        // SUPPRESSED for swapped slots above — so without this the override is
+        // invisible/wrong on that row.
+        for meta in meta_items.iter_mut() {
+            // Only gear rows (no `type`) carry a `slot` that can collide with an axis.
+            if meta.get("type").is_some() {
+                continue;
+            }
+            let Some(slot) = meta
+                .get("slot")
+                .and_then(|s| s.as_str())
+                .map(str::to_string)
+            else {
+                continue;
+            };
+            let is_swap = gear_item_rows.iter().any(|(s, _, _)| *s == slot);
+            if !is_swap {
+                continue;
+            }
+            if let Some(&eid) = effective_enchants_map.get(&slot) {
+                meta["enchant_id"] = serde_json::json!(eid);
+            }
+            if let Some(gids) = eff_gems.get(&slot) {
+                meta["gem_id"] = serde_json::json!(gids.first().copied().unwrap_or(0));
+            }
+        }
         let metadata = serde_json::json!(meta_items);
 
         Some(ProfilesetCandidate {
@@ -539,6 +592,132 @@ mod tests {
             yielded[0].profileset_simc.contains("gem_id=240898"),
             "gem-only profileset should be emitted with gem override: {}",
             yielded[0].profileset_simc
+        );
+    }
+
+    /// Build an equipped, socketed item whose simc_string ALREADY carries `gem`.
+    fn arc_item_with_gem(id: u64, slot: &str, gem: u64) -> Arc<Value> {
+        Arc::new(json!({
+            "item_id": id,
+            "slot": slot,
+            "simc_string": format!(",id={},gem_id={}", id, gem),
+            "is_equipped": true,
+            "sockets": 1,
+            "bonus_ids": [],
+            "enchant_id": 0,
+            "gem_id": gem,
+            "ilevel": 0,
+            "name": format!("Item {}", id),
+            "origin": "bags",
+        }))
+    }
+
+    fn gem_only_iter(slot_gem: u64, combo_gem: u64) -> Vec<ProfilesetCandidate> {
+        let mut slot_item_lists = HashMap::new();
+        slot_item_lists.insert(
+            "head".to_string(),
+            vec![arc_item_with_gem(100, "head", slot_gem)],
+        );
+        let mut socketed_item_ids = HashSet::new();
+        socketed_item_ids.insert(100);
+        let mut gem_combo = GemCombo::new();
+        gem_combo.insert("head".to_string(), vec![combo_gem]);
+
+        let cfg = ProfilesetIteratorConfig {
+            spec: "mistweaver".to_string(),
+            base_profile: Arc::from(""),
+            slot_item_lists,
+            varying_slots: vec![],
+            enchant_axes: vec![],
+            gem_combo_count: 1,
+            gem_combos_resolver: GemCombosResolver::new(vec![gem_combo]),
+            socketed_item_ids,
+            talent_builds: vec![],
+            max_catalyst_charges: None,
+        };
+        ProfilesetIterator::new(cfg).collect()
+    }
+
+    #[test]
+    fn baseline_gem_equal_to_equipped_is_not_emitted() {
+        crate::test_support::ensure_game_data_loaded();
+        // Equipped head already has gem 5001; the gem axis re-assigns the SAME
+        // gem 5001 (e.g. replace_gems=true, user re-picked the equipped gem).
+        // `set_gem_ids` would be a no-op → byte-identical to baseline → must skip.
+        let same = gem_only_iter(5001, 5001);
+        assert!(
+            same.is_empty(),
+            "a baseline-identical gem combo must not be emitted, got: {:?}",
+            same.iter().map(|c| &c.profileset_simc).collect::<Vec<_>>()
+        );
+
+        // A DIFFERENT gem 5002 genuinely changes the actor → still emitted.
+        let diff = gem_only_iter(5001, 5002);
+        assert_eq!(diff.len(), 1, "a distinct gem must still be emitted");
+        assert!(diff[0].profileset_simc.contains("gem_id=5002"));
+    }
+
+    #[test]
+    fn swapped_slot_gear_row_carries_override_enchant_and_gem() {
+        crate::test_support::ensure_game_data_loaded();
+
+        // head: equipped 100 (gemless) + alt 200 (socketed). The alt is the swap.
+        let mut slot_item_lists = HashMap::new();
+        slot_item_lists.insert(
+            "head".to_string(),
+            vec![
+                arc_item(100, "head", true, 0),
+                arc_item(200, "head", false, 1),
+            ],
+        );
+        let mut socketed_item_ids = HashSet::new();
+        socketed_item_ids.insert(200);
+
+        // Enchant axis on head: index 0 = equipped (none), index 1 = override 9999.
+        let enchant_axes = vec![EnchantAxis {
+            slot: "head".to_string(),
+            options: vec![0, 9999],
+        }];
+        // Gem combo assigns gem 5005 to head.
+        let mut gem_combo = GemCombo::new();
+        gem_combo.insert("head".to_string(), vec![5005]);
+
+        let cfg = ProfilesetIteratorConfig {
+            spec: "mistweaver".to_string(),
+            base_profile: Arc::from(""),
+            slot_item_lists,
+            varying_slots: vec!["head".to_string()],
+            enchant_axes,
+            gem_combo_count: 1,
+            gem_combos_resolver: GemCombosResolver::new(vec![gem_combo]),
+            socketed_item_ids,
+            talent_builds: vec![],
+            max_catalyst_charges: None,
+        };
+
+        let mut it = ProfilesetIterator::new(cfg);
+        // Find the candidate that swaps head to 200 AND applies the enchant override.
+        let cand = it
+            .find(|c| {
+                c.profileset_simc.contains("id=200")
+                    && c.profileset_simc.contains("enchant_id=9999")
+            })
+            .expect("expected a swapped+enchanted candidate");
+
+        let items = cand.metadata.as_array().expect("metadata array");
+        let head = items
+            .iter()
+            .find(|v| v["slot"] == "head" && v.get("type").is_none())
+            .expect("head gear row required");
+        assert_eq!(
+            head["enchant_id"],
+            json!(9999),
+            "swapped slot gear row must carry the OVERRIDE enchant, not the item's static enchant_id: {head:?}"
+        );
+        assert_eq!(
+            head["gem_id"],
+            json!(5005),
+            "swapped slot gear row must carry the override gem: {head:?}"
         );
     }
 
