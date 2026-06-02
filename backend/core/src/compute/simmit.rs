@@ -648,22 +648,6 @@ impl SimmitProvider {
         Ok(simmit_result_to_simc_output(&body))
     }
 
-    /// Submit ONE chunk of profilesets to Simmit with server-side multistage,
-    /// poll to terminal, and return the adapted SimC-shaped output. The
-    /// cloud-streaming orchestrator calls this per chunk. Reuses the same
-    /// submit/poll/fetch path as `run_with_profilesets`.
-    pub async fn submit_profileset_chunk(
-        &self,
-        ctx: RunCtx<'_>,
-        input: &str,
-    ) -> Result<SimcOutput, RunError> {
-        let bearer = Self::bearer(&ctx)?;
-        let stripped = strip_simmit_blocked_directives(input);
-        let remote_id = self.submit(&bearer, ctx.job_id, ctx.job_id, &stripped, true).await?;
-        let _final = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
-        self.fetch_result(&bearer, &remote_id).await
-    }
-
     async fn cancel_remote(&self, bearer: &str, remote_job_id: &str) {
         let url = format!("{}/v1/simc/jobs/{}/cancel", SIMMIT_BASE_URL, remote_job_id);
         let resp = self.http.post(&url).bearer_auth(bearer).send().await;
