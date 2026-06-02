@@ -621,6 +621,7 @@ impl CloudStreamingRun {
             /*start_chunk_idx=*/ 0,
             /*combo_id_base=*/ 0,
             Some(first),
+            /*resume_guard=*/ false,
         )
         .await;
     }
@@ -651,6 +652,12 @@ impl CloudStreamingRun {
         start_chunk_idx: usize,
         start_combo_id_base: i64,
         first: Option<GeneratedChunk>,
+        // `true` on the RESUME path: before finalizing Done, recompute provable
+        // coverage over the reconciled `cloud_chunks` rows and REFUSE to finalize
+        // (leave the job Paused + resumable) if any emitted combo range is still
+        // uncovered. The fresh path passes `false` — its generation covers the
+        // whole space by construction and a hard failure already errors.
+        resume_guard: bool,
     ) {
         // K = min(CONFIG_MAX_INFLIGHT, max_active_jobs). Unknown limit → config.
         // A `0` limit is rejected up front in `execute` before this loop runs, so
@@ -851,6 +858,63 @@ impl CloudStreamingRun {
         // (resume continues from the checkpointed next_chunk_idx).
         if paused {
             return;
+        }
+
+        // ── 3b. Completeness guard (RESUME only). ────────────────────────────
+        // With every chunk regenerated/re-polled/re-submitted, re-derive provable
+        // coverage over the persisted rows. The full emitted space is `[1, total+1)`
+        // where `total = next_name_idx - 1` (names are 1-based and the iterator has
+        // now emitted every candidate). If a range is STILL uncovered (e.g. a
+        // pre-cursor chunk whose re-submit silently dropped, or a remote that never
+        // recovered), DO NOT finalize Done — leave the job Paused + resumable with a
+        // diagnostic so the user can resume again, never silently dropping combos.
+        if resume_guard {
+            let total = it.next_name_idx().saturating_sub(1) as i64;
+            match cloud_repo.list_for_job(&self.job_id).await {
+                Ok(rows) => {
+                    let rep = coverage_report(&rows, total);
+                    if !rep.is_complete() {
+                        let detail = format!(
+                            "Resume could not cover all combinations ({} range(s) still \
+                             missing, e.g. {:?}); job left paused for another resume.",
+                            rep.uncovered.len(),
+                            rep.uncovered.first().copied().unwrap_or((0, 0)),
+                        );
+                        let _ = self
+                            .repo
+                            .update_status(&self.job_id, crate::models::JobStatus::Paused)
+                            .await;
+                        // Write only the stage/detail diagnostic — preserve the
+                        // existing `progress_pct` (most chunks completed) so the
+                        // resumable job doesn't rewind its bar to 0%.
+                        let pct = self
+                            .repo
+                            .get(&self.job_id)
+                            .await
+                            .ok()
+                            .flatten()
+                            .map(|j| j.progress_pct)
+                            .unwrap_or(0);
+                        let _ = self
+                            .repo
+                            .update_progress(&self.job_id, pct, "Cloud", &detail)
+                            .await;
+                        return;
+                    }
+                }
+                Err(e) => {
+                    // Could not verify coverage → fail clean rather than finalize a
+                    // possibly-incomplete result as Done.
+                    let _ = self
+                        .repo
+                        .set_error(
+                            &self.job_id,
+                            &format!("Resume could not verify chunk coverage: {e}"),
+                        )
+                        .await;
+                    return;
+                }
+            }
         }
 
         // ── 4. Finalize the merged multi-chunk result. ──────────────────────
@@ -1371,17 +1435,146 @@ pub fn build_production_chunk_runner(
     })
 }
 
+// ── Provable coverage (resume reconciliation + completeness guard) ───────────
+
+use crate::db::cloud_chunks_repo::CloudChunkRow;
+
+/// The provable coverage analysis over a job's `cloud_chunks` rows, built from
+/// `first_combo_name_idx` + `profileset_count` + `status` + `parent_chunk_idx`.
+///
+/// Names are 1-BASED (`Combo 1` is the first emitted candidate), so the full
+/// emitted space is `[1, total + 1)` where `total` is the number of emitted
+/// combos. Each row covers `[first, first + count)`. Coverage is decided by the
+/// UNION of *completed* rows' ranges — never by count-matching (two equal-count
+/// chunks can cover different combos).
+#[derive(Debug, Clone)]
+struct CoverageReport {
+    /// Completed-row ranges do NOT exactly tile `[1, total + 1)`.
+    uncovered: Vec<(i64, i64)>,
+    /// `chunk_idx` of each `failed` row whose `[first, first + count)` range is
+    /// FULLY covered by completed rows (its completed children tiled it). Such a
+    /// parent is terminal: it must NOT be re-run (no PK collision, combos once).
+    superseded_failed: std::collections::HashSet<i64>,
+}
+
+impl CoverageReport {
+    /// `true` when every emitted combo is covered by some completed chunk.
+    fn is_complete(&self) -> bool {
+        self.uncovered.is_empty()
+    }
+}
+
+/// Merge half-open `[start, end)` intervals into a sorted, disjoint list.
+fn merge_intervals(mut ivs: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+    ivs.retain(|(s, e)| e > s);
+    ivs.sort_by_key(|(s, _)| *s);
+    let mut out: Vec<(i64, i64)> = Vec::with_capacity(ivs.len());
+    for (s, e) in ivs {
+        if let Some(last) = out.last_mut() {
+            if s <= last.1 {
+                last.1 = last.1.max(e);
+                continue;
+            }
+        }
+        out.push((s, e));
+    }
+    out
+}
+
+/// Subtract the merged `covered` intervals from `[lo, hi)`, returning the
+/// uncovered gaps. `covered` MUST be sorted+disjoint (use [`merge_intervals`]).
+fn subtract_covered(lo: i64, hi: i64, covered: &[(i64, i64)]) -> Vec<(i64, i64)> {
+    let mut gaps = Vec::new();
+    let mut at = lo;
+    for &(s, e) in covered {
+        if e <= at || s >= hi {
+            continue;
+        }
+        if s > at {
+            gaps.push((at, s.min(hi)));
+        }
+        at = at.max(e);
+        if at >= hi {
+            break;
+        }
+    }
+    if at < hi {
+        gaps.push((at, hi));
+    }
+    gaps
+}
+
+/// The completed range of a row, when it carries a provable combo-name range.
+/// A completed row with no `first_combo_name_idx` (legacy, pre-0014) returns
+/// `None` and contributes NOTHING to coverage — the guard then conservatively
+/// keeps the job resumable rather than finalizing Done on unproven coverage.
+fn completed_range(row: &CloudChunkRow) -> Option<(i64, i64)> {
+    if row.status != "completed" {
+        return None;
+    }
+    let first = row.first_combo_name_idx?;
+    Some((first, first + row.profileset_count))
+}
+
+/// Build the provable [`CoverageReport`] for `total_combos` emitted candidates.
+///
+/// Decides, from durable per-chunk metadata only:
+/// - which name ranges are NOT covered by any completed chunk (→ re-submit),
+/// - which `failed` rows are fully superseded by completed rows (→ skip, terminal).
+fn coverage_report(rows: &[CloudChunkRow], total_combos: i64) -> CoverageReport {
+    // Union of all completed rows' ranges (children + standalone alike).
+    let covered = merge_intervals(rows.iter().filter_map(completed_range).collect());
+
+    // Emitted names are 1-based: `[1, total_combos + 1)`. Saturating add keeps the
+    // supersession-only call (which passes `i64::MAX` for an unbounded total)
+    // overflow-safe.
+    let uncovered = if total_combos <= 0 {
+        Vec::new()
+    } else {
+        subtract_covered(1, total_combos.saturating_add(1), &covered)
+    };
+
+    // A failed row is superseded iff its own range is fully inside the completed
+    // union (i.e. completed rows — typically its retry children — tiled it).
+    let mut superseded_failed = std::collections::HashSet::new();
+    for row in rows {
+        if row.status != "failed" {
+            continue;
+        }
+        let Some(first) = row.first_combo_name_idx else {
+            continue;
+        };
+        let span = (first, first + row.profileset_count);
+        if span.1 > span.0 && subtract_covered(span.0, span.1, &covered).is_empty() {
+            superseded_failed.insert(row.chunk_idx);
+        }
+    }
+
+    CoverageReport {
+        uncovered,
+        superseded_failed,
+    }
+}
+
 // ── Resume ───────────────────────────────────────────────────────────────────
 
-/// Resume a paused/crashed cloud-streaming run. Mirrors `resume_triage`/
-/// `resume_staged`: reads the `CloudStreaming` checkpoint + the `cloud_chunks`
-/// rows, reloads completed chunks into the accumulator (NEVER re-billed),
-/// re-polls in-flight (`submitted`) chunks via their `remote_job_id`
-/// (terminal → fold + complete; lost/expired → reset to `pending`), rebuilds the
-/// iterator from the stored request and `seek`s it to `iterator_cursor` while
-/// restoring `next_name_idx` (so resumed chunks keep the global `Combo N` naming
-/// and never collide with completed chunks), then continues the SAME chunked
-/// submit/merge loop from `next_chunk_idx` and finalizes.
+/// Resume a paused/crashed cloud-streaming run via a from-start deterministic
+/// walk (NOT a seek — do not re-introduce one). Mirrors `resume_triage`/
+/// `resume_staged` in that it reads the `CloudStreaming` checkpoint + the
+/// `cloud_chunks` rows, but rebuilds the iterator from `new()` and re-walks the
+/// whole emitted space from the origin. Cloud chunk generation is dedup-free and
+/// a pure function of the cursor, so the walk reproduces byte-identical chunk
+/// boundaries and `Combo N` names. For every regenerated chunk it: folds
+/// `completed` rows into the accumulator (NEVER re-billed); re-polls BOTH
+/// `submitted`-with-live-remote AND `failed`-with-live-remote chunks via their
+/// `remote_job_id`; and RE-SUBMITS any uncovered chunk (`failed`-not-superseded /
+/// `pending` / lost) on its own row — it never resets a chunk to `pending`. A
+/// DB-provable supersession check skips a `failed` retry parent whose range its
+/// completed children already tiled. It then continues the SAME chunked
+/// submit/merge loop for the never-generated tail. Before finalizing Done a
+/// completeness guard re-derives provable coverage over `[1, total+1)`; if any
+/// range is still uncovered the job is left Paused + resumable (never silently
+/// dropping combos), otherwise the merged result is finalized.
 ///
 /// Auth: on resume there are no request headers, so the Simmit key must come from
 /// server-side settings (`provider.simmit.api_key`). Desktop stores it; web works
@@ -1523,11 +1716,16 @@ pub type RepollFn = Arc<
 >;
 
 /// The HTTP-free resume core, reused by the production path and TDD'd against
-/// fakes. Reloads completed chunks into the accumulator (never re-billed),
-/// re-polls in-flight chunks through `repoll`, rebuilds + seeks the iterator with
-/// restored `next_name_idx`, then continues the SAME `run_chunk_loop` from
-/// `next_chunk_idx`. The `runner`/`repoll` are injected so no live Simmit HTTP
-/// happens in tests.
+/// fakes. Rebuilds the iterator from `new()` (NOT a seek) and walks the emitted
+/// space from the origin: regenerates every generated (parent=None) chunk in
+/// emission order, folding `completed` rows into the accumulator (never
+/// re-billed), re-polling BOTH `submitted`- and `failed`-with-live-remote chunks
+/// through `repoll`, and re-submitting uncovered chunks via `runner` on their own
+/// row (a DB-provable supersession check skips `failed` retry parents already
+/// tiled by their completed children). It then continues the SAME `run_chunk_loop`
+/// for the never-generated tail, whose completeness guard keeps the job Paused +
+/// resumable if any range stays uncovered. The `runner`/`repoll` are injected so
+/// no live Simmit HTTP happens in tests.
 #[allow(clippy::too_many_arguments)]
 async fn resume_cloud_streaming_inner(
     job_id: &str,
@@ -1541,82 +1739,32 @@ async fn resume_cloud_streaming_inner(
     cancel: Option<CancelToken>,
 ) -> Result<(), String> {
     use crate::profileset_generator::checkpoint::CheckpointPhase;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let cloud_cp = match &checkpoint.phase {
         CheckpointPhase::CloudStreaming(cc) => cc,
         _ => return Err("resume_cloud_streaming called with non-CloudStreaming checkpoint".into()),
     };
 
-    // ── 2. Load cloud_chunks; seed the accumulator; re-poll in-flight chunks. ─
+    // ── 1. Load cloud_chunks — the source of truth for the from-start walk. ──
     let rows = cloud_repo
         .list_for_job(job_id)
         .await
         .map_err(|e| format!("cloud resume: failed to list chunks: {e}"))?;
 
-    let mut acc = ChunkAccumulator::new();
-    // The base actor is whichever completed/re-polled chunk carries one (chunk 0).
-    // The accumulator already takes base_player from the FIRST envelope that has
-    // it, so ordered iteration (list_for_job is ORDER BY chunk_idx) is sufficient.
-    for row in &rows {
-        match row.status.as_str() {
-            "completed" => {
-                if let Some(json) = &row.results_json {
-                    if let Ok(env) =
-                        serde_json::from_str::<ChunkResultEnvelope>(json)
-                    {
-                        // The provider already billed these credits when the chunk
-                        // first completed; do not re-bill. But the REPORTED merged
-                        // total must still include them, so fold the per-chunk
-                        // credits that were persisted in the envelope. Old envelopes
-                        // (pre-persist) carry credits=0 and behave exactly as before.
-                        let credits = env.credits;
-                        acc.add_envelope(env, credits);
-                    }
-                }
-            }
-            "submitted" => {
-                // In-flight at crash time: re-poll via remote_job_id.
-                let Some(remote_id) = row.remote_job_id.as_deref().filter(|s| !s.is_empty())
-                else {
-                    // No usable remote id → treat as lost; regenerate from cursor.
-                    let _ = cloud_repo.reset_to_pending(job_id, row.chunk_idx).await;
-                    continue;
-                };
-                match repoll(remote_id.to_string()).await {
-                    Ok(json) => {
-                        // Terminal on Simmit: fold + complete (never re-submit).
-                        // Adopt base_player on the FIRST envelope that lacks one
-                        // (iteration order), not strictly chunk_idx==0. This is safe
-                        // because the Top Gear base actor is the SAME unmodified
-                        // character in every chunk, so players[0]/base_dps is
-                        // invariant — whichever chunk supplies it yields the same base.
-                        let include_base = acc.needs_base();
-                        let mut env =
-                            ChunkAccumulator::envelope_from_simc_json(&json, include_base);
-                        let credits = ChunkAccumulator::credits_from_simc_json(&json);
-                        env.credits = credits;
-                        let completed_at = chrono::Utc::now().to_rfc3339();
-                        let _ = cloud_repo
-                            .mark_completed(job_id, row.chunk_idx, &env, &completed_at)
-                            .await;
-                        acc.add_envelope(env, credits);
-                    }
-                    Err(RunError::Paused) | Err(RunError::Cancelled) => {
-                        // Terminal state already set elsewhere; stop cleanly.
-                        return Ok(());
-                    }
-                    Err(RunError::Other(_)) => {
-                        // Lost / expired remote job → reset so it regenerates.
-                        let _ = cloud_repo.reset_to_pending(job_id, row.chunk_idx).await;
-                    }
-                }
-            }
-            // pending / failed → regenerated from the iterator cursor below.
-            _ => {}
-        }
-    }
+    // Provable supersession: a `failed` retry parent whose range is fully covered
+    // by completed rows (its children tiled it) is TERMINAL — never re-run it. This
+    // is independent of the total combo count, so it can be computed up front; the
+    // completeness guard recomputes against the real total after the tail loop.
+    let coverage = coverage_report(&rows, i64::MAX);
 
-    // ── 3. Rebuild the iterator, seek, and RESTORE next_name_idx. ────────────
+    // ── 2. Rebuild the iterator FROM START + the run inputs. ─────────────────
+    // Cloud chunk generation is dedup-free and a pure function of the iterator
+    // cursor, so walking from `new()` reproduces byte-identical chunk boundaries
+    // and `Combo N` names. We never `seek` to the checkpoint cursor: that forward
+    // skip is exactly what dropped pre-cursor failed/lost chunks. `new()` leaves
+    // the cursor at the origin and `next_name_idx = 1` (Combo 1 first), matching a
+    // fresh run.
     let iter_cfg =
         crate::profileset_generator::iterator_from_request::build_iterator_from_request_json(
             request_json,
@@ -1633,27 +1781,11 @@ async fn resume_cloud_streaming_inner(
     // `"options"`); resumed chunks must carry them through build_simc_input_from_options
     // exactly like the fresh path, or the resumed chunk submits a malformed input.
     let options = payload.get("options").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let ceiling = cloud_cp.chunk_size.max(1);
 
     let mut it = ProfilesetIterator::new(iter_cfg.clone());
-    if !it.seek(cloud_cp.iterator_cursor.clone()) {
-        return Err(format!(
-            "cloud resume: stored iterator cursor {:?} is invalid for the rebuilt iterator",
-            cloud_cp.iterator_cursor
-        ));
-    }
-    // CRITICAL: seek leaves next_name_idx at 1; restore the checkpointed global
-    // counter so resumed chunks continue "Combo N" naming without colliding.
-    it.set_next_name_idx(cloud_cp.next_name_idx.max(1));
 
-    // combo_metadata.combo_id must stay globally unique across already-persisted
-    // chunks; seed the offset from the existing row count.
-    let meta_repo = crate::db::ComboMetadataRepo::new(pool.clone());
-    let combo_id_base = meta_repo
-        .count_for_job(job_id)
-        .await
-        .map_err(|e| format!("cloud resume: failed to count combo metadata: {e}"))?;
-
-    // ── 4. Clear pause_requested + flip back to Running. ─────────────────────
+    // ── 3. Clear pause_requested + flip back to Running. ─────────────────────
     repo.set_pause_requested(job_id, false)
         .await
         .map_err(|e| format!("Failed to clear pause_requested: {e}"))?;
@@ -1661,24 +1793,190 @@ async fn resume_cloud_streaming_inner(
         .await
         .map_err(|e| format!("Failed to set Running status: {e}"))?;
 
-    // ── 5. Continue the SAME chunked loop from next_chunk_idx, then finalize. ─
-    // Reconcile the chunk-idx allocator against what's actually persisted. A
-    // retry-split allocates tail `cloud_chunks` rows AFTER the per-generation
-    // checkpoint was written; if a crash landed between that allocation and the
-    // next generation-boundary checkpoint, `cloud_cp.next_chunk_idx` can LAG the
-    // highest existing chunk_idx. Seeding the allocator from the checkpoint alone
-    // would then re-issue an index that already exists and collide on the
-    // `(job_id, chunk_idx)` PK. Seed past BOTH the checkpoint and the max existing
-    // row so the next generated chunk always lands on a fresh index.
+    // Shared tail allocator for any re-submit split sub-chunks: seed PAST the max
+    // existing row so a re-submit's retry-split never collides on the
+    // `(job_id, chunk_idx)` PK. `run_chunk_loop` reuses this seed for tail chunks.
     let max_existing_next = rows
         .iter()
         .map(|r| r.chunk_idx + 1)
         .max()
-        .map(|n| n as usize);
-    let start_chunk_idx = match max_existing_next {
-        Some(n) => cloud_cp.next_chunk_idx.max(n),
-        None => cloud_cp.next_chunk_idx,
-    };
+        .map(|n| n as usize)
+        .unwrap_or(0);
+    let start_chunk_idx = cloud_cp.next_chunk_idx.max(max_existing_next);
+    let tail_alloc = AtomicUsize::new(start_chunk_idx);
+
+    let mut acc = ChunkAccumulator::new();
+
+    // The GENERATED chunks (parent=None) are the ones the iterator reproduces, one
+    // `build_chunk` call each. Retry children (parent=Some) live at tail indices
+    // and are NOT regenerated (their parent is skipped as superseded; the children
+    // are folded in step 5). Walk the generated rows in EMISSION order — by
+    // `first_combo_name_idx` (their chunk_idx may be non-contiguous when retry
+    // splits claimed interleaved tail indices), so each `build_chunk` lines up with
+    // the row whose range it reproduces.
+    let mut generated_rows: Vec<&CloudChunkRow> =
+        rows.iter().filter(|r| r.parent_chunk_idx.is_none()).collect();
+    generated_rows.sort_by_key(|r| (r.first_combo_name_idx.unwrap_or(i64::MAX), r.chunk_idx));
+
+    // ── 4. From-start walk over generated chunks. ────────────────────────────
+    for row in &generated_rows {
+        let row = *row;
+        // Regenerate this chunk from the iterator (advances the cursor + names).
+        let chunk = build_chunk(&mut it, &base_profile, ceiling);
+        if chunk.profileset_count == 0 {
+            // The iterator ran dry before reproducing all recorded generated chunks
+            // — the stored chunk_size/request no longer reproduces the space.
+            return Err(format!(
+                "cloud resume: iterator exhausted before reproducing generated \
+                 chunk {} (range start {:?})",
+                row.chunk_idx, row.first_combo_name_idx
+            ));
+        }
+        // Sanity: the regenerated chunk must cover the row's recorded name range.
+        if let Some(first) = row.first_combo_name_idx {
+            if chunk.first_name_idx as i64 != first {
+                return Err(format!(
+                    "cloud resume: regenerated chunk for row {} starts at Combo {} \
+                     but the row records first_combo_name_idx {first} — the iterator \
+                     no longer reproduces the original chunk boundaries",
+                    row.chunk_idx, chunk.first_name_idx
+                ));
+            }
+        }
+        let chunk_idx = row.chunk_idx;
+        let status = row.status.as_str();
+        let live_remote = row
+            .remote_job_id
+            .as_deref()
+            .filter(|s| !s.is_empty());
+
+        match status {
+            "completed" => {
+                // Fold the stored envelope (incl. its persisted credits — already
+                // billed, never re-submitted). Discard the regenerated lines.
+                if let Some(env) = row
+                    .results_json
+                    .as_deref()
+                    .and_then(|j| serde_json::from_str::<ChunkResultEnvelope>(j).ok())
+                {
+                    let credits = env.credits;
+                    acc.add_envelope(env, credits);
+                }
+            }
+            "submitted" => match live_remote {
+                Some(remote_id) => {
+                    match repoll(remote_id.to_string()).await {
+                        Ok(json) => fold_repolled(
+                            &cloud_repo, job_id, chunk_idx, &json, &mut acc,
+                        )
+                        .await,
+                        Err(RunError::Paused) | Err(RunError::Cancelled) => return Ok(()),
+                        // Lost/expired remote → re-submit the regenerated lines.
+                        Err(RunError::Other(_)) => {
+                            if let Some(t) = resume_resubmit_chunk(
+                                &runner, &cloud_repo, job_id, &base_profile, &options,
+                                chunk_idx, &chunk, &tail_alloc, &mut acc,
+                            )
+                            .await
+                            {
+                                return t;
+                            }
+                        }
+                    }
+                }
+                // No usable remote id → re-submit.
+                None => {
+                    if let Some(t) = resume_resubmit_chunk(
+                        &runner, &cloud_repo, job_id, &base_profile, &options,
+                        chunk_idx, &chunk, &tail_alloc, &mut acc,
+                    )
+                    .await
+                    {
+                        return t;
+                    }
+                }
+            },
+            "failed" => {
+                if coverage.superseded_failed.contains(&chunk_idx) {
+                    // DB-provably superseded by completed children (folded in step
+                    // 5) → terminal, never re-run (no PK collision, combos once).
+                } else if let Some(remote_id) = live_remote {
+                    // A failed chunk that still has a live remote job: re-poll it
+                    // (Bug B — the old resume only re-polled `submitted`). Recover
+                    // it if terminal; re-submit if the remote is truly gone.
+                    match repoll(remote_id.to_string()).await {
+                        Ok(json) => fold_repolled(
+                            &cloud_repo, job_id, chunk_idx, &json, &mut acc,
+                        )
+                        .await,
+                        Err(RunError::Paused) | Err(RunError::Cancelled) => return Ok(()),
+                        Err(RunError::Other(_)) => {
+                            if let Some(t) = resume_resubmit_chunk(
+                                &runner, &cloud_repo, job_id, &base_profile, &options,
+                                chunk_idx, &chunk, &tail_alloc, &mut acc,
+                            )
+                            .await
+                            {
+                                return t;
+                            }
+                        }
+                    }
+                } else {
+                    // Failed, not superseded, no live remote (Bug A) → re-submit.
+                    if let Some(t) = resume_resubmit_chunk(
+                        &runner, &cloud_repo, job_id, &base_profile, &options,
+                        chunk_idx, &chunk, &tail_alloc, &mut acc,
+                    )
+                    .await
+                    {
+                        return t;
+                    }
+                }
+            }
+            // `pending` (recorded but never submitted) → re-submit.
+            _ => {
+                if let Some(t) = resume_resubmit_chunk(
+                    &runner, &cloud_repo, job_id, &base_profile, &options,
+                    chunk_idx, &chunk, &tail_alloc, &mut acc,
+                )
+                .await
+                {
+                    return t;
+                }
+            }
+        }
+    }
+
+    // ── 5. Fold completed retry-child rows (parent=Some). ────────────────────
+    // Their combos were NOT regenerated above (the iterator only re-walks generated
+    // chunks); their parent is skipped as superseded, so folding them here makes
+    // each combo appear exactly once.
+    for row in rows.iter().filter(|r| r.parent_chunk_idx.is_some()) {
+        if row.status != "completed" {
+            continue;
+        }
+        if let Some(env) = row
+            .results_json
+            .as_deref()
+            .and_then(|j| serde_json::from_str::<ChunkResultEnvelope>(j).ok())
+        {
+            let credits = env.credits;
+            acc.add_envelope(env, credits);
+        }
+    }
+
+    // ── 6. Continue forward for any NEVER-generated tail chunks + finalize. ──
+    // The iterator is now positioned exactly after the last recorded generated
+    // chunk; `next_name_idx` continued monotonically through the walk, so tail
+    // chunks keep the global `Combo N` naming without colliding. `run_chunk_loop`
+    // (the same loop the fresh path uses) generates the tail, and — with the
+    // resume guard — refuses to finalize Done if any range is still uncovered.
+    let meta_repo = crate::db::ComboMetadataRepo::new(pool.clone());
+    let combo_id_base = meta_repo
+        .count_for_job(job_id)
+        .await
+        .map_err(|e| format!("cloud resume: failed to count combo metadata: {e}"))?;
+
     let run = CloudStreamingRun {
         repo: repo.clone(),
         pool: pool.clone(),
@@ -1687,30 +1985,106 @@ async fn resume_cloud_streaming_inner(
         options,
         job_id: job_id.to_string(),
         sim_type: "top_gear".to_string(),
-        ceiling: cloud_cp.chunk_size.max(1),
+        ceiling,
         max_active_jobs: None,
         cancel,
         affordability: None,
         est_credits_needed: 0,
     };
-
-    // `run_chunk_loop` is the SAME loop the fresh multi-chunk path uses — no
-    // parallel orchestration copy. It pre-seeds the accumulator (completed +
-    // re-polled chunks), the chunk-idx allocator (`start_chunk_idx`), and the
-    // combo-id offset, then continues generating + submitting the remaining chunks
-    // and finalizes.
     run.run_chunk_loop(
         &cloud_repo,
         &mut it,
         runner,
         acc,
-        start_chunk_idx,
+        tail_alloc.load(Ordering::SeqCst),
         combo_id_base,
         None,
+        /*resume_guard=*/ true,
     )
     .await;
 
     Ok(())
+}
+
+/// Fold a re-polled chunk's terminal Simmit JSON: extract its envelope (adopting
+/// the base actor only when the accumulator still lacks one — the Top Gear base
+/// is invariant across chunks), persist `mark_completed`, and fold it. Used by
+/// the resume walk for both `submitted` and live-`failed` chunks.
+async fn fold_repolled(
+    cloud_repo: &CloudChunksRepo,
+    job_id: &str,
+    chunk_idx: i64,
+    json: &Value,
+    acc: &mut ChunkAccumulator,
+) {
+    let include_base = acc.needs_base();
+    let mut env = ChunkAccumulator::envelope_from_simc_json(json, include_base);
+    let credits = ChunkAccumulator::credits_from_simc_json(json);
+    env.credits = credits;
+    let completed_at = chrono::Utc::now().to_rfc3339();
+    let _ = cloud_repo
+        .mark_completed(job_id, chunk_idx, &env, &completed_at)
+        .await;
+    acc.add_envelope(env, credits);
+}
+
+/// Re-submit ONE regenerated chunk on its OWN `chunk_idx` (reusing its existing
+/// `cloud_chunks` row + combo_metadata) through the same split-retry path the
+/// fresh run uses. On success folds + marks the row completed; on a hard failure
+/// sets the job error. Returns `Some(result)` when the resume must STOP (a clean
+/// terminal abort or a hard failure), `None` to continue the walk.
+#[allow(clippy::too_many_arguments)]
+async fn resume_resubmit_chunk(
+    runner: &ChunkRunner,
+    cloud_repo: &CloudChunksRepo,
+    job_id: &str,
+    base_profile: &str,
+    options: &Value,
+    chunk_idx: i64,
+    chunk: &GeneratedChunk,
+    tail_alloc: &std::sync::atomic::AtomicUsize,
+    acc: &mut ChunkAccumulator,
+) -> Option<Result<(), String>> {
+    // Re-mark the row submitted so a crash mid-re-submit leaves a re-pollable row.
+    let now = chrono::Utc::now().to_rfc3339();
+    let _ = cloud_repo.mark_submitted(job_id, chunk_idx, "", &now).await;
+
+    let outcome = run_chunk_with_retry(
+        runner,
+        cloud_repo,
+        job_id,
+        base_profile,
+        options,
+        chunk_idx as usize,
+        &chunk.profileset_lines,
+        chunk.profileset_count,
+        chunk.first_name_idx,
+        tail_alloc,
+    )
+    .await;
+
+    match outcome {
+        ChunkOutcome::Done(results) => {
+            for (i, (exec_idx, json)) in results.iter().enumerate() {
+                let include_base = acc.needs_base() && i == 0;
+                let mut env = ChunkAccumulator::envelope_from_simc_json(json, include_base);
+                let credits = ChunkAccumulator::credits_from_simc_json(json);
+                env.credits = credits;
+                let completed_at = chrono::Utc::now().to_rfc3339();
+                let _ = cloud_repo
+                    .mark_completed(job_id, *exec_idx as i64, &env, &completed_at)
+                    .await;
+                acc.add_envelope(env, credits);
+            }
+            None
+        }
+        // Clean terminal abort (Paused/Cancelled): stop, state already set.
+        ChunkOutcome::Terminal => Some(Ok(())),
+        // Hard failure → propagate as a terminal Error (the resume wrapper writes
+        // it to the job). Matches fresh-path semantics: a hard submit failure is
+        // non-retryable and correctly NOT resumable.
+        ChunkOutcome::Failed(msg) => Some(Err(msg)),
+    }
 }
 
 impl ChunkAccumulator {
@@ -1904,6 +2278,87 @@ mod tests {
     fn resume_auth_errors_when_neither_present() {
         // Web BYO-key with no key supplied AND none in Settings → fail clean.
         assert!(resolve_resume_auth(&crate::compute::ProviderAuth::None, None).is_none());
+    }
+
+    // ── coverage_report (provable supersession + completeness) ──────────────
+    use crate::db::cloud_chunks_repo::CloudChunkRow;
+
+    /// Build a `CloudChunkRow` with the fields coverage_report reads.
+    fn row(
+        chunk_idx: i64,
+        status: &str,
+        count: i64,
+        parent: Option<i64>,
+        first_name: Option<i64>,
+    ) -> CloudChunkRow {
+        CloudChunkRow {
+            chunk_idx,
+            remote_job_id: None,
+            status: status.to_string(),
+            profileset_count: count,
+            results_json: None,
+            submitted_at: None,
+            completed_at: None,
+            parent_chunk_idx: parent,
+            first_combo_name_idx: first_name,
+        }
+    }
+
+    #[test]
+    fn coverage_complete_when_completed_rows_tile_one_based_range() {
+        // 5 emitted combos (1-based): chunk 0 covers [1,3), chunk 1 [3,5),
+        // chunk 2 [5,6) — exactly tiling [1,6). No gaps.
+        let rows = [
+            row(0, "completed", 2, None, Some(1)),
+            row(1, "completed", 2, None, Some(3)),
+            row(2, "completed", 1, None, Some(5)),
+        ];
+        let rep = coverage_report(&rows, 5);
+        assert!(rep.is_complete(), "uncovered: {:?}", rep.uncovered);
+        assert!(rep.superseded_failed.is_empty());
+    }
+
+    #[test]
+    fn coverage_reports_uncovered_gap_for_unsuperseded_failed() {
+        // chunk 0 completed [1,3); chunk 1 FAILED [3,5) with no completed
+        // children; chunk 2 completed [5,6). The middle range [3,5) is a gap.
+        let rows = [
+            row(0, "completed", 2, None, Some(1)),
+            row(1, "failed", 2, None, Some(3)),
+            row(2, "completed", 1, None, Some(5)),
+        ];
+        let rep = coverage_report(&rows, 5);
+        assert!(!rep.is_complete());
+        assert_eq!(rep.uncovered, vec![(3, 5)]);
+        // The failed parent is NOT superseded (its range is uncovered).
+        assert!(!rep.superseded_failed.contains(&1));
+    }
+
+    #[test]
+    fn coverage_marks_failed_parent_superseded_by_completed_children() {
+        // chunk 1 FAILED [3,5); its two retry children (idx 3,4) completed and
+        // tile [3,4)+[4,5) → parent 1 is superseded (terminal, never re-run).
+        let rows = [
+            row(0, "completed", 2, None, Some(1)),
+            row(1, "failed", 2, None, Some(3)),
+            row(2, "completed", 1, None, Some(5)),
+            row(3, "completed", 1, Some(1), Some(3)),
+            row(4, "completed", 1, Some(1), Some(4)),
+        ];
+        let rep = coverage_report(&rows, 5);
+        assert!(rep.is_complete(), "uncovered: {:?}", rep.uncovered);
+        assert!(rep.superseded_failed.contains(&1));
+    }
+
+    #[test]
+    fn coverage_completed_row_without_range_does_not_prove_coverage() {
+        // A legacy completed row (no first_combo_name_idx) contributes nothing,
+        // so the whole space stays uncovered — the guard keeps the job resumable
+        // rather than finalizing Done on unproven coverage.
+        let rows = [row(0, "completed", 5, None, None)];
+        let rep = coverage_report(&rows, 5);
+        assert!(!rep.is_complete());
+        assert_eq!(rep.uncovered, vec![(1, 6)]);
     }
 }
 
@@ -2953,7 +3408,11 @@ mod orchestrator_tests {
         repo.insert(&job).await.unwrap();
 
         // ── Seed cloud_chunks: chunk 0 completed; chunk 1 submitted (re-poll). ─
-        cloud_repo.insert_pending(&job_id, 0, 2).await.unwrap();
+        // Ranges are 1-based: chunk 0 covers Combo [1,3), chunk 1 covers [3,5).
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 0, 2, None, Some(1))
+            .await
+            .unwrap();
         cloud_repo
             .mark_submitted(&job_id, 0, "remote-0", "2026-05-30T00:00:00Z")
             .await
@@ -2975,7 +3434,10 @@ mod orchestrator_tests {
             .mark_completed(&job_id, 0, &c0_env, "2026-05-30T00:01:00Z")
             .await
             .unwrap();
-        cloud_repo.insert_pending(&job_id, 1, 2).await.unwrap();
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 1, 2, None, Some(3))
+            .await
+            .unwrap();
         cloud_repo
             .mark_submitted(&job_id, 1, "remote-1", "2026-05-30T00:00:30Z")
             .await
@@ -3163,7 +3625,12 @@ mod orchestrator_tests {
         // chunk 0 completed (Combo 1,2). chunk 1 FAILED (Combo 3,4) and was
         // retry-split into two size-1 sub-chunks at TAIL indices 2 and 3 — both
         // COMPLETED — but the checkpoint never advanced past next_chunk_idx = 2.
-        cloud_repo.insert_pending(&job_id, 0, 2).await.unwrap();
+        // Ranges are 1-based: chunk 0 covers [1,3); chunk 1 (failed parent) [3,5);
+        // its children cover [3,4) and [4,5), tiling the parent → superseded.
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 0, 2, None, Some(1))
+            .await
+            .unwrap();
         cloud_repo
             .mark_submitted(&job_id, 0, "remote-0", "2026-05-30T00:00:00Z")
             .await
@@ -3184,11 +3651,18 @@ mod orchestrator_tests {
             .await
             .unwrap();
         // The original chunk-1 row, flipped to failed by the retry path.
-        cloud_repo.insert_pending(&job_id, 1, 2).await.unwrap();
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 1, 2, None, Some(3))
+            .await
+            .unwrap();
         cloud_repo.mark_failed(&job_id, 1).await.unwrap();
-        // Retry sub-chunk rows at tail indices 2 and 3 (>= checkpoint next=2).
-        for (idx, combo) in [(2i64, "Combo 3"), (3i64, "Combo 4")] {
-            cloud_repo.insert_pending(&job_id, idx, 1).await.unwrap();
+        // Retry sub-chunk rows at tail indices 2 and 3 (>= checkpoint next=2),
+        // linked to parent chunk 1, each covering one combo of its range.
+        for (idx, combo, first) in [(2i64, "Combo 3", 3i64), (3i64, "Combo 4", 4i64)] {
+            cloud_repo
+                .insert_pending_with_lineage(&job_id, idx, 1, Some(1), Some(first))
+                .await
+                .unwrap();
             cloud_repo
                 .mark_submitted(&job_id, idx, &format!("remote-{idx}"), "2026-05-30T00:00:10Z")
                 .await
@@ -3294,5 +3768,602 @@ mod orchestrator_tests {
                 "{n} must appear exactly once: {names:?}"
             );
         }
+    }
+
+    // ── Task 11: from-start resume walk (full recovery) ──────────────────────
+
+    /// Build a `CloudStreaming` checkpoint with the given `next_chunk_idx`/cursor.
+    /// The from-start walk regenerates chunks itself, so only `next_chunk_idx`
+    /// (tail-allocator floor) and `chunk_size` are load-bearing here.
+    fn cloud_checkpoint(
+        next_chunk_idx: usize,
+        cursor: Vec<usize>,
+        next_name_idx: usize,
+    ) -> crate::profileset_generator::checkpoint::Checkpoint {
+        use crate::profileset_generator::checkpoint::{
+            Checkpoint, CheckpointPhase, CloudStreamingCheckpoint,
+        };
+        use crate::profileset_generator::triage::TriageConstants;
+        Checkpoint {
+            phase: CheckpointPhase::CloudStreaming(CloudStreamingCheckpoint {
+                next_chunk_idx,
+                iterator_cursor: cursor,
+                chunk_size: 2,
+                total_chunks_estimate: 3,
+                next_name_idx,
+            }),
+            constants: TriageConstants::default(),
+        }
+    }
+
+    /// Insert a Paused streamed top_gear job carrying the five-combo request +
+    /// checkpoint, and seed combo_metadata for Combo 1..4 (the already-persisted
+    /// chunks). Returns the job_id.
+    async fn seed_resume_job(
+        repo: &JobRepo,
+        request_json: &str,
+        checkpoint: &crate::profileset_generator::checkpoint::Checkpoint,
+    ) -> String {
+        let mut job = crate::models::Job::new_with_provider(
+            String::new(),
+            "top_gear".to_string(),
+            100,
+            "patchwerk".to_string(),
+            0.1,
+            "simmit".to_string(),
+        );
+        job.simc_input_mode = crate::models::SimcInputMode::Streamed;
+        job.request_json = Some(request_json.to_string());
+        job.checkpoint = Some(checkpoint.to_json_string().unwrap());
+        job.status = crate::models::JobStatus::Paused;
+        let job_id = job.id.clone();
+        repo.insert(&job).await.unwrap();
+        super::super::helpers::write_combo_metadata_table_raw(
+            repo,
+            &job_id,
+            &[
+                ("Combo 1".into(), "[]".into()),
+                ("Combo 2".into(), "[]".into()),
+                ("Combo 3".into(), "[]".into()),
+                ("Combo 4".into(), "[]".into()),
+            ],
+            &[],
+        )
+        .await;
+        job_id
+    }
+
+    /// A fake new-chunk runner that echoes the combos it was handed (records calls).
+    fn echo_runner(calls: std::sync::Arc<Mutex<Vec<ChunkRequest>>>) -> ChunkRunner {
+        std::sync::Arc::new(move |req: ChunkRequest| {
+            calls.lock().unwrap().push(req.clone());
+            let names = combo_names(&req.simc_input);
+            Box::pin(async move { Ok(result_for(&names)) })
+                as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+        })
+    }
+
+    /// A re-poll that always errors (asserts re-poll was NOT exercised).
+    fn never_repoll() -> RepollFn {
+        std::sync::Arc::new(move |remote_id: String| {
+            Box::pin(async move {
+                Err(RunError::Other(format!("unexpected re-poll of {remote_id}")))
+            }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+        })
+    }
+
+    fn names_of(result: &Value) -> Vec<String> {
+        result["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    // Bug A: a PRE-CURSOR `failed` chunk (no live remote, range uncovered) is
+    // regenerated + re-submitted on resume — its combos are NOT silently dropped,
+    // and Done is reached only after every range is covered.
+    #[tokio::test]
+    async fn resume_recovers_pre_cursor_failed_chunk() {
+        crate::test_support::ensure_game_data_loaded();
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        let request_json = five_combo_request_json();
+
+        // Cursor after the first 6 combos doesn't matter (walk is from-start); the
+        // checkpoint's next_chunk_idx=3 marks chunks 0,1,2 as generated.
+        let checkpoint = cloud_checkpoint(3, vec![5], 7);
+        let job_id = seed_resume_job(&repo, &request_json, &checkpoint).await;
+
+        // chunk 0 completed [1,3); chunk 1 FAILED [3,5) with NO live remote (its
+        // remote was lost) and NO superseding children → must be re-submitted;
+        // chunk 2 completed [5,6). The checkpoint cursor is PAST chunk 2.
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 0, 2, None, Some(1))
+            .await
+            .unwrap();
+        cloud_repo
+            .mark_completed(
+                &job_id,
+                0,
+                &ChunkResultEnvelope {
+                    profilesets: vec![
+                        json!({ "name": "Combo 1", "mean": 1100.0 }),
+                        json!({ "name": "Combo 2", "mean": 1050.0 }),
+                    ],
+                    base_player: Some(json!({
+                        "name": "Hero",
+                        "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+                    })),
+                    credits: 0,
+                },
+                "2026-05-30T00:01:00Z",
+            )
+            .await
+            .unwrap();
+        // The pre-cursor failed chunk with no usable remote id.
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 1, 2, None, Some(3))
+            .await
+            .unwrap();
+        cloud_repo.mark_failed(&job_id, 1).await.unwrap();
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 2, 1, None, Some(5))
+            .await
+            .unwrap();
+        cloud_repo
+            .mark_completed(
+                &job_id,
+                2,
+                &ChunkResultEnvelope {
+                    profilesets: vec![json!({ "name": "Combo 5", "mean": 1000.0 })],
+                    base_player: None,
+                    credits: 0,
+                },
+                "2026-05-30T00:01:00Z",
+            )
+            .await
+            .unwrap();
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = echo_runner(calls.clone());
+
+        resume_cloud_streaming_inner(
+            &job_id,
+            &request_json,
+            &checkpoint,
+            repo.clone(),
+            pool.clone(),
+            cloud_repo.clone(),
+            runner,
+            never_repoll(),
+            None,
+        )
+        .await
+        .expect("resume succeeds");
+
+        // The pre-cursor failed chunk 1 (Combo 3,4) was re-submitted (and nothing
+        // else — completed chunks are never re-submitted).
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "only the failed chunk re-submits: {recorded:?}");
+        assert_eq!(
+            combo_names(&recorded[0].simc_input),
+            vec!["Combo 3".to_string(), "Combo 4".to_string()],
+        );
+        // It re-used chunk 1's own row index (not a fresh tail index).
+        assert_eq!(recorded[0].chunk_idx, 1);
+        drop(recorded);
+
+        // Done with ALL 5 combos, each exactly once (chunk 1's combos recovered).
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
+        let names = names_of(&serde_json::from_str::<Value>(
+            finished.result_json.as_deref().unwrap(),
+        )
+        .unwrap());
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert_eq!(
+                names.iter().filter(|x| *x == n).count(),
+                1,
+                "{n} must appear exactly once: {names:?}"
+            );
+        }
+    }
+
+    // Bug B: a `failed` chunk that STILL has a live remote job is re-polled (not
+    // regenerated). The re-poll recovers it and it is folded.
+    #[tokio::test]
+    async fn resume_repolls_failed_chunk_with_live_remote() {
+        crate::test_support::ensure_game_data_loaded();
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        let request_json = five_combo_request_json();
+
+        let checkpoint = cloud_checkpoint(2, vec![3], 5);
+        let job_id = seed_resume_job(&repo, &request_json, &checkpoint).await;
+
+        // chunk 0 completed [1,3); chunk 1 FAILED [3,5) but with a LIVE remote.
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 0, 2, None, Some(1))
+            .await
+            .unwrap();
+        cloud_repo
+            .mark_completed(
+                &job_id,
+                0,
+                &ChunkResultEnvelope {
+                    profilesets: vec![
+                        json!({ "name": "Combo 1", "mean": 1100.0 }),
+                        json!({ "name": "Combo 2", "mean": 1050.0 }),
+                    ],
+                    base_player: Some(json!({
+                        "name": "Hero",
+                        "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+                    })),
+                    credits: 0,
+                },
+                "2026-05-30T00:01:00Z",
+            )
+            .await
+            .unwrap();
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 1, 2, None, Some(3))
+            .await
+            .unwrap();
+        // Mark submitted (records a live remote id) THEN failed — the live remote
+        // survives the failure flip (mark_failed only changes status).
+        cloud_repo
+            .mark_submitted(&job_id, 1, "live-remote-1", "2026-05-30T00:00:30Z")
+            .await
+            .unwrap();
+        cloud_repo.mark_failed(&job_id, 1).await.unwrap();
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = echo_runner(calls.clone());
+        let repoll_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let repoll: RepollFn = {
+            let repoll_calls = repoll_calls.clone();
+            std::sync::Arc::new(move |remote_id: String| {
+                repoll_calls.lock().unwrap().push(remote_id.clone());
+                Box::pin(async move {
+                    Ok(result_for(&["Combo 3".to_string(), "Combo 4".to_string()]))
+                })
+                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+            })
+        };
+
+        resume_cloud_streaming_inner(
+            &job_id,
+            &request_json,
+            &checkpoint,
+            repo.clone(),
+            pool.clone(),
+            cloud_repo.clone(),
+            runner,
+            repoll,
+            None,
+        )
+        .await
+        .expect("resume succeeds");
+
+        // The failed-with-live-remote chunk 1 was RE-POLLED (Bug B), not regenerated.
+        assert_eq!(repoll_calls.lock().unwrap().as_slice(), &["live-remote-1"]);
+        // Only the tail (Combo 5) was submitted via the runner — chunk 1 was folded.
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "only the tail submits: {recorded:?}");
+        assert_eq!(combo_names(&recorded[0].simc_input), vec!["Combo 5".to_string()]);
+        drop(recorded);
+
+        // chunk 1 flipped failed→completed via the re-poll.
+        let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
+        assert_eq!(
+            rows.iter().find(|r| r.chunk_idx == 1).unwrap().status,
+            "completed"
+        );
+
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
+        let names = names_of(&serde_json::from_str::<Value>(
+            finished.result_json.as_deref().unwrap(),
+        )
+        .unwrap());
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert_eq!(names.iter().filter(|x| *x == n).count(), 1, "{names:?}");
+        }
+    }
+
+    // A `failed` retry parent whose completed children tile its range is provably
+    // superseded: it is NOT re-run (no PK collision; its combos appear once).
+    #[tokio::test]
+    async fn resume_skips_superseded_retry_parent() {
+        crate::test_support::ensure_game_data_loaded();
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        let request_json = five_combo_request_json();
+
+        let checkpoint = cloud_checkpoint(2, vec![3], 5);
+        let job_id = seed_resume_job(&repo, &request_json, &checkpoint).await;
+
+        // chunk 0 completed [1,3). chunk 1 FAILED parent [3,5); children at tail
+        // idx 2,3 completed and tile [3,4)+[4,5) → parent superseded.
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 0, 2, None, Some(1))
+            .await
+            .unwrap();
+        cloud_repo
+            .mark_completed(
+                &job_id,
+                0,
+                &ChunkResultEnvelope {
+                    profilesets: vec![
+                        json!({ "name": "Combo 1", "mean": 1100.0 }),
+                        json!({ "name": "Combo 2", "mean": 1050.0 }),
+                    ],
+                    base_player: Some(json!({
+                        "name": "Hero",
+                        "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+                    })),
+                    credits: 0,
+                },
+                "2026-05-30T00:01:00Z",
+            )
+            .await
+            .unwrap();
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 1, 2, None, Some(3))
+            .await
+            .unwrap();
+        cloud_repo.mark_failed(&job_id, 1).await.unwrap();
+        for (idx, combo, first) in [(2i64, "Combo 3", 3i64), (3i64, "Combo 4", 4i64)] {
+            cloud_repo
+                .insert_pending_with_lineage(&job_id, idx, 1, Some(1), Some(first))
+                .await
+                .unwrap();
+            cloud_repo
+                .mark_completed(
+                    &job_id,
+                    idx,
+                    &ChunkResultEnvelope {
+                        profilesets: vec![json!({ "name": combo, "mean": 1000.0 })],
+                        base_player: None,
+                        credits: 0,
+                    },
+                    "2026-05-30T00:01:10Z",
+                )
+                .await
+                .unwrap();
+        }
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = echo_runner(calls.clone());
+
+        resume_cloud_streaming_inner(
+            &job_id,
+            &request_json,
+            &checkpoint,
+            repo.clone(),
+            pool.clone(),
+            cloud_repo.clone(),
+            runner,
+            never_repoll(),
+            None,
+        )
+        .await
+        .expect("resume succeeds (superseded parent not re-run)");
+
+        // The superseded parent (Combo 3,4) was NOT re-submitted: only the tail
+        // (Combo 5) reaches the runner.
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "only the tail submits: {recorded:?}");
+        assert_eq!(combo_names(&recorded[0].simc_input), vec!["Combo 5".to_string()]);
+        // The parent stays `failed` (it was legitimately superseded; never resurrected).
+        drop(recorded);
+        let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
+        assert_eq!(
+            rows.iter().find(|r| r.chunk_idx == 1).unwrap().status,
+            "failed",
+            "superseded parent must remain failed (not resurrected): {rows:?}"
+        );
+
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Done);
+        let names = names_of(&serde_json::from_str::<Value>(
+            finished.result_json.as_deref().unwrap(),
+        )
+        .unwrap());
+        for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
+            assert_eq!(
+                names.iter().filter(|x| *x == n).count(),
+                1,
+                "{n} appears exactly once (no double-count with superseded parent): {names:?}"
+            );
+        }
+    }
+
+    // The completeness guard (defense-in-depth): if — after the walk + tail loop —
+    // the persisted completed ranges do NOT tile [1, total+1), the job MUST NOT
+    // finalize Done. It is left PAUSED (the frontend Resume affordance shows for
+    // Paused) with the CloudStreaming checkpoint preserved, so the user can resume
+    // again — never silently dropping combos.
+    //
+    // The from-start walk re-submits every non-completed generated chunk, so a
+    // recoverable gap can't arise from the generated walk in normal flow; this
+    // drives `run_chunk_loop` (the finalize site the guard guards) directly with a
+    // deliberately-incomplete row set and an exhausted iterator (no tail to fill
+    // the gap), proving the guard refuses Done.
+    #[tokio::test]
+    async fn resume_guard_keeps_incomplete_job_resumable() {
+        crate::test_support::ensure_game_data_loaded();
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        let request_json = five_combo_request_json();
+
+        // Seed a Paused job whose checkpoint is preserved across the guard.
+        let checkpoint = cloud_checkpoint(3, vec![5], 6);
+        let job_id = seed_resume_job(&repo, &request_json, &checkpoint).await;
+
+        // Persisted coverage has a HOLE: chunk 0 completed [1,3) and chunk 2
+        // completed [5,6), but [3,5) is never covered (its chunk was lost and not
+        // recoverable). total = 5 → emitted space [1,6); [3,5) is uncovered.
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 0, 2, None, Some(1))
+            .await
+            .unwrap();
+        cloud_repo
+            .mark_completed(
+                &job_id,
+                0,
+                &ChunkResultEnvelope {
+                    profilesets: vec![
+                        json!({ "name": "Combo 1", "mean": 1100.0 }),
+                        json!({ "name": "Combo 2", "mean": 1050.0 }),
+                    ],
+                    base_player: Some(json!({
+                        "name": "Hero",
+                        "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
+                    })),
+                    credits: 0,
+                },
+                "2026-05-30T00:01:00Z",
+            )
+            .await
+            .unwrap();
+        cloud_repo
+            .insert_pending_with_lineage(&job_id, 2, 1, None, Some(5))
+            .await
+            .unwrap();
+        cloud_repo
+            .mark_completed(
+                &job_id,
+                2,
+                &ChunkResultEnvelope {
+                    profilesets: vec![json!({ "name": "Combo 5", "mean": 1000.0 })],
+                    base_player: None,
+                    credits: 0,
+                },
+                "2026-05-30T00:01:00Z",
+            )
+            .await
+            .unwrap();
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: five_combo_cfg(),
+            base_profile: String::new(),
+            options: serde_json::json!({}),
+            job_id: job_id.clone(),
+            sim_type: "top_gear".to_string(),
+            ceiling: 2,
+            max_active_jobs: Some(1),
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
+        };
+
+        // An iterator already EXHAUSTED (seeked to the end) so the tail loop
+        // generates nothing — the [3,5) hole cannot be filled and the guard fires.
+        let mut it = ProfilesetIterator::new(five_combo_cfg());
+        while it.next().is_some() {}
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = echo_runner(calls.clone());
+
+        run.run_chunk_loop(
+            &cloud_repo,
+            &mut it,
+            runner,
+            ChunkAccumulator::new(),
+            /*start_chunk_idx=*/ 3,
+            /*combo_id_base=*/ 5,
+            /*first=*/ None,
+            /*resume_guard=*/ true,
+        )
+        .await;
+
+        // No tail submitted (iterator exhausted).
+        assert!(calls.lock().unwrap().is_empty(), "no tail chunk should submit");
+
+        // Guard fired: NOT Done (no silent drop of Combo 3,4); left PAUSED so the
+        // user can resume again; the CloudStreaming checkpoint is preserved.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(
+            finished.status,
+            crate::models::JobStatus::Paused,
+            "incomplete coverage must keep the job resumable, not Done"
+        );
+        assert!(
+            finished.result_json.is_none(),
+            "guard must not write a Done result"
+        );
+        let cp_json = finished.checkpoint.expect("checkpoint preserved for re-resume");
+        assert!(matches!(
+            crate::profileset_generator::checkpoint::Checkpoint::from_json_str(&cp_json)
+                .unwrap()
+                .phase,
+            crate::profileset_generator::checkpoint::CheckpointPhase::CloudStreaming(_)
+        ));
+    }
+
+    // ── Direct interval-math tests ───────────────────────────────────────────
+    // `merge_intervals`/`subtract_covered` are the core of the coverage proof and
+    // were only exercised transitively via `coverage_report`. These lock the
+    // half-open `[start, end)` math so a future refactor is caught in isolation.
+
+    #[test]
+    fn merge_intervals_merges_adjacent_overlapping_and_unsorted() {
+        // Empty input → empty.
+        assert_eq!(merge_intervals(vec![]), vec![]);
+
+        // Adjacent half-open ranges fuse: [1,3) + [3,5) → [1,5).
+        assert_eq!(merge_intervals(vec![(1, 3), (3, 5)]), vec![(1, 5)]);
+
+        // Overlapping ranges fuse to their union.
+        assert_eq!(merge_intervals(vec![(1, 4), (2, 6)]), vec![(1, 6)]);
+
+        // Out-of-order input is sorted before merging.
+        assert_eq!(merge_intervals(vec![(5, 7), (1, 3), (3, 5)]), vec![(1, 7)]);
+
+        // A real gap is preserved (a 1-wide gap at the boundary): [1,3) and [4,6)
+        // do NOT touch (3 != 4), so they stay two disjoint ranges.
+        assert_eq!(merge_intervals(vec![(1, 3), (4, 6)]), vec![(1, 3), (4, 6)]);
+
+        // Single combo range survives as-is.
+        assert_eq!(merge_intervals(vec![(2, 3)]), vec![(2, 3)]);
+
+        // Empty/inverted ranges (e > s violated) are dropped.
+        assert_eq!(merge_intervals(vec![(4, 4), (1, 1)]), vec![]);
+    }
+
+    #[test]
+    fn subtract_covered_reports_half_open_gaps() {
+        // Fully covered → no gaps.
+        assert_eq!(subtract_covered(1, 6, &[(1, 6)]), vec![]);
+
+        // No coverage → the whole range is the gap.
+        assert_eq!(subtract_covered(1, 6, &[]), vec![(1, 6)]);
+
+        // A single interior hole: [1,3) and [5,6) covered → gap [3,5).
+        assert_eq!(subtract_covered(1, 6, &[(1, 3), (5, 6)]), vec![(3, 5)]);
+
+        // Adjacent covers leave no gap (boundary-exact): [1,3)+[3,5) tile [1,5).
+        assert_eq!(subtract_covered(1, 5, &[(1, 3), (3, 5)]), vec![]);
+
+        // A covered interval entirely BEFORE lo is ignored.
+        assert_eq!(subtract_covered(5, 8, &[(1, 3)]), vec![(5, 8)]);
+
+        // A covered interval entirely AFTER hi is ignored.
+        assert_eq!(subtract_covered(1, 4, &[(6, 9)]), vec![(1, 4)]);
+
+        // Coverage overhanging both ends is clamped to [lo, hi).
+        assert_eq!(subtract_covered(2, 5, &[(0, 10)]), vec![]);
+
+        // Single-combo range left uncovered.
+        assert_eq!(subtract_covered(3, 4, &[]), vec![(3, 4)]);
     }
 }
