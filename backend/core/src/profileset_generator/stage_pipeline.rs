@@ -104,6 +104,48 @@ struct NamedCandidate {
     combo_name: String,
 }
 
+/// Result of building one batch's pre-SimC critical section.
+enum PreSimcOutcome {
+    /// Iterator/chunks exhausted — no ledger row was written (Invariant 8).
+    Exhausted,
+    /// A committed batch ready to run through SimC.
+    Batch(PreparedBatch),
+}
+
+struct PreparedBatch {
+    batch_idx: usize,
+    candidates: Vec<NamedCandidate>,
+}
+
+/// Result of running one prepared batch through SimC + persistence.
+enum BatchOutcome {
+    Completed { local_survivors: Vec<CandidateResult> },
+    Paused,
+}
+
+/// Build a stage's summary from DB-derived totals (Invariant 9) plus the
+/// global-prune stats. `seconds` is filled by the caller.
+fn stage_summary_from_db(
+    stage: &StagePlan,
+    totals: &crate::db::StageTotals,
+    global: &super::survivor_policy::PruneOutcome,
+) -> StageSummary {
+    StageSummary {
+        stage_name: stage.name.clone(),
+        target_error: stage.target_error,
+        input_count: totals.accepted_total as usize,
+        batch_count: totals.batch_count as usize,
+        local_survivor_count: totals.local_survivor_total as usize,
+        global_window_survivor_count: global.stats.window_survivor_count,
+        baseline_forced_keep_count: global.stats.baseline_forced_keep_count,
+        min_keep_added_count: global.stats.min_keep_added_count,
+        global_target_truncated_count: global.stats.global_target_truncated_count,
+        hard_max_truncated_count: global.stats.hard_max_truncated_count,
+        output_count: global.stats.output_count,
+        seconds: 0.0,
+    }
+}
+
 pub fn default_local_topgear_plan(options: &Value) -> StagePipelinePlan {
     let user_target_error = options
         .get("target_error")
