@@ -29,6 +29,13 @@ pub struct CloudChunkRow {
     pub results_json: Option<String>,
     pub submitted_at: Option<String>,
     pub completed_at: Option<String>,
+    /// `None` = a normally-generated chunk; `Some(parent_idx)` = a retry sub-chunk
+    /// split from `parent_idx`.
+    pub parent_chunk_idx: Option<i64>,
+    /// First global `Combo N` index this chunk covers; the chunk spans the
+    /// contiguous range `[first_combo_name_idx, first_combo_name_idx + profileset_count)`.
+    /// `None` on legacy rows written before this column existed.
+    pub first_combo_name_idx: Option<i64>,
 }
 
 impl CloudChunksRepo {
@@ -36,25 +43,45 @@ impl CloudChunksRepo {
         Self { pool }
     }
 
-    /// Insert a `pending` chunk row at generation time, before submission.
+    /// Insert a `pending` chunk row at generation time, before submission,
+    /// recording its lineage (`parent_chunk_idx`) and combo-name range start
+    /// (`first_combo_name_idx`). The chunk covers the contiguous global combo
+    /// range `[first_combo_name_idx, first_combo_name_idx + profileset_count)`.
+    pub async fn insert_pending_with_lineage(
+        &self,
+        job_id: &str,
+        chunk_idx: i64,
+        profileset_count: i64,
+        parent_chunk_idx: Option<i64>,
+        first_combo_name_idx: Option<i64>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO cloud_chunks
+             (job_id, chunk_idx, remote_job_id, status, profileset_count,
+              results_json, submitted_at, completed_at,
+              parent_chunk_idx, first_combo_name_idx)
+             VALUES ($1, $2, NULL, 'pending', $3, NULL, NULL, NULL, $4, $5)",
+        )
+        .bind(job_id)
+        .bind(chunk_idx)
+        .bind(profileset_count)
+        .bind(parent_chunk_idx)
+        .bind(first_combo_name_idx)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Insert a `pending` chunk row with no lineage/range metadata. Thin wrapper
+    /// retained for tests and callers that don't track combo ranges.
     pub async fn insert_pending(
         &self,
         job_id: &str,
         chunk_idx: i64,
         profileset_count: i64,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            "INSERT INTO cloud_chunks
-             (job_id, chunk_idx, remote_job_id, status, profileset_count,
-              results_json, submitted_at, completed_at)
-             VALUES ($1, $2, NULL, 'pending', $3, NULL, NULL, NULL)",
-        )
-        .bind(job_id)
-        .bind(chunk_idx)
-        .bind(profileset_count)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        self.insert_pending_with_lineage(job_id, chunk_idx, profileset_count, None, None)
+            .await
     }
 
     /// Record the Simmit remote job id + flip to `submitted` (sets submitted_at).
@@ -133,7 +160,8 @@ impl CloudChunksRepo {
     pub async fn list_for_job(&self, job_id: &str) -> Result<Vec<CloudChunkRow>, sqlx::Error> {
         let rows = sqlx::query(
             "SELECT chunk_idx, remote_job_id, status, profileset_count,
-                    results_json, submitted_at, completed_at
+                    results_json, submitted_at, completed_at,
+                    parent_chunk_idx, first_combo_name_idx
              FROM cloud_chunks
              WHERE job_id = $1
              ORDER BY chunk_idx",
@@ -151,6 +179,8 @@ impl CloudChunksRepo {
                 results_json: r.get("results_json"),
                 submitted_at: r.get("submitted_at"),
                 completed_at: r.get("completed_at"),
+                parent_chunk_idx: r.get("parent_chunk_idx"),
+                first_combo_name_idx: r.get("first_combo_name_idx"),
             })
             .collect())
     }
@@ -233,5 +263,32 @@ mod tests {
         let old: ChunkResultEnvelope =
             serde_json::from_str(r#"{"profilesets":[],"base_player":null}"#).unwrap();
         assert_eq!(old.credits, 0);
+    }
+
+    #[tokio::test]
+    async fn lineage_and_ranges_round_trip_and_tile() {
+        let repo = CloudChunksRepo::new(pool().await);
+        // generated parent chunk 0: names [0,4)
+        repo.insert_pending_with_lineage("j", 0, 4, None, Some(0))
+            .await
+            .unwrap();
+        // two retry children at tail, halves of parent: [0,2) and [2,4)
+        repo.insert_pending_with_lineage("j", 1, 2, Some(0), Some(0))
+            .await
+            .unwrap();
+        repo.insert_pending_with_lineage("j", 2, 2, Some(0), Some(2))
+            .await
+            .unwrap();
+        let rows = repo.list_for_job("j").await.unwrap();
+        let parent = rows.iter().find(|r| r.chunk_idx == 0).unwrap();
+        assert_eq!(parent.parent_chunk_idx, None);
+        assert_eq!(parent.first_combo_name_idx, Some(0));
+        let children: Vec<_> = rows
+            .iter()
+            .filter(|r| r.parent_chunk_idx == Some(0))
+            .collect();
+        // children ranges [0,2)+[2,4) exactly tile the parent [0,4)
+        let covered: i64 = children.iter().map(|c| c.profileset_count).sum();
+        assert_eq!(covered, parent.profileset_count);
     }
 }

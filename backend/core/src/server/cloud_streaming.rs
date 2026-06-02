@@ -164,6 +164,12 @@ pub struct GeneratedChunk {
     /// `(combo_name, metadata_json)` pairs, ordered, for `combo_metadata`.
     pub metadata: Vec<(String, String)>,
     pub profileset_count: usize,
+    /// The global `Combo N` index of this chunk's FIRST emitted profileset
+    /// (`it.next_name_idx()` captured before the iterator advanced). The chunk
+    /// covers the contiguous range `[first_name_idx, first_name_idx + profileset_count)`,
+    /// persisted as `cloud_chunks.first_combo_name_idx` so resume can prove
+    /// coverage.
+    pub first_name_idx: usize,
     /// `true` when the iterator yielded `None` before hitting `ceiling` — i.e.
     /// the whole product space fit in this chunk (the single-chunk fast path).
     pub exhausted: bool,
@@ -184,6 +190,11 @@ pub fn build_chunk(
     _base_profile: &str,
     ceiling: usize,
 ) -> GeneratedChunk {
+    // Capture the global name index BEFORE pulling any candidate: this chunk's
+    // first emitted profileset is `Combo {first_name_idx}`. Names are contiguous
+    // (next_name_idx increments once per emitted candidate), so the chunk covers
+    // `[first_name_idx, first_name_idx + count)`.
+    let first_name_idx = it.next_name_idx();
     let mut lines: Vec<String> = Vec::new();
     let mut metadata: Vec<(String, String)> = Vec::new();
     let mut count = 0usize;
@@ -214,6 +225,7 @@ pub fn build_chunk(
         profileset_lines: lines,
         metadata,
         profileset_count: count,
+        first_name_idx,
         exhausted,
     }
 }
@@ -283,6 +295,7 @@ async fn run_chunk_with_retry(
     chunk_idx: usize,
     profileset_lines: &[String],
     profileset_count: usize,
+    parent_first_name_idx: usize,
     next_chunk_idx: &std::sync::atomic::AtomicUsize,
 ) -> ChunkOutcome {
     let req = ChunkRequest {
@@ -314,14 +327,27 @@ async fn run_chunk_with_retry(
 
             use std::sync::atomic::Ordering;
             let mut results: Vec<(usize, Value)> = Vec::new();
+            // Cumulative name offset within the parent's contiguous range: the
+            // first half starts at the parent's first name idx; the second starts
+            // `mid` names later (each half is a contiguous sub-range).
+            let mut name_offset = 0usize;
             for half in halves {
                 if half.is_empty() {
                     continue;
                 }
-                // Allocate this sub-chunk's OWN execution row at the tail.
+                let sub_first_name_idx = parent_first_name_idx + name_offset;
+                name_offset += half.len();
+                // Allocate this sub-chunk's OWN execution row at the tail, linked
+                // to the parent and carrying its sub-range start.
                 let sub_idx = next_chunk_idx.fetch_add(1, Ordering::SeqCst);
                 if cloud_repo
-                    .insert_pending(job_id, sub_idx as i64, half.len() as i64)
+                    .insert_pending_with_lineage(
+                        job_id,
+                        sub_idx as i64,
+                        half.len() as i64,
+                        Some(chunk_idx as i64),
+                        Some(sub_first_name_idx as i64),
+                    )
                     .await
                     .is_err()
                 {
@@ -494,7 +520,13 @@ impl CloudStreamingRun {
 
         // Record the chunk row before submission (the crash-recovery oracle).
         if let Err(e) = cloud_repo
-            .insert_pending(&self.job_id, 0, chunk.profileset_count as i64)
+            .insert_pending_with_lineage(
+                &self.job_id,
+                0,
+                chunk.profileset_count as i64,
+                None,
+                Some(chunk.first_name_idx as i64),
+            )
             .await
         {
             let _ = self
@@ -521,6 +553,7 @@ impl CloudStreamingRun {
             0,
             &chunk.profileset_lines,
             chunk.profileset_count,
+            chunk.first_name_idx,
             &next_idx,
         )
         .await;
@@ -697,7 +730,13 @@ impl CloudStreamingRun {
                 .await;
                 combo_id_base += chunk.metadata.len() as i64;
                 if let Err(e) = cloud_repo
-                    .insert_pending(&self.job_id, chunk_idx as i64, chunk.profileset_count as i64)
+                    .insert_pending_with_lineage(
+                        &self.job_id,
+                        chunk_idx as i64,
+                        chunk.profileset_count as i64,
+                        None,
+                        Some(chunk.first_name_idx as i64),
+                    )
                     .await
                 {
                     let _ = self
@@ -727,6 +766,7 @@ impl CloudStreamingRun {
                 let job_id = self.job_id.clone();
                 let base_profile = self.base_profile.clone();
                 let options = self.options.clone();
+                let chunk_first_name_idx = chunk.first_name_idx;
                 let lines = chunk.profileset_lines;
                 let count = chunk.profileset_count;
                 let alloc = next_chunk_idx.clone();
@@ -740,6 +780,7 @@ impl CloudStreamingRun {
                         chunk_idx,
                         &lines,
                         count,
+                        chunk_first_name_idx,
                         &alloc,
                     )
                     .await;
