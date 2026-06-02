@@ -191,6 +191,13 @@ pub fn strip_simmit_blocked_directives(input: &str) -> String {
 
 const SIMMIT_BASE_URL: &str = "https://api.simmit.com";
 
+/// Submission runtime ceiling. We never ask Simmit for more than 1800s, and we
+/// honor a lower per-account cap (`ProviderUsage.max_runtime_seconds`) when it's
+/// known — submitting above the account cap gets the job rejected.
+fn submit_runtime_seconds(account_max: Option<u32>) -> u32 {
+    account_max.map(|a| a.min(1800)).unwrap_or(1800)
+}
+
 #[derive(Serialize)]
 struct SubmitBuild { channel: &'static str }
 #[derive(Serialize)]
@@ -256,7 +263,13 @@ impl SimmitProvider {
             profile: SubmitProfile { text: input },
             runtime: SubmitRuntime {
                 multi_stage: if enable_multistage { Some(true) } else { None },
-                max_runtime_seconds: 1800,
+                // The per-account cap (`ProviderUsage.max_runtime_seconds` from
+                // `get_usage`) is not threaded to this private submit path today —
+                // the provider is a shared `Arc<dyn SimcProvider>` singleton, so it
+                // can't cache a per-account value safely, and `RunCtx` carries no
+                // usage. `None` preserves the 1800s ceiling; once the cap is
+                // threaded in, pass it here and the helper clamps it correctly.
+                max_runtime_seconds: submit_runtime_seconds(None),
             },
             artifacts: SubmitArtifacts { json: SubmitArtifactsJson { version: "2" } },
             metadata,
@@ -881,6 +894,13 @@ mod tests {
         let u = parse_usage(&serde_json::json!({}));
         assert!(u.max_runtime_seconds.is_none());
         assert!(u.max_active_jobs.is_none());
+    }
+
+    #[test]
+    fn submit_runtime_respects_account_cap() {
+        assert_eq!(submit_runtime_seconds(None), 1800);
+        assert_eq!(submit_runtime_seconds(Some(600)), 600);
+        assert_eq!(submit_runtime_seconds(Some(3600)), 1800); // clamp down to ceiling
     }
 
     #[test]
