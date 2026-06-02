@@ -979,7 +979,7 @@ pub(super) async fn start_cloud_streaming(
     let super::streaming_top_gear::StreamingTopGearStart {
         req,
         repo,
-        simc: _simc,
+        simc_bins: _simc_bins,
         log_buffer: _log_buffer,
         base_profile,
         items_by_slot,

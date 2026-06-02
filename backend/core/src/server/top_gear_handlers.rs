@@ -131,15 +131,15 @@ pub(super) async fn create_top_gear_sim(
     let provider_id_str = provider.id().to_string();
 
     if use_streaming_path {
-        let simc = match simc_bins.resolve(&req.options.simc_branch) {
-            Ok(path) => path,
-            Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e})),
-        };
+        // Don't resolve a local SimC binary here — that happens inside
+        // `start_streaming_top_gear_job` only on the local branch, after the
+        // cloud-vs-local fork. A cloud-only deploy with no local SimC installed
+        // must still be able to run a streaming Top Gear via the cloud provider.
         return super::streaming_top_gear::start_streaming_top_gear_job(
             super::streaming_top_gear::StreamingTopGearStart {
                 req,
                 repo,
-                simc,
+                simc_bins: simc_bins.get_ref().clone(),
                 log_buffer,
                 base_profile,
                 items_by_slot,

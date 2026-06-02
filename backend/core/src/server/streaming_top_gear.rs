@@ -1,12 +1,12 @@
 use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::helpers::{finalize_local_stage_result, validate_batch};
 use super::request_json::NormalizedRequest;
 use super::types::TopGearRequest;
+use super::SimcBinaries;
 use crate::db::JobRepo;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, SimcInputMode};
@@ -16,7 +16,11 @@ use crate::simc_runner;
 pub(super) struct StreamingTopGearStart {
     pub req: web::Json<TopGearRequest>,
     pub repo: web::Data<JobRepo>,
-    pub simc: PathBuf,
+    /// The local SimC binary registry. Resolved to a concrete binary path only
+    /// on the LOCAL streaming branch (after the cloud-vs-local fork) so a
+    /// cloud-only deploy with no local SimC installed can still run a streaming
+    /// Top Gear via the cloud orchestrator (which never touches a local binary).
+    pub simc_bins: Arc<SimcBinaries>,
     pub log_buffer: web::Data<Arc<LogBuffer>>,
     pub base_profile: String,
     pub items_by_slot: HashMap<String, Vec<Value>>,
@@ -65,7 +69,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
     let StreamingTopGearStart {
         req,
         repo,
-        simc,
+        simc_bins,
         log_buffer,
         base_profile,
         items_by_slot,
@@ -80,6 +84,14 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         local_queue,
         local_provider: _local_provider,
     } = start;
+
+    // Resolve the local SimC binary ONLY here, on the local branch — the cloud
+    // branch above returned already and never needs a local binary. A bad branch
+    // on a genuine local run still surfaces as a 400 to the user.
+    let simc = match simc_bins.resolve(&req.options.simc_branch) {
+        Ok(path) => path,
+        Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
+    };
 
     let gem_opts = profileset_generator::GemEnchantOptions {
         enchant_selections: Some(&req.enchant_selections),
