@@ -96,7 +96,7 @@ async fn resume_local_stage(
     job_id: &str,
     job: &Job,
     request_json: &str,
-    _checkpoint: &Checkpoint,
+    checkpoint: &Checkpoint,
     inputs: ResumeInputs,
 ) -> Result<(), String> {
     let envelope: crate::server::request_json::NormalizedRequest =
@@ -116,25 +116,69 @@ async fn resume_local_stage(
         .to_string();
     let iter_cfg = super::iterator_from_request::build_iterator_from_request_json(request_json)?;
 
-    // The first unified-stage implementation stores scalar stage results outside
-    // the checkpoint, but does not yet replay partially completed stages. Resume
-    // from the original request by clearing local stage state for this job.
-    crate::db::ComboDedupRepo::new(inputs.pool.clone())
-        .delete_for_job(job_id)
+    // Checkpoint-driven mid-stage resume: load the LocalStage checkpoint, find
+    // any committed-but-incomplete batch, validate it forms a clean suffix,
+    // clean up its uncommitted side effects (dedup keys + ledger row), and
+    // compute the resume state (rewind to the pending batch, or use the
+    // pre-advanced checkpoint scalars at a clean boundary).
+    let local_cp = match &checkpoint.phase {
+        CheckpointPhase::LocalStage(c) => c.clone(),
+        _ => {
+            return Err("resume_local_stage called with non-LocalStage checkpoint".to_string());
+        }
+    };
+
+    let stage_batches_repo = crate::db::StageBatchesRepo::new(inputs.pool.clone());
+    let dedup_repo = crate::db::ComboDedupRepo::new(inputs.pool.clone());
+    let pending = stage_batches_repo
+        .committed_pending(job_id)
         .await
-        .map_err(|e| format!("Failed to clear dedup state: {e}"))?;
-    crate::db::ComboMetadataRepo::new(inputs.pool.clone())
-        .delete_for_job(job_id)
+        .map_err(|e| format!("Failed to load committed-pending batches: {e}"))?;
+
+    let max_done = stage_batches_repo
+        .max_completed_batch_idx(job_id, local_cp.stage_idx as i64)
         .await
-        .map_err(|e| format!("Failed to clear combo metadata: {e}"))?;
-    crate::db::StageBatchesRepo::new(inputs.pool.clone())
-        .delete_for_job(job_id)
+        .map_err(|e| format!("Failed to load max completed batch: {e}"))?;
+    validate_pending_stage_batches(&pending, max_done)?;
+
+    // Cleanup in order (abort resume if either fails): dedup first, batch row second.
+    for batch in &pending {
+        if batch.source_kind == "generated" {
+            dedup_repo
+                .delete_for_batch(job_id, batch.batch_idx)
+                .await
+                .map_err(|e| format!("Failed to delete pending dedup keys: {e}"))?;
+        }
+    }
+    for batch in &pending {
+        sqlx::query(
+            "DELETE FROM stage_batches WHERE job_id = $1 AND stage_idx = $2 AND batch_idx = $3",
+        )
+        .bind(job_id)
+        .bind(batch.stage_idx)
+        .bind(batch.batch_idx)
+        .execute(&inputs.pool)
         .await
-        .map_err(|e| format!("Failed to clear stage batches: {e}"))?;
-    crate::db::StageResultsRepo::new(inputs.pool.clone())
-        .delete_for_job(job_id)
-        .await
-        .map_err(|e| format!("Failed to clear stage results: {e}"))?;
+        .map_err(|e| format!("Failed to delete pending stage batch: {e}"))?;
+    }
+
+    let rewind = rewind_for_pending_stage_batches(&local_cp, &pending)?;
+    let resume_state = super::stage_pipeline::StagePipelineResume {
+        start_stage_idx: local_cp.stage_idx,
+        start_batch_idx: rewind
+            .as_ref()
+            .map(|r| r.start_batch_idx)
+            .unwrap_or(local_cp.next_batch_idx),
+        input_survivor_ids: local_cp.survivor_combo_ids.clone(),
+        iterator_cursor: rewind
+            .as_ref()
+            .and_then(|r| r.iterator_cursor.clone())
+            .or_else(|| local_cp.generated_cursor.clone().filter(|c| !c.is_empty())),
+        next_combo_id: rewind
+            .as_ref()
+            .map(|r| r.next_combo_id)
+            .unwrap_or(local_cp.next_combo_id),
+    };
 
     inputs
         .repo
@@ -221,7 +265,14 @@ async fn resume_local_stage(
             }),
         };
         let plan = super::stage_pipeline::default_local_topgear_plan(&options_for_task);
-        match super::stage_pipeline::run_stage_pipeline(iter_cfg, stage_inputs, plan, None).await {
+        match super::stage_pipeline::run_stage_pipeline(
+            iter_cfg,
+            stage_inputs,
+            plan,
+            Some(resume_state),
+        )
+        .await
+        {
             Ok(super::stage_pipeline::StagePipelineOutcome::Completed(result)) => {
                 drop(permit);
                 crate::server::helpers::finalize_local_stage_result(
@@ -296,6 +347,36 @@ pub(crate) fn rewind_for_pending_stage_batches(
         iterator_cursor,
         next_combo_id,
     }))
+}
+
+/// Enforce Invariants 5 & 6: pending rows are at most one, in a single stage,
+/// and form a suffix (no completed batch above the committed one).
+pub(crate) fn validate_pending_stage_batches(
+    pending: &[crate::db::StageBatchRow],
+    max_completed_batch_idx: Option<i64>,
+) -> Result<(), String> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+    if pending.len() > 1 {
+        return Err(format!(
+            "Expected ≤1 committed-pending batch, found {}",
+            pending.len()
+        ));
+    }
+    let stage = pending[0].stage_idx;
+    if pending.iter().any(|b| b.stage_idx != stage) {
+        return Err("Committed-pending batches span multiple stages".to_string());
+    }
+    if let Some(max_done) = max_completed_batch_idx {
+        if max_done >= pending[0].batch_idx {
+            return Err(format!(
+                "Completed batch {max_done} sits at/above committed batch {} — not a suffix",
+                pending[0].batch_idx
+            ));
+        }
+    }
+    Ok(())
 }
 
 struct TriageRewind {
@@ -710,6 +791,28 @@ mod tests {
         let mut row = gen_row(5, "[3,4]", 0, "committed");
         row.accepted_count = None;
         assert!(rewind_for_pending_stage_batches(&cp, &[row]).is_err());
+    }
+
+    #[test]
+    fn validate_pending_rejects_multi_stage() {
+        let mut a = gen_row(0, "[0]", 1, "committed");
+        a.stage_idx = 0;
+        let mut b = gen_row(1, "[1]", 1, "committed");
+        b.stage_idx = 1;
+        assert!(validate_pending_stage_batches(&[a, b], None).is_err());
+    }
+
+    #[test]
+    fn validate_pending_rejects_completed_above_committed() {
+        // committed at batch 2, but a completed batch exists at 3 → not a suffix.
+        let committed = gen_row(2, "[2]", 1, "committed");
+        assert!(validate_pending_stage_batches(&[committed], Some(3)).is_err());
+    }
+
+    #[test]
+    fn validate_pending_ok_for_single_tail() {
+        let committed = gen_row(3, "[3]", 1, "committed");
+        assert!(validate_pending_stage_batches(&[committed], Some(2)).is_ok());
     }
 
     #[test]
