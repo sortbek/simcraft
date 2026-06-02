@@ -354,7 +354,6 @@ struct StatusLog {
 /// non-numeric as 0 so log dedup still progresses.
 fn deserialize_ts<'de, D>(d: D) -> Result<u64, D::Error>
 where D: serde::Deserializer<'de> {
-    use serde::de::Error;
     let v = serde_json::Value::deserialize(d)?;
     match v {
         serde_json::Value::Number(n) => {
@@ -366,9 +365,9 @@ where D: serde::Deserializer<'de> {
                 Ok(0)
             }
         }
-        serde_json::Value::String(s) => s.parse::<u64>().map_err(D::Error::custom),
+        serde_json::Value::String(s) => Ok(s.parse::<u64>().unwrap_or(0)),
         serde_json::Value::Null => Ok(0),
-        _ => Err(D::Error::custom("ts is not a number")),
+        _ => Ok(0),
     }
 }
 
@@ -873,6 +872,18 @@ mod tests {
         let u = parse_usage(&serde_json::json!({}));
         assert!(u.max_runtime_seconds.is_none());
         assert!(u.max_active_jobs.is_none());
+    }
+
+    #[test]
+    fn deserialize_ts_tolerates_non_numeric() {
+        #[derive(serde::Deserialize)]
+        struct W { #[serde(default, deserialize_with = "deserialize_ts")] ts: u64 }
+        // bool / object / unparseable string must NOT error — they become 0.
+        assert_eq!(serde_json::from_str::<W>(r#"{"ts": true}"#).unwrap().ts, 0);
+        assert_eq!(serde_json::from_str::<W>(r#"{"ts": {}}"#).unwrap().ts, 0);
+        assert_eq!(serde_json::from_str::<W>(r#"{"ts": "abc"}"#).unwrap().ts, 0);
+        // numeric still works
+        assert_eq!(serde_json::from_str::<W>(r#"{"ts": 42}"#).unwrap().ts, 42);
     }
 
     #[test]
