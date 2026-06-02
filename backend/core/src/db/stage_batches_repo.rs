@@ -183,6 +183,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn resume_cleanup_removes_only_pending_rows() {
+        use crate::db::ComboDedupRepo;
+        let pool = pool().await;
+        let batches = StageBatchesRepo::new(pool.clone());
+        let dedup = ComboDedupRepo::new(pool.clone());
+
+        // completed batch 0 (keys K0) + committed-pending batch 1 (keys K1)
+        let mut tx = pool.begin().await.unwrap();
+        dedup.insert_chunked(&mut tx, "job", 0, &["K0a".into(), "K0b".into()]).await.unwrap();
+        batches.insert_committed(&mut tx, "job", 0, 0, "generated", Some("[0]"), Some("[1]"), 2, 2).await.unwrap();
+        dedup.insert_chunked(&mut tx, "job", 1, &["K1a".into()]).await.unwrap();
+        batches.insert_committed(&mut tx, "job", 0, 1, "generated", Some("[1]"), Some("[2]"), 1, 1).await.unwrap();
+        tx.commit().await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        batches.mark_completed(&mut tx, "job", 0, 0, 2).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // simulate resume cleanup of batch 1
+        dedup.delete_for_batch("job", 1).await.unwrap();
+        sqlx::query("DELETE FROM stage_batches WHERE job_id='job' AND stage_idx=0 AND batch_idx=1")
+            .execute(&pool).await.unwrap();
+
+        // batch 0's keys survive; pending row gone
+        let mut tx = pool.begin().await.unwrap();
+        let survived = dedup.snapshot_existing(&mut tx, "job", &["K0a".into(), "K1a".into()]).await.unwrap();
+        tx.commit().await.unwrap();
+        assert!(survived.contains("K0a"));
+        assert!(!survived.contains("K1a"));
+        assert_eq!(batches.committed_pending("job").await.unwrap().len(), 0);
+        assert_eq!(batches.max_completed_batch_idx("job", 0).await.unwrap(), Some(0));
+    }
+
+    #[tokio::test]
     async fn max_completed_and_totals_ignore_committed_rows() {
         let pool = pool().await;
         let repo = StageBatchesRepo::new(pool.clone());
