@@ -16,6 +16,8 @@ pub struct ChunkResultEnvelope {
     pub profilesets: Vec<serde_json::Value>,
     #[serde(default)]
     pub base_player: Option<serde_json::Value>,
+    #[serde(default)]
+    pub credits: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -186,6 +188,7 @@ mod tests {
         let env = ChunkResultEnvelope {
             profilesets: vec![serde_json::json!({"name": "Combo 1", "mean": 100.0})],
             base_player: Some(serde_json::json!({"name": "Base"})),
+            credits: 0,
         };
         repo.mark_completed("job-1", 0, &env, "2026-05-30T00:01:00Z")
             .await
@@ -214,5 +217,21 @@ mod tests {
         let rows = repo.list_for_job("job-2").await.unwrap();
         assert_eq!(rows[0].status, "pending");
         assert!(rows[0].remote_job_id.is_none());
+    }
+
+    #[test]
+    fn envelope_round_trips_credits_with_serde_default() {
+        let env = ChunkResultEnvelope {
+            profilesets: vec![serde_json::json!({"name":"Combo 1"})],
+            base_player: None,
+            credits: 123,
+        };
+        let s = serde_json::to_string(&env).unwrap();
+        let back: ChunkResultEnvelope = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.credits, 123);
+        // backward-compat: an old envelope without the field decodes to credits=0
+        let old: ChunkResultEnvelope =
+            serde_json::from_str(r#"{"profilesets":[],"base_player":null}"#).unwrap();
+        assert_eq!(old.credits, 0);
     }
 }

@@ -77,7 +77,7 @@ impl ChunkAccumulator {
         } else {
             None
         };
-        ChunkResultEnvelope { profilesets, base_player }
+        ChunkResultEnvelope { profilesets, base_player, credits: 0 }
     }
 
     /// Pull a chunk's credits from its adapted Simmit JSON
@@ -539,8 +539,10 @@ impl CloudStreamingRun {
             // Take the base actor from the FIRST result only (chunk 0 or, if it
             // split, its first sub-chunk — both carry the same base actor).
             let include_base = i == 0;
-            let envelope = ChunkAccumulator::envelope_from_simc_json(chunk_json, include_base);
+            let mut envelope =
+                ChunkAccumulator::envelope_from_simc_json(chunk_json, include_base);
             let credits = ChunkAccumulator::credits_from_simc_json(chunk_json);
+            envelope.credits = credits;
             let completed_at = chrono::Utc::now().to_rfc3339();
             let _ = cloud_repo
                 .mark_completed(&self.job_id, *idx as i64, &envelope, &completed_at)
@@ -774,9 +776,10 @@ impl CloudStreamingRun {
                         for (i, (exec_idx, json)) in results.iter().enumerate() {
                             // Base actor comes from chunk 0's FIRST result only.
                             let include_base = orig_idx == 0 && i == 0;
-                            let envelope =
+                            let mut envelope =
                                 ChunkAccumulator::envelope_from_simc_json(json, include_base);
                             let credits = ChunkAccumulator::credits_from_simc_json(json);
+                            envelope.credits = credits;
                             let completed_at = chrono::Utc::now().to_rfc3339();
                             let _ = cloud_repo
                                 .mark_completed(
@@ -1520,9 +1523,13 @@ async fn resume_cloud_streaming_inner(
                     if let Ok(env) =
                         serde_json::from_str::<ChunkResultEnvelope>(json)
                     {
-                        // Credits were already billed/recorded when the chunk first
-                        // completed; do not re-add on resume (avoid double-count).
-                        acc.add_envelope(env, 0);
+                        // The provider already billed these credits when the chunk
+                        // first completed; do not re-bill. But the REPORTED merged
+                        // total must still include them, so fold the per-chunk
+                        // credits that were persisted in the envelope. Old envelopes
+                        // (pre-persist) carry credits=0 and behave exactly as before.
+                        let credits = env.credits;
+                        acc.add_envelope(env, credits);
                     }
                 }
             }
@@ -1543,9 +1550,10 @@ async fn resume_cloud_streaming_inner(
                         // character in every chunk, so players[0]/base_dps is
                         // invariant — whichever chunk supplies it yields the same base.
                         let include_base = acc.needs_base();
-                        let env =
+                        let mut env =
                             ChunkAccumulator::envelope_from_simc_json(&json, include_base);
                         let credits = ChunkAccumulator::credits_from_simc_json(&json);
+                        env.credits = credits;
                         let completed_at = chrono::Utc::now().to_rfc3339();
                         let _ = cloud_repo
                             .mark_completed(job_id, row.chunk_idx, &env, &completed_at)
@@ -2918,6 +2926,9 @@ mod orchestrator_tests {
                 "name": "Hero",
                 "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
             })),
+            // Per-chunk credits persisted at completion time (Bug C): on resume the
+            // merged total must fold this stored value, not 0.
+            credits: 100,
         };
         cloud_repo
             .mark_completed(&job_id, 0, &c0_env, "2026-05-30T00:01:00Z")
@@ -3033,6 +3044,19 @@ mod orchestrator_tests {
                 "{n} must appear exactly once (no resume name collision): {names:?}"
             );
         }
+
+        // (e) Bug C: the merged credits_consumed must include the pre-crash
+        // completed chunk 0's persisted credits (100), plus the re-polled chunk 1
+        // (100) and the regenerated tail chunk (100) = 300. Before the fix, the
+        // completed chunk folded credits=0, under-reporting the total as 200.
+        // The merged credits live in the raw merged SimC doc (raw_json), which is
+        // what the result-page footer reads.
+        let raw: Value =
+            serde_json::from_str(finished.raw_json.as_deref().unwrap()).unwrap();
+        assert_eq!(
+            raw["simmit"]["credits_consumed"], 300,
+            "resume must fold the completed chunk's persisted credits, not 0"
+        );
     }
 
     /// Finding 1 regression: a retry-split persisted tail `cloud_chunks` rows at
@@ -3112,6 +3136,7 @@ mod orchestrator_tests {
                 "name": "Hero",
                 "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 0.0 } }
             })),
+            credits: 0,
         };
         cloud_repo
             .mark_completed(&job_id, 0, &c0_env, "2026-05-30T00:01:00Z")
@@ -3134,6 +3159,7 @@ mod orchestrator_tests {
                     &ChunkResultEnvelope {
                         profilesets: vec![json!({ "name": combo, "mean": 1000.0 })],
                         base_player: None,
+                        credits: 0,
                     },
                     "2026-05-30T00:01:10Z",
                 )
