@@ -22,7 +22,7 @@ pub(super) async fn create_sim(
     req: web::Json<SimRequest>,
     repo: web::Data<JobRepo>,
     settings_repo: web::Data<SettingsRepo>,
-    _simc_bins: web::Data<Arc<SimcBinaries>>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
@@ -82,6 +82,12 @@ pub(super) async fn create_sim(
         Ok(p) => p,
         Err(e) => return HttpResponse::BadRequest().json(json!({"detail": e.to_string()})),
     };
+    // Reject an invalid simc_branch BEFORE inserting the Job — otherwise a bad
+    // local branch leaves an orphan Pending row that only fails asynchronously.
+    if let Some(resp) = validate_eager_branch(&provider, simc_bins.get_ref(), &req.options.simc_branch) {
+        return resp;
+    }
+
     let auth = avail.auth_for(provider.id());
     let provider_id_str = provider.id().to_string();
 

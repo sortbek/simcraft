@@ -18,7 +18,7 @@ pub(super) async fn create_enchant_gem_sim(
     req: web::Json<EnchantGemSimRequest>,
     repo: web::Data<JobRepo>,
     settings_repo: web::Data<SettingsRepo>,
-    _simc_bins: web::Data<Arc<SimcBinaries>>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
@@ -91,6 +91,7 @@ pub(super) async fn create_enchant_gem_sim(
         provider,
         avail,
         repo.get_ref(),
+        simc_bins.get_ref(),
         log_buffer.get_ref(),
     )
     .await

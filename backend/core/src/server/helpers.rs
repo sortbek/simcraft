@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::types::SimOptions;
+use super::SimcBinaries;
 use crate::db::{self, ComboMetadataInsert, ComboMetadataRepo, JobRepo, SettingsRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::{JobStatus, SimcInputMode};
@@ -614,6 +615,38 @@ pub(crate) async fn resolve_provider_for_request(
     Ok((provider, avail))
 }
 
+/// Pure decision: should an eager submit be rejected up front for a bad branch?
+/// Only LOCAL submits need a resolvable binary; a cloud provider doesn't use a
+/// local binary, so a branch that won't resolve locally is the remote's concern.
+fn eager_branch_reject(is_local: bool, resolve_ok: bool) -> bool {
+    is_local && !resolve_ok
+}
+
+/// Up-front `simc_branch` validation for the EAGER (non-streaming) submit path.
+/// When the resolved provider is LOCAL, the requested branch must resolve to a
+/// local SimC binary BEFORE we insert a Job — otherwise an invalid branch leaves
+/// an orphan Pending row that nothing can ever finish (and only surfaces as an
+/// async Error). On a cloud provider this is skipped (no local binary involved).
+/// Returns `Some(BadRequest)` to reject, `None` to proceed.
+pub(crate) fn validate_eager_branch(
+    provider: &Arc<dyn crate::compute::SimcProvider>,
+    simc_bins: &SimcBinaries,
+    branch: &str,
+) -> Option<HttpResponse> {
+    let is_local = provider.id() == "local";
+    if !is_local {
+        // Cloud provider: branch validation is the remote's concern.
+        return None;
+    }
+    match simc_bins.resolve(branch) {
+        Ok(_) => None,
+        Err(e) if eager_branch_reject(is_local, false) => {
+            Some(HttpResponse::BadRequest().json(json!({ "detail": e })))
+        }
+        Err(_) => None,
+    }
+}
+
 /// Shared post-resolution finalize for profileset workloads. Owns the entire
 /// "build Job, insert, write metadata, spawn, return SimResponse" sequence
 /// that previously sat duplicated at the bottom of four handlers.
@@ -626,8 +659,15 @@ pub(crate) async fn submit_profileset_sim(
     provider: Arc<dyn crate::compute::SimcProvider>,
     avail: crate::compute::ProviderAvailability,
     repo: &JobRepo,
+    simc_bins: &SimcBinaries,
     log_buffer: &Arc<LogBuffer>,
 ) -> HttpResponse {
+    // Reject an invalid simc_branch BEFORE inserting the Job — otherwise a bad
+    // local branch leaves an orphan Pending row that only fails asynchronously.
+    if let Some(resp) = validate_eager_branch(&provider, simc_bins, &options.simc_branch) {
+        return resp;
+    }
+
     let provider_id_str = provider.id().to_string();
     let mut options_json = options.to_json();
     // The handler-built `display_input` is the final ready-to-execute simc
@@ -895,5 +935,22 @@ pub(super) async fn load_combo_metadata(
             })
             .collect(),
         Err(_) => HashMap::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::eager_branch_reject;
+
+    #[test]
+    fn eager_branch_reject_only_rejects_bad_local_branch() {
+        // Local provider + branch won't resolve → reject up front.
+        assert!(eager_branch_reject(true, false));
+        // Local provider + branch resolves → allow.
+        assert!(!eager_branch_reject(true, true));
+        // Cloud provider + branch won't resolve locally → allow (remote's concern).
+        assert!(!eager_branch_reject(false, false));
+        // Cloud provider + resolves → allow.
+        assert!(!eager_branch_reject(false, true));
     }
 }
