@@ -119,7 +119,7 @@ struct PreparedBatch {
 
 /// Result of running one prepared batch through SimC + persistence.
 enum BatchOutcome {
-    Completed { local_survivors: Vec<CandidateResult> },
+    Completed,
     Paused,
 }
 
@@ -273,17 +273,19 @@ pub async fn run_stage_pipeline(
                     generated_iter.as_mut(),
                     &current_survivor_ids,
                     &mut next_combo_id,
+                    0,
                     stage_progress_start,
                     stage_progress_end,
-               )
-               .await?;
-                if outcome.paused || check_pause(inputs.pool, inputs.job_id).await? {
+                )
+                .await?;
+                if outcome.paused {
                     return Ok(StagePipelineOutcome::Paused);
                 }
                 current_survivor_ids = outcome.survivor_combo_ids;
-                let mut summary = outcome.summary;
-                summary.seconds = stage_start.elapsed().as_secs_f64();
-                summaries.push(summary);
+                if let Some(mut summary) = outcome.summary {
+                    summary.seconds = stage_start.elapsed().as_secs_f64();
+                    summaries.push(summary);
+                }
                 (inputs.on_stage_complete)(format!(
                     "{} - {} survivors",
                     stage.name,
@@ -336,32 +338,296 @@ pub async fn run_stage_pipeline(
 
 struct PruningStageOutcome {
     survivor_combo_ids: Vec<i64>,
-    summary: StageSummary,
+    summary: Option<StageSummary>,
     paused: bool,
 }
 
-/// Summary recorded when a pruning stage stops early because pause was requested.
-/// Only the counts known at the pause point are populated; the rest are zero.
-fn paused_summary(
+#[allow(clippy::too_many_arguments)]
+async fn pre_simc_generated(
+    inputs: &StagePipelineInputs<'_>,
     stage: &StagePlan,
-    input_count: usize,
+    iter: &mut ProfilesetIterator,
     batch_idx: usize,
-    local_survivor_count: usize,
-) -> StageSummary {
-    StageSummary {
-        stage_name: stage.name.clone(),
-        target_error: stage.target_error,
-        input_count,
-        batch_count: batch_idx + 1,
-        local_survivor_count,
-        global_window_survivor_count: 0,
-        baseline_forced_keep_count: 0,
-        min_keep_added_count: 0,
-        global_target_truncated_count: 0,
-        hard_max_truncated_count: 0,
-        output_count: 0,
-        seconds: 0.0,
+    next_combo_id: &mut i64,
+    input_survivor_ids: &[i64],
+) -> Result<PreSimcOutcome, String> {
+    let target = if batch_idx == 0 {
+        stage.batch_policy.probe_size
+    } else {
+        stage.batch_policy.max_profilesets
+    };
+    let start_cursor = iter.cursor().to_vec();
+    let mut pending = Vec::with_capacity(target);
+    for _ in 0..target {
+        match iter.next() {
+            Some(c) => pending.push(c),
+            None => break,
+        }
     }
+    if pending.is_empty() {
+        return Ok(PreSimcOutcome::Exhausted); // Invariant 8: no ledger row
+    }
+    let end_cursor = iter.cursor().to_vec();
+    let keys: Vec<String> = pending.iter().map(|c| c.identity_key.clone()).collect();
+
+    let dedup_repo = ComboDedupRepo::new(inputs.pool.clone());
+    let stage_batches_repo = StageBatchesRepo::new(inputs.pool.clone());
+    let mut tx = inputs
+        .pool
+        .begin()
+        .await
+        .map_err(|e| format!("Pre-simc transaction failed: {e}"))?;
+
+    let existing = dedup_repo
+        .snapshot_existing(&mut tx, inputs.job_id, &keys)
+        .await
+        .map_err(|e| format!("Dedup snapshot failed: {e}"))?;
+    dedup_repo
+        .insert_chunked(&mut tx, inputs.job_id, batch_idx as i64, &keys)
+        .await
+        .map_err(|e| format!("Dedup insert failed: {e}"))?;
+
+    let mut accepted = Vec::new();
+    let mut local_next = *next_combo_id;
+    for candidate in pending {
+        if existing.contains(&candidate.identity_key) {
+            continue;
+        }
+        let combo_id = local_next;
+        local_next += 1;
+        let combo_name = format!("Combo {combo_id}");
+        accepted.push(NamedCandidate {
+            candidate: rename_profileset_candidate(candidate, &combo_name),
+            combo_id,
+            combo_name,
+        });
+    }
+
+    let start_cursor_json = serde_json::to_string(&start_cursor).unwrap_or_default();
+    let end_cursor_json = serde_json::to_string(&end_cursor).unwrap_or_default();
+    stage_batches_repo
+        .insert_committed(
+            &mut tx,
+            inputs.job_id,
+            stage.index as i64,
+            batch_idx as i64,
+            "generated",
+            Some(&start_cursor_json),
+            Some(&end_cursor_json),
+            keys.len() as i64,
+            accepted.len() as i64,
+        )
+        .await
+        .map_err(|e| format!("Failed to insert stage batch: {e}"))?;
+
+    // Advanced checkpoint (Invariant 3): points at the NEXT batch.
+    write_stage_checkpoint_in_tx(
+        &mut tx,
+        inputs.job_id,
+        stage,
+        batch_idx + 1,
+        Some(end_cursor.clone()),
+        input_survivor_ids,
+        local_next,
+    )
+    .await?;
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("Pre-simc commit failed: {e}"))?;
+    *next_combo_id = local_next;
+
+    inputs.log_buffer.push_line(
+        inputs.job_id,
+        format!(
+            "{} generated batch {} cursor {:?}->{:?} ({} accepted)",
+            stage.name,
+            batch_idx,
+            start_cursor,
+            end_cursor,
+            accepted.len()
+        ),
+    );
+    Ok(PreSimcOutcome::Batch(PreparedBatch {
+        batch_idx,
+        candidates: accepted,
+    }))
+}
+
+async fn pre_simc_survivor(
+    inputs: &StagePipelineInputs<'_>,
+    stage: &StagePlan,
+    metadata_repo: &ComboMetadataRepo,
+    input_survivor_ids: &[i64],
+    batch_idx: usize,
+    next_combo_id: i64,
+) -> Result<PreSimcOutcome, String> {
+    let chunk_size = stage.batch_policy.max_profilesets.max(1);
+    let start = batch_idx * chunk_size;
+    if start >= input_survivor_ids.len() {
+        return Ok(PreSimcOutcome::Exhausted); // Invariant 8
+    }
+    let end = (start + chunk_size).min(input_survivor_ids.len());
+    let chunk_ids = &input_survivor_ids[start..end];
+    let rows = metadata_repo
+        .list_for_combo_ids(inputs.job_id, chunk_ids)
+        .await
+        .map_err(|e| format!("Failed to load survivors: {e}"))?;
+    if rows.is_empty() {
+        return Ok(PreSimcOutcome::Exhausted);
+    }
+    let candidates: Vec<NamedCandidate> = rows.iter().map(named_from_metadata).collect();
+
+    let stage_batches_repo = StageBatchesRepo::new(inputs.pool.clone());
+    let mut tx = inputs
+        .pool
+        .begin()
+        .await
+        .map_err(|e| format!("Pre-simc transaction failed: {e}"))?;
+    stage_batches_repo
+        .insert_committed(
+            &mut tx,
+            inputs.job_id,
+            stage.index as i64,
+            batch_idx as i64,
+            "previous_survivors",
+            None,
+            None,
+            candidates.len() as i64,
+            candidates.len() as i64,
+        )
+        .await
+        .map_err(|e| format!("Failed to insert stage batch: {e}"))?;
+    write_stage_checkpoint_in_tx(
+        &mut tx,
+        inputs.job_id,
+        stage,
+        batch_idx + 1,
+        None,
+        input_survivor_ids,
+        next_combo_id,
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("Pre-simc commit failed: {e}"))?;
+
+    Ok(PreSimcOutcome::Batch(PreparedBatch {
+        batch_idx,
+        candidates,
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn process_batch(
+    inputs: &StagePipelineInputs<'_>,
+    metadata_repo: &ComboMetadataRepo,
+    stage_results_repo: &StageResultsRepo,
+    stage: &StagePlan,
+    batch: &PreparedBatch,
+    total_batches_hint: usize,
+    stage_progress_start: u8,
+    stage_progress_end: u8,
+) -> Result<BatchOutcome, String> {
+    let batch_idx = batch.batch_idx;
+    let profileset_simc = batch
+        .candidates
+        .iter()
+        .map(|c| c.candidate.profileset_simc.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let total_hint = total_batches_hint.max(batch_idx + 1);
+    (inputs.on_progress)(
+        progress_between(
+            stage_progress_start,
+            stage_progress_end,
+            batch_idx as f64 / total_hint as f64,
+        ),
+        format!(
+            "{} batch {}: simc on {} profilesets",
+            stage.name,
+            batch_idx + 1,
+            batch.candidates.len()
+        ),
+    );
+
+    let progress_buckets = std::sync::atomic::AtomicUsize::new(0);
+    let results = match simc_runner::run_simc_triage_batch(
+        inputs.base_profile,
+        &profileset_simc,
+        inputs.options,
+        stage_iterations(inputs.options),
+        inputs.fight_style,
+        stage.target_error,
+        inputs.simc_bin,
+        inputs.job_id,
+        inputs.log_buffer.clone(),
+        |current, total| {
+            let bucket = (current.saturating_mul(20) / total.max(1)).min(20);
+            let prev = progress_buckets.fetch_max(bucket, std::sync::atomic::Ordering::Relaxed);
+            if bucket <= prev {
+                return;
+            }
+            let stage_fraction =
+                (batch_idx as f64 + current as f64 / total.max(1) as f64) / total_hint as f64;
+            (inputs.on_progress)(
+                progress_between(stage_progress_start, stage_progress_end, stage_fraction),
+                format!(
+                    "{} batch {}: {}/{} profilesets",
+                    stage.name,
+                    batch_idx + 1,
+                    current,
+                    total
+                ),
+            );
+        },
+    )
+    .await
+    {
+        Ok(results) => results,
+        Err(e) => {
+            if check_pause(inputs.pool, inputs.job_id).await? {
+                mark_paused(inputs.pool, inputs.job_id).await;
+                return Ok(BatchOutcome::Paused);
+            }
+            return Err(e);
+        }
+    };
+
+    let parsed = candidate_results_from_simc(&results, &batch.candidates);
+    let local = if stage.survivor_policy.local_prefilter {
+        prune_global(&parsed, &stage.survivor_policy).survivors
+    } else {
+        parsed
+    };
+
+    // Post-SimC tx (Invariant 2): results + combo_metadata + mark_completed atomic.
+    persist_and_complete_batch(
+        inputs.pool,
+        metadata_repo,
+        stage_results_repo,
+        inputs.job_id,
+        stage.index,
+        batch_idx,
+        &local,
+        &batch.candidates,
+        stage.index > 0,
+    )
+    .await?;
+
+    if check_pause(inputs.pool, inputs.job_id).await? {
+        mark_paused(inputs.pool, inputs.job_id).await;
+        return Ok(BatchOutcome::Paused);
+    }
+    Ok(BatchOutcome::Completed)
+}
+
+async fn mark_paused(pool: &AnyPool, job_id: &str) {
+    let repo = crate::db::JobRepo::new(pool.clone());
+    let _ = repo.set_pause_requested(job_id, false).await;
+    let _ = repo
+        .update_status(job_id, crate::models::JobStatus::Paused)
+        .await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -370,215 +636,91 @@ async fn run_pruning_stage(
     metadata_repo: &ComboMetadataRepo,
     stage_results_repo: &StageResultsRepo,
     stage: &StagePlan,
-    generated_iter: Option<&mut ProfilesetIterator>,
-    previous_survivor_ids: &[i64],
+    mut generated_iter: Option<&mut ProfilesetIterator>,
+    input_survivor_ids: &[i64],
     next_combo_id: &mut i64,
+    start_batch_idx: usize,
     stage_progress_start: u8,
     stage_progress_end: u8,
 ) -> Result<PruningStageOutcome, String> {
-    let batches = build_stage_batches(
-        inputs,
-        metadata_repo,
-        stage,
-        generated_iter,
-        previous_survivor_ids,
-        next_combo_id,
-    )
-    .await?;
-    let input_count = batches.iter().map(Vec::len).sum();
-    let total_batches = batches.len().max(1);
-    let mut local_survivors = Vec::new();
-    let stage_batches_repo = StageBatchesRepo::new(inputs.pool.clone());
-
-    for (batch_idx, batch) in batches.iter().enumerate() {
-        if batch.is_empty() {
-            continue;
-        }
-        write_stage_checkpoint(
+    // Stage-entry checkpoint (clean-boundary resume target for this stage).
+    if start_batch_idx == 0 {
+        write_stage_entry_checkpoint(
             inputs.pool,
             inputs.job_id,
             stage,
-            batch_idx,
-            previous_survivor_ids,
+            input_survivor_ids,
             *next_combo_id,
         )
         .await?;
-        let source_kind = match stage.source {
-            CandidateSource::GeneratedCombinations => "generated",
-            CandidateSource::PreviousStageSurvivors => "previous_survivors",
-        };
-        let mut tx = inputs
-            .pool
-            .begin()
-            .await
-            .map_err(|e| format!("Stage batch transaction failed: {e}"))?;
-        stage_batches_repo
-            .insert_committed(
-                &mut tx,
-                inputs.job_id,
-                stage.index as i64,
-                batch_idx as i64,
-                source_kind,
-                None,
-                None,
-                batch.len() as i64,
-                batch.len() as i64,
-            )
-            .await
-            .map_err(|e| format!("Failed to insert stage batch: {e}"))?;
-        tx.commit()
-            .await
-            .map_err(|e| format!("Failed to commit stage batch: {e}"))?;
-
-        let profileset_simc = batch
-            .iter()
-            .map(|c| c.candidate.profileset_simc.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        let batch_start_pct = progress_between(
-            stage_progress_start,
-            stage_progress_end,
-            batch_idx as f64 / total_batches as f64,
-        );
-        (inputs.on_progress)(
-            batch_start_pct,
-            format!(
-                "{} batch {}/{}: simc on {} profilesets",
-                stage.name,
-                batch_idx + 1,
-                total_batches,
-                batch.len()
-            ),
-        );
-        inputs.log_buffer.push_line(
-            inputs.job_id,
-            format!(
-                "{} batch {}/{}: simc on {} profilesets",
-                stage.name,
-                batch_idx + 1,
-                total_batches,
-                batch.len()
-            ),
-        );
-        let progress_buckets = std::sync::atomic::AtomicUsize::new(0);
-        let results = match simc_runner::run_simc_triage_batch(
-            inputs.base_profile,
-            &profileset_simc,
-            inputs.options,
-            stage_iterations(inputs.options),
-            inputs.fight_style,
-            stage.target_error,
-            inputs.simc_bin,
-            inputs.job_id,
-            inputs.log_buffer.clone(),
-            |current, total| {
-                let bucket = (current.saturating_mul(20) / total.max(1)).min(20);
-                let prev = progress_buckets
-                    .fetch_max(bucket, std::sync::atomic::Ordering::Relaxed);
-                if bucket <= prev {
-                    return;
-                }
-                let batch_fraction = current as f64 / total.max(1) as f64;
-                let stage_fraction =
-                    (batch_idx as f64 + batch_fraction) / total_batches as f64;
-                let pct =
-                    progress_between(stage_progress_start, stage_progress_end, stage_fraction);
-                (inputs.on_progress)(
-                    pct,
-                    format!(
-                        "{} batch {}/{}: {}/{} profilesets",
-                        stage.name,
-                        batch_idx + 1,
-                        total_batches,
-                        current,
-                        total
-                    ),
-                );
-                inputs.log_buffer.push_line(
-                    inputs.job_id,
-                    format!(
-                        "{} batch {}/{} progress: {}/{} profilesets ({}%)",
-                        stage.name,
-                        batch_idx + 1,
-                        total_batches,
-                        current,
-                        total,
-                        bucket * 5
-                    ),
-                );
-            },
-        )
-        .await
-        {
-            Ok(results) => results,
-            Err(e) => {
-                if check_pause(inputs.pool, inputs.job_id).await? {
-                    let repo = crate::db::JobRepo::new(inputs.pool.clone());
-                    let _ = repo.set_pause_requested(inputs.job_id, false).await;
-                    let _ = repo
-                        .update_status(inputs.job_id, crate::models::JobStatus::Paused)
-                        .await;
-                    return Ok(PruningStageOutcome {
-                        survivor_combo_ids: Vec::new(),
-                        summary: paused_summary(
-                            stage,
-                            input_count,
-                            batch_idx,
-                            local_survivors.len(),
-                        ),
-                        paused: true,
-                    });
-                }
-                return Err(e);
-            }
-        };
-
-        let parsed = candidate_results_from_simc(&results, batch);
-        let local = if stage.survivor_policy.local_prefilter {
-            prune_global(&parsed, &stage.survivor_policy).survivors
-        } else {
-            parsed
-        };
-        persist_stage_results(
-            inputs.pool,
-            metadata_repo,
-            stage_results_repo,
-            inputs.job_id,
-            stage.index,
-            &local,
-            batch,
-            stage.index > 0,
-        )
-        .await?;
-        let mut tx = inputs
-            .pool
-            .begin()
-            .await
-            .map_err(|e| format!("Stage completion transaction failed: {e}"))?;
-        stage_batches_repo
-            .mark_completed(
-                &mut tx,
-                inputs.job_id,
-                stage.index as i64,
-                batch_idx as i64,
-                local.len() as i64,
-            )
-            .await
-            .map_err(|e| format!("Failed to complete stage batch: {e}"))?;
-        tx.commit()
-            .await
-            .map_err(|e| format!("Failed to commit stage completion: {e}"))?;
-
-        local_survivors.extend(local);
-        if check_pause(inputs.pool, inputs.job_id).await? {
-            return Ok(PruningStageOutcome {
-                survivor_combo_ids: Vec::new(),
-                summary: paused_summary(stage, input_count, batch_idx, local_survivors.len()),
-                paused: true,
-            });
-        }
     }
 
+    let total_hint = match stage.source {
+        CandidateSource::PreviousStageSurvivors => {
+            (input_survivor_ids.len() / stage.batch_policy.max_profilesets.max(1)) + 1
+        }
+        CandidateSource::GeneratedCombinations => 1,
+    };
+
+    let mut batch_idx = start_batch_idx;
+    loop {
+        let pre = match stage.source {
+            CandidateSource::GeneratedCombinations => {
+                let iter = generated_iter
+                    .as_deref_mut()
+                    .ok_or_else(|| "Generated stage missing iterator".to_string())?;
+                pre_simc_generated(
+                    inputs,
+                    stage,
+                    iter,
+                    batch_idx,
+                    next_combo_id,
+                    input_survivor_ids,
+                )
+                .await?
+            }
+            CandidateSource::PreviousStageSurvivors => {
+                pre_simc_survivor(
+                    inputs,
+                    stage,
+                    metadata_repo,
+                    input_survivor_ids,
+                    batch_idx,
+                    *next_combo_id,
+                )
+                .await?
+            }
+        };
+        let prepared = match pre {
+            PreSimcOutcome::Exhausted => break,
+            PreSimcOutcome::Batch(b) => b,
+        };
+        match process_batch(
+            inputs,
+            metadata_repo,
+            stage_results_repo,
+            stage,
+            &prepared,
+            total_hint,
+            stage_progress_start,
+            stage_progress_end,
+        )
+        .await?
+        {
+            BatchOutcome::Completed => {}
+            BatchOutcome::Paused => {
+                return Ok(PruningStageOutcome {
+                    survivor_combo_ids: Vec::new(),
+                    paused: true,
+                    summary: None,
+                });
+            }
+        }
+        batch_idx += 1;
+        tokio::task::yield_now().await;
+    }
+
+    // Global prune over ALL persisted results for this stage (DB-backed).
     let global_input = stage_results_repo
         .list_for_stage(inputs.job_id, stage.index as i64)
         .await
@@ -603,140 +745,18 @@ async fn run_pruning_stage(
     let survivor_combo_ids = global
         .survivors
         .iter()
-        .map(|row| row.combo_id)
+        .map(|r| r.combo_id)
         .collect::<Vec<_>>();
+    let totals = StageBatchesRepo::new(inputs.pool.clone())
+        .stage_totals(inputs.job_id, stage.index as i64)
+        .await
+        .map_err(|e| format!("Failed to load stage totals: {e}"))?;
 
     Ok(PruningStageOutcome {
         survivor_combo_ids,
-        summary: StageSummary {
-            stage_name: stage.name.clone(),
-            target_error: stage.target_error,
-            input_count,
-            batch_count: batches.len(),
-            local_survivor_count: local_survivors.len(),
-            global_window_survivor_count: global.stats.window_survivor_count,
-            baseline_forced_keep_count: global.stats.baseline_forced_keep_count,
-            min_keep_added_count: global.stats.min_keep_added_count,
-            global_target_truncated_count: global.stats.global_target_truncated_count,
-            hard_max_truncated_count: global.stats.hard_max_truncated_count,
-            output_count: global.stats.output_count,
-            seconds: 0.0,
-        },
+        summary: Some(stage_summary_from_db(stage, &totals, &global)),
         paused: false,
     })
-}
-
-
-async fn build_stage_batches(
-    inputs: &StagePipelineInputs<'_>,
-    metadata_repo: &ComboMetadataRepo,
-    stage: &StagePlan,
-    generated_iter: Option<&mut ProfilesetIterator>,
-    previous_survivor_ids: &[i64],
-    next_combo_id: &mut i64,
-) -> Result<Vec<Vec<NamedCandidate>>, String> {
-    match stage.source {
-        CandidateSource::GeneratedCombinations => {
-            let iter = generated_iter.ok_or_else(|| "Generated stage missing iterator".to_string())?;
-            build_generated_batches(inputs, stage, iter, next_combo_id).await
-        }
-        CandidateSource::PreviousStageSurvivors => {
-            let rows = metadata_repo
-                .list_for_combo_ids(inputs.job_id, previous_survivor_ids)
-                .await
-                .map_err(|e| format!("Failed to load previous survivors: {e}"))?;
-            Ok(rows
-                .chunks(stage.batch_policy.max_profilesets)
-                .map(|chunk| chunk.iter().map(named_from_metadata).collect())
-                .collect())
-        }
-    }
-}
-
-async fn build_generated_batches(
-    inputs: &StagePipelineInputs<'_>,
-    stage: &StagePlan,
-    iter: &mut ProfilesetIterator,
-    next_combo_id: &mut i64,
-) -> Result<Vec<Vec<NamedCandidate>>, String> {
-    let dedup_repo = ComboDedupRepo::new(inputs.pool.clone());
-    let mut batches = Vec::new();
-    let mut batch_idx = 0i64;
-    loop {
-        let target = if batch_idx == 0 {
-            stage.batch_policy.probe_size
-        } else {
-            stage.batch_policy.max_profilesets
-        };
-        let start_cursor = iter.cursor().to_vec();
-        let mut pending = Vec::with_capacity(target);
-        for _ in 0..target {
-            if let Some(candidate) = iter.next() {
-                pending.push(candidate);
-            } else {
-                break;
-            }
-        }
-        if pending.is_empty() {
-            break;
-        }
-        let end_cursor = iter.cursor().to_vec();
-        let keys: Vec<String> = pending.iter().map(|c| c.identity_key.clone()).collect();
-        let mut tx = inputs
-            .pool
-            .begin()
-            .await
-            .map_err(|e| format!("Dedup transaction failed: {e}"))?;
-        let existing = dedup_repo
-            .snapshot_existing(&mut tx, inputs.job_id, &keys)
-            .await
-            .map_err(|e| format!("Dedup snapshot failed: {e}"))?;
-        dedup_repo
-            .insert_chunked(&mut tx, inputs.job_id, batch_idx, &keys)
-            .await
-            .map_err(|e| format!("Dedup insert failed: {e}"))?;
-        tx.commit()
-            .await
-            .map_err(|e| format!("Dedup commit failed: {e}"))?;
-
-        let mut accepted = Vec::new();
-        for candidate in pending {
-            if existing.contains(&candidate.identity_key) {
-                continue;
-            }
-            let combo_id = *next_combo_id;
-            *next_combo_id += 1;
-            let combo_name = format!("Combo {combo_id}");
-            accepted.push(NamedCandidate {
-                candidate: rename_profileset_candidate(candidate, &combo_name),
-                combo_id,
-                combo_name,
-            });
-        }
-        if !accepted.is_empty() {
-            let cursor_detail = format!(
-                "Stage {} generated batch {} cursor {:?}->{:?}",
-                stage.name, batch_idx, start_cursor, end_cursor
-            );
-            inputs.log_buffer.push_line(inputs.job_id, cursor_detail);
-            (inputs.on_progress)(
-                0,
-                format!(
-                    "{} generated batch {} ({} profilesets)",
-                    stage.name,
-                    batch_idx + 1,
-                    accepted.len()
-                ),
-            );
-            batches.push(accepted);
-        }
-        batch_idx += 1;
-        tokio::task::yield_now().await;
-        if batches.last().is_some_and(|b| b.len() < target) {
-            break;
-        }
-    }
-    Ok(batches)
 }
 
 fn rename_profileset_candidate(
@@ -790,12 +810,14 @@ fn candidate_results_from_simc(results: &[Value], batch: &[NamedCandidate]) -> V
         .collect()
 }
 
-async fn persist_stage_results(
+#[allow(clippy::too_many_arguments)]
+async fn persist_and_complete_batch(
     pool: &AnyPool,
     metadata_repo: &ComboMetadataRepo,
     stage_results_repo: &StageResultsRepo,
     job_id: &str,
     stage_idx: usize,
+    batch_idx: usize,
     results: &[CandidateResult],
     batch: &[NamedCandidate],
     persist_json: bool,
@@ -862,7 +884,7 @@ async fn persist_stage_results(
     let mut tx = pool
         .begin()
         .await
-        .map_err(|e| format!("Persist stage transaction failed: {e}"))?;
+        .map_err(|e| format!("Persist+complete tx failed: {e}"))?;
     metadata_repo
         .insert_batch(&mut tx, job_id, &metadata_inserts)
         .await
@@ -871,9 +893,19 @@ async fn persist_stage_results(
         .insert_batch(&mut tx, job_id, &result_inserts)
         .await
         .map_err(|e| format!("Persist stage results failed: {e}"))?;
+    StageBatchesRepo::new(pool.clone())
+        .mark_completed(
+            &mut tx,
+            job_id,
+            stage_idx as i64,
+            batch_idx as i64,
+            results.len() as i64,
+        )
+        .await
+        .map_err(|e| format!("Mark completed failed: {e}"))?;
     tx.commit()
         .await
-        .map_err(|e| format!("Persist stage commit failed: {e}"))?;
+        .map_err(|e| format!("Persist+complete commit failed: {e}"))?;
     Ok(())
 }
 
@@ -1035,11 +1067,13 @@ fn candidate_from_stage_row(row: StageResultRow) -> CandidateResult {
     }
 }
 
-async fn write_stage_checkpoint(
-    pool: &AnyPool,
+#[allow(clippy::too_many_arguments)]
+async fn write_stage_checkpoint_in_tx(
+    tx: &mut sqlx::AnyConnection,
     job_id: &str,
     stage: &StagePlan,
     next_batch_idx: usize,
+    generated_cursor: Option<Vec<usize>>,
     survivor_combo_ids: &[i64],
     next_combo_id: i64,
 ) -> Result<(), String> {
@@ -1050,12 +1084,10 @@ async fn write_stage_checkpoint(
             next_batch_idx,
             source: match stage.source {
                 CandidateSource::GeneratedCombinations => CheckpointSource::GeneratedCombinations,
-                CandidateSource::PreviousStageSurvivors => {
-                    CheckpointSource::PreviousStageSurvivors
-                }
+                CandidateSource::PreviousStageSurvivors => CheckpointSource::PreviousStageSurvivors,
             },
             survivor_combo_ids: survivor_combo_ids.to_vec(),
-            generated_cursor: None,
+            generated_cursor,
             next_combo_id,
         }),
         constants: crate::profileset_generator::triage::TriageConstants::default(),
@@ -1066,10 +1098,41 @@ async fn write_stage_checkpoint(
     sqlx::query("UPDATE jobs SET checkpoint = $1 WHERE id = $2")
         .bind(json)
         .bind(job_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| format!("Failed to write stage checkpoint: {e}"))?;
     Ok(())
+}
+
+/// Stand-alone checkpoint write (own tx) for stage-entry boundaries.
+async fn write_stage_entry_checkpoint(
+    pool: &AnyPool,
+    job_id: &str,
+    stage: &StagePlan,
+    survivor_combo_ids: &[i64],
+    next_combo_id: i64,
+) -> Result<(), String> {
+    let generated_cursor = match stage.source {
+        CandidateSource::GeneratedCombinations => Some(Vec::new()),
+        CandidateSource::PreviousStageSurvivors => None,
+    };
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("Stage-entry checkpoint tx failed: {e}"))?;
+    write_stage_checkpoint_in_tx(
+        &mut tx,
+        job_id,
+        stage,
+        0,
+        generated_cursor,
+        survivor_combo_ids,
+        next_combo_id,
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("Stage-entry checkpoint commit failed: {e}"))
 }
 
 async fn check_pause(pool: &AnyPool, job_id: &str) -> Result<bool, String> {
