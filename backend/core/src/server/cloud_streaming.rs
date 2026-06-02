@@ -235,6 +235,18 @@ pub fn combine_chunk_input(base_profile: &str, lines: &[String], options: &Value
     crate::simc_runner::build_simc_input_from_options(&combined, options)
 }
 
+/// In-flight concurrency bound K from the account's `max_active_jobs` and the
+/// config ceiling. A `0` account limit (quota exhausted/suspended) has NO
+/// capacity and must reject the run up front — returning `Err(())` so the
+/// caller can fail cleanly rather than silently clamping to 1 and submitting a
+/// chunk Simmit will reject per-chunk.
+fn inflight_bound(account_max_active: usize, config_max: usize) -> Result<usize, ()> {
+    if account_max_active == 0 {
+        return Err(());
+    }
+    Ok(account_max_active.min(config_max).max(1))
+}
+
 // ── Retry-by-subchunk ────────────────────────────────────────────────────────
 
 /// Outcome of running ONE logical chunk through the runner with a single round
@@ -415,6 +427,21 @@ impl CloudStreamingRun {
             let _ = self.repo.set_error(&self.job_id, &msg).await;
             return;
         }
+        // A known `max_active_jobs == 0` (quota exhausted / account suspended)
+        // has no concurrent-job capacity: reject up front rather than clamp to 1
+        // and submit a chunk Simmit would reject per-chunk. An unknown limit
+        // (`None`) is best-effort and falls back to the config ceiling.
+        if self.max_active_jobs == Some(0) {
+            let _ = self
+                .repo
+                .set_error(
+                    &self.job_id,
+                    "Account has no concurrent-job capacity (max active jobs is 0); \
+                     cannot submit. Check the account's quota or status and retry.",
+                )
+                .await;
+            return;
+        }
 
         let mut it = ProfilesetIterator::new(self.iter_cfg.clone());
 
@@ -591,11 +618,12 @@ impl CloudStreamingRun {
         first: Option<GeneratedChunk>,
     ) {
         // K = min(CONFIG_MAX_INFLIGHT, max_active_jobs). Unknown limit → config.
+        // A `0` limit is rejected up front in `execute` before this loop runs, so
+        // `inflight_bound`'s `Err` is treated defensively as the config fallback.
         let k = self
             .max_active_jobs
-            .map(|m| m.clamp(1, CONFIG_MAX_INFLIGHT))
-            .unwrap_or(CONFIG_MAX_INFLIGHT)
-            .max(1);
+            .map(|m| inflight_bound(m, CONFIG_MAX_INFLIGHT).unwrap_or(CONFIG_MAX_INFLIGHT))
+            .unwrap_or(CONFIG_MAX_INFLIGHT);
 
         let mut acc = seed_acc;
         // Each task returns its ORIGINAL chunk_idx + the retry outcome (which may
@@ -1649,6 +1677,13 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
+    #[test]
+    fn zero_active_jobs_is_rejected_not_clamped_to_one() {
+        assert!(inflight_bound(0, 4).is_err());
+        assert_eq!(inflight_bound(2, 4).unwrap(), 2);
+        assert_eq!(inflight_bound(10, 4).unwrap(), 4);
+    }
+
     fn chunk_json(base_name: &str, base_dps: f64, rows: &[(&str, f64)]) -> Value {
         let results: Vec<Value> = rows
             .iter()
@@ -2428,6 +2463,51 @@ mod orchestrator_tests {
                 .as_deref()
                 .unwrap_or("")
                 .contains("Insufficient credits at submit"),
+            "msg: {:?}",
+            finished.error_message
+        );
+    }
+
+    // A known zero active-job limit → job fails up front, ZERO runner calls.
+    #[tokio::test]
+    async fn zero_active_job_limit_fails_clean_zero_chunks() {
+        let pool = pool().await;
+        let repo = JobRepo::new(pool.clone());
+        let job_id = streamed_top_gear_job(&repo).await;
+
+        let calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let runner = fake_runner(calls.clone());
+
+        let run = CloudStreamingRun {
+            repo: repo.clone(),
+            pool: pool.clone(),
+            iter_cfg: one_combo_cfg(),
+            base_profile: "server=tichondrius\nregion=us".to_string(),
+            job_id: job_id.clone(),
+            options: serde_json::json!({}),
+            sim_type: "top_gear".to_string(),
+            ceiling: REMOTE_MAX_PROFILESETS_PER_JOB,
+            max_active_jobs: Some(0),
+            cancel: None,
+            affordability: None,
+            est_credits_needed: 0,
+        };
+        run.execute(runner).await;
+
+        // ZERO runner calls — the gate fired before any submission.
+        assert_eq!(calls.lock().unwrap().len(), 0, "no chunk may be submitted");
+        // No cloud_chunks rows at all (nothing inserted past the gate).
+        let cloud_repo = CloudChunksRepo::new(pool.clone());
+        assert!(cloud_repo.list_for_job(&job_id).await.unwrap().is_empty());
+        // Job failed cleanly with the no-capacity message.
+        let finished = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(finished.status, crate::models::JobStatus::Failed);
+        assert!(
+            finished
+                .error_message
+                .as_deref()
+                .unwrap_or("")
+                .contains("no concurrent-job capacity"),
             "msg: {:?}",
             finished.error_message
         );
