@@ -255,6 +255,49 @@ fn simc_branch_from_payload(payload: &serde_json::Value) -> &str {
         .unwrap_or("")
 }
 
+pub(crate) struct StageRewind {
+    pub start_batch_idx: usize,
+    pub iterator_cursor: Option<Vec<usize>>,
+    pub next_combo_id: i64,
+}
+
+/// Compute the in-flight replay target from committed-pending stage batches.
+/// Returns Ok(None) at a clean boundary (no pending rows). Only generated
+/// pending batches reclaim combo IDs (Invariant 7); checked subtraction
+/// guards against missing/over-large counts.
+pub(crate) fn rewind_for_pending_stage_batches(
+    checkpoint: &super::checkpoint::LocalStageCheckpoint,
+    pending: &[crate::db::StageBatchRow],
+) -> Result<Option<StageRewind>, String> {
+    let Some(first) = pending.first() else {
+        return Ok(None);
+    };
+    let generated_accepted: i64 = pending
+        .iter()
+        .filter(|b| b.source_kind == "generated")
+        .map(|b| {
+            b.accepted_count
+                .ok_or_else(|| "Pending generated batch missing accepted_count".to_string())
+        })
+        .sum::<Result<i64, String>>()?;
+    let next_combo_id = checkpoint
+        .next_combo_id
+        .checked_sub(generated_accepted)
+        .filter(|v| *v >= 1)
+        .ok_or_else(|| "Combo-ID reclaim underflow on resume".to_string())?;
+    let iterator_cursor = match first.start_cursor_json.as_deref() {
+        Some(s) => Some(
+            serde_json::from_str(s).map_err(|e| format!("Invalid pending start cursor: {e}"))?,
+        ),
+        None => None,
+    };
+    Ok(Some(StageRewind {
+        start_batch_idx: first.batch_idx as usize,
+        iterator_cursor,
+        next_combo_id,
+    }))
+}
+
 struct TriageRewind {
     cursor: Vec<usize>,
     next_batch_idx: i64,
@@ -615,7 +658,75 @@ async fn resume_staged(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::TriageBatchRow;
+    use crate::db::{StageBatchRow, TriageBatchRow};
+    use crate::profileset_generator::checkpoint::{CheckpointSource, LocalStageCheckpoint};
+
+    fn gen_row(batch_idx: i64, start: &str, accepted: i64, status: &str) -> StageBatchRow {
+        StageBatchRow {
+            stage_idx: 0,
+            batch_idx,
+            source_kind: "generated".to_string(),
+            start_cursor_json: Some(start.to_string()),
+            end_cursor_json: Some("[9]".to_string()),
+            candidate_count: Some(accepted),
+            accepted_count: Some(accepted),
+            local_survivor_count: None,
+            status: status.to_string(),
+        }
+    }
+
+    #[test]
+    fn rewind_uses_pending_cursor_and_reclaims_generated_ids() {
+        // checkpoint advanced to next_combo_id=43 after a generated batch that accepted 7.
+        let cp = LocalStageCheckpoint {
+            stage_idx: 0, stage_name: "Broad".into(), next_batch_idx: 6,
+            source: CheckpointSource::GeneratedCombinations,
+            survivor_combo_ids: vec![], generated_cursor: Some(vec![9, 9]), next_combo_id: 43,
+        };
+        let pending = vec![gen_row(5, "[3,4]", 7, "committed")];
+        let r = rewind_for_pending_stage_batches(&cp, &pending).unwrap().unwrap();
+        assert_eq!(r.start_batch_idx, 5);
+        assert_eq!(r.iterator_cursor, Some(vec![3, 4]));
+        assert_eq!(r.next_combo_id, 36); // 43 - 7
+    }
+
+    #[test]
+    fn rewind_is_none_without_pending() {
+        let cp = LocalStageCheckpoint {
+            stage_idx: 0, stage_name: "Broad".into(), next_batch_idx: 6,
+            source: CheckpointSource::GeneratedCombinations,
+            survivor_combo_ids: vec![], generated_cursor: Some(vec![9, 9]), next_combo_id: 43,
+        };
+        assert!(rewind_for_pending_stage_batches(&cp, &[]).unwrap().is_none());
+    }
+
+    #[test]
+    fn rewind_errors_on_missing_accepted_count() {
+        let cp = LocalStageCheckpoint {
+            stage_idx: 0, stage_name: "Broad".into(), next_batch_idx: 6,
+            source: CheckpointSource::GeneratedCombinations,
+            survivor_combo_ids: vec![], generated_cursor: None, next_combo_id: 43,
+        };
+        let mut row = gen_row(5, "[3,4]", 0, "committed");
+        row.accepted_count = None;
+        assert!(rewind_for_pending_stage_batches(&cp, &[row]).is_err());
+    }
+
+    #[test]
+    fn rewind_survivor_pending_does_not_touch_combo_ids() {
+        let cp = LocalStageCheckpoint {
+            stage_idx: 1, stage_name: "Refine".into(), next_batch_idx: 3,
+            source: CheckpointSource::PreviousStageSurvivors,
+            survivor_combo_ids: vec![1, 2, 3], generated_cursor: None, next_combo_id: 50,
+        };
+        let mut row = gen_row(2, "[]", 9, "committed");
+        row.source_kind = "previous_survivors".into();
+        row.start_cursor_json = None;
+        let r = rewind_for_pending_stage_batches(&cp, &[row]).unwrap().unwrap();
+        assert_eq!(r.start_batch_idx, 2);
+        assert_eq!(r.iterator_cursor, None);
+        assert_eq!(r.next_combo_id, 50); // unchanged: survivor batches don't allocate ids
+    }
 
     #[test]
     fn rewind_for_pending_batches_replays_from_first_pending_batch() {
