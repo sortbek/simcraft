@@ -1015,8 +1015,6 @@ async fn write_stage_checkpoint(
             survivor_combo_ids: survivor_combo_ids.to_vec(),
             generated_cursor: None,
             next_combo_id,
-            estimated_total_batches: 1,
-            avg_bytes_per_profileset: 0,
         }),
         constants: crate::profileset_generator::triage::TriageConstants::default(),
     };

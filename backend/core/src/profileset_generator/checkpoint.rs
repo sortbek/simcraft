@@ -85,8 +85,6 @@ pub struct LocalStageCheckpoint {
     pub survivor_combo_ids: Vec<i64>,
     pub generated_cursor: Option<Vec<usize>>,
     pub next_combo_id: i64,
-    pub estimated_total_batches: usize,
-    pub avg_bytes_per_profileset: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,8 +227,6 @@ mod tests {
                 survivor_combo_ids: vec![9, 3, 7],
                 generated_cursor: Some(vec![2, 5, 0]),
                 next_combo_id: 42,
-                estimated_total_batches: 12,
-                avg_bytes_per_profileset: 512,
             }),
             constants: TriageConstants::default(),
         };
@@ -248,8 +244,6 @@ mod tests {
                 assert_eq!(local.survivor_combo_ids, vec![9, 3, 7]);
                 assert_eq!(local.generated_cursor, Some(vec![2, 5, 0]));
                 assert_eq!(local.next_combo_id, 42);
-                assert_eq!(local.estimated_total_batches, 12);
-                assert_eq!(local.avg_bytes_per_profileset, 512);
             }
             _ => panic!("expected LocalStage phase"),
         }
