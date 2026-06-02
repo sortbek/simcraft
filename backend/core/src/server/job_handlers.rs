@@ -9,13 +9,25 @@ use crate::models::{JobStatus, SimcInputMode};
 use crate::simc_runner;
 use std::sync::Arc;
 
+/// Whether a Simmit job should advertise pause/resume, given the chunk count.
+/// `None` = the chunk-count read FAILED (transient). On an unknown count we
+/// advertise Pause: showing Pause on a single-chunk job (a no-op press) is less
+/// bad than HIDING Pause on a real multi-chunk job. `Some(1)` cannot pause;
+/// `Some(>1)` can.
+fn simmit_pause_capability(chunk_count: Option<i64>) -> bool {
+    match chunk_count {
+        None => true,
+        Some(c) => c > 1,
+    }
+}
+
 /// Per-run effective capabilities. For a cloud-streaming run, pause is only
 /// possible when the run spans more than one chunk.
-pub(super) fn effective_capabilities(provider_id: &str, chunk_count: i64) -> serde_json::Value {
+pub(super) fn effective_capabilities(provider_id: &str, chunk_count: Option<i64>) -> serde_json::Value {
     let is_cloud = provider_id == "simmit"; // any cloud-streaming provider
     serde_json::json!({
         "cancel": true, // both local and cloud runs are cancellable
-        "pause": if is_cloud { chunk_count > 1 } else { true },
+        "pause": if is_cloud { simmit_pause_capability(chunk_count) } else { true },
     })
 }
 
@@ -24,16 +36,22 @@ mod cap_tests {
     use super::*;
     #[test]
     fn cloud_single_chunk_cannot_pause() {
-        assert_eq!(effective_capabilities("simmit", 1)["pause"], false);
-        assert_eq!(effective_capabilities("simmit", 1)["cancel"], true);
+        assert_eq!(effective_capabilities("simmit", Some(1))["pause"], false);
+        assert_eq!(effective_capabilities("simmit", Some(1))["cancel"], true);
     }
     #[test]
     fn cloud_multi_chunk_can_pause() {
-        assert_eq!(effective_capabilities("simmit", 3)["pause"], true);
+        assert_eq!(effective_capabilities("simmit", Some(3))["pause"], true);
     }
     #[test]
     fn local_can_pause() {
-        assert_eq!(effective_capabilities("local", 0)["pause"], true);
+        assert_eq!(effective_capabilities("local", None)["pause"], true);
+    }
+    #[test]
+    fn simmit_pause_capability_does_not_hide_on_read_failure() {
+        assert_eq!(simmit_pause_capability(None), true);   // transient read error → still pausable
+        assert_eq!(simmit_pause_capability(Some(1)), false);
+        assert_eq!(simmit_pause_capability(Some(3)), true);
     }
 }
 
@@ -139,18 +157,21 @@ pub(super) async fn get_sim_status(
         .as_ref()
         .and_then(|s| serde_json::from_str(s).ok());
 
-    let chunk_count: i64 = if job.provider_id == "simmit" {
+    // `None` means the read failed (transient); `Some(n)` is the real count.
+    // Non-simmit jobs never have chunks, so they get `Some(0)` (irrelevant to
+    // the capability decision, which only fires for simmit).
+    let chunk_count: Option<i64> = if job.provider_id == "simmit" {
         if let Some(pool) = repo.pool() {
             crate::db::CloudChunksRepo::new(pool.clone())
                 .list_for_job(&job.id)
                 .await
-                .map(|rows| rows.len() as i64)
-                .unwrap_or(0)
+                .ok()
+                .map(|rows| rows.len() as i64) // transient error → None (unknown)
         } else {
-            0
+            Some(0)
         }
     } else {
-        0
+        Some(0)
     };
 
     HttpResponse::Ok().json(json!({
@@ -165,6 +186,7 @@ pub(super) async fn get_sim_status(
         "simc_input_mode": job.simc_input_mode.as_str(),
         "pause_requested": job.pause_requested,
         "provider_id": job.provider_id,
+        "chunk_count": chunk_count.unwrap_or(0), // display 0 on transient error; capability uses the Option
         "effective_capabilities": effective_capabilities(&job.provider_id, chunk_count),
     }))
 }
