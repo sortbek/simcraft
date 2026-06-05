@@ -103,7 +103,7 @@ export default function RunButton({
           <span className="flex flex-col items-start leading-tight">
             <span>{buttonLabel}</span>
             {subLabel && (
-              <span className="mt-0.5 text-[10px] font-normal normal-case tracking-normal opacity-80">
+              <span className="mt-0.5 text-[11px] font-semibold normal-case tracking-normal">
                 {subLabel}
               </span>
             )}
@@ -152,7 +152,7 @@ export default function RunButton({
               <span className="font-bold normal-case tracking-normal">{targetLabel}</span>
             </span>
             {subLabel && (
-              <span className="mt-0.5 text-[10px] font-normal normal-case tracking-normal opacity-80">
+              <span className="mt-0.5 text-[11px] font-semibold normal-case tracking-normal">
                 {subLabel}
               </span>
             )}
