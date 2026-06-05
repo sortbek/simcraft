@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useProviders, useReadyRemoteProviders } from '../../lib/providers';
 import type { ComputeChoice } from '../../lib/useComputeChoice';
 import { useLanguage } from '../../lib/i18n';
@@ -15,6 +15,9 @@ interface RunButtonProps {
   /** target id -> disable reason; absent = enabled.
    *  e.g. { simmit: 'too large for cloud' } (page-owned) or generic 'configure in Settings'. */
   targetDisabledReasons?: Record<string, string>;
+  /** Optional second line under the main label (e.g. a cloud cost estimate).
+   *  The caller owns the content and styling; the button only renders it. */
+  subLabel?: ReactNode;
 }
 
 const GOLD =
@@ -28,6 +31,7 @@ export default function RunButton({
   buttonLabel,
   disabled,
   targetDisabledReasons = {},
+  subLabel,
 }: RunButtonProps) {
   const { t } = useLanguage();
   const providers = useProviders();
@@ -93,7 +97,18 @@ export default function RunButton({
         disabled={runDisabled}
         className={`${GOLD} rounded-lg`}
       >
-        {submitting ? spinner : buttonLabel}
+        {submitting ? (
+          spinner
+        ) : (
+          <span className="flex flex-col items-start leading-tight">
+            <span>{buttonLabel}</span>
+            {subLabel && (
+              <span className="mt-0.5 text-[10px] font-normal normal-case tracking-normal opacity-80">
+                {subLabel}
+              </span>
+            )}
+          </span>
+        )}
       </button>
     );
   }
@@ -130,10 +145,17 @@ export default function RunButton({
         {submitting ? (
           spinner
         ) : (
-          <span className="flex items-center gap-2">
-            {buttonLabel}
-            <span className="opacity-50">·</span>
-            <span className="font-bold normal-case tracking-normal">{targetLabel}</span>
+          <span className="flex flex-col items-start leading-tight">
+            <span className="flex items-center gap-2">
+              {buttonLabel}
+              <span className="opacity-50">·</span>
+              <span className="font-bold normal-case tracking-normal">{targetLabel}</span>
+            </span>
+            {subLabel && (
+              <span className="mt-0.5 text-[10px] font-normal normal-case tracking-normal opacity-80">
+                {subLabel}
+              </span>
+            )}
           </span>
         )}
       </button>
