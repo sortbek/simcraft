@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
 import EnchantGemSelector from '../components/gear/EnchantGemSelector';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -90,7 +91,7 @@ function Toggle({
 export default function TopGearScreen() {
   const { simcInput, talentBuilds, fightStyle, targetCount, fightLength } = useSimContext();
   const sharedSimPayload = useSharedSimPayload();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [compute, setCompute] = useComputeChoice('top_gear');
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
@@ -461,6 +462,31 @@ export default function TopGearScreen() {
     onBeforeNavigate: saveState,
   });
 
+  // Cloud cost estimate shown as the Run-button subline. Same gate as the
+  // former inline row: only for streaming-sized cloud jobs.
+  let creditsSubLabel: ReactNode;
+  if (isCloudCompute && cloudEstimate && cloudEstimate.would_stream && cloudEstimate.combos > 0) {
+    const bcp47 = locale.replace('_', '-');
+    const credits = cloudEstimate.est_credits.toLocaleString(bcp47);
+    const text =
+      cloudEstimate.available_credits !== null
+        ? t('topGear.runCreditsAvailable', {
+            credits,
+            available: cloudEstimate.available_credits.toLocaleString(bcp47),
+          })
+        : t('topGear.runCreditsOnly', { credits });
+    creditsSubLabel = (
+      <span className="flex items-center gap-1.5">
+        <span>{text}</span>
+        {!cloudEstimate.affordable && (
+          <span className="rounded bg-red-950/80 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-red-100">
+            {t('topGear.insufficientCredits')}
+          </span>
+        )}
+      </span>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-20">
       <div>
@@ -541,20 +567,6 @@ export default function TopGearScreen() {
             comboCount={comboCount}
             comboError={comboError}
           />
-          {isCloudCompute && cloudEstimate && cloudEstimate.would_stream && cloudEstimate.combos > 0 && (
-            <p
-              className={`text-xs ${
-                cloudEstimate.affordable ? 'text-muted' : 'text-amber-400'
-              }`}
-            >
-              ~{cloudEstimate.est_credits.toLocaleString()} credits ·{' '}
-              {cloudEstimate.chunks.toLocaleString()} chunk
-              {cloudEstimate.chunks !== 1 ? 's' : ''}
-              {!cloudEstimate.affordable && (
-                <span className="ml-1 font-semibold">· insufficient credits</span>
-              )}
-            </p>
-          )}
           <EnchantGemSelector
             equippedSlots={equippedSlots}
             enchantSelections={enchantSelections}
@@ -585,6 +597,7 @@ export default function TopGearScreen() {
         disabled={!resolved}
         compute={compute}
         onComputeChange={setCompute}
+        subLabel={creditsSubLabel}
       />
     </div>
   );
