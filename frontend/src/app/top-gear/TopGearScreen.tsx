@@ -466,7 +466,7 @@ export default function TopGearScreen() {
   // former inline row: only for streaming-sized cloud jobs.
   let creditsSubLabel: ReactNode;
   if (isCloudCompute && cloudEstimate && cloudEstimate.would_stream && cloudEstimate.combos > 0) {
-    const bcp47 = locale.replace('_', '-');
+    const bcp47 = locale.replace(/_/g, '-');
     const credits = cloudEstimate.est_credits.toLocaleString(bcp47);
     const text =
       cloudEstimate.available_credits !== null
