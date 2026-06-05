@@ -17,6 +17,8 @@ interface ConfigFooterProps {
   compute: ComputeChoice;
   onComputeChange: (v: ComputeChoice) => void;
   computeTargetDisabledReasons?: Record<string, string>;
+  /** Optional second line for the Run button (e.g. cloud cost estimate). */
+  subLabel?: ReactNode;
 }
 
 export default function ConfigFooter({
@@ -29,6 +31,7 @@ export default function ConfigFooter({
   compute,
   onComputeChange,
   computeTargetDisabledReasons,
+  subLabel,
 }: ConfigFooterProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'simulation' | 'buffs'>('simulation');
@@ -65,6 +68,7 @@ export default function ConfigFooter({
         compute={compute}
         onComputeChange={onComputeChange}
         computeTargetDisabledReasons={computeTargetDisabledReasons}
+        subLabel={subLabel}
       />
     </div>
   );

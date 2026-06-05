@@ -4,6 +4,7 @@ import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import RunButton from './RunButton';
 import type { ComputeChoice } from '../../lib/useComputeChoice';
+import type { ReactNode } from 'react';
 
 interface ConfigFooterBarProps {
   drawerOpen: boolean;
@@ -18,6 +19,8 @@ interface ConfigFooterBarProps {
   compute: ComputeChoice;
   onComputeChange: (v: ComputeChoice) => void;
   computeTargetDisabledReasons?: Record<string, string>;
+  /** Optional second line for the Run button (e.g. cloud cost estimate). */
+  subLabel?: ReactNode;
 }
 
 export default function ConfigFooterBar({
@@ -31,6 +34,7 @@ export default function ConfigFooterBar({
   compute,
   onComputeChange,
   computeTargetDisabledReasons,
+  subLabel,
 }: ConfigFooterBarProps) {
   const { t } = useLanguage();
   const { fightStyle, fightLength, targetCount, statWeights, setStatWeights } = useSimContext();
@@ -102,6 +106,7 @@ export default function ConfigFooterBar({
           buttonLabel={buttonLabel}
           disabled={disabled}
           targetDisabledReasons={computeTargetDisabledReasons}
+          subLabel={subLabel}
         />
       </div>
     </div>
