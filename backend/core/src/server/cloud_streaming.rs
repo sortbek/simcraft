@@ -1192,7 +1192,28 @@ pub(super) async fn start_cloud_streaming(
     // credential endpoint (reusing the Task 6 `cloud_estimate` math). `None` auth
     // / no-credits-concept → `Ok(None)` (treated as affordable inside the gate).
     let ceiling = REMOTE_MAX_PROFILESETS_PER_JOB;
-    let est_credits_needed = super::cloud_estimate::est_credits(estimate, ceiling, target_error);
+    // Credits must reflect the ACTUAL (deduped) combo count, not the O(axes)
+    // upper-bound `estimate`. For gem-heavy selections the upper bound is the
+    // cartesian `gems^sockets`, orders of magnitude larger than the deduped
+    // multiset count the run actually emits — billing off the upper bound would
+    // falsely block an affordable job at submit (the "need ~N but only M
+    // available" trap). Count exactly here so the gate matches the figure
+    // cloud_estimate showed the user (which also counts exactly). Fall back to
+    // the upper bound only if the exact count is unavailable, preserving the
+    // prior conservative behavior.
+    let combos_for_credits = profileset_generator::count_top_gear_combos_with_talents(
+        &base_profile,
+        &items_by_slot,
+        &req.selected_items,
+        max_combinations,
+        &talent_builds,
+        catalyst_charges,
+        &gem_opts,
+    )
+    .map(|n| n as u64)
+    .unwrap_or(estimate);
+    let est_credits_needed =
+        super::cloud_estimate::est_credits(combos_for_credits, ceiling, target_error);
     let affordability: Option<AffordabilityCheck> = {
         let provider = provider.clone();
         let auth = provider_auth.clone();

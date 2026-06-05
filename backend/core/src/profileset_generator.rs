@@ -1407,6 +1407,70 @@ main_hand=,id=200\n";
     }
 
     #[test]
+    fn gem_upper_bound_estimate_far_exceeds_exact_count() {
+        // Regression guard for the "Insufficient credits at submit" bug: the
+        // O(axes) upper-bound `estimate_top_gear_combo_count` (gems^socketed_slots
+        // for the gem axis) must NOT be used for credit gating, because it dwarfs
+        // the exact deduped multiset count the run actually emits. The submit
+        // affordability gate counts exactly; this test documents the size gap so
+        // nobody reuses the upper bound for billing again.
+        ensure_game_data_loaded();
+
+        let socketed: HashSet<u64> = HashSet::from([301_u64, 302, 303]);
+        let mut base = String::from("mage=test\nspec=frost\n");
+        let mut items_by_slot: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        let mut selected: HashMap<String, Vec<String>> = HashMap::new();
+        for (slot, eq_id, alt_id) in [
+            ("head", 250010_u64, 301_u64),
+            ("wrist", 250011, 302),
+            ("neck", 250012, 303),
+        ] {
+            base.push_str(&format!("{slot}=,id={eq_id}\n"));
+            let equipped = json!({
+                "slot": slot, "simc_string": format!(",id={eq_id}"),
+                "is_equipped": true, "origin": "equipped", "item_id": eq_id,
+                "ilevel": 0, "name": "eq", "bonus_ids": [], "enchant_id": 0,
+                "gem_id": 0, "sockets": 0,
+            });
+            let alt = json!({
+                "slot": slot, "simc_string": format!(",id={alt_id}"),
+                "is_equipped": false, "origin": "bags", "item_id": alt_id,
+                "ilevel": 0, "name": "alt", "bonus_ids": [], "enchant_id": 0,
+                "gem_id": 0, "sockets": 1,
+            });
+            items_by_slot.insert(slot.to_string(), vec![equipped, alt]);
+            selected.insert(slot.to_string(), vec![format!("{alt_id}::bags:{slot}")]);
+        }
+
+        let gems = [213454_u64, 213455, 213456, 213457, 213458];
+        let gem_opts = GemEnchantOptions {
+            gem_options: &gems,
+            socketed_item_ids: Some(&socketed),
+            ..Default::default()
+        };
+
+        let exact = super::count_top_gear_combos_with_talents(
+            &base, &items_by_slot, &selected, None, &[], None, &gem_opts,
+        )
+        .unwrap();
+
+        let upper = super::estimate_top_gear_combo_count(
+            &items_by_slot,
+            &selected,
+            &HashMap::new(),
+            &gems,
+            &socketed,
+            1,
+        );
+
+        assert!(exact > 0, "exact count should be positive, got {exact}");
+        assert!(
+            upper > exact as u64 * 2,
+            "upper-bound estimate ({upper}) should dwarf exact deduped count ({exact})"
+        );
+    }
+
+    #[test]
     fn enchant_gem_multiple_slots_create_cartesian_product() {
         ensure_game_data_loaded();
         let base_profile =
