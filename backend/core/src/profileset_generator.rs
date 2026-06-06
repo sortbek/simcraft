@@ -1535,6 +1535,51 @@ main_hand=,id=200\n";
     }
 
     #[test]
+    fn replace_gems_false_full_sockets_emits_nothing_via_iterator() {
+        // Repro: equipped item already gemmed, all gems selected, replace_gems
+        // OFF. No empty sockets → count is 0. The streaming iterator MUST also
+        // emit 0 (otherwise combos get sent to the cloud despite the 0 shown in
+        // the UI). Mirrors the populated items_by_slot the real flow sends.
+        ensure_game_data_loaded();
+
+        let base = "mage=test\nspec=frost\nhead=,id=100,gem_id=213453\nmain_hand=,id=200\n"
+            .to_string();
+        let equipped_head = json!({
+            "slot": "head", "simc_string": ",id=100,gem_id=213453",
+            "is_equipped": true, "origin": "equipped", "item_id": 100,
+            "ilevel": 0, "name": "head", "bonus_ids": [], "enchant_id": 0,
+            "gem_id": 213453, "sockets": 1,
+        });
+        let mut items_by_slot: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped_head]);
+        let selected: HashMap<String, Vec<String>> = HashMap::new();
+
+        let gems = [213454_u64, 213455];
+        let socketed: HashSet<u64> = HashSet::from([100_u64]);
+        let gem_opts = GemEnchantOptions {
+            gem_options: &gems,
+            socketed_item_ids: Some(&socketed),
+            // replace_gems intentionally left false
+            ..Default::default()
+        };
+
+        let exact = super::count_top_gear_combos_with_talents(
+            &base, &items_by_slot, &selected, None, &[], None, &gem_opts,
+        )
+        .unwrap();
+
+        let cfg =
+            super::build_iterator_config(&base, &items_by_slot, &selected, &[], &gem_opts, None);
+        let iter_count = super::ProfilesetIterator::new(cfg).count();
+
+        assert_eq!(exact, 0, "count should be 0 (no empty sockets, replace off)");
+        assert_eq!(
+            iter_count, 0,
+            "iterator emitted {iter_count} profilesets but count is 0 — combos would leak to cloud"
+        );
+    }
+
+    #[test]
     fn enchant_gem_multiple_slots_create_cartesian_product() {
         ensure_game_data_loaded();
         let base_profile =

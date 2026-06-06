@@ -114,6 +114,29 @@ pub(super) async fn create_top_gear_sim(
         .unwrap_or(estimate);
     let use_streaming_path = effective_estimate >= TRIAGE_THRESHOLD;
 
+    // The upper-bound `estimate` ignores replace_gems and already-gemmed sockets,
+    // so a request with zero REAL combos (e.g. all gems selected but replace_gems
+    // off and every socket already filled) can still have estimate > 0. Routing
+    // on the estimate alone would then submit a baseline-only job to a provider —
+    // billing the user for work the UI correctly showed as 0 combinations. Count
+    // exactly here and reject cleanly before any provider/streaming work. (A
+    // too-many error is left to the downstream paths, which handle large jobs.)
+    if let Ok(0) = profileset_generator::count_top_gear_combos_with_talents(
+        &base_profile,
+        &items_by_slot,
+        &req.selected_items,
+        max_combinations,
+        &talent_builds,
+        catalyst_charges,
+        &gem_opts,
+    ) {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "No combinations to simulate. Select alternative items, enchants, \
+                       or gems that change the current gear set (with 'replace gems' off, \
+                       already-gemmed sockets produce no combinations)."
+        }));
+    }
+
     let (provider, avail) = match resolve_provider_for_request(
         "top_gear",
         req.options.compute_provider.as_deref(),
