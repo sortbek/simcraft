@@ -324,15 +324,22 @@ impl ProfilesetIterator {
                 } else {
                     base_simc.to_string()
                 };
-                let with_gem = if let Some(gids) = eff_gems.get(*slot) {
-                    if gids.is_empty() {
-                        with_enchant
-                    } else {
-                        crate::simc_string::set_gem_ids(&with_enchant, gids)
-                    }
-                } else {
-                    with_enchant
-                };
+                let item_sockets = item
+                    .get("sockets")
+                    .and_then(|s| s.as_u64())
+                    .unwrap_or(0) as usize;
+                // apply_item_gems uses item_sockets from game data as authoritative:
+                // items with sockets:0 are never gemmed, regardless of socketed_item_ids.
+                // replace_gems=true here because eff_gems is already filtered upstream
+                // (socketless items and replace_gems=false already-gemmed items are excluded
+                // during gem_slots construction in build_iterator_config).
+                let with_gem = super::emit::apply_item_gems(
+                    &with_enchant,
+                    item_sockets,
+                    slot,
+                    &eff_gems,
+                    true,
+                );
                 Some((slot.to_string(), with_gem))
             })
             .collect();

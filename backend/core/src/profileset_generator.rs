@@ -1970,7 +1970,21 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
                 "bonus_ids": [], "enchant_id": 0, "gem_id": 0, "sockets": sockets,
             })
         };
+        // mk_simc: like mk but with a custom simc_string (needed for head w/ enchant)
+        let mk_simc = |slot: &str, id: u64, simc: &str, eq: bool, sockets: u64| {
+            json!({
+                "slot": slot, "simc_string": simc,
+                "is_equipped": eq, "origin": if eq {"equipped"} else {"bags"},
+                "item_id": id, "ilevel": 0, "name": format!("it{id}"),
+                "bonus_ids": [], "enchant_id": if simc.contains("enchant_id=7000") { 7000u64 } else { 0u64 },
+                "gem_id": 0, "sockets": sockets,
+            })
+        };
         let mut items: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        // Include head and main_hand so the iterator's slot_item_lists matches the eager's
+        // equipped_gear, ensuring both paths emit the same simc lines for enchant overrides.
+        items.insert("head".into(), vec![mk_simc("head", 100, ",id=100,enchant_id=7000", true, 0)]);
+        items.insert("main_hand".into(), vec![mk("main_hand", 200, true, 0)]);
         items.insert("finger1".into(), vec![mk("finger1", 400, true, 1), mk("finger1", 402, false, 1)]);
         items.insert("finger2".into(), vec![mk("finger2", 401, true, 1), mk("finger2", 403, false, 1)]);
         let mut selected: HashMap<String, Vec<String>> = HashMap::new();
@@ -1979,7 +1993,7 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         let mut enchants: HashMap<String, Vec<u64>> = HashMap::new();
         enchants.insert("head".into(), vec![7001]);
         let gems = vec![213454_u64, 213455];
-        let socketed = HashSet::from([402_u64, 403]);
+        let socketed = HashSet::from([400_u64, 401, 402, 403]);
         let talents = vec![("A".to_string(), "AAAA".to_string()), ("B".to_string(), "BBBB".to_string())];
         (base, items, selected, enchants, gems, socketed, talents)
     }
@@ -2089,4 +2103,215 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         assert_eq!(off["is_kept"], json!(false), "off_hand is_kept must be false");
         assert_eq!(off["origin"], json!("system"), "off_hand origin must be system");
     }
+
+    /// Behavior test (Step 1 of the gem-apply fix): pins correct per-item socket behavior
+    /// for both the eager and iterator paths.
+    ///
+    /// Scenario A (positive): equipped `head` with `sockets:1, gem_id:0` (empty socket, NOT
+    /// encoded via bonus_id). With gems selected and replace_gems off, a gem combo MUST be
+    /// emitted for the equipped head (it has an empty socket). Bug: eager used simc_socket_count
+    /// which returned 0 for this item → gem never applied.
+    ///
+    /// Scenario B (negative, control): a slot whose gem axis exists only because an ALT has a
+    /// socket. The equipped item for that slot has `sockets:0`. When the equipped item is used,
+    /// it must NOT receive a gem.
+    #[test]
+    fn gem_apply_uses_per_item_socket_count_from_game_data() {
+        ensure_game_data_loaded();
+
+        // ── Scenario A: equipped item with empty socket (sockets:1, no bonus_id encoding) ──
+        // The item has sockets:1 in game data but the simc string has no bonus_id that
+        // adds a socket, so simc_socket_count returns 0. With the fix, we use the item's
+        // "sockets" field from game data, and a gem combo MUST be emitted.
+        let base_a = "mage=test\nspec=frost\nhead=,id=100\n";
+        let gems_a = [213453_u64];
+        // id=100 is in socketed_item_ids → it has a real socket per game data
+        let sockets_a = HashSet::from([100_u64]);
+
+        // items_by_slot must be populated with the equipped item carrying sockets:1 so
+        // the gem_slots builder finds the socket count from game data, not the simc string.
+        let equipped_head_a = serde_json::json!({
+            "slot": "head", "simc_string": ",id=100",
+            "is_equipped": true, "origin": "equipped", "item_id": 100_u64,
+            "ilevel": 0, "name": "Equipped Head", "bonus_ids": [],
+            "enchant_id": 0, "gem_id": 0, "sockets": 1,
+        });
+        let mut items_a: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        items_a.insert("head".to_string(), vec![equipped_head_a.clone()]);
+
+        // Eager path
+        let (input_a, count_a, _) = generate_top_gear_input_with_talents(
+            base_a,
+            &items_a,
+            &HashMap::new(),
+            Some(20),
+            &[],
+            None,
+            &GemEnchantOptions {
+                gem_options: &gems_a,
+                socketed_item_ids: Some(&sockets_a),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            count_a, 1,
+            "Scenario A (eager): equipped item with empty socket must emit one gem combo, got {count_a}:\n{input_a}"
+        );
+        assert!(
+            input_a.contains("gem_id=213453"),
+            "Scenario A (eager): gem must be applied to equipped head:\n{input_a}"
+        );
+
+        // Iterator path
+        let gem_opts_a = GemEnchantOptions {
+            gem_options: &gems_a,
+            socketed_item_ids: Some(&sockets_a),
+            ..Default::default()
+        };
+        let cfg_a = super::build_iterator_config(base_a, &items_a, &HashMap::new(), &[], &gem_opts_a, None);
+        let iter_a: Vec<_> = super::ProfilesetIterator::new(cfg_a).collect();
+        assert_eq!(
+            iter_a.len(), 1,
+            "Scenario A (iterator): equipped item with empty socket must emit one gem combo, got {}",
+            iter_a.len()
+        );
+        assert!(
+            iter_a[0].profileset_simc.contains("gem_id=213453"),
+            "Scenario A (iterator): gem must be applied to equipped head:\n{}",
+            iter_a[0].profileset_simc
+        );
+
+        // ── Scenario B: 0-socket equipped item whose slot has a gem axis from an alt ──
+        // neck slot: equipped=250012 (sockets:0), alt=303 (sockets:1). Gem combo covers
+        // the neck slot (because the alt has a socket). When the equipped item is chosen
+        // (equipped gear state), the neck must NOT receive a gem.
+        let base_b = "mage=test\nspec=frost\nneck=,id=250012\n";
+        let gems_b = [213453_u64];
+        let sockets_b = HashSet::from([303_u64]); // only the alt is socketable
+        let equipped_neck_b = serde_json::json!({
+            "slot": "neck", "simc_string": ",id=250012",
+            "is_equipped": true, "origin": "equipped", "item_id": 250012_u64,
+            "ilevel": 0, "name": "Equipped Neck", "bonus_ids": [],
+            "enchant_id": 0, "gem_id": 0, "sockets": 0,
+        });
+        let alt_neck_b = serde_json::json!({
+            "slot": "neck", "simc_string": ",id=303",
+            "is_equipped": false, "origin": "bags", "item_id": 303_u64,
+            "ilevel": 0, "name": "Alt Neck", "bonus_ids": [],
+            "enchant_id": 0, "gem_id": 0, "sockets": 1,
+        });
+        let mut items_b: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        items_b.insert("neck".to_string(), vec![equipped_neck_b, alt_neck_b]);
+        let mut selected_b: HashMap<String, Vec<String>> = HashMap::new();
+        selected_b.insert("neck".to_string(), vec!["303::bags:neck".to_string()]);
+        let gem_opts_b = GemEnchantOptions {
+            gem_options: &gems_b,
+            socketed_item_ids: Some(&sockets_b),
+            ..Default::default()
+        };
+
+        // Iterator path: the gem-only baseline combo (equipped neck) must NOT have gem_id
+        let cfg_b = super::build_iterator_config(base_b, &items_b, &selected_b, &[], &gem_opts_b, None);
+        let iter_b: Vec<_> = super::ProfilesetIterator::new(cfg_b).collect();
+        // There MUST be at least one combo (the alt neck with gem).
+        assert!(
+            iter_b.len() >= 1,
+            "Scenario B: at least one combo expected (alt+gem), got 0"
+        );
+        // Any combo using the equipped neck (id=250012) must NOT have gem_id applied.
+        for cand in &iter_b {
+            if cand.profileset_simc.contains("id=250012") {
+                assert!(
+                    !cand.profileset_simc.contains("gem_id="),
+                    "Scenario B (iterator): 0-socket equipped neck must NOT be gemmed:\n{}",
+                    cand.profileset_simc
+                );
+            }
+        }
+
+        // Eager path for Scenario B: same check
+        let (input_b, _, _) = generate_top_gear_input_with_talents(
+            base_b,
+            &items_b,
+            &selected_b,
+            Some(20),
+            &[],
+            None,
+            &gem_opts_b,
+        )
+        .unwrap();
+        for block in input_b.split("### ").skip(1) {
+            if block.contains("neck=,id=250012") && block.contains("gem_id=") {
+                panic!(
+                    "Scenario B (eager): 0-socket equipped neck must NOT be gemmed:\n{block}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn iterator_emission_set_equals_eager_deduped_set_paired_slots() {
+        // The eager generator dedups gear sets (seen_combo_keys); the iterator is
+        // dedup-free and relies on cursor uniqueness + baseline/ swapped-slot
+        // skips. For paired slots (finger swaps) these MUST still agree, or the
+        // refactor would change counts and break resume coverage. Compare the
+        // emitted profileset simc bodies as sets (order-independent, name-stripped).
+        ensure_game_data_loaded();
+        let (base, items, selected, enchants, gems, socketed, talents) = golden_top_gear_inputs();
+        let gem_opts = GemEnchantOptions {
+            enchant_selections: Some(&enchants),
+            gem_options: &gems,
+            socketed_item_ids: Some(&socketed),
+            ..Default::default()
+        };
+
+        let (input, eager_count, _) = generate_top_gear_input_with_talents(
+            &base, &items, &selected, None, &talents, None, &gem_opts,
+        )
+        .unwrap();
+
+        let eager_bodies = strip_named_profileset_bodies(&input);
+
+        let cfg = super::build_iterator_config(&base, &items, &selected, &talents, &gem_opts, None);
+        let iter: Vec<_> = super::ProfilesetIterator::new(cfg).collect();
+        let iter_bodies: std::collections::BTreeSet<String> = iter
+            .iter()
+            .map(|c| strip_combo_name(&c.profileset_simc))
+            .collect();
+
+        assert_eq!(
+            iter.len(),
+            eager_count,
+            "iterator emitted {} but eager counted {eager_count}",
+            iter.len()
+        );
+        assert_eq!(
+            eager_bodies, iter_bodies,
+            "eager and iterator emit different profileset sets"
+        );
+    }
+
+    // Returns the set of profileset bodies from an eager input string, each with
+    // its "Combo N" name replaced by a constant so name offsets don't matter.
+    fn strip_named_profileset_bodies(input: &str) -> std::collections::BTreeSet<String> {
+        input
+            .split("### ")
+            .filter(|b| b.starts_with("Combo ") && b.contains("profileset."))
+            .map(|b| strip_combo_name(b))
+            .collect()
+    }
+
+    fn strip_combo_name(block: &str) -> String {
+        // Replace every "Combo N" with "Combo X" and keep only the "+=" body
+        // lines so header lines / name offsets don't affect the comparison.
+        let re = regex::Regex::new(r#"Combo \d+"#).unwrap();
+        let normalized = re.replace_all(block, "Combo X").to_string();
+        normalized
+            .lines()
+            .filter(|l| l.contains("+="))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
 }

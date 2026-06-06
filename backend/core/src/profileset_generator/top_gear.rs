@@ -10,7 +10,7 @@ use super::constraints::{
 use super::selection::build_slot_candidates;
 use super::simc::{
     extract_enchant_id, extract_gem_id, extract_gem_ids, extract_item_id,
-    extract_spec_id_from_talent_string, is_diamond, set_enchant_id, set_gem_ids,
+    extract_spec_id_from_talent_string, is_diamond, set_enchant_id,
     simc_has_socket, simc_socket_count,
 };
 use crate::profileset_generator::gem_combos::GemCombo;
@@ -297,32 +297,25 @@ pub fn generate_top_gear_input_with_talents(
         return Ok((base_profile.to_string(), 0, HashMap::new()));
     }
 
-    // Build cartesian product across varying slots
+    // Lazily enumerate the cartesian product across varying slots in
+    // lexicographic order (first varying slot most significant). Building the
+    // full `Vec<Vec<usize>>` up front would allocate the entire raw product —
+    // which for large selections dwarfs the valid set and can exhaust memory
+    // before the limit check ever runs. Iterating in place keeps memory flat
+    // and lets us bail the moment the valid count exceeds the limit.
     let option_lists: Vec<&Vec<Arc<Value>>> = varying_slots
         .iter()
         .map(|slot| slot_item_lists.get(slot).unwrap())
         .collect();
+    let radices: Vec<usize> = option_lists.iter().map(|o| o.len()).collect();
+    let n_axes = radices.len();
 
-    // Generate all combos via iterative cartesian product
-    let mut all_combos: Vec<Vec<usize>> = vec![vec![]];
-    for opts in &option_lists {
-        let mut new_combos = Vec::new();
-        for combo in &all_combos {
-            for i in 0..opts.len() {
-                let mut new = combo.clone();
-                new.push(i);
-                new_combos.push(new);
-            }
-        }
-        all_combos = new_combos;
-    }
+    let limit =
+        max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
 
-    // Filter invalid combos and build gear sets
-    let mut valid_combos: Vec<HashMap<String, Arc<Value>>> = Vec::new();
-    let mut seen_combo_keys: HashSet<String> = HashSet::new();
-
-    for combo_indices in &all_combos {
-        // Build full gear set: start with equipped, override varying slots
+    // Build one candidate gear set from a combo's per-axis indices, returning
+    // None for sets that are illegal or identical to the all-equipped baseline.
+    let make_gear_set = |combo_indices: &[usize]| -> Option<HashMap<String, Arc<Value>>> {
         let mut gear_set: HashMap<String, Arc<Value>> = HashMap::new();
         for slot in GEAR_SLOTS {
             let slot = slot.to_string();
@@ -359,7 +352,7 @@ pub fn generate_top_gear_input_with_talents(
                 max_catalyst_charges: catalyst_charges,
             },
         ) {
-            continue;
+            return None;
         }
 
         // Check if this is identical to baseline (all equipped)
@@ -371,15 +364,60 @@ pub fn generate_top_gear_input_with_talents(
                 .unwrap_or(true)
         });
         if is_baseline {
-            continue;
+            return None;
         }
 
-        let combo_key = gear_set_identity_key(&gear_set);
-        if !seen_combo_keys.insert(combo_key) {
-            continue;
+        Some(gear_set)
+    };
+
+    let mut valid_combos: Vec<HashMap<String, Arc<Value>>> = Vec::new();
+    let mut seen_combo_keys: HashSet<String> = HashSet::new();
+    let mut combo_indices = vec![0usize; n_axes];
+
+    loop {
+        if let Some(gear_set) = make_gear_set(&combo_indices) {
+            let combo_key = gear_set_identity_key(&gear_set);
+            if seen_combo_keys.insert(combo_key) {
+                valid_combos.push(gear_set);
+                // total_combo_count >= gear_combo_count always, so once the
+                // gear axis alone overflows the limit the whole job does too.
+                // Stop here and report the O(axes) upper-bound estimate rather
+                // than pay for an exact total we've already proven is too big.
+                if limit > 0 && valid_combos.len() > limit {
+                    let est = super::estimate_top_gear_combo_count(
+                        items_by_slot,
+                        selected_items,
+                        enchant_selections,
+                        gem_options,
+                        socketed_item_ids,
+                        talent_builds.len().max(1),
+                    );
+                    return Err(format!(
+                        "Too many combinations ({est}). Maximum is {limit}. Please deselect some items."
+                    ));
+                }
+            }
         }
 
-        valid_combos.push(gear_set);
+        // Advance the mixed-radix counter (rightmost axis least significant)
+        // to reproduce the old eager product's lexicographic ordering.
+        if n_axes == 0 {
+            break;
+        }
+        let mut i = n_axes;
+        let mut carried = true;
+        while i > 0 {
+            i -= 1;
+            combo_indices[i] += 1;
+            if combo_indices[i] < radices[i] {
+                carried = false;
+                break;
+            }
+            combo_indices[i] = 0;
+        }
+        if carried {
+            break;
+        }
     }
 
     let gear_combo_count = valid_combos.len(); // excludes baseline
@@ -556,8 +594,8 @@ pub fn generate_top_gear_input_with_talents(
         non_gem_combos
     };
 
-    let limit =
-        max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
+    // `limit` is computed once above (before the gear loop) and reused here for
+    // the full gear×enchant×gem×talent total.
     if limit > 0 && total_combo_count > limit {
         return Err(format!(
             "Too many combinations ({}). Maximum is {}. Please deselect some items.",
@@ -689,27 +727,38 @@ pub fn generate_top_gear_input_with_talents(
         meta
     };
 
-    // Helper: apply a gem combo assignment to a simc string for a slot.
-    // Only writes gems when the socket is empty, or when replace_gems is on.
-    // Truncates the gem list to the item's actual socket count so a 2-gem
-    // combo applied to a 1-socket alternative emits a valid single-id line.
-    let apply_gem = |slot: &str, simc: &str, gem_combo: &GemCombo| -> String {
-        let socket_count = simc_socket_count(simc);
-        if socket_count == 0 {
-            return simc.to_string();
-        }
-        let already_gemmed = extract_gem_id(simc) > 0;
-        if !replace_gems && already_gemmed {
-            return simc.to_string();
-        }
-        match gem_combo.get(slot) {
-            Some(gids) => {
-                let take = gids.len().min(socket_count);
-                set_gem_ids(simc, &gids[..take])
+    // Per-slot socket count for equipped items. Primary source: each item's authoritative
+    // `"sockets"` field in game data (from slot_item_lists). Fallback: `simc_socket_count`
+    // from the equipped simc string, which covers bonus-id sockets and existing gem counts
+    // for items that aren't in slot_item_lists (e.g. when items_by_slot is empty).
+    let equipped_sockets: HashMap<String, usize> = GEAR_SLOTS
+        .iter()
+        .filter_map(|slot| {
+            // Primary: game-data "sockets" field from slot_item_lists
+            let from_items = slot_item_lists
+                .get(*slot)
+                .and_then(|items| items.iter().find(|it| {
+                    it.get("is_equipped").and_then(|v| v.as_bool()).unwrap_or(false)
+                }))
+                .and_then(|it| it.get("sockets"))
+                .and_then(|s| s.as_u64())
+                .unwrap_or(0) as usize;
+            // Fallback: derive from simc string (bonus_id resolved + existing gem count)
+            let sockets = if from_items > 0 {
+                from_items
+            } else {
+                equipped_gear
+                    .get(*slot)
+                    .map(|s| simc_socket_count(s))
+                    .unwrap_or(0)
+            };
+            if sockets > 0 {
+                Some((slot.to_string(), sockets))
+            } else {
+                None
             }
-            None => simc.to_string(),
-        }
-    };
+        })
+        .collect();
 
     // Helper: build gem metadata for a gem combo, filtered to only slots that
     // actually have a socket. If socketed_slots is None, include all gems.
@@ -758,10 +807,12 @@ pub fn generate_top_gear_input_with_talents(
     let mut socketed_cache: HashMap<(usize, Vec<usize>), HashSet<String>> = HashMap::new();
 
     for gem_combo_opt in &gem_iter {
-        // Helper: apply gem combo to a simc string for a slot, if gem combo is active
-        let gem_simc = |slot: &str, simc: &str| -> String {
+        // Helper: apply gem combo to a simc string for a slot (equipped-gear paths only).
+        // Uses the slot's equipped_sockets count (from game-data `"sockets"` field).
+        let gem_simc_equipped = |slot: &str, simc: &str| -> String {
             if let Some(gc) = gem_combo_opt {
-                apply_gem(slot, simc, gc)
+                let sockets = equipped_sockets.get(slot).copied().unwrap_or(0);
+                super::emit::apply_item_gems(simc, sockets, slot, gc, replace_gems)
             } else {
                 simc.to_string()
             }
@@ -786,7 +837,7 @@ pub fn generate_top_gear_input_with_talents(
                 let any_gem_change = GEAR_SLOTS.iter().any(|slot| {
                     equipped_gear
                         .get(*slot)
-                        .map(|gear_val| gem_simc(slot, gear_val) != *gear_val)
+                        .map(|gear_val| gem_simc_equipped(slot, gear_val) != *gear_val)
                         .unwrap_or(false)
                 });
                 if any_gem_change {
@@ -798,14 +849,17 @@ pub fn generate_top_gear_input_with_talents(
                             .filter_map(|slot| {
                                 equipped_gear
                                     .get(*slot)
-                                    .map(|gear_val| (slot.to_string(), gem_simc(slot, gear_val)))
+                                    .map(|gear_val| (slot.to_string(), gem_simc_equipped(slot, gear_val)))
                             })
                             .collect();
+                        let combo_talent_spec: Option<&str> =
+                            extract_spec_id_from_talent_string(talent_str)
+                                .and_then(class_data::spec_id_to_name);
                         lines.extend(super::emit::emit_profileset(
                             &combo_name,
                             &slot_simc,
-                            "",
-                            None,
+                            talent_str,
+                            combo_talent_spec,
                             &base_actor_spec,
                         ));
                         let mut combo_items: Vec<Value> = Vec::new();
@@ -848,16 +902,19 @@ pub fn generate_top_gear_input_with_talents(
                                 equipped_gear.get(*slot).map(|gear_val| {
                                     let modified = apply_enchant_combo(slot, gear_val, enchant_idx);
                                     let val =
-                                        gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
+                                        gem_simc_equipped(slot, modified.as_deref().unwrap_or(gear_val));
                                     (slot.to_string(), val)
                                 })
                             })
                             .collect();
+                        let enchant_talent_spec: Option<&str> =
+                            extract_spec_id_from_talent_string(talent_str)
+                                .and_then(class_data::spec_id_to_name);
                         lines.extend(super::emit::emit_profileset(
                             &combo_name,
                             &slot_simc,
-                            "",
-                            None,
+                            talent_str,
+                            enchant_talent_spec,
                             &base_actor_spec,
                         ));
                         let mut combo_items: Vec<Value> = build_enchant_meta(enchant_idx);
@@ -958,7 +1015,7 @@ pub fn generate_top_gear_input_with_talents(
                                     let modified =
                                         apply_enchant_combo(slot, gear_val, enchant_idx);
                                     let val =
-                                        gem_simc(slot, modified.as_deref().unwrap_or(gear_val));
+                                        gem_simc_equipped(slot, modified.as_deref().unwrap_or(gear_val));
                                     (slot.to_string(), val)
                                 })
                             })
@@ -990,10 +1047,23 @@ pub fn generate_top_gear_input_with_talents(
                                         .get("simc_string")
                                         .and_then(|s| s.as_str())
                                         .unwrap_or("");
+                                    let item_sockets = item
+                                        .get("sockets")
+                                        .and_then(|s| s.as_u64())
+                                        .unwrap_or(0) as usize;
                                     let modified =
                                         apply_enchant_combo(slot, simc_str, enchant_idx);
-                                    let val =
-                                        gem_simc(slot, modified.as_deref().unwrap_or(simc_str));
+                                    let val = if let Some(gc) = gem_combo_opt {
+                                        super::emit::apply_item_gems(
+                                            modified.as_deref().unwrap_or(simc_str),
+                                            item_sockets,
+                                            slot,
+                                            gc,
+                                            replace_gems,
+                                        )
+                                    } else {
+                                        modified.unwrap_or_else(|| simc_str.to_string())
+                                    };
                                     map.insert(slot.to_string(), val);
                                 }
                             }

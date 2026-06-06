@@ -17,6 +17,38 @@ use std::collections::HashMap;
 
 use crate::types::class_data::GEAR_SLOTS;
 
+/// Apply a gem-combo's gem ids to one item's simc string, gated by the item's
+/// OWN socket count (authoritative — from its resolved `"sockets"` field in
+/// game data, NOT from the simc string's bonus-id or existing gem count).
+///
+/// No-op when:
+/// - `item_sockets == 0` (item has no socket)
+/// - `replace_gems` is false and the simc string already carries a gem
+///
+/// Otherwise writes `gem_id=…` entries truncated to `item_sockets`, so a
+/// 2-gem combo applied to a 1-socket item writes exactly one gem id.
+pub(super) fn apply_item_gems(
+    item_simc: &str,
+    item_sockets: usize,
+    slot: &str,
+    gem_combo: &crate::profileset_generator::gem_combos::GemCombo,
+    replace_gems: bool,
+) -> String {
+    if item_sockets == 0 {
+        return item_simc.to_string();
+    }
+    if !replace_gems && crate::simc_string::extract_gem_id(item_simc) > 0 {
+        return item_simc.to_string();
+    }
+    match gem_combo.get(slot) {
+        Some(gids) => {
+            let take = gids.len().min(item_sockets);
+            crate::simc_string::set_gem_ids(item_simc, &gids[..take])
+        }
+        None => item_simc.to_string(),
+    }
+}
+
 /// Emit the "# Base Actor" header block for the eager generator.
 ///
 /// Produces: `# Base Actor`, the non-gear profile lines, `### Combo 1`,

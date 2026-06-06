@@ -1,6 +1,6 @@
 pub(super) use crate::simc_string::{
     extract_bonus_ids, extract_enchant_id, extract_gem_id, extract_gem_ids, extract_item_id,
-    set_enchant_id, set_gem_id, set_gem_ids,
+    set_enchant_id, set_gem_id,
 };
 
 const BASE64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
