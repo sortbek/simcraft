@@ -1471,6 +1471,70 @@ main_hand=,id=200\n";
     }
 
     #[test]
+    fn iterator_emit_count_matches_exact_count_for_gems() {
+        // The cloud progress bar's denominator is the exact count
+        // (count_top_gear_combos_with_talents). This locks the invariant that
+        // makes that correct: the streaming ProfilesetIterator emits exactly that
+        // many profilesets, so the bar reaches 100% (and the credit estimate
+        // matches the work billed).
+        ensure_game_data_loaded();
+
+        // Production-shaped inputs: a populated items_by_slot (equipped + a
+        // selected socketed alt per slot) so the count function and the iterator
+        // see the SAME gear/socket data, plus several gems. This mirrors what the
+        // cloud submit path passes to both `count_top_gear_combos_with_talents`
+        // (credits + progress denominator) and `build_iterator_config` (the run).
+        let socketed: HashSet<u64> = HashSet::from([301_u64, 302, 303]);
+        let mut base = String::from("mage=test\nspec=frost\n");
+        let mut items_by_slot: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        let mut selected: HashMap<String, Vec<String>> = HashMap::new();
+        for (slot, eq_id, alt_id) in [
+            ("head", 250010_u64, 301_u64),
+            ("wrist", 250011, 302),
+            ("neck", 250012, 303),
+        ] {
+            base.push_str(&format!("{slot}=,id={eq_id}\n"));
+            let equipped = json!({
+                "slot": slot, "simc_string": format!(",id={eq_id}"),
+                "is_equipped": true, "origin": "equipped", "item_id": eq_id,
+                "ilevel": 0, "name": "eq", "bonus_ids": [], "enchant_id": 0,
+                "gem_id": 0, "sockets": 0,
+            });
+            let alt = json!({
+                "slot": slot, "simc_string": format!(",id={alt_id}"),
+                "is_equipped": false, "origin": "bags", "item_id": alt_id,
+                "ilevel": 0, "name": "alt", "bonus_ids": [], "enchant_id": 0,
+                "gem_id": 0, "sockets": 1,
+            });
+            items_by_slot.insert(slot.to_string(), vec![equipped, alt]);
+            selected.insert(slot.to_string(), vec![format!("{alt_id}::bags:{slot}")]);
+        }
+
+        let gems = [213454_u64, 213455, 213456];
+        let gem_opts = GemEnchantOptions {
+            gem_options: &gems,
+            socketed_item_ids: Some(&socketed),
+            ..Default::default()
+        };
+
+        let exact = super::count_top_gear_combos_with_talents(
+            &base, &items_by_slot, &selected, None, &[], None, &gem_opts,
+        )
+        .unwrap();
+
+        let cfg =
+            super::build_iterator_config(&base, &items_by_slot, &selected, &[], &gem_opts, None);
+        let iter_count = super::ProfilesetIterator::new(cfg).count();
+
+        assert!(exact > 0, "expected gem combos to be emitted, got {exact}");
+        assert_eq!(
+            iter_count, exact,
+            "streaming iterator emitted {iter_count} profilesets but the exact \
+             count is {exact}; the progress denominator would be wrong"
+        );
+    }
+
+    #[test]
     fn enchant_gem_multiple_slots_create_cartesian_product() {
         ensure_game_data_loaded();
         let base_profile =

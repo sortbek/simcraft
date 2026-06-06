@@ -1247,8 +1247,13 @@ pub(super) async fn start_cloud_streaming(
     let cloud_repo = CloudChunksRepo::new(pool.clone());
     let cancel = Some(CancelToken::new(repo.get_ref().clone(), job_id.clone()));
     // Run-scoped job-level progress bar: weights each chunk's live percent
-    // against the known total combo count (`estimate`). Zero extra Simmit calls.
-    let progress = CloudProgress::new(repo.get_ref().clone(), job_id.clone(), estimate as usize);
+    // against the EXACT combo count (same figure used for credits above), not the
+    // O(axes) upper-bound `estimate`. For gem-heavy jobs the upper bound is huge
+    // relative to what the iterator emits, which would peg the bar near 0% for the
+    // whole run. The exact count equals the iterator's emitted total, so the bar
+    // reaches 100%. Zero extra Simmit calls.
+    let progress =
+        CloudProgress::new(repo.get_ref().clone(), job_id.clone(), combos_for_credits as usize);
     let runner = build_production_chunk_runner(
         provider.clone(),
         cloud_repo,
