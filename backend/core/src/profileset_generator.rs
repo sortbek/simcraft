@@ -1946,6 +1946,84 @@ head=,id=100\n";
     /// Characterization test — pins the CURRENT eager simc lines + metadata shape
     /// for a single gear-swap combo. This freezes the contract before the
     /// emit.rs refactor (Task D1) so any behavior drift is caught immediately.
+    // Golden oracle for the single-pipeline refactor: a representative Top Gear
+    // job exercising gear alternatives, a paired slot (finger1/finger2), an
+    // enchant axis, a gem axis, and a talent variant. The refactor must keep
+    // (simc string, count, metadata) byte-for-byte identical to this snapshot.
+    fn golden_top_gear_inputs() -> (
+        String,
+        HashMap<String, Vec<serde_json::Value>>,
+        HashMap<String, Vec<String>>,
+        HashMap<String, Vec<u64>>,
+        Vec<u64>,
+        HashSet<u64>,
+        Vec<(String, String)>,
+    ) {
+        let base = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7000\n\
+finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
+            .to_string();
+        let mk = |slot: &str, id: u64, eq: bool, sockets: u64| {
+            json!({
+                "slot": slot, "simc_string": format!(",id={id}"),
+                "is_equipped": eq, "origin": if eq {"equipped"} else {"bags"},
+                "item_id": id, "ilevel": 0, "name": format!("it{id}"),
+                "bonus_ids": [], "enchant_id": 0, "gem_id": 0, "sockets": sockets,
+            })
+        };
+        let mut items: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        items.insert("finger1".into(), vec![mk("finger1", 400, true, 1), mk("finger1", 402, false, 1)]);
+        items.insert("finger2".into(), vec![mk("finger2", 401, true, 1), mk("finger2", 403, false, 1)]);
+        let mut selected: HashMap<String, Vec<String>> = HashMap::new();
+        selected.insert("finger1".into(), vec!["402::bags:finger1".into()]);
+        selected.insert("finger2".into(), vec!["403::bags:finger2".into()]);
+        let mut enchants: HashMap<String, Vec<u64>> = HashMap::new();
+        enchants.insert("head".into(), vec![7001]);
+        let gems = vec![213454_u64, 213455];
+        let socketed = HashSet::from([402_u64, 403]);
+        let talents = vec![("A".to_string(), "AAAA".to_string()), ("B".to_string(), "BBBB".to_string())];
+        (base, items, selected, enchants, gems, socketed, talents)
+    }
+
+    #[test]
+    fn golden_eager_output_snapshot() {
+        ensure_game_data_loaded();
+        let (base, items, selected, enchants, gems, socketed, talents) = golden_top_gear_inputs();
+        let gem_opts = GemEnchantOptions {
+            enchant_selections: Some(&enchants),
+            gem_options: &gems,
+            socketed_item_ids: Some(&socketed),
+            ..Default::default()
+        };
+        // NOTE: until a later task removes it, this fn still takes a trailing
+        // `count_only: bool` — pass `false`.
+        let (input, count, metadata) = generate_top_gear_input_with_talents(
+            &base, &items, &selected, None, &talents, None, &gem_opts,
+        )
+        .unwrap();
+
+        assert!(count > 0, "golden scenario must emit combos");
+        insta_like_lock(&input, count, &metadata);
+    }
+
+    fn insta_like_lock(
+        input: &str,
+        count: usize,
+        metadata: &HashMap<String, Vec<serde_json::Value>>,
+    ) {
+        let mut keys: Vec<&String> = metadata.keys().collect();
+        keys.sort();
+        let mut meta_dump = String::new();
+        for k in keys {
+            meta_dump.push_str(k);
+            meta_dump.push_str(" => ");
+            meta_dump.push_str(&serde_json::to_string(&metadata[k]).unwrap());
+            meta_dump.push('\n');
+        }
+        let bundle = format!("COUNT={count}\n---INPUT---\n{input}\n---META---\n{meta_dump}");
+        let expected = include_str!("profileset_generator/testdata/golden_top_gear.txt");
+        assert_eq!(bundle, expected, "eager output drifted from golden snapshot");
+    }
+
     #[test]
     fn eager_emit_characterization_single_gear_swap() {
         ensure_game_data_loaded();

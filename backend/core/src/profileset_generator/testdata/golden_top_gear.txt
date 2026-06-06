@@ -1,0 +1,345 @@
+COUNT=45
+---INPUT---
+# Base Actor
+mage=test
+spec=frost
+### Combo 1
+head=,id=100,enchant_id=7000
+finger1=,id=400
+finger2=,id=401
+main_hand=,id=200
+off_hand=,
+talents=AAAA
+
+### Combo 2
+profileset."Combo 2"+=head=,id=100,enchant_id=7001
+profileset."Combo 2"+=finger1=,id=400
+profileset."Combo 2"+=finger2=,id=401
+profileset."Combo 2"+=main_hand=,id=200
+profileset."Combo 2"+=off_hand=,
+
+### Combo 3
+profileset."Combo 3"+=finger1=,id=400
+profileset."Combo 3"+=finger2=,id=403
+profileset."Combo 3"+=off_hand=,
+profileset."Combo 3"+=talents=AAAA
+
+### Combo 4
+profileset."Combo 4"+=finger1=,id=400
+profileset."Combo 4"+=finger2=,id=403
+profileset."Combo 4"+=off_hand=,
+profileset."Combo 4"+=talents=AAAA
+
+### Combo 5
+profileset."Combo 5"+=finger1=,id=402
+profileset."Combo 5"+=finger2=,id=401
+profileset."Combo 5"+=off_hand=,
+profileset."Combo 5"+=talents=AAAA
+
+### Combo 6
+profileset."Combo 6"+=finger1=,id=402
+profileset."Combo 6"+=finger2=,id=401
+profileset."Combo 6"+=off_hand=,
+profileset."Combo 6"+=talents=AAAA
+
+### Combo 7
+profileset."Combo 7"+=finger1=,id=402
+profileset."Combo 7"+=finger2=,id=403
+profileset."Combo 7"+=off_hand=,
+profileset."Combo 7"+=talents=AAAA
+
+### Combo 8
+profileset."Combo 8"+=finger1=,id=402
+profileset."Combo 8"+=finger2=,id=403
+profileset."Combo 8"+=off_hand=,
+profileset."Combo 8"+=talents=AAAA
+
+### Combo 9
+profileset."Combo 9"+=head=,id=100,enchant_id=7000
+profileset."Combo 9"+=finger1=,id=400
+profileset."Combo 9"+=finger2=,id=401
+profileset."Combo 9"+=main_hand=,id=200
+profileset."Combo 9"+=off_hand=,
+profileset."Combo 9"+=talents=BBBB
+
+### Combo 10
+profileset."Combo 10"+=head=,id=100,enchant_id=7001
+profileset."Combo 10"+=finger1=,id=400
+profileset."Combo 10"+=finger2=,id=401
+profileset."Combo 10"+=main_hand=,id=200
+profileset."Combo 10"+=off_hand=,
+profileset."Combo 10"+=talents=BBBB
+
+### Combo 11
+profileset."Combo 11"+=finger1=,id=400
+profileset."Combo 11"+=finger2=,id=403
+profileset."Combo 11"+=off_hand=,
+profileset."Combo 11"+=talents=BBBB
+
+### Combo 12
+profileset."Combo 12"+=finger1=,id=400
+profileset."Combo 12"+=finger2=,id=403
+profileset."Combo 12"+=off_hand=,
+profileset."Combo 12"+=talents=BBBB
+
+### Combo 13
+profileset."Combo 13"+=finger1=,id=402
+profileset."Combo 13"+=finger2=,id=401
+profileset."Combo 13"+=off_hand=,
+profileset."Combo 13"+=talents=BBBB
+
+### Combo 14
+profileset."Combo 14"+=finger1=,id=402
+profileset."Combo 14"+=finger2=,id=401
+profileset."Combo 14"+=off_hand=,
+profileset."Combo 14"+=talents=BBBB
+
+### Combo 15
+profileset."Combo 15"+=finger1=,id=402
+profileset."Combo 15"+=finger2=,id=403
+profileset."Combo 15"+=off_hand=,
+profileset."Combo 15"+=talents=BBBB
+
+### Combo 16
+profileset."Combo 16"+=finger1=,id=402
+profileset."Combo 16"+=finger2=,id=403
+profileset."Combo 16"+=off_hand=,
+profileset."Combo 16"+=talents=BBBB
+
+### Combo 17
+profileset."Combo 17"+=head=,id=100,enchant_id=7001
+profileset."Combo 17"+=finger1=,id=400
+profileset."Combo 17"+=finger2=,id=401
+profileset."Combo 17"+=main_hand=,id=200
+profileset."Combo 17"+=off_hand=,
+
+### Combo 18
+profileset."Combo 18"+=finger1=,id=400
+profileset."Combo 18"+=finger2=,id=403
+profileset."Combo 18"+=off_hand=,
+profileset."Combo 18"+=talents=AAAA
+
+### Combo 19
+profileset."Combo 19"+=finger1=,id=400
+profileset."Combo 19"+=finger2=,id=403
+profileset."Combo 19"+=off_hand=,
+profileset."Combo 19"+=talents=AAAA
+
+### Combo 20
+profileset."Combo 20"+=finger1=,id=402
+profileset."Combo 20"+=finger2=,id=401
+profileset."Combo 20"+=off_hand=,
+profileset."Combo 20"+=talents=AAAA
+
+### Combo 21
+profileset."Combo 21"+=finger1=,id=402
+profileset."Combo 21"+=finger2=,id=401
+profileset."Combo 21"+=off_hand=,
+profileset."Combo 21"+=talents=AAAA
+
+### Combo 22
+profileset."Combo 22"+=finger1=,id=402
+profileset."Combo 22"+=finger2=,id=403
+profileset."Combo 22"+=off_hand=,
+profileset."Combo 22"+=talents=AAAA
+
+### Combo 23
+profileset."Combo 23"+=finger1=,id=402
+profileset."Combo 23"+=finger2=,id=403
+profileset."Combo 23"+=off_hand=,
+profileset."Combo 23"+=talents=AAAA
+
+### Combo 24
+profileset."Combo 24"+=head=,id=100,enchant_id=7000
+profileset."Combo 24"+=finger1=,id=400
+profileset."Combo 24"+=finger2=,id=401
+profileset."Combo 24"+=main_hand=,id=200
+profileset."Combo 24"+=off_hand=,
+profileset."Combo 24"+=talents=BBBB
+
+### Combo 25
+profileset."Combo 25"+=head=,id=100,enchant_id=7001
+profileset."Combo 25"+=finger1=,id=400
+profileset."Combo 25"+=finger2=,id=401
+profileset."Combo 25"+=main_hand=,id=200
+profileset."Combo 25"+=off_hand=,
+profileset."Combo 25"+=talents=BBBB
+
+### Combo 26
+profileset."Combo 26"+=finger1=,id=400
+profileset."Combo 26"+=finger2=,id=403
+profileset."Combo 26"+=off_hand=,
+profileset."Combo 26"+=talents=BBBB
+
+### Combo 27
+profileset."Combo 27"+=finger1=,id=400
+profileset."Combo 27"+=finger2=,id=403
+profileset."Combo 27"+=off_hand=,
+profileset."Combo 27"+=talents=BBBB
+
+### Combo 28
+profileset."Combo 28"+=finger1=,id=402
+profileset."Combo 28"+=finger2=,id=401
+profileset."Combo 28"+=off_hand=,
+profileset."Combo 28"+=talents=BBBB
+
+### Combo 29
+profileset."Combo 29"+=finger1=,id=402
+profileset."Combo 29"+=finger2=,id=401
+profileset."Combo 29"+=off_hand=,
+profileset."Combo 29"+=talents=BBBB
+
+### Combo 30
+profileset."Combo 30"+=finger1=,id=402
+profileset."Combo 30"+=finger2=,id=403
+profileset."Combo 30"+=off_hand=,
+profileset."Combo 30"+=talents=BBBB
+
+### Combo 31
+profileset."Combo 31"+=finger1=,id=402
+profileset."Combo 31"+=finger2=,id=403
+profileset."Combo 31"+=off_hand=,
+profileset."Combo 31"+=talents=BBBB
+
+### Combo 32
+profileset."Combo 32"+=head=,id=100,enchant_id=7001
+profileset."Combo 32"+=finger1=,id=400
+profileset."Combo 32"+=finger2=,id=401
+profileset."Combo 32"+=main_hand=,id=200
+profileset."Combo 32"+=off_hand=,
+
+### Combo 33
+profileset."Combo 33"+=finger1=,id=400
+profileset."Combo 33"+=finger2=,id=403
+profileset."Combo 33"+=off_hand=,
+profileset."Combo 33"+=talents=AAAA
+
+### Combo 34
+profileset."Combo 34"+=finger1=,id=400
+profileset."Combo 34"+=finger2=,id=403
+profileset."Combo 34"+=off_hand=,
+profileset."Combo 34"+=talents=AAAA
+
+### Combo 35
+profileset."Combo 35"+=finger1=,id=402
+profileset."Combo 35"+=finger2=,id=401
+profileset."Combo 35"+=off_hand=,
+profileset."Combo 35"+=talents=AAAA
+
+### Combo 36
+profileset."Combo 36"+=finger1=,id=402
+profileset."Combo 36"+=finger2=,id=401
+profileset."Combo 36"+=off_hand=,
+profileset."Combo 36"+=talents=AAAA
+
+### Combo 37
+profileset."Combo 37"+=finger1=,id=402
+profileset."Combo 37"+=finger2=,id=403
+profileset."Combo 37"+=off_hand=,
+profileset."Combo 37"+=talents=AAAA
+
+### Combo 38
+profileset."Combo 38"+=finger1=,id=402
+profileset."Combo 38"+=finger2=,id=403
+profileset."Combo 38"+=off_hand=,
+profileset."Combo 38"+=talents=AAAA
+
+### Combo 39
+profileset."Combo 39"+=head=,id=100,enchant_id=7000
+profileset."Combo 39"+=finger1=,id=400
+profileset."Combo 39"+=finger2=,id=401
+profileset."Combo 39"+=main_hand=,id=200
+profileset."Combo 39"+=off_hand=,
+profileset."Combo 39"+=talents=BBBB
+
+### Combo 40
+profileset."Combo 40"+=head=,id=100,enchant_id=7001
+profileset."Combo 40"+=finger1=,id=400
+profileset."Combo 40"+=finger2=,id=401
+profileset."Combo 40"+=main_hand=,id=200
+profileset."Combo 40"+=off_hand=,
+profileset."Combo 40"+=talents=BBBB
+
+### Combo 41
+profileset."Combo 41"+=finger1=,id=400
+profileset."Combo 41"+=finger2=,id=403
+profileset."Combo 41"+=off_hand=,
+profileset."Combo 41"+=talents=BBBB
+
+### Combo 42
+profileset."Combo 42"+=finger1=,id=400
+profileset."Combo 42"+=finger2=,id=403
+profileset."Combo 42"+=off_hand=,
+profileset."Combo 42"+=talents=BBBB
+
+### Combo 43
+profileset."Combo 43"+=finger1=,id=402
+profileset."Combo 43"+=finger2=,id=401
+profileset."Combo 43"+=off_hand=,
+profileset."Combo 43"+=talents=BBBB
+
+### Combo 44
+profileset."Combo 44"+=finger1=,id=402
+profileset."Combo 44"+=finger2=,id=401
+profileset."Combo 44"+=off_hand=,
+profileset."Combo 44"+=talents=BBBB
+
+### Combo 45
+profileset."Combo 45"+=finger1=,id=402
+profileset."Combo 45"+=finger2=,id=403
+profileset."Combo 45"+=off_hand=,
+profileset."Combo 45"+=talents=BBBB
+
+### Combo 46
+profileset."Combo 46"+=finger1=,id=402
+profileset."Combo 46"+=finger2=,id=403
+profileset."Combo 46"+=off_hand=,
+profileset."Combo 46"+=talents=BBBB
+
+---META---
+Combo 10 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 11 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 12 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 13 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 14 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 15 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 16 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 17 => [{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"}]
+Combo 18 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 19 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 2 => [{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"}]
+Combo 20 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 21 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 22 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 23 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 24 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 25 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 26 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 27 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 28 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 29 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 3 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 30 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 31 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 32 => [{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"}]
+Combo 33 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 34 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 35 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 36 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 37 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 38 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 39 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 4 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 40 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 41 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 42 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 43 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 44 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 45 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 46 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"B","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"B","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 5 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 6 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 7 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 8 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":402,"name":"it402","origin":"bags","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":403,"name":"it403","origin":"bags","slot":"finger2","talent_build":"A","talent_spec":null},{"enchant_id":7001,"name":"","slot":"head","talent_build":"A","talent_spec":null,"type":"enchant"},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Combo 9 => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"B","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":false,"item_id":0,"name":"","origin":"system","slot":"off_hand"}]
+Currently Equipped (A) => [{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":400,"name":"it400","origin":"equipped","slot":"finger1","talent_build":"A","talent_spec":null},{"bonus_ids":[],"enchant_id":0,"gem_id":0,"ilevel":0,"is_kept":true,"item_id":401,"name":"it401","origin":"equipped","slot":"finger2","talent_build":"A","talent_spec":null}]
