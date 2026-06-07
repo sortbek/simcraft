@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 
 use crate::game_data;
-use crate::types::class_data::UNIQUE_SLOT_PAIRS;
+use crate::types::class_data::{GEAR_SLOTS, UNIQUE_SLOT_PAIRS};
 
 /// Optional context required by spec- or budget-dependent constraints.
 /// Plain gear-set checks (unique-equipped, item limits, vault) need none of
@@ -110,6 +110,64 @@ pub(super) fn validate_weapon_constraint<V: Borrow<Value>>(
     }
 }
 
+fn item_identity(item: &Value) -> String {
+    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+    let mut bonus_ids: Vec<u64> = item
+        .get("bonus_ids")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
+        .unwrap_or_default();
+    bonus_ids.sort();
+    let bonus_key = bonus_ids
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    format!("{}:{}", item_id, bonus_key)
+}
+
+pub(super) fn gear_set_identity_key<V: Borrow<Value>>(gear_set: &HashMap<String, V>) -> String {
+    let paired: HashSet<&str> = UNIQUE_SLOT_PAIRS
+        .iter()
+        .flat_map(|(a, b)| [*a, *b])
+        .collect();
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut handled: HashSet<&str> = HashSet::new();
+
+    for slot in GEAR_SLOTS {
+        if handled.contains(slot) {
+            continue;
+        }
+        if paired.contains(slot) {
+            if let Some((s1, s2)) = UNIQUE_SLOT_PAIRS
+                .iter()
+                .find(|(a, b)| *a == *slot || *b == *slot)
+            {
+                handled.insert(s1);
+                handled.insert(s2);
+                let id1 = gear_set
+                    .get(*s1)
+                    .map(|v| item_identity(v.borrow()))
+                    .unwrap_or_else(|| "none".to_string());
+                let id2 = gear_set
+                    .get(*s2)
+                    .map(|v| item_identity(v.borrow()))
+                    .unwrap_or_else(|| "none".to_string());
+                let (a, b) = if id1 <= id2 { (id1, id2) } else { (id2, id1) };
+                parts.push(format!("{}+{}={},{}", s1, s2, a, b));
+            }
+        } else {
+            let id = gear_set
+                .get(*slot)
+                .map(|v| item_identity(v.borrow()))
+                .unwrap_or_else(|| "none".to_string());
+            parts.push(format!("{}={}", slot, id));
+        }
+    }
+
+    parts.join("|")
+}
 
 pub(super) fn main_hand_is_two_hand<V: Borrow<Value>>(
     gear_set: &HashMap<String, V>,
@@ -351,6 +409,29 @@ mod tests {
         let mut gs = HashMap::new();
         gs.insert("finger1".to_string(), item(99));
         assert!(validate_unique_equipped(&gs));
+    }
+
+    #[test]
+    fn gear_set_identity_key_swap_invariant() {
+        // Swapping items between finger1/finger2 must yield the same key.
+        let mut a = HashMap::new();
+        a.insert("finger1".to_string(), item(1));
+        a.insert("finger2".to_string(), item(2));
+
+        let mut b = HashMap::new();
+        b.insert("finger1".to_string(), item(2));
+        b.insert("finger2".to_string(), item(1));
+
+        assert_eq!(gear_set_identity_key(&a), gear_set_identity_key(&b));
+    }
+
+    #[test]
+    fn gear_set_identity_key_distinguishes_different_items() {
+        let mut a = HashMap::new();
+        a.insert("head".to_string(), item(1));
+        let mut b = HashMap::new();
+        b.insert("head".to_string(), item(2));
+        assert_ne!(gear_set_identity_key(&a), gear_set_identity_key(&b));
     }
 
     #[test]

@@ -163,6 +163,7 @@ pub fn generate_top_gear_input_with_talents(
         talent_builds,
         catalyst_charges,
         gem_opts,
+        false,
     )
 }
 
@@ -2273,17 +2274,7 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         let eager_bodies = strip_named_profileset_bodies(&input);
 
         let cfg = super::build_iterator_config(&base, &items, &selected, &talents, &gem_opts, None);
-        // Apply the same base-actor-cursor skip as the eager wrapper: when
-        // talent_builds is non-empty, the all-zeros cursor is already covered by
-        // the "### Combo 1" base actor block and must not be counted as a profileset.
-        let n_axes =
-            cfg.varying_slots.len() + cfg.enchant_axes.len() + 1 /* gem */ + 1 /* talent */;
-        let base_actor_cursor = vec![0usize; n_axes];
-        let iter: Vec<_> = super::ProfilesetIterator::new(cfg)
-            .filter(|cand| {
-                !(!talents.is_empty() && cand.cursor_at_emission == base_actor_cursor)
-            })
-            .collect();
+        let iter: Vec<_> = super::ProfilesetIterator::new(cfg).collect();
         let iter_bodies: std::collections::BTreeSet<String> = iter
             .iter()
             .map(|c| strip_combo_name(&c.profileset_simc))
@@ -2354,17 +2345,10 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             .collect();
 
         let cfg = super::build_iterator_config(&base, &items, &selected, &talents, &gem_opts, None);
-        // Apply the same base-actor-cursor skip as the eager wrapper.
-        let n_axes_meta =
-            cfg.varying_slots.len() + cfg.enchant_axes.len() + 1 /* gem */ + 1 /* talent */;
-        let base_actor_cursor_meta = vec![0usize; n_axes_meta];
         let mut iter = super::ProfilesetIterator::new(cfg);
         iter.set_next_name_idx(2);
         let mut checked = 0;
         for cand in iter {
-            if !talents.is_empty() && cand.cursor_at_emission == base_actor_cursor_meta {
-                continue;
-            }
             let key = strip_combo_name(&cand.profileset_simc);
             let expected = eager_body_to_meta
                 .get(&key)
