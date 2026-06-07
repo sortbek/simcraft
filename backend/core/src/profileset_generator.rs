@@ -2314,4 +2314,54 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             .join("\n")
     }
 
+    #[test]
+    fn iterator_metadata_matches_eager_per_combo() {
+        ensure_game_data_loaded();
+        let (base, items, selected, enchants, gems, socketed, talents) = golden_top_gear_inputs();
+        let gem_opts = GemEnchantOptions {
+            enchant_selections: Some(&enchants),
+            gem_options: &gems,
+            socketed_item_ids: Some(&socketed),
+            ..Default::default()
+        };
+        let (eager_input, _, eager_meta) = generate_top_gear_input_with_talents(
+            &base, &items, &selected, None, &talents, None, &gem_opts,
+        )
+        .unwrap();
+
+        // Build a map of normalized-simc-body → eager-metadata so we can look up
+        // by combo content rather than by Combo-N name (the iterator and eager
+        // enumerate in different orders, so the Combo-N numbers don't match).
+        // normalized key: "+=" body lines with "Combo N" replaced by "Combo X".
+        let eager_body_to_meta: HashMap<String, &Vec<serde_json::Value>> = eager_input
+            .split("### ")
+            .filter(|b| b.starts_with("Combo ") && b.contains("profileset."))
+            .filter_map(|b| {
+                let name_end = b.find('\n')?;
+                let name = b[..name_end].trim().to_string();
+                let meta = eager_meta.get(&name)?;
+                Some((strip_combo_name(b), meta))
+            })
+            .collect();
+
+        let cfg = super::build_iterator_config(&base, &items, &selected, &talents, &gem_opts, None);
+        let mut iter = super::ProfilesetIterator::new(cfg);
+        iter.set_next_name_idx(2);
+        let mut checked = 0;
+        for cand in iter {
+            let key = strip_combo_name(&cand.profileset_simc);
+            let expected = eager_body_to_meta
+                .get(&key)
+                .unwrap_or_else(|| panic!("eager has no metadata for simc body of {}", cand.profileset_name));
+            let actual: Vec<serde_json::Value> =
+                serde_json::from_value(cand.metadata.clone()).unwrap();
+            assert_eq!(&actual, *expected, "metadata mismatch for {} (simc body lookup)", cand.profileset_name);
+            checked += 1;
+        }
+        assert!(checked > 0, "no candidates checked");
+        // Every eager profileset (Combo 2..) must be covered by the iterator.
+        let eager_profilesets = eager_meta.keys().filter(|k| k.starts_with("Combo ")).count();
+        assert_eq!(checked, eager_profilesets, "iterator did not cover all eager profileset combos");
+    }
+
 }

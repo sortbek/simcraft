@@ -261,7 +261,7 @@ impl ProfilesetIterator {
 
         // ── 7. Resolve talent ────────────────────────────────────────────────
         let talent_idx = self.cursor[self.cursor.len() - 1];
-        let (_, talent_string) = self
+        let (talent_name, talent_string) = self
             .cfg
             .talent_builds
             .get(talent_idx)
@@ -362,54 +362,69 @@ impl ProfilesetIterator {
         )
         .join("\n");
 
-        // Build gear-item rows: non-equipped items (streaming has no paired
-        // display slot distinction — all non-equipped items appear).
-        let gear_item_rows: Vec<(String, bool, &Value)> = GEAR_SLOTS
-            .iter()
-            .filter_map(|slot| {
-                let item = gear_set.get(*slot)?;
-                let is_equipped = item
-                    .get("is_equipped")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                if !is_equipped {
-                    Some((slot.to_string(), false, item.as_ref()))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // ── Talent tagging ───────────────────────────────────────────────────
+        let has_talent_variants = self.cfg.talent_builds.len() > 1;
+        // talent_spec_name was already derived above for profileset_simc; reuse it.
+        let talent_info: Option<(&str, Option<&str>)> = if has_talent_variants {
+            Some((talent_name.as_str(), talent_spec_name))
+        } else {
+            None
+        };
 
-        // Enchant delta entries.
-        let enchant_entries: Vec<serde_json::Value> = effective_enchants_map
-            .iter()
-            .filter(|(slot, _)| {
-                // Only emit an enchant entry when there is no gear-swap for
-                // that slot (the gear item entry already carries enchant_id).
-                !gear_item_rows.iter().any(|(s, _, _)| s == *slot)
-            })
-            .map(|(slot, &eid)| {
-                let info = crate::item_db::get_enchant_info(eid);
-                let ename = info
-                    .as_ref()
-                    .and_then(|v| v.get("name"))
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                serde_json::json!({
-                    "slot": slot,
-                    "type": "enchant",
-                    "enchant_id": eid,
-                    "name": ename,
+        // ── Paired display slots (rings + trinkets) ──────────────────────────
+        // The eager always includes BOTH slots of a pair (finger1+finger2,
+        // trinket1+trinket2) in gear-swap metadata so the frontend can show
+        // the "kept" ring alongside the swapped one. We replicate this here.
+        let paired_display_slots = ["finger1", "finger2", "trinket1", "trinket2"];
+
+        // ── Helper: equipped simc string for a slot ──────────────────────────
+        // Used for `simc_has_socket` checks that mirror the eager's socketed-set
+        // logic for gem-only and enchant-only baseline metadata.
+        let equipped_simc_for = |slot: &str| -> Option<String> {
+            self.cfg
+                .slot_item_lists
+                .get(slot)
+                .and_then(|items| {
+                    items.iter().find(|it| {
+                        it.get("is_equipped")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false)
+                    })
                 })
-            })
-            .collect();
+                .and_then(|it| it.get("simc_string"))
+                .and_then(|s| s.as_str())
+                .map(str::to_string)
+        };
 
-        // Gem delta entries (one per socket per slot).
-        let gem_entries: Vec<serde_json::Value> = eff_gems
-            .iter()
-            .flat_map(|(slot, gids)| {
-                gids.iter().map(move |&gid| {
+        // ── Helper: build gem entries filtered by simc_has_socket ───────────
+        // Mirrors the eager's `build_gem_meta(gc, Some(&socketed))` where
+        // `socketed` is derived from `simc_has_socket` on equipped simc strings
+        // (possibly with an enchant already applied). Returns empty when no
+        // equipped simc has a socket indicator.
+        let gem_entries_simc_filtered = |enchant_overrides: &HashMap<String, u64>| -> Vec<serde_json::Value> {
+            if self.cfg.gem_combos_resolver.is_empty() {
+                return Vec::new();
+            }
+            let combo = match self.cfg.gem_combos_resolver.nth(gem_combo_idx) {
+                Some(c) => c,
+                None => return Vec::new(),
+            };
+            let mut entries = Vec::new();
+            for (slot, gids) in combo {
+                // Build the (possibly enchant-modified) equipped simc string.
+                let simc = match equipped_simc_for(slot) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let modified = if let Some(&eid) = enchant_overrides.get(slot) {
+                    crate::simc_string::set_enchant_id(&simc, eid)
+                } else {
+                    simc.clone()
+                };
+                if !super::simc::simc_has_socket(&modified) {
+                    continue; // eager filters by simc_has_socket
+                }
+                for &gid in gids {
                     let info = crate::item_db::get_gem_info(gid);
                     let gname = info
                         .as_ref()
@@ -417,56 +432,226 @@ impl ProfilesetIterator {
                         .and_then(|n| n.as_str())
                         .unwrap_or("")
                         .to_string();
-                    serde_json::json!({
+                    entries.push(serde_json::json!({
                         "slot": slot,
                         "type": "gem",
                         "gem_id": gid,
                         "name": gname,
-                    })
-                })
-            })
-            .collect();
+                    }));
+                }
+            }
+            entries
+        };
 
+        // ── Build metadata matching the eager's per-combo-type logic ─────────
+        //
+        // The eager emits metadata via three distinct code paths; the iterator
+        // must replicate each one exactly:
+        //
+        //   Case A — gem-only baseline (is_baseline, talent_idx==0, no enchants):
+        //     eager: build_gem_meta filtered by simc_has_socket → often []
+        //
+        //   Case B — enchant-only/enchant+gem baseline (is_baseline, talent_idx==0, enchants):
+        //     eager: enchant entries + gem entries (simc_has_socket filtered) + talent tags
+        //            built inline — NO off_hand synthetic
+        //
+        //   Case C — is_equipped_with_new_talent (is_baseline, talent_idx>0):
+        //     eager: build_combo_metadata with paired display slots (is_kept=true)
+        //            + enchant entries + gem entries + talent_info + off_hand synthetic
+        //
+        //   Case D — gear swap (!is_baseline, any talent_idx):
+        //     eager: build_combo_metadata with paired display slots (correct is_kept)
+        //            + non-paired non-equipped items + enchant entries + gem entries
+        //            + talent_info + off_hand synthetic
+        //
         let include_off_hand_synthetic = !gear_set.contains_key("off_hand");
 
-        let mut meta_items = super::emit::build_combo_metadata(
-            &gear_item_rows,
-            &enchant_entries,
-            &gem_entries,
-            None, // no talent tagging in streaming path
-            include_off_hand_synthetic,
-        );
-
-        // A gear-SWAP slot that ALSO receives an enchant/gem override in this
-        // combo must show the OVERRIDE on its gear row, not the swapped item's
-        // STATIC enchant_id/gem_id (which `item_meta` copied verbatim). Frontend
-        // consumers read the gear row's `enchant_id` directly (TopGearRankings
-        // ItemTag, GearSlotRow), and the enchant delta entry is intentionally
-        // SUPPRESSED for swapped slots above — so without this the override is
-        // invisible/wrong on that row.
-        for meta in meta_items.iter_mut() {
-            // Only gear rows (no `type`) carry a `slot` that can collide with an axis.
-            if meta.get("type").is_some() {
-                continue;
+        let meta_items: Vec<serde_json::Value> = if is_baseline && talent_idx == 0 {
+            if effective_enchants_map.is_empty() {
+                // Case A: gem-only baseline. Mirror eager's simc_has_socket filter.
+                gem_entries_simc_filtered(&HashMap::new())
+            } else {
+                // Case B: enchant-only/enchant+gem baseline.
+                // Build enchant entries, then gem entries filtered by simc_has_socket.
+                let mut items: Vec<serde_json::Value> = effective_enchants_map
+                    .iter()
+                    .map(|(slot, &eid)| {
+                        let info = crate::item_db::get_enchant_info(eid);
+                        let ename = info
+                            .as_ref()
+                            .and_then(|v| v.get("name"))
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        serde_json::json!({
+                            "slot": slot,
+                            "type": "enchant",
+                            "enchant_id": eid,
+                            "name": ename,
+                        })
+                    })
+                    .collect();
+                items.extend(gem_entries_simc_filtered(&effective_enchants_map));
+                if let Some((build_name, ts)) = talent_info {
+                    for item in &mut items {
+                        item["talent_build"] = serde_json::json!(build_name);
+                        item["talent_spec"] = serde_json::json!(ts);
+                    }
+                }
+                // No off_hand synthetic for this case (eager builds inline, not via
+                // build_combo_metadata).
+                items
             }
-            let Some(slot) = meta
-                .get("slot")
-                .and_then(|s| s.as_str())
-                .map(str::to_string)
-            else {
-                continue;
+        } else {
+            // Case C (is_baseline && talent_idx > 0) or Case D (!is_baseline).
+            // Build gear_item_rows in the same order as the eager.
+            let gear_item_rows: Vec<(String, bool, &Value)> = if is_baseline {
+                // Case C: is_equipped_with_new_talent — paired display slots only, is_kept=true.
+                paired_display_slots
+                    .iter()
+                    .filter_map(|slot| {
+                        let slot = slot.to_string();
+                        self.cfg
+                            .slot_item_lists
+                            .get(&slot)
+                            .and_then(|items| items.first())
+                            .map(|item| (slot, true, item.as_ref()))
+                    })
+                    .collect()
+            } else {
+                // Case D: gear swap. Paired display slots first (with is_kept), then
+                // non-paired non-equipped items.
+                let mut rows: Vec<(String, bool, &Value)> = Vec::new();
+                // Paired display slots first.
+                for slot in &paired_display_slots {
+                    let slot = slot.to_string();
+                    if let Some(item) = gear_set.get(&slot) {
+                        let is_kept = item
+                            .get("is_equipped")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        rows.push((slot, is_kept, item.as_ref()));
+                    }
+                }
+                // Non-paired non-equipped items.
+                for slot in crate::types::class_data::GEAR_SLOTS {
+                    if paired_display_slots.contains(slot) {
+                        continue;
+                    }
+                    if let Some(item) = gear_set.get(*slot) {
+                        let is_equipped = item
+                            .get("is_equipped")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
+                        if !is_equipped {
+                            rows.push((slot.to_string(), false, item.as_ref()));
+                        }
+                    }
+                }
+                rows
             };
-            let is_swap = gear_item_rows.iter().any(|(s, _, _)| *s == slot);
-            if !is_swap {
-                continue;
-            }
-            if let Some(&eid) = effective_enchants_map.get(&slot) {
-                meta["enchant_id"] = serde_json::json!(eid);
-            }
-            if let Some(gids) = eff_gems.get(&slot) {
-                meta["gem_id"] = serde_json::json!(gids.first().copied().unwrap_or(0));
-            }
-        }
+
+            // Enchant entries: all overrides, including for gear-swap slots.
+            // The eager emits the enchant entry separately even when the slot is
+            // also swapped; we mirror that (no filter by swap status).
+            let enchant_entries: Vec<serde_json::Value> = effective_enchants_map
+                .iter()
+                .map(|(slot, &eid)| {
+                    let info = crate::item_db::get_enchant_info(eid);
+                    let ename = info
+                        .as_ref()
+                        .and_then(|v| v.get("name"))
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    serde_json::json!({
+                        "slot": slot,
+                        "type": "enchant",
+                        "enchant_id": eid,
+                        "name": ename,
+                    })
+                })
+                .collect();
+
+            // Gem entries (one per socket per slot) for the non-baseline cases.
+            // The eager uses build_gem_meta with a socketed set derived from
+            // simc_has_socket on the gear-set's simc strings (after enchant apply).
+            // For gear-swap combos the simc_has_socket check is on the GEAR item's
+            // simc string (which may differ from the equipped item). Mirror that:
+            let gem_entries: Vec<serde_json::Value> = {
+                if self.cfg.gem_combos_resolver.is_empty() {
+                    Vec::new()
+                } else {
+                    let combo = self
+                        .cfg
+                        .gem_combos_resolver
+                        .nth(gem_combo_idx)
+                        .cloned()
+                        .unwrap_or_default();
+                    let mut entries = Vec::new();
+                    for (slot, gids) in &combo {
+                        // Mirror eager's socketed-set filter for this path.
+                        let simc = if is_baseline {
+                            // Case C: equipped simc (possibly enchant-modified).
+                            match equipped_simc_for(slot) {
+                                Some(s) => {
+                                    if let Some(&eid) = effective_enchants_map.get(slot) {
+                                        crate::simc_string::set_enchant_id(&s, eid)
+                                    } else {
+                                        s
+                                    }
+                                }
+                                None => continue,
+                            }
+                        } else {
+                            // Case D: gear-set item simc (after enchant override).
+                            match gear_set.get(slot) {
+                                Some(item) => {
+                                    let base = item
+                                        .get("simc_string")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("");
+                                    if let Some(&eid) = effective_enchants_map.get(slot) {
+                                        crate::simc_string::set_enchant_id(base, eid)
+                                    } else {
+                                        base.to_string()
+                                    }
+                                }
+                                None => continue,
+                            }
+                        };
+                        if !super::simc::simc_has_socket(&simc) {
+                            continue;
+                        }
+                        for &gid in gids {
+                            let info = crate::item_db::get_gem_info(gid);
+                            let gname = info
+                                .as_ref()
+                                .and_then(|v| v.get("name"))
+                                .and_then(|n| n.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            entries.push(serde_json::json!({
+                                "slot": slot,
+                                "type": "gem",
+                                "gem_id": gid,
+                                "name": gname,
+                            }));
+                        }
+                    }
+                    entries
+                }
+            };
+
+            super::emit::build_combo_metadata(
+                &gear_item_rows,
+                &enchant_entries,
+                &gem_entries,
+                talent_info,
+                include_off_hand_synthetic,
+            )
+        };
+
         let metadata = serde_json::json!(meta_items);
 
         Some(ProfilesetCandidate {
@@ -665,7 +850,15 @@ mod tests {
     }
 
     #[test]
-    fn swapped_slot_gear_row_carries_override_enchant_and_gem() {
+    fn swapped_slot_gear_row_carries_static_fields_enchant_entry_is_separate() {
+        // Replaces the old "swapped_slot_gear_row_carries_override_enchant_and_gem" test.
+        // After the eager-shape refactor the iterator no longer writes the enchant/gem
+        // override values into the gear row — it mirrors the eager generator which:
+        //   • keeps the gear row's enchant_id/gem_id from the STATIC item JSON (both 0
+        //     here because the alt item has no static enchant or gem), and
+        //   • emits the enchant override as a SEPARATE {type:"enchant"} delta entry.
+        // Gem entries are absent because the alt item's simc_string (",id=200") has no
+        // socket-adding bonus → simc_has_socket returns false.
         crate::test_support::ensure_game_data_loaded();
 
         // head: equipped 100 (gemless) + alt 200 (socketed). The alt is the swap.
@@ -712,19 +905,44 @@ mod tests {
             .expect("expected a swapped+enchanted candidate");
 
         let items = cand.metadata.as_array().expect("metadata array");
+
+        // Gear row carries the item's STATIC enchant_id and gem_id (both 0).
         let head = items
             .iter()
             .find(|v| v["slot"] == "head" && v.get("type").is_none())
             .expect("head gear row required");
         assert_eq!(
             head["enchant_id"],
-            json!(9999),
-            "swapped slot gear row must carry the OVERRIDE enchant, not the item's static enchant_id: {head:?}"
+            json!(0),
+            "eager shape: gear row must carry static enchant_id (0), not the override: {head:?}"
         );
         assert_eq!(
             head["gem_id"],
-            json!(5005),
-            "swapped slot gear row must carry the override gem: {head:?}"
+            json!(0),
+            "eager shape: gear row must carry static gem_id (0), not the override: {head:?}"
+        );
+
+        // Enchant override appears as a SEPARATE delta entry (type:"enchant").
+        let enchant_entry = items
+            .iter()
+            .find(|v| v.get("type").and_then(|t| t.as_str()) == Some("enchant"))
+            .expect("enchant delta entry required in eager shape");
+        assert_eq!(
+            enchant_entry["slot"],
+            json!("head"),
+            "enchant entry must reference the head slot: {enchant_entry:?}"
+        );
+        assert_eq!(
+            enchant_entry["enchant_id"],
+            json!(9999),
+            "enchant entry must carry the override enchant_id: {enchant_entry:?}"
+        );
+
+        // No gem delta entry: alt item simc string has no socket bonus →
+        // simc_has_socket is false → mirrors eager behavior.
+        assert!(
+            !items.iter().any(|v| v.get("type").and_then(|t| t.as_str()) == Some("gem")),
+            "eager shape: no gem delta entry when simc_has_socket is false; got: {items:?}"
         );
     }
 
