@@ -2007,8 +2007,6 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             socketed_item_ids: Some(&socketed),
             ..Default::default()
         };
-        // NOTE: until a later task removes it, this fn still takes a trailing
-        // `count_only: bool` — pass `false`.
         let (input, count, metadata) = generate_top_gear_input_with_talents(
             &base, &items, &selected, None, &talents, None, &gem_opts,
         )
@@ -2361,6 +2359,33 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         // Every eager profileset (Combo 2..) must be covered by the iterator.
         let eager_profilesets = eager_meta.keys().filter(|k| k.starts_with("Combo ")).count();
         assert_eq!(checked, eager_profilesets, "iterator did not cover all eager profileset combos");
+    }
+
+    #[test]
+    fn returned_count_matches_emitted_blocks_and_count_fn() {
+        ensure_game_data_loaded();
+        let (base, items, selected, enchants, gems, socketed, talents) = golden_top_gear_inputs();
+        let gem_opts = GemEnchantOptions {
+            enchant_selections: Some(&enchants),
+            gem_options: &gems,
+            socketed_item_ids: Some(&socketed),
+            ..Default::default()
+        };
+        let (input, count, meta) = generate_top_gear_input_with_talents(
+            &base, &items, &selected, None, &talents, None, &gem_opts,
+        )
+        .unwrap();
+        // emitted profileset blocks = "### Combo " count minus the base actor (Combo 1)
+        let emitted = input.matches("### Combo ").count().saturating_sub(1);
+        assert_eq!(count, emitted, "returned count must match emitted ### Combo blocks");
+        // metadata has one entry per profileset plus the baseline "Currently Equipped*" keys
+        let profileset_meta = meta.keys().filter(|k| k.starts_with("Combo ")).count();
+        assert_eq!(count, profileset_meta, "count must match profileset metadata entries");
+        let cnt = count_top_gear_combos_with_talents(
+            &base, &items, &selected, None, &talents, None, &gem_opts,
+        )
+        .unwrap();
+        assert_eq!(count, cnt, "generate count must equal count_top_gear_combos_with_talents");
     }
 
 }
