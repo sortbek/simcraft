@@ -292,7 +292,7 @@ pub fn count_top_gear_combos_with_talents(
         gem_opts,
         catalyst_charges,
     );
-    Ok(super::iterator::ProfilesetIterator::new(cfg).count())
+    Ok(super::iterator::ProfilesetIterator::new(cfg).count_emitted())
 }
 
 /// Generate top-gear profileset input, multiplied by talent builds and

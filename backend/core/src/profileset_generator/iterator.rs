@@ -89,6 +89,21 @@ pub struct ProfilesetIteratorConfig {
     pub max_catalyst_charges: Option<u32>,
 }
 
+// ── Internal evaluation result ────────────────────────────────────────────────
+
+/// Resolved emission decision for one cursor position. Returned by `evaluate`
+/// for positions that should emit a profileset; `None` means skip.
+struct Eval {
+    gear_set: HashMap<String, Arc<Value>>,
+    is_baseline: bool,
+    effective_enchants_map: HashMap<String, u64>,
+    gem_combo_idx: usize,
+    eff_gems: super::gem_combos::GemCombo,
+    talent_idx: usize,
+    talent_name: String,
+    talent_string: String,
+}
+
 // ── Iterator ─────────────────────────────────────────────────────────────────
 
 pub struct ProfilesetIterator {
@@ -172,6 +187,46 @@ impl ProfilesetIterator {
         self.next_name_idx = next_name_idx;
     }
 
+    /// Count the number of positions that `evaluate` would emit (i.e. that would
+    /// become profilesets) without building simc strings, identity keys, or
+    /// metadata. Walks the same cursor space and uses the same advance order as
+    /// the `Iterator` impl so the count is always identical to `self.count()`.
+    pub fn count_emitted(&self) -> usize {
+        let n_axes = self.axis_sizes.len();
+        // Single degenerate position when there are no axes (n_axes == 0):
+        // the iterator yields at most one item (the `done` flag is checked by
+        // the real iterator's `next`). With zero axes the cursor is empty and
+        // `evaluate` receives an empty slice — this is the same path the real
+        // iterator takes, so we mirror it exactly.
+        if n_axes == 0 {
+            return if self.evaluate(&[]).is_some() { 1 } else { 0 };
+        }
+        if self.done {
+            return 0;
+        }
+
+        let mut cursor = vec![0usize; n_axes];
+        let mut count = 0usize;
+        loop {
+            if self.evaluate(&cursor).is_some() {
+                count += 1;
+            }
+            // Advance cursor (same carry logic as `advance`).
+            let mut i = n_axes;
+            loop {
+                if i == 0 {
+                    return count;
+                }
+                i -= 1;
+                cursor[i] += 1;
+                if cursor[i] < self.axis_sizes[i] {
+                    break;
+                }
+                cursor[i] = 0;
+            }
+        }
+    }
+
     fn advance(&mut self) {
         let mut i = self.cursor.len();
         while i > 0 {
@@ -185,7 +240,13 @@ impl ProfilesetIterator {
         self.done = true;
     }
 
-    fn build_candidate(&self) -> Option<ProfilesetCandidate> {
+    /// Evaluate the emission decision for the current cursor: build the gear set,
+    /// normalize, validate constraints, detect baseline, resolve enchants/gems/talent,
+    /// and apply the baseline-skip. Returns `Some(Eval)` for positions that emit a
+    /// profileset, `None` for positions that are skipped. Both the full path
+    /// (`build_candidate`) and the count-only path (`count_emitted`) share this
+    /// decision so the two paths can never diverge.
+    fn evaluate(&self, cursor: &[usize]) -> Option<Eval> {
         // ── 1. Build gear set ────────────────────────────────────────────────
         let mut gear_set: HashMap<String, Arc<Value>> = HashMap::new();
         for (slot, items) in &self.cfg.slot_item_lists {
@@ -200,7 +261,7 @@ impl ProfilesetIterator {
             gear_set.insert(slot.clone(), Arc::clone(default));
         }
         for (i, slot) in self.cfg.varying_slots.iter().enumerate() {
-            let idx = self.cursor[i];
+            let idx = cursor[i];
             if let Some(items) = self.cfg.slot_item_lists.get(slot) {
                 if let Some(item) = items.get(idx) {
                     gear_set.insert(slot.clone(), Arc::clone(item));
@@ -237,7 +298,7 @@ impl ProfilesetIterator {
         let gear_axes_count = self.cfg.varying_slots.len();
         let mut effective_enchants_map: HashMap<String, u64> = HashMap::new();
         for (i, ea) in self.cfg.enchant_axes.iter().enumerate() {
-            let opt_idx = self.cursor[gear_axes_count + i];
+            let opt_idx = cursor[gear_axes_count + i];
             // Index 0 = equipped baseline (no override needed in effective_enchants).
             if opt_idx > 0 {
                 if let Some(&enchant_id) = ea.options.get(opt_idx) {
@@ -250,7 +311,7 @@ impl ProfilesetIterator {
 
         // ── 6. Resolve gems ──────────────────────────────────────────────────
         let gem_axis_idx = gear_axes_count + self.cfg.enchant_axes.len();
-        let gem_combo_idx = self.cursor[gem_axis_idx];
+        let gem_combo_idx = cursor[gem_axis_idx];
         let nominal_gems: GemCombo = self
             .cfg
             .gem_combos_resolver
@@ -260,7 +321,7 @@ impl ProfilesetIterator {
         let eff_gems = effective_gems(&gear_set, &nominal_gems, &self.cfg.socketed_item_ids);
 
         // ── 7. Resolve talent ────────────────────────────────────────────────
-        let talent_idx = self.cursor[self.cursor.len() - 1];
+        let talent_idx = cursor[cursor.len() - 1];
         let (talent_name, talent_string) = self
             .cfg
             .talent_builds
@@ -305,6 +366,30 @@ impl ProfilesetIterator {
         {
             return None;
         }
+
+        Some(Eval {
+            gear_set,
+            is_baseline,
+            effective_enchants_map,
+            gem_combo_idx,
+            eff_gems,
+            talent_idx,
+            talent_name,
+            talent_string,
+        })
+    }
+
+    fn build_candidate(&self) -> Option<ProfilesetCandidate> {
+        let Eval {
+            gear_set,
+            is_baseline,
+            effective_enchants_map,
+            gem_combo_idx,
+            eff_gems,
+            talent_idx,
+            talent_name,
+            talent_string,
+        } = self.evaluate(&self.cursor)?;
 
         // ── 8. Identity key ──────────────────────────────────────────────────
         let identity_key = compute_identity_key(&IdentityInput {

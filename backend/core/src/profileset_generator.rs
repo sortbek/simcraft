@@ -2388,4 +2388,109 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         assert_eq!(count, cnt, "generate count must equal count_top_gear_combos_with_talents");
     }
 
+    /// Regression guard: `count_emitted()` must return the SAME count as the full
+    /// iterator (`ProfilesetIterator::new(cfg).count()`) across structurally different
+    /// configs. The shared `evaluate` logic ensures the emission decision can't drift
+    /// between the two paths. This test locks the two paths together permanently.
+    #[test]
+    fn count_emitted_equals_full_iterator_count() {
+        ensure_game_data_loaded();
+
+        // ── Config 1: golden fixture (gear + enchant + gem + talent axes) ────────
+        {
+            let (base, items, selected, enchants, gems, socketed, talents) =
+                golden_top_gear_inputs();
+            let gem_opts = GemEnchantOptions {
+                enchant_selections: Some(&enchants),
+                gem_options: &gems,
+                socketed_item_ids: Some(&socketed),
+                ..Default::default()
+            };
+            let cfg =
+                super::build_iterator_config(&base, &items, &selected, &talents, &gem_opts, None);
+            let full = super::ProfilesetIterator::new(cfg.clone()).count();
+            let fast = super::ProfilesetIterator::new(cfg).count_emitted();
+            assert_eq!(
+                full, fast,
+                "golden config: count_emitted={fast} != full iterator count={full}"
+            );
+            assert!(full > 0, "golden config must emit combos");
+        }
+
+        // ── Config 2: gear-only (two slots, no gems/enchants/talents) ────────────
+        {
+            let base = "mage=test\nspec=frost\nhead=,id=100\nchest=,id=101\n".to_string();
+            let head_eq = serde_json::json!({
+                "slot": "head", "simc_string": ",id=100", "is_equipped": true,
+                "origin": "equipped", "item_id": 100_u64, "ilevel": 0, "name": "head eq",
+                "bonus_ids": [], "enchant_id": 0, "gem_id": 0, "sockets": 0,
+            });
+            let head_alt = serde_json::json!({
+                "slot": "head", "simc_string": ",id=200", "is_equipped": false,
+                "origin": "bags", "item_id": 200_u64, "ilevel": 0, "name": "head alt",
+                "bonus_ids": [], "enchant_id": 0, "gem_id": 0, "sockets": 0,
+            });
+            let chest_eq = serde_json::json!({
+                "slot": "chest", "simc_string": ",id=101", "is_equipped": true,
+                "origin": "equipped", "item_id": 101_u64, "ilevel": 0, "name": "chest eq",
+                "bonus_ids": [], "enchant_id": 0, "gem_id": 0, "sockets": 0,
+            });
+            let chest_alt = serde_json::json!({
+                "slot": "chest", "simc_string": ",id=201", "is_equipped": false,
+                "origin": "bags", "item_id": 201_u64, "ilevel": 0, "name": "chest alt",
+                "bonus_ids": [], "enchant_id": 0, "gem_id": 0, "sockets": 0,
+            });
+            let mut items: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+            items.insert("head".into(), vec![head_eq, head_alt]);
+            items.insert("chest".into(), vec![chest_eq, chest_alt]);
+            let mut selected: HashMap<String, Vec<String>> = HashMap::new();
+            selected.insert("head".into(), vec!["200::bags:head".into()]);
+            selected.insert("chest".into(), vec!["201::bags:chest".into()]);
+            let gem_opts = GemEnchantOptions::default();
+            let cfg =
+                super::build_iterator_config(&base, &items, &selected, &[], &gem_opts, None);
+            let full = super::ProfilesetIterator::new(cfg.clone()).count();
+            let fast = super::ProfilesetIterator::new(cfg).count_emitted();
+            assert_eq!(
+                full, fast,
+                "gear-only config: count_emitted={fast} != full iterator count={full}"
+            );
+            assert!(full > 0, "gear-only config must emit combos");
+        }
+
+        // ── Config 3: gem-only (single socketed equipped item, no gear alts) ────
+        {
+            let base = "mage=test\nspec=frost\nhead=,id=100,bonus_id=13534\n".to_string();
+            let head_eq = serde_json::json!({
+                "slot": "head", "simc_string": ",id=100,bonus_id=13534", "is_equipped": true,
+                "origin": "equipped", "item_id": 100_u64, "ilevel": 0, "name": "head eq",
+                "bonus_ids": [13534_u64], "enchant_id": 0, "gem_id": 0, "sockets": 1,
+            });
+            let mut items: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+            items.insert("head".into(), vec![head_eq]);
+            let gems = [213453_u64, 213454_u64];
+            let socketed = std::collections::HashSet::from([100_u64]);
+            let gem_opts = GemEnchantOptions {
+                gem_options: &gems,
+                socketed_item_ids: Some(&socketed),
+                ..Default::default()
+            };
+            let cfg = super::build_iterator_config(
+                &base,
+                &items,
+                &HashMap::new(),
+                &[],
+                &gem_opts,
+                None,
+            );
+            let full = super::ProfilesetIterator::new(cfg.clone()).count();
+            let fast = super::ProfilesetIterator::new(cfg).count_emitted();
+            assert_eq!(
+                full, fast,
+                "gem-only config: count_emitted={fast} != full iterator count={full}"
+            );
+            assert!(full > 0, "gem-only config must emit combos");
+        }
+    }
+
 }
