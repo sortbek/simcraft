@@ -85,7 +85,10 @@ fn gen_color_combos(slots: &[(String, usize)], gems: &[u64], max_colors: bool) -
                         next.push(c);
                     }
                 }
-                current = next;
+                // Collapse permutation-equivalent partials each step so the
+                // accumulator can't balloon into the full cross-slot product
+                // before the final dedup (see non-max_colors branch below).
+                current = dedupe_gem_assignments(next, 0);
             }
             result.extend(current);
         }
@@ -104,9 +107,15 @@ fn gen_color_combos(slots: &[(String, usize)], gems: &[u64], max_colors: bool) -
                     next.push(c);
                 }
             }
-            result = next;
+            // Dedup the partial accumulator after every slot. The final dedup
+            // collapses on the flat sorted gem list across all slots; two
+            // partials with the same flat multiset can only extend to the same
+            // final set, so collapsing here is loss-free and keeps the
+            // accumulator polynomial instead of letting the full cross-slot
+            // product (gems^slots) materialize first.
+            result = dedupe_gem_assignments(next, 0);
         }
-        dedupe_gem_assignments(result, 0)
+        result
     }
 }
 
@@ -271,6 +280,36 @@ mod tests {
         assert_eq!(direct.len(), iter_collected.len());
         for (a, c) in direct.iter().zip(iter_collected.iter()) {
             assert_eq!(a, c);
+        }
+    }
+
+    #[test]
+    fn cross_slot_dedup_matches_multiset_count() {
+        // 5 single-socket slots, 5 gems. The naive cross-slot product is
+        // 5^5 = 3125 intermediate combos; gems are character-wide so the
+        // deduped result is the number of size-5 multisets of 5 gems =
+        // C(5+5-1, 5) = C(9,5) = 126. This invariant must hold regardless
+        // of whether dedup happens incrementally or at the end.
+        ensure_game_data_loaded();
+        let slots: Vec<(String, usize)> = ["head", "neck", "wrist", "hands", "waist"]
+            .iter()
+            .map(|s| (s.to_string(), 1))
+            .collect();
+        let gems = vec![100u64, 200, 300, 400, 500];
+        let b = GemCombosBuilder {
+            gem_options: &gems,
+            gem_slots: &slots,
+            diamond_ids: &[],
+            diamond_always_use: false,
+            max_colors: false,
+        };
+        let combos = enumerate_all(&b);
+        assert_eq!(combos.len(), 126, "expected C(9,5)=126 deduped multisets");
+        for c in &combos {
+            assert_eq!(c.len(), 5, "every slot must be assigned: {c:?}");
+            for gids in c.values() {
+                assert_eq!(gids.len(), 1, "single-socket slot gets one gem: {gids:?}");
+            }
         }
     }
 
