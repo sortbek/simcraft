@@ -29,6 +29,11 @@ pub(super) struct StreamingTopGearStart {
     pub catalyst_charges: Option<u32>,
     pub max_combinations: Option<usize>,
     pub estimate: u64,
+    /// Exact combo count computed once in `create_top_gear_sim` by
+    /// `count_top_gear_combos_with_talents`. Threaded into the cloud path so
+    /// `start_cloud_streaming` can use it directly for credit reservation and
+    /// the `CloudProgress` denominator without re-counting.
+    pub exact_combos: u64,
     pub provider_id: String,
     /// The resolved compute provider for this request. Local ⇒ existing triage
     /// path; a cloud-streaming-capable remote (e.g. Simmit) ⇒ the cloud
@@ -78,6 +83,7 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
         catalyst_charges,
         max_combinations,
         estimate,
+        exact_combos: _,
         provider_id,
         provider: _provider,
         provider_auth: _provider_auth,

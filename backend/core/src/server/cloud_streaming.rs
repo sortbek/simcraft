@@ -1096,6 +1096,7 @@ pub(super) async fn start_cloud_streaming(
         catalyst_charges,
         max_combinations,
         estimate,
+        exact_combos,
         provider_id,
         provider,
         provider_auth,
@@ -1187,33 +1188,18 @@ pub(super) async fn start_cloud_streaming(
     }
 
     // ── Affordability gate: re-validate the estimate authoritatively at submit. ─
-    // `est_credits` from the (capped) combo count + ceiling + target_error; the
-    // check closure fetches the account's available credits via the provider's
-    // credential endpoint (reusing the Task 6 `cloud_estimate` math). `None` auth
-    // / no-credits-concept → `Ok(None)` (treated as affordable inside the gate).
+    // `est_credits` from the exact combo count (passed from `create_top_gear_sim`,
+    // already computed once) + ceiling + target_error. The check closure fetches
+    // the account's available credits via the provider's credential endpoint
+    // (reusing the Task 6 `cloud_estimate` math). `None` auth / no-credits-concept
+    // → `Ok(None)` (treated as affordable inside the gate).
     let ceiling = REMOTE_MAX_PROFILESETS_PER_JOB;
-    // Credits must reflect the ACTUAL (deduped) combo count, not the O(axes)
-    // upper-bound `estimate`. For gem-heavy selections the upper bound is the
-    // cartesian `gems^sockets`, orders of magnitude larger than the deduped
-    // multiset count the run actually emits — billing off the upper bound would
-    // falsely block an affordable job at submit (the "need ~N but only M
-    // available" trap). Count exactly here so the gate matches the figure
-    // cloud_estimate showed the user (which also counts exactly). Fall back to
-    // the upper bound only if the exact count is unavailable, preserving the
-    // prior conservative behavior.
-    let combos_for_credits = profileset_generator::count_top_gear_combos_with_talents(
-        &base_profile,
-        &items_by_slot,
-        &req.selected_items,
-        max_combinations,
-        &talent_builds,
-        catalyst_charges,
-        &gem_opts,
-    )
-    .map(|n| n as u64)
-    .unwrap_or(estimate);
+    // `exact_combos` was computed once in `create_top_gear_sim` via
+    // `count_top_gear_combos_with_talents`. Using it directly avoids a second
+    // O(total) count here and ensures the credit gate and progress denominator
+    // match the figure `cloud_estimate` showed the user.
     let est_credits_needed =
-        super::cloud_estimate::est_credits(combos_for_credits, ceiling, target_error);
+        super::cloud_estimate::est_credits(exact_combos, ceiling, target_error);
     let affordability: Option<AffordabilityCheck> = {
         let provider = provider.clone();
         let auth = provider_auth.clone();
@@ -1247,13 +1233,13 @@ pub(super) async fn start_cloud_streaming(
     let cloud_repo = CloudChunksRepo::new(pool.clone());
     let cancel = Some(CancelToken::new(repo.get_ref().clone(), job_id.clone()));
     // Run-scoped job-level progress bar: weights each chunk's live percent
-    // against the EXACT combo count (same figure used for credits above), not the
-    // O(axes) upper-bound `estimate`. For gem-heavy jobs the upper bound is huge
-    // relative to what the iterator emits, which would peg the bar near 0% for the
-    // whole run. The exact count equals the iterator's emitted total, so the bar
-    // reaches 100%. Zero extra Simmit calls.
+    // against `exact_combos` (the exact deduped count, same figure used for
+    // credits). For gem-heavy jobs the O(axes) upper-bound `estimate` is huge
+    // relative to what the iterator emits, which would peg the bar near 0% for
+    // the whole run. The exact count equals the iterator's emitted total, so the
+    // bar reaches 100%. No extra Simmit calls.
     let progress =
-        CloudProgress::new(repo.get_ref().clone(), job_id.clone(), combos_for_credits as usize);
+        CloudProgress::new(repo.get_ref().clone(), job_id.clone(), exact_combos as usize);
     let runner = build_production_chunk_runner(
         provider.clone(),
         cloud_repo,

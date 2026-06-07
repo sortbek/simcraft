@@ -100,6 +100,39 @@ pub(super) async fn create_top_gear_sim(
     };
 
     // ── Path decision ────────────────────────────────────────────────────────
+    // Count the exact combo count once: used for the zero-guard, the
+    // streaming-vs-eager routing decision, and (on the streaming path) the
+    // credit reservation + progress denominator. `Err` (TooMany) falls through
+    // to the eager path, which re-counts and surfaces the same error to the user.
+    let exact_combos: u64 = match profileset_generator::count_top_gear_combos_with_talents(
+        &base_profile,
+        &items_by_slot,
+        &req.selected_items,
+        max_combinations,
+        &talent_builds,
+        catalyst_charges,
+        &gem_opts,
+    ) {
+        Ok(0) => {
+            return HttpResponse::BadRequest().json(json!({
+                "detail": "No combinations to simulate. Select alternative items, enchants, \
+                           or gems that change the current gear set (with 'replace gems' off, \
+                           already-gemmed sockets produce no combinations)."
+            }));
+        }
+        Ok(n) => n as u64,
+        // TooMany: fall through to the eager path, which re-counts and returns the
+        // same error. We do NOT early-return here so the user-facing error message
+        // and behavior remain identical to the pre-refactor state.
+        Err(_) => 0,
+    };
+    // Route on the exact count. `exact_combos == 0` means Err(TooMany) above;
+    // routing it as non-streaming sends it to the eager path which handles it.
+    let use_streaming_path = exact_combos >= TRIAGE_THRESHOLD;
+
+    // O(axes) upper-bound estimate: kept only for the WorkloadEstimate passed to
+    // `resolve_provider_for_request` (provider selection heuristic) and the
+    // `estimate` field in the streaming response envelope. Not used for routing.
     let estimate = profileset_generator::estimate_top_gear_combo_count(
         &items_by_slot,
         &req.selected_items,
@@ -109,39 +142,15 @@ pub(super) async fn create_top_gear_sim(
         talent_builds.len().max(1),
     );
 
-    let effective_estimate = max_combinations
-        .map(|cap| estimate.min(cap as u64))
-        .unwrap_or(estimate);
-    let use_streaming_path = effective_estimate >= TRIAGE_THRESHOLD;
-
-    // The upper-bound `estimate` ignores replace_gems and already-gemmed sockets,
-    // so a request with zero REAL combos (e.g. all gems selected but replace_gems
-    // off and every socket already filled) can still have estimate > 0. Routing
-    // on the estimate alone would then submit a baseline-only job to a provider —
-    // billing the user for work the UI correctly showed as 0 combinations. Count
-    // exactly here and reject cleanly before any provider/streaming work. (A
-    // too-many error is left to the downstream paths, which handle large jobs.)
-    if let Ok(0) = profileset_generator::count_top_gear_combos_with_talents(
-        &base_profile,
-        &items_by_slot,
-        &req.selected_items,
-        max_combinations,
-        &talent_builds,
-        catalyst_charges,
-        &gem_opts,
-    ) {
-        return HttpResponse::BadRequest().json(json!({
-            "detail": "No combinations to simulate. Select alternative items, enchants, \
-                       or gems that change the current gear set (with 'replace gems' off, \
-                       already-gemmed sockets produce no combinations)."
-        }));
-    }
-
+    // For the WorkloadEstimate combo_count heuristic: use the exact count when
+    // available (non-zero), fall back to `estimate` for the TooMany case
+    // (exact_combos == 0 means Err was returned and the eager path handles it).
+    let workload_combo_count = if exact_combos > 0 { exact_combos as usize } else { estimate as usize };
     let (provider, avail) = match resolve_provider_for_request(
         "top_gear",
         req.options.compute_provider.as_deref(),
         WorkloadEstimate {
-            combo_count: effective_estimate as usize,
+            combo_count: workload_combo_count,
             would_use_streaming_path: use_streaming_path,
         },
         http_req.headers(),
@@ -171,6 +180,7 @@ pub(super) async fn create_top_gear_sim(
                 catalyst_charges,
                 max_combinations,
                 estimate,
+                exact_combos,
                 provider_id: provider_id_str.clone(),
                 provider: provider.clone(),
                 provider_auth: avail.auth_for(provider.id()),
