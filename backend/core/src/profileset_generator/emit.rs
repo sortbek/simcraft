@@ -129,6 +129,28 @@ pub(super) fn emit_profileset(
     lines
 }
 
+/// One enchant delta metadata row: `{slot, type:"enchant", enchant_id, name}`.
+pub(super) fn build_enchant_entry(slot: &str, enchant_id: u64) -> Value {
+    let name = crate::item_db::get_enchant_info(enchant_id)
+        .as_ref()
+        .and_then(|v| v.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
+    json!({ "slot": slot, "type": "enchant", "enchant_id": enchant_id, "name": name })
+}
+
+/// One gem delta metadata row: `{slot, type:"gem", gem_id, name}`.
+pub(super) fn build_gem_entry(slot: &str, gem_id: u64) -> Value {
+    let name = crate::item_db::get_gem_info(gem_id)
+        .as_ref()
+        .and_then(|v| v.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
+    json!({ "slot": slot, "type": "gem", "gem_id": gem_id, "name": name })
+}
+
 /// Build per-combo metadata for one profileset (the canonical eager shape).
 ///
 /// # Arguments

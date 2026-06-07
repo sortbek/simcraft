@@ -433,19 +433,7 @@ impl ProfilesetIterator {
                     continue; // eager filters by simc_has_socket
                 }
                 for &gid in gids {
-                    let info = crate::item_db::get_gem_info(gid);
-                    let gname = info
-                        .as_ref()
-                        .and_then(|v| v.get("name"))
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    entries.push(serde_json::json!({
-                        "slot": slot,
-                        "type": "gem",
-                        "gem_id": gid,
-                        "name": gname,
-                    }));
+                    entries.push(super::emit::build_gem_entry(slot, gid));
                 }
             }
             entries
@@ -483,21 +471,7 @@ impl ProfilesetIterator {
                 // Build enchant entries, then gem entries filtered by simc_has_socket.
                 let mut items: Vec<serde_json::Value> = effective_enchants_map
                     .iter()
-                    .map(|(slot, &eid)| {
-                        let info = crate::item_db::get_enchant_info(eid);
-                        let ename = info
-                            .as_ref()
-                            .and_then(|v| v.get("name"))
-                            .and_then(|n| n.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        serde_json::json!({
-                            "slot": slot,
-                            "type": "enchant",
-                            "enchant_id": eid,
-                            "name": ename,
-                        })
-                    })
+                    .map(|(slot, &eid)| super::emit::build_enchant_entry(slot, eid))
                     .collect();
                 items.extend(gem_entries_simc_filtered(&effective_enchants_map));
                 if let Some((build_name, ts)) = talent_info {
@@ -564,21 +538,7 @@ impl ProfilesetIterator {
             // also swapped; we mirror that (no filter by swap status).
             let enchant_entries: Vec<serde_json::Value> = effective_enchants_map
                 .iter()
-                .map(|(slot, &eid)| {
-                    let info = crate::item_db::get_enchant_info(eid);
-                    let ename = info
-                        .as_ref()
-                        .and_then(|v| v.get("name"))
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    serde_json::json!({
-                        "slot": slot,
-                        "type": "enchant",
-                        "enchant_id": eid,
-                        "name": ename,
-                    })
-                })
+                .map(|(slot, &eid)| super::emit::build_enchant_entry(slot, eid))
                 .collect();
 
             // Gem entries (one per socket per slot) for the non-baseline cases.
@@ -632,19 +592,7 @@ impl ProfilesetIterator {
                             continue;
                         }
                         for &gid in gids {
-                            let info = crate::item_db::get_gem_info(gid);
-                            let gname = info
-                                .as_ref()
-                                .and_then(|v| v.get("name"))
-                                .and_then(|n| n.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            entries.push(serde_json::json!({
-                                "slot": slot,
-                                "type": "gem",
-                                "gem_id": gid,
-                                "name": gname,
-                            }));
+                            entries.push(super::emit::build_gem_entry(slot, gid));
                         }
                     }
                     entries
