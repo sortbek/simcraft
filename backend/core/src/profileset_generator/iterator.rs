@@ -277,6 +277,14 @@ impl ProfilesetIterator {
         // (Enchant overrides always differ from equipped — axis index 0 is the
         // equipped enchant and never emits an override — so a non-empty enchant
         // map always changes something.)
+        //
+        // Also skip baseline + talent_idx=0 when there are no other effective
+        // deltas. In the eager wrapper the base actor is emitted separately as
+        // "### Combo 1" using the FIRST talent; a profileset of
+        // (baseline gear, first talent, no enchant override, no gem delta) would
+        // duplicate it byte-for-byte. In the streaming path the base_profile
+        // already carries the first talent, so the same deduplication applies.
+        // talent_idx>0 is never the base actor regardless of deltas.
         let gems_match_equipped = eff_gems.iter().all(|(slot, gids)| {
             let equipped_gems = gear_set
                 .get(slot)
@@ -293,7 +301,7 @@ impl ProfilesetIterator {
         if is_baseline
             && effective_enchants_map.is_empty()
             && gems_match_equipped
-            && talent_string.is_empty()
+            && (talent_string.is_empty() || talent_idx == 0)
         {
             return None;
         }

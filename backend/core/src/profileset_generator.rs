@@ -163,7 +163,6 @@ pub fn generate_top_gear_input_with_talents(
         talent_builds,
         catalyst_charges,
         gem_opts,
-        false,
     )
 }
 
