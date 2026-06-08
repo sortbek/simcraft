@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePollWhileVisible } from '../../lib/usePollWhileVisible';
 import DpsHeroCard from '../../components/results/DpsHeroCard';
 import GearOverview from '../../components/gear/GearOverview';
 import ResultsChart from '../../components/results/ResultsChart';
@@ -72,50 +73,32 @@ export default function SimResultClient() {
     setSiblings(getScenarioSiblings());
   }, []);
 
-  useEffect(() => {
-    if (!id || id === '_') return;
-    setFetchError('');
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
+  usePollWhileVisible(
+    async () => {
       try {
         const res = await fetch(`${API_URL}/api/sim/${id}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: JobData = await res.json();
-        if (active) setJob(data);
-        if (
-          active &&
-          !document.hidden &&
-          (data.status === 'pending' || data.status === 'running' || data.status === 'paused')
-        ) {
-          timer = setTimeout(poll, 2000);
-        }
+        setFetchError(''); // preserve the original per-poll error reset on success
+        setJob(data);
+        return data.status === 'pending' || data.status === 'running' || data.status === 'paused'
+          ? 2000
+          : null;
       } catch (err) {
-        if (active) setFetchError(err instanceof Error ? err.message : 'Failed to fetch status');
+        setFetchError(err instanceof Error ? err.message : 'Failed to fetch status');
+        return null;
       }
-    }
-    const onVisibility = () => {
-      if (active && !document.hidden) poll();
-    };
-    poll();
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [id]);
+    },
+    !!id && id !== '_',
+    [id]
+  );
 
   // Poll logs only when the log console is expanded and the sim is active
-  useEffect(() => {
-    if (!showLogs || !id || id === '_') return;
-    if (job?.status !== 'pending' && job?.status !== 'running') return;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function pollLogs() {
+  usePollWhileVisible(
+    async () => {
       try {
         const res = await fetch(`${API_URL}/api/sim/${id}/logs?after=${logCursorRef.current}`);
-        if (!res.ok || !active) return;
+        if (!res.ok) return null;
         const data = await res.json();
         if (data.lines.length > 0) {
           setLogLines((prev) => {
@@ -127,19 +110,11 @@ export default function SimResultClient() {
       } catch {
         /* ignore */
       }
-      if (active && !document.hidden) timer = setTimeout(pollLogs, 1000);
-    }
-    const onVisibility = () => {
-      if (active && !document.hidden) pollLogs();
-    };
-    pollLogs();
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [showLogs, id, job?.status]);
+      return 1000;
+    },
+    showLogs && !!id && id !== '_' && (job?.status === 'pending' || job?.status === 'running'),
+    [showLogs, id, job?.status]
+  );
 
   // Final flush: when the job transitions to a terminal state, fetch any
   // log lines that arrived between the last successful poll and the status
