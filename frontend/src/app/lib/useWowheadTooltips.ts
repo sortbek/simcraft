@@ -6,6 +6,21 @@ declare global {
   }
 }
 
+/** Produces a stable cache-busting key from the three info maps. When the key
+ * changes, `useWowheadTooltips` fires a refreshLinks() call so newly-loaded
+ * item/enchant/gem anchors pick up their tooltips. */
+export function wowheadKeyFor(maps: {
+  item: Record<number, unknown>;
+  enchant: Record<number, unknown>;
+  gem: Record<number, unknown>;
+}): string {
+  return [
+    Object.keys(maps.item).sort().join(','),
+    Object.keys(maps.enchant).sort().join(','),
+    Object.keys(maps.gem).sort().join(','),
+  ].join('|');
+}
+
 export function useWowheadTooltips(deps: unknown[] = []) {
   useEffect(() => {
     let cancelled = false;

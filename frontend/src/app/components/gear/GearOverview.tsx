@@ -11,7 +11,7 @@ import {
   useItemInfo,
 } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
-import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
+import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import GearSlotRow from './GearSlotRow';
 import {
   GEAR_ORDER_BOTTOM,
@@ -69,12 +69,7 @@ export default function GearOverview({
   const gemInfoMap = propGemInfoMap ?? fetchedGemInfoMap;
 
   const wowheadKey = useMemo(
-    () =>
-      [
-        Object.keys(itemInfoMap).sort().join(','),
-        Object.keys(enchantInfoMap).sort().join(','),
-        Object.keys(gemInfoMap).sort().join(','),
-      ].join('|'),
+    () => wowheadKeyFor({ item: itemInfoMap, enchant: enchantInfoMap, gem: gemInfoMap }),
     [itemInfoMap, enchantInfoMap, gemInfoMap]
   );
   useWowheadTooltips([wowheadKey]);

@@ -6,7 +6,7 @@ import GearOverview from './GearOverview';
 import TopGearRankings from './TopGearRankings';
 import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
-import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
+import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import type { GroupMode, TopGearResultsProps } from './topGearResultsTypes';
 import {
   buildBestGearSet,
@@ -78,12 +78,7 @@ export default function TopGearResults({
   const gemInfoMap = useGemInfo(allGemIds);
 
   const wowheadKey = useMemo(
-    () =>
-      [
-        Object.keys(itemInfoMap).sort().join(','),
-        Object.keys(enchantInfoMap).sort().join(','),
-        Object.keys(gemInfoMap).sort().join(','),
-      ].join('|'),
+    () => wowheadKeyFor({ item: itemInfoMap, enchant: enchantInfoMap, gem: gemInfoMap }),
     [itemInfoMap, enchantInfoMap, gemInfoMap]
   );
   useWowheadTooltips([wowheadKey]);
