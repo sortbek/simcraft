@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { simRow } from '../../lib/api';
 import { SLOT_LABELS, specDisplayName } from '../../lib/types';
@@ -231,7 +231,7 @@ export default function TopGearRankings({
                       baseDps={baseDps}
                       isBest={result === results[0] && result.delta > 0}
                       isSelected={result.name === (selectedResultName || results[0]?.name)}
-                      onSelect={() => onSelectResult(result.name)}
+                      onSelect={onSelectResult}
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
@@ -299,7 +299,7 @@ function RankedResults({
           targetError={targetError}
           isBest={idx === 0 && result.delta > 0}
           isSelected={result.name === (selectedResultName || results[0]?.name)}
-          onSelect={() => onSelectResult(result.name)}
+          onSelect={onSelectResult}
           itemInfoMap={itemInfoMap}
           enchantInfoMap={enchantInfoMap}
           gemInfoMap={gemInfoMap}
@@ -310,7 +310,7 @@ function RankedResults({
   );
 }
 
-function ResultRow({
+const ResultRow = memo(function ResultRow({
   result,
   rank,
   maxDps,
@@ -331,7 +331,7 @@ function ResultRow({
   targetError?: number;
   isBest: boolean;
   isSelected?: boolean;
-  onSelect?: () => void;
+  onSelect?: (name: string) => void;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -379,7 +379,7 @@ function ResultRow({
 
   return (
     <div
-      onClick={onSelect}
+      onClick={() => onSelect?.(result.name)}
       className={`relative cursor-pointer overflow-hidden rounded-lg transition-colors hover:bg-white/[0.04] ${
         isSelected && !isBest
           ? 'bg-emerald-500/[0.04] ring-1 ring-emerald-500/50'
@@ -508,7 +508,7 @@ function ResultRow({
       </div>
     </div>
   );
-}
+});
 
 function ItemTag({
   item,
