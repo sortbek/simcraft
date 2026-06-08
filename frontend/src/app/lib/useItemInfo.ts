@@ -68,6 +68,20 @@ export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
     if (toFetch.length === 0) return;
 
     let cancelled = false;
+    // Coalesce per-item resolutions into batched state updates. Setting state
+    // once per fetched item would re-render the whole results tree (and re-run
+    // wowhead refresh) once per item — hundreds of times on large results,
+    // freezing the UI. Buffer arrivals and flush on a short debounce so they
+    // still appear progressively, just in batches.
+    let pending: Record<number, ItemInfo> = {};
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      flushTimer = null;
+      if (cancelled) return;
+      const batch = pending;
+      pending = {};
+      if (Object.keys(batch).length > 0) setItems((prev) => ({ ...prev, ...batch }));
+    };
 
     // Fetch each item individually so results appear as they arrive
     for (const q of toFetch) {
@@ -85,7 +99,8 @@ export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
 
           const key = cacheKey(q.item_id, q.bonus_ids);
           cache[key] = info;
-          setItems((prev) => ({ ...prev, [q.item_id]: info }));
+          pending[q.item_id] = info;
+          if (!flushTimer) flushTimer = setTimeout(flush, 80);
         } catch {
           // Silently fail
         }
@@ -94,6 +109,7 @@ export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
 
     return () => {
       cancelled = true;
+      if (flushTimer) clearTimeout(flushTimer);
     };
   }, [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -137,6 +153,15 @@ export function useEnchantInfo(enchantIds: number[]): Record<number, EnchantInfo
     if (toFetch.length === 0) return;
 
     let cancelled = false;
+    let pending: Record<number, EnchantInfo> = {};
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      flushTimer = null;
+      if (cancelled) return;
+      const batch = pending;
+      pending = {};
+      if (Object.keys(batch).length > 0) setEnchants((prev) => ({ ...prev, ...batch }));
+    };
 
     for (const id of toFetch) {
       (async () => {
@@ -146,7 +171,8 @@ export function useEnchantInfo(enchantIds: number[]): Record<number, EnchantInfo
           const info: EnchantInfo = await res.json();
           if (cancelled || !info.name) return;
           enchantCache[id] = info;
-          setEnchants((prev) => ({ ...prev, [id]: info }));
+          pending[id] = info;
+          if (!flushTimer) flushTimer = setTimeout(flush, 80);
         } catch {
           // Silently fail
         }
@@ -155,6 +181,7 @@ export function useEnchantInfo(enchantIds: number[]): Record<number, EnchantInfo
 
     return () => {
       cancelled = true;
+      if (flushTimer) clearTimeout(flushTimer);
     };
   }, [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -199,6 +226,15 @@ export function useGemInfo(gemIds: number[]): Record<number, GemInfo> {
     if (toFetch.length === 0) return;
 
     let cancelled = false;
+    let pending: Record<number, GemInfo> = {};
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      flushTimer = null;
+      if (cancelled) return;
+      const batch = pending;
+      pending = {};
+      if (Object.keys(batch).length > 0) setGems((prev) => ({ ...prev, ...batch }));
+    };
 
     for (const id of toFetch) {
       (async () => {
@@ -208,7 +244,8 @@ export function useGemInfo(gemIds: number[]): Record<number, GemInfo> {
           const info: GemInfo = await res.json();
           if (cancelled || !info.name) return;
           gemCache[id] = info;
-          setGems((prev) => ({ ...prev, [id]: info }));
+          pending[id] = info;
+          if (!flushTimer) flushTimer = setTimeout(flush, 80);
         } catch {
           // Silently fail
         }
@@ -217,6 +254,7 @@ export function useGemInfo(gemIds: number[]): Record<number, GemInfo> {
 
     return () => {
       cancelled = true;
+      if (flushTimer) clearTimeout(flushTimer);
     };
   }, [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
