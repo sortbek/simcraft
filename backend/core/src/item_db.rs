@@ -2,11 +2,16 @@
 //!
 //! No filtering, no class logic. Just load JSON files and provide accessors.
 
+use once_cell::sync::Lazy;
 use once_cell::sync::OnceCell;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
+
+// Shared regex for bonus_id replacement — compiled once, used by both upgrade fns.
+static RE_BONUS_ID: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"bonus_id=([0-9/:]+)").unwrap());
 
 use crate::types::{class_data, BonusResolved, ItemInfo};
 
@@ -1193,8 +1198,7 @@ pub fn upgrade_bonus_ids_to_max(bonus_ids: &[u64]) -> Vec<u64> {
 }
 
 pub fn upgrade_simc_input(simc_input: &str) -> String {
-    let re = regex::Regex::new(r"bonus_id=([0-9/:]+)").unwrap();
-    re.replace_all(simc_input, |caps: &regex::Captures| {
+    RE_BONUS_ID.replace_all(simc_input, |caps: &regex::Captures| {
         let raw = &caps[1];
         let sep = if raw.contains('/') { "/" } else { ":" };
         let ids: Vec<u64> = raw
@@ -1217,7 +1221,6 @@ pub fn upgrade_simc_input(simc_input: &str) -> String {
 pub fn upgrade_items_by_slot(
     items_by_slot: &HashMap<String, Vec<Value>>,
 ) -> HashMap<String, Vec<Value>> {
-    let bonus_re = regex::Regex::new(r"bonus_id=([0-9/:]+)").unwrap();
     let mut result = HashMap::new();
 
     for (slot, slot_items) in items_by_slot {
@@ -1238,7 +1241,7 @@ pub fn upgrade_items_by_slot(
                 updated["bonus_ids"] = serde_json::json!(new_bonus_ids);
 
                 if let Some(simc) = item.get("simc_string").and_then(|s| s.as_str()) {
-                    let new_simc = bonus_re
+                    let new_simc = RE_BONUS_ID
                         .replace(simc, |caps: &regex::Captures| {
                             let raw = &caps[1];
                             let sep = if raw.contains('/') { "/" } else { ":" };

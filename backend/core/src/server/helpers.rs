@@ -1,7 +1,16 @@
 use actix_web::HttpResponse;
+use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+// Hot-path regexes compiled once at startup.
+static RE_BLOCKED_DIRECTIVES: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"(?mi)^\s*(output|html|json2?|xml)\s*=").unwrap());
+static RE_TALENTS_LINE: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"(?m)^talents=.+$").unwrap());
+static RE_SPEC_LINE: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"(?m)^spec=.+$").unwrap());
 
 use super::types::SimOptions;
 use super::SimcBinaries;
@@ -68,10 +77,9 @@ pub(super) async fn finalize_job_outcome(
 
 /// Sanitize user-provided custom SimC input by stripping dangerous directives.
 pub(super) fn sanitize_custom_simc(input: &str) -> String {
-    let blocked = regex::Regex::new(r"(?mi)^\s*(output|html|json2?|xml)\s*=").unwrap();
     input
         .lines()
-        .filter(|line| !blocked.is_match(line))
+        .filter(|line| !RE_BLOCKED_DIRECTIVES.is_match(line))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -275,9 +283,9 @@ pub(super) fn apply_talent_override(simc_input: &str, talents: &str) -> String {
     if talents.is_empty() {
         return simc_input.to_string();
     }
-    let re = regex::Regex::new(r"(?m)^talents=.+$").unwrap();
-    if re.is_match(simc_input) {
-        re.replace(simc_input, format!("talents={}", talents))
+    if RE_TALENTS_LINE.is_match(simc_input) {
+        RE_TALENTS_LINE
+            .replace(simc_input, format!("talents={}", talents))
             .to_string()
     } else {
         format!("{}\ntalents={}", simc_input, talents)
@@ -289,9 +297,10 @@ pub(super) fn apply_spec_override(simc_input: &str, spec: &str) -> String {
     if spec.is_empty() {
         return simc_input.to_string();
     }
-    let re = regex::Regex::new(r"(?m)^spec=.+$").unwrap();
-    if re.is_match(simc_input) {
-        re.replace(simc_input, format!("spec={}", spec)).to_string()
+    if RE_SPEC_LINE.is_match(simc_input) {
+        RE_SPEC_LINE
+            .replace(simc_input, format!("spec={}", spec))
+            .to_string()
     } else {
         format!("{}\nspec={}", simc_input, spec)
     }

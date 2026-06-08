@@ -1,8 +1,40 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
 
 use crate::types::class_data::{self, GEAR_SLOTS};
 use crate::types::{CharacterInfo, ItemOrigin, ParseResult, RawParsedItem, TalentLoadout};
+
+// parse_item_props regexes — compiled once, reused for every item in the request.
+static RE_ITEM_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"id=(\d+)").unwrap());
+static RE_ILVL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?:ilevel|ilvl)=(\d+)").unwrap());
+static RE_BONUS_ID: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"bonus_id=([0-9/:]+)").unwrap());
+static RE_ENCHANT_ID: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"enchant_id=(\d+)").unwrap());
+static RE_GEM_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"gem_id=(\d+)").unwrap());
+static RE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"name=([^,]+)").unwrap());
+static RE_SLOT_NAME: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^([a-z_]+),").unwrap());
+
+// parse_simc_input regexes — compiled once per process.
+static RE_SLOT: Lazy<Regex> = Lazy::new(|| {
+    let pattern = format!(r"^({})=(.*)", GEAR_SLOTS.join("|"));
+    Regex::new(&pattern).unwrap()
+});
+static RE_HEADER: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^#+\s*(.+?)\s*\(?(\d+)\)?\s*$").unwrap());
+static RE_TALENTS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^talents=(.+)").unwrap());
+
+// parse_upgrade_currencies / parse_catalyst_charges regexes.
+static RE_UPGRADE_CURRENCIES_LINE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^#?\s*upgrade_currencies\s*=\s*(.+)$").unwrap());
+static RE_CURRENCY_PAIR: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"c:(\d+):(\d+)").unwrap());
+static RE_CATALYST_LINE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^#?\s*catalyst_currencies\s*=\s*(.+)$").unwrap());
 
 struct ItemProps {
     item_id: u64,
@@ -23,35 +55,29 @@ fn parse_item_props(item_str: &str) -> ItemProps {
         gem_id: 0,
     };
 
-    if let Some(caps) = Regex::new(r"id=(\d+)").unwrap().captures(item_str) {
+    if let Some(caps) = RE_ITEM_ID.captures(item_str) {
         props.item_id = caps[1].parse().unwrap_or(0);
     }
-    if let Some(caps) = Regex::new(r"(?:ilevel|ilvl)=(\d+)")
-        .unwrap()
-        .captures(item_str)
-    {
+    if let Some(caps) = RE_ILVL.captures(item_str) {
         props.ilevel = caps[1].parse().unwrap_or(0);
     }
-    if let Some(caps) = Regex::new(r"bonus_id=([0-9/:]+)")
-        .unwrap()
-        .captures(item_str)
-    {
+    if let Some(caps) = RE_BONUS_ID.captures(item_str) {
         props.bonus_ids = caps[1]
             .split(&['/', ':'][..])
             .filter_map(|s| s.parse().ok())
             .collect();
     }
-    if let Some(caps) = Regex::new(r"enchant_id=(\d+)").unwrap().captures(item_str) {
+    if let Some(caps) = RE_ENCHANT_ID.captures(item_str) {
         props.enchant_id = caps[1].parse().unwrap_or(0);
     }
-    if let Some(caps) = Regex::new(r"gem_id=(\d+)").unwrap().captures(item_str) {
+    if let Some(caps) = RE_GEM_ID.captures(item_str) {
         props.gem_id = caps[1].parse().unwrap_or(0);
     }
-    if let Some(caps) = Regex::new(r"name=([^,]+)").unwrap().captures(item_str) {
+    if let Some(caps) = RE_NAME.captures(item_str) {
         props.name = class_data::title_case(&caps[1].replace('_', " "));
     }
     if props.name.is_empty() {
-        if let Some(caps) = Regex::new(r"^([a-z_]+),").unwrap().captures(item_str) {
+        if let Some(caps) = RE_SLOT_NAME.captures(item_str) {
             props.name = class_data::title_case(&caps[1].replace('_', " "));
         }
     }
@@ -63,10 +89,9 @@ fn parse_item_props(item_str: &str) -> ItemProps {
 /// This is a PURE parser: no slot assignment, no crossover, no dedup, no filtering.
 /// Those responsibilities belong to `gear_resolver`.
 pub fn parse_simc_input(simc_input: &str) -> ParseResult {
-    let slot_pattern = format!(r"^({})=(.*)", GEAR_SLOTS.join("|"));
-    let slot_re = Regex::new(&slot_pattern).unwrap();
-    let header_re = Regex::new(r"^#+\s*(.+?)\s*\(?(\d+)\)?\s*$").unwrap();
-    let talents_re = Regex::new(r"^talents=(.+)").unwrap();
+    let slot_re = &*RE_SLOT;
+    let header_re = &*RE_HEADER;
+    let talents_re = &*RE_TALENTS;
 
     let character = CharacterInfo {
         class_name: class_data::detect_class(simc_input),
@@ -251,15 +276,12 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
 /// Parses lines like: `# upgrade_currencies = 3068:80/3069:100`
 /// Returns a map of currency_id → amount.
 pub fn parse_upgrade_currencies(simc_input: &str) -> HashMap<u64, u64> {
-    let line_re = Regex::new(r"(?i)^#?\s*upgrade_currencies\s*=\s*(.+)$").unwrap();
     // Only match c:ID:AMOUNT entries (currencies), skip i:ID:AMOUNT (items)
-    let pair_re = Regex::new(r"c:(\d+):(\d+)").unwrap();
-
     let mut currencies = HashMap::new();
     for line in simc_input.lines() {
-        if let Some(caps) = line_re.captures(line.trim()) {
+        if let Some(caps) = RE_UPGRADE_CURRENCIES_LINE.captures(line.trim()) {
             let rhs = &caps[1];
-            for pair in pair_re.captures_iter(rhs) {
+            for pair in RE_CURRENCY_PAIR.captures_iter(rhs) {
                 let id: u64 = pair[1].parse().unwrap_or(0);
                 let amount: u64 = pair[2].parse().unwrap_or(0);
                 if id > 0 {
@@ -277,9 +299,8 @@ pub fn parse_upgrade_currencies(simc_input: &str) -> HashMap<u64, u64> {
 /// Parses lines like: `# catalyst_currencies=3269:8/3378:5/2813:8/3116:8`
 /// Returns the charge count for the given currency_id (e.g. 3378 for Midnight Catalyst).
 pub fn parse_catalyst_charges(simc_input: &str, currency_id: u64) -> Option<u32> {
-    let line_re = Regex::new(r"(?i)^#?\s*catalyst_currencies\s*=\s*(.+)$").unwrap();
     for line in simc_input.lines() {
-        if let Some(caps) = line_re.captures(line.trim()) {
+        if let Some(caps) = RE_CATALYST_LINE.captures(line.trim()) {
             let rhs = &caps[1];
             for entry in rhs.split('/') {
                 let parts: Vec<&str> = entry.split(':').collect();
