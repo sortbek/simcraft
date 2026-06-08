@@ -104,6 +104,22 @@ struct Eval {
     talent_string: String,
 }
 
+// ── Shared cursor helpers ─────────────────────────────────────────────────────
+
+/// Advance a mixed-radix cursor. Returns false when the space is exhausted.
+fn step_cursor(cursor: &mut [usize], axis_sizes: &[usize]) -> bool {
+    let mut i = cursor.len();
+    while i > 0 {
+        i -= 1;
+        cursor[i] += 1;
+        if cursor[i] < axis_sizes[i] {
+            return true;
+        }
+        cursor[i] = 0;
+    }
+    false
+}
+
 // ── Iterator ─────────────────────────────────────────────────────────────────
 
 pub struct ProfilesetIterator {
@@ -211,33 +227,16 @@ impl ProfilesetIterator {
             if self.evaluate(&cursor).is_some() {
                 count += 1;
             }
-            // Advance cursor (same carry logic as `advance`).
-            let mut i = n_axes;
-            loop {
-                if i == 0 {
-                    return count;
-                }
-                i -= 1;
-                cursor[i] += 1;
-                if cursor[i] < self.axis_sizes[i] {
-                    break;
-                }
-                cursor[i] = 0;
+            if !step_cursor(&mut cursor, &self.axis_sizes) {
+                return count;
             }
         }
     }
 
     fn advance(&mut self) {
-        let mut i = self.cursor.len();
-        while i > 0 {
-            i -= 1;
-            self.cursor[i] += 1;
-            if self.cursor[i] < self.axis_sizes[i] {
-                return;
-            }
-            self.cursor[i] = 0;
+        if !step_cursor(&mut self.cursor, &self.axis_sizes) {
+            self.done = true;
         }
-        self.done = true;
     }
 
     /// Evaluate the emission decision for the current cursor: build the gear set,

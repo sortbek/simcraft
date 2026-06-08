@@ -230,6 +230,22 @@ pub fn build_chunk(
     }
 }
 
+/// Move the iterator onto a blocking thread, build one chunk, and move it back.
+/// The CPU-bound iterator walk must not block the async executor.
+async fn run_build_chunk_blocking(
+    it: ProfilesetIterator,
+    base_profile: String,
+    ceiling: usize,
+) -> (ProfilesetIterator, GeneratedChunk) {
+    tokio::task::spawn_blocking(move || {
+        let mut it = it;
+        let chunk = build_chunk(&mut it, &base_profile, ceiling);
+        (it, chunk)
+    })
+    .await
+    .expect("build_chunk task panicked")
+}
+
 /// Assemble a chunk's COMPLETE submitted simc input: the base actor + its
 /// profileset lines, run through `build_simc_input_from_options` so the
 /// `# Simulation Options` section (target_error, iterations, fight_style,
@@ -473,14 +489,8 @@ impl CloudStreamingRun {
 
         // ── Generate the FIRST chunk (blocking CPU work off the async thread). ─
         let ceiling = self.ceiling;
-        let base_profile = self.base_profile.clone();
-        let (it, first) = tokio::task::spawn_blocking(move || {
-            let mut it = it;
-            let chunk = build_chunk(&mut it, &base_profile, ceiling);
-            (it, chunk)
-        })
-        .await
-        .expect("build_chunk task panicked");
+        let (it, first) =
+            run_build_chunk_blocking(it, self.base_profile.clone(), ceiling).await;
 
         if first.profileset_count == 0 {
             let _ = self
@@ -722,14 +732,8 @@ impl CloudStreamingRun {
                     Some(c) => c,
                     None => {
                         let ceiling = self.ceiling;
-                        let base_profile = self.base_profile.clone();
-                        let (it_back, chunk) = tokio::task::spawn_blocking(move || {
-                            let mut it = it;
-                            let chunk = build_chunk(&mut it, &base_profile, ceiling);
-                            (it, chunk)
-                        })
-                        .await
-                        .expect("build_chunk task panicked");
+                        let (it_back, chunk) =
+                            run_build_chunk_blocking(it, self.base_profile.clone(), ceiling).await;
                         it = it_back;
                         chunk
                     }
@@ -1856,14 +1860,8 @@ async fn resume_cloud_streaming_inner(
         // Regenerate this chunk from the iterator (advances the cursor + names).
         // Run on a blocking thread so the CPU-bound iterator walk does not stall
         // the async executor while awaiting chunk results.
-        let base_profile_clone = base_profile.clone();
-        let (it_back, chunk) = tokio::task::spawn_blocking(move || {
-            let mut it = it;
-            let chunk = build_chunk(&mut it, &base_profile_clone, ceiling);
-            (it, chunk)
-        })
-        .await
-        .expect("build_chunk task panicked");
+        let (it_back, chunk) =
+            run_build_chunk_blocking(it, base_profile.clone(), ceiling).await;
         it = it_back;
         if chunk.profileset_count == 0 {
             // The iterator ran dry before reproducing all recorded generated chunks
