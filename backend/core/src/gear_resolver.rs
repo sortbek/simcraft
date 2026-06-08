@@ -6,9 +6,16 @@
 
 use std::collections::{HashMap, HashSet};
 
+use once_cell::sync::Lazy;
+use regex::Regex;
+
 use crate::item_db;
 use crate::types::class_data::{self, ARMOR_SLOTS, GEAR_SLOTS};
 use crate::types::*;
+
+// Pattern intentionally omits ':' — preserves gear_resolver's original behavior.
+static RE_BONUS_ID_NO_COLON: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"bonus_id=([0-9/]+)").unwrap());
 
 /// Build a stable UID for deduplication: "item_id:sorted_bonus_ids:origin:raw_slot"
 fn make_uid(item: &RawParsedItem) -> String {
@@ -644,8 +651,6 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
 /// recomputed ilevel and simc_string, tag and upgrade fields refreshed from the
 /// VF bonus entry so the UI can distinguish it from the base item.
 pub fn build_void_forge_item(source: &ResolvedItem, vf_bonus_id: u64) -> ResolvedItem {
-    use regex::Regex;
-
     // Replace the matching base bonus_id with the VF variant.
     let vf_map = item_db::void_forge_map();
     let mut new_bonus_ids: Vec<u64> = source
@@ -678,7 +683,7 @@ pub fn build_void_forge_item(source: &ResolvedItem, vf_bonus_id: u64) -> Resolve
     }
 
     // Rewrite bonus_id=... in simc_string.
-    let bonus_id_re = Regex::new(r"bonus_id=([0-9/]+)").unwrap();
+    let bonus_id_re = &*RE_BONUS_ID_NO_COLON;
     let bonus_id_str = new_bonus_ids
         .iter()
         .map(u64::to_string)

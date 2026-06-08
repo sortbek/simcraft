@@ -7,6 +7,8 @@ use super::handler_prep::{preprocess_simc_input, serialize_combo_metadata_vec};
 use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
+use once_cell::sync::Lazy;
+
 use crate::addon_parser;
 use crate::compute::{ProviderRegistry, WorkloadEstimate};
 use crate::db::{JobRepo, SettingsRepo};
@@ -14,6 +16,9 @@ use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::profileset_generator;
+
+static RE_BONUS_ID: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"bonus_id=([0-9/:]+)").unwrap());
 
 /// Shared prep: parse SimC input, extract upgrade budget, build upgrade options per slot.
 struct PreparedUpgradeCompare {
@@ -41,7 +46,7 @@ fn prepare_upgrade_compare(
     let base_profile = resolved.base_profile.clone();
     let items_by_slot = resolve_to_items_by_slot(&resolved);
 
-    let bonus_re = regex::Regex::new(r"bonus_id=([0-9/:]+)").unwrap();
+    let bonus_re = &*RE_BONUS_ID;
     let mut upgraded_options_by_slot: HashMap<String, Vec<Value>> = HashMap::new();
 
     for slot in selected_slots {
