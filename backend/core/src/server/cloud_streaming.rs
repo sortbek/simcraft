@@ -469,10 +469,18 @@ impl CloudStreamingRun {
             return;
         }
 
-        let mut it = ProfilesetIterator::new(self.iter_cfg.clone());
+        let it = ProfilesetIterator::new(self.iter_cfg.clone());
 
-        // ── Generate the FIRST chunk. ────────────────────────────────────────
-        let first = build_chunk(&mut it, &self.base_profile, self.ceiling);
+        // ── Generate the FIRST chunk (blocking CPU work off the async thread). ─
+        let ceiling = self.ceiling;
+        let base_profile = self.base_profile.clone();
+        let (it, first) = tokio::task::spawn_blocking(move || {
+            let mut it = it;
+            let chunk = build_chunk(&mut it, &base_profile, ceiling);
+            (it, chunk)
+        })
+        .await
+        .expect("build_chunk task panicked");
 
         if first.profileset_count == 0 {
             let _ = self
@@ -492,7 +500,7 @@ impl CloudStreamingRun {
         }
 
         // ── Multi-chunk path: bounded-concurrency generate/submit loop. ──────
-        self.run_multi_chunk(&cloud_repo, &mut it, first, runner)
+        self.run_multi_chunk(&cloud_repo, it, first, runner)
             .await;
     }
 
@@ -607,7 +615,7 @@ impl CloudStreamingRun {
     async fn run_multi_chunk(
         &self,
         cloud_repo: &CloudChunksRepo,
-        it: &mut ProfilesetIterator,
+        it: ProfilesetIterator,
         first: GeneratedChunk,
         runner: ChunkRunner,
     ) {
@@ -646,7 +654,7 @@ impl CloudStreamingRun {
     async fn run_chunk_loop(
         &self,
         cloud_repo: &CloudChunksRepo,
-        it: &mut ProfilesetIterator,
+        mut it: ProfilesetIterator,
         runner: ChunkRunner,
         seed_acc: ChunkAccumulator,
         start_chunk_idx: usize,
@@ -699,7 +707,7 @@ impl CloudStreamingRun {
             }
             if !generation_done {
                 let next_idx = next_chunk_idx.load(Ordering::SeqCst);
-                if self.check_and_honor_pause(it, next_idx).await {
+                if self.check_and_honor_pause(&it, next_idx).await {
                     // Stop generating new chunks but DRAIN the in-flight ones so
                     // their completed results are checkpointed (not re-billed on
                     // resume).
@@ -712,7 +720,19 @@ impl CloudStreamingRun {
             while !generation_done && join.len() < k {
                 let chunk = match pending.take() {
                     Some(c) => c,
-                    None => build_chunk(it, &self.base_profile, self.ceiling),
+                    None => {
+                        let ceiling = self.ceiling;
+                        let base_profile = self.base_profile.clone();
+                        let (it_back, chunk) = tokio::task::spawn_blocking(move || {
+                            let mut it = it;
+                            let chunk = build_chunk(&mut it, &base_profile, ceiling);
+                            (it, chunk)
+                        })
+                        .await
+                        .expect("build_chunk task panicked");
+                        it = it_back;
+                        chunk
+                    }
                 };
 
                 // A generated chunk with zero profilesets means the iterator was
@@ -761,7 +781,7 @@ impl CloudStreamingRun {
                 // retry-split already claimed — keeping it consistent with the
                 // pause-path checkpoint, which also loads the atomic.
                 let next_idx_cp = next_chunk_idx.load(Ordering::SeqCst);
-                self.write_checkpoint(it, next_idx_cp, chunk.exhausted).await;
+                self.write_checkpoint(&it, next_idx_cp, chunk.exhausted).await;
 
                 let now = chrono::Utc::now().to_rfc3339();
                 let _ = cloud_repo
@@ -1834,7 +1854,17 @@ async fn resume_cloud_streaming_inner(
     for row in &generated_rows {
         let row = *row;
         // Regenerate this chunk from the iterator (advances the cursor + names).
-        let chunk = build_chunk(&mut it, &base_profile, ceiling);
+        // Run on a blocking thread so the CPU-bound iterator walk does not stall
+        // the async executor while awaiting chunk results.
+        let base_profile_clone = base_profile.clone();
+        let (it_back, chunk) = tokio::task::spawn_blocking(move || {
+            let mut it = it;
+            let chunk = build_chunk(&mut it, &base_profile_clone, ceiling);
+            (it, chunk)
+        })
+        .await
+        .expect("build_chunk task panicked");
+        it = it_back;
         if chunk.profileset_count == 0 {
             // The iterator ran dry before reproducing all recorded generated chunks
             // — the stored chunk_size/request no longer reproduces the space.
@@ -2005,7 +2035,7 @@ async fn resume_cloud_streaming_inner(
     };
     run.run_chunk_loop(
         &cloud_repo,
-        &mut it,
+        it,
         runner,
         acc,
         tail_alloc.load(Ordering::SeqCst),
@@ -4288,7 +4318,7 @@ mod orchestrator_tests {
 
         run.run_chunk_loop(
             &cloud_repo,
-            &mut it,
+            it,
             runner,
             ChunkAccumulator::new(),
             /*start_chunk_idx=*/ 3,
