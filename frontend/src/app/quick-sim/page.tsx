@@ -13,8 +13,14 @@ import { specDisplayName } from '../lib/types';
 import { API_URL } from '../lib/api';
 import { useResolvedGear, equippedGearItems } from '../lib/useResolvedGear';
 import { useLanguage } from '../lib/i18n';
+import { useEnchantInfo, useGemInfo, useItemInfo } from '../lib/useItemInfo';
 import { parseCharacterInfo } from '../lib/character';
 import { useComputeChoice } from '../lib/useComputeChoice';
+import {
+  collectEnchantIds,
+  collectGemIds,
+  collectItemQueries,
+} from '../components/gear/gearOverviewUtils';
 
 interface LastSim {
   id: string;
@@ -56,6 +62,16 @@ export default function QuickSimPage() {
   const lastSim = useLastSim(characterInfo?.name ?? null, characterInfo?.realm ?? null);
   const { resolved } = useResolvedGear(simcInput);
   const equippedGear = useMemo(() => equippedGearItems(resolved), [resolved]);
+
+  const goItemQueries = useMemo(
+    () => collectItemQueries(equippedGear ?? {}),
+    [equippedGear]
+  );
+  const goEnchantIds = useMemo(() => collectEnchantIds(equippedGear ?? {}), [equippedGear]);
+  const goGemIds = useMemo(() => collectGemIds(equippedGear ?? {}), [equippedGear]);
+  const goItemInfo = useItemInfo(goItemQueries);
+  const goEnchantInfo = useEnchantInfo(goEnchantIds);
+  const goGemInfo = useGemInfo(goGemIds);
 
   const insetUrl =
     characterInfo?.realm && characterInfo?.name
@@ -156,6 +172,9 @@ export default function QuickSimPage() {
           gear={equippedGear}
           title={t('gear.equippedGear')}
           characterRenderUrl={renderUrl}
+          itemInfoMap={goItemInfo}
+          enchantInfoMap={goEnchantInfo}
+          gemInfoMap={goGemInfo}
         />
       )}
 

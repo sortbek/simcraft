@@ -2,14 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useMemo } from 'react';
-import {
-  type EnchantInfo,
-  type GemInfo,
-  type ItemInfo,
-  useEnchantInfo,
-  useGemInfo,
-  useItemInfo,
-} from '../../lib/useItemInfo';
+import { type EnchantInfo, type GemInfo, type ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import GearSlotRow from './GearSlotRow';
@@ -19,7 +12,6 @@ import {
   GEAR_ORDER_RIGHT,
   type GearItem,
 } from './gearOverviewTypes';
-import { collectEnchantIds, collectGemIds, collectItemQueries } from './gearOverviewUtils';
 
 interface GearOverviewProps {
   gear: Record<string, GearItem>;
@@ -27,9 +19,9 @@ interface GearOverviewProps {
   characterRenderUrl?: string | null;
   upgradeSlots?: Set<string>;
   downgradeSlots?: Set<string>;
-  itemInfoMap?: Record<number, ItemInfo>;
-  enchantInfoMap?: Record<number, EnchantInfo>;
-  gemInfoMap?: Record<number, GemInfo>;
+  itemInfoMap: Record<number, ItemInfo>;
+  enchantInfoMap: Record<number, EnchantInfo>;
+  gemInfoMap: Record<number, GemInfo>;
 }
 
 export type { GearItem } from './gearOverviewTypes';
@@ -40,33 +32,12 @@ export default function GearOverview({
   characterRenderUrl,
   upgradeSlots,
   downgradeSlots,
-  itemInfoMap: propItemInfoMap,
-  enchantInfoMap: propEnchantInfoMap,
-  gemInfoMap: propGemInfoMap,
+  itemInfoMap,
+  enchantInfoMap,
+  gemInfoMap,
 }: GearOverviewProps) {
   const { t } = useLanguage();
   const resolvedTitle = title ?? t('gear.equippedGear');
-
-  const allItemQueries = useMemo(
-    () => (propItemInfoMap ? [] : collectItemQueries(gear)),
-    [gear, propItemInfoMap]
-  );
-  const fetchedItemInfoMap = useItemInfo(allItemQueries);
-  const itemInfoMap = propItemInfoMap ?? fetchedItemInfoMap;
-
-  const allEnchantIds = useMemo(
-    () => (propEnchantInfoMap ? [] : collectEnchantIds(gear)),
-    [gear, propEnchantInfoMap]
-  );
-  const fetchedEnchantInfoMap = useEnchantInfo(allEnchantIds);
-  const enchantInfoMap = propEnchantInfoMap ?? fetchedEnchantInfoMap;
-
-  const allGemIds = useMemo(
-    () => (propGemInfoMap ? [] : collectGemIds(gear)),
-    [gear, propGemInfoMap]
-  );
-  const fetchedGemInfoMap = useGemInfo(allGemIds);
-  const gemInfoMap = propGemInfoMap ?? fetchedGemInfoMap;
 
   const wowheadKey = useMemo(
     () => wowheadKeyFor({ item: itemInfoMap, enchant: enchantInfoMap, gem: gemInfoMap }),

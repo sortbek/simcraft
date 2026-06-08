@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePollWhileVisible } from '../../lib/usePollWhileVisible';
 import DpsHeroCard from '../../components/results/DpsHeroCard';
 import GearOverview from '../../components/gear/GearOverview';
@@ -19,6 +19,7 @@ import {
   type SimInputPreview,
 } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
+import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
 import { useProviderCaps, useProviderMeta } from '../../lib/providers';
 import {
   getScenarioSiblings,
@@ -28,6 +29,11 @@ import {
 import { getTopGearState } from '../../lib/topgear-state';
 import { ROUTES } from '../../lib/routes';
 import { isGearComparisonResult, type SimResult } from '../../lib/simResultTypes';
+import {
+  collectEnchantIds,
+  collectGemIds,
+  collectItemQueries,
+} from '../../components/gear/gearOverviewUtils';
 
 interface JobData {
   id: string;
@@ -68,6 +74,20 @@ export default function SimResultClient() {
   const [inputPreviewError, setInputPreviewError] = useState('');
   const [showInputPreview, setShowInputPreview] = useState(false);
   const inputPreviewFetchedRef = useRef(false);
+
+  // Info maps for the non-TopGear GearOverview. Hooks must be unconditional,
+  // so we derive safe empty inputs when the result is absent or is a TopGear result.
+  const nonTgGear = useMemo(
+    () =>
+      job?.result && !isGearComparisonResult(job.result) ? (job.result.equipped_gear ?? {}) : {},
+    [job?.result]
+  );
+  const goItemQueries = useMemo(() => collectItemQueries(nonTgGear), [nonTgGear]);
+  const goEnchantIds = useMemo(() => collectEnchantIds(nonTgGear), [nonTgGear]);
+  const goGemIds = useMemo(() => collectGemIds(nonTgGear), [nonTgGear]);
+  const goItemInfo = useItemInfo(goItemQueries);
+  const goEnchantInfo = useEnchantInfo(goEnchantIds);
+  const goGemInfo = useGemInfo(goGemIds);
 
   useEffect(() => {
     setSiblings(getScenarioSiblings());
@@ -404,6 +424,9 @@ export default function SimResultClient() {
                   ? `https://simhammer.com/api/blizzard/character/${r.region || 'eu'}/${encodeURIComponent(r.realm.toLowerCase())}/${encodeURIComponent(r.player_name.toLowerCase())}/media/render`
                   : null
               }
+              itemInfoMap={goItemInfo}
+              enchantInfoMap={goEnchantInfo}
+              gemInfoMap={goGemInfo}
             />
           ) : null}
           {r.stat_weights ? <StatWeightsTable statWeights={r.stat_weights} /> : null}
