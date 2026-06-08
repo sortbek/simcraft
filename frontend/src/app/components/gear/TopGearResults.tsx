@@ -77,7 +77,16 @@ export default function TopGearResults({
   const allGemIds = useMemo(() => collectGemIds(results, equippedGear), [results, equippedGear]);
   const gemInfoMap = useGemInfo(allGemIds);
 
-  useWowheadTooltips([itemInfoMap]);
+  const wowheadKey = useMemo(
+    () =>
+      [
+        Object.keys(itemInfoMap).sort().join(','),
+        Object.keys(enchantInfoMap).sort().join(','),
+        Object.keys(gemInfoMap).sort().join(','),
+      ].join('|'),
+    [itemInfoMap, enchantInfoMap, gemInfoMap]
+  );
+  useWowheadTooltips([wowheadKey]);
 
   const hasGearOverview = equippedGear && Object.keys(equippedGear).length > 0;
   const characterRenderUrl = getCharacterRenderUrl(playerRealm, playerName, playerRegion);
@@ -120,6 +129,9 @@ export default function TopGearResults({
           characterRenderUrl={characterRenderUrl}
           upgradeSlots={upgradeSlots}
           downgradeSlots={downgradeSlots}
+          itemInfoMap={itemInfoMap}
+          enchantInfoMap={enchantInfoMap}
+          gemInfoMap={gemInfoMap}
         />
       )}
 
