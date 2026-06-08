@@ -222,6 +222,11 @@ pub(super) struct ItemInfoBatchRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub(super) struct IdsBatchRequest {
+    pub ids: Vec<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(super) struct BonusIdsQuery {
     #[serde(default)]
     pub bonus_ids: String,

@@ -106,11 +106,39 @@ pub(super) async fn get_enchant_info(path: web::Path<u64>) -> HttpResponse {
     HttpResponse::Ok().json(result)
 }
 
+pub(super) async fn get_enchant_info_batch(
+    req: web::Json<super::types::IdsBatchRequest>,
+) -> HttpResponse {
+    if req.ids.is_empty() || req.ids.len() > 200 {
+        return HttpResponse::BadRequest().json(json!({"detail": "Provide 1-200 ids"}));
+    }
+    let enchants: Vec<_> = req
+        .ids
+        .iter()
+        .filter_map(|&id| game_data::get_enchant_info(id))
+        .collect();
+    HttpResponse::Ok().json(json!({"enchants": enchants}))
+}
+
 pub(super) async fn get_gem_info(path: web::Path<u64>) -> HttpResponse {
     let gem_id = path.into_inner();
     let result = game_data::get_gem_info(gem_id)
         .unwrap_or_else(|| json!({"gem_id": gem_id, "name": "", "icon": "", "quality": 3}));
     HttpResponse::Ok().json(result)
+}
+
+pub(super) async fn get_gem_info_batch(
+    req: web::Json<super::types::IdsBatchRequest>,
+) -> HttpResponse {
+    if req.ids.is_empty() || req.ids.len() > 200 {
+        return HttpResponse::BadRequest().json(json!({"detail": "Provide 1-200 ids"}));
+    }
+    let gems: Vec<_> = req
+        .ids
+        .iter()
+        .filter_map(|&id| game_data::get_gem_info(id))
+        .collect();
+    HttpResponse::Ok().json(json!({"gems": gems}))
 }
 
 pub(super) async fn list_enchants(query: web::Query<EnchantListQuery>) -> HttpResponse {

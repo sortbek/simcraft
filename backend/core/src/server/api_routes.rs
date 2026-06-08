@@ -130,8 +130,16 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(game_data_handlers::get_enchant_info),
         )
         .route(
+            "/api/enchant-info/batch",
+            web::post().to(game_data_handlers::get_enchant_info_batch),
+        )
+        .route(
             "/api/gem-info/{id}",
             web::get().to(game_data_handlers::get_gem_info),
+        )
+        .route(
+            "/api/gem-info/batch",
+            web::post().to(game_data_handlers::get_gem_info_batch),
         )
         .route(
             "/api/max-upgrade-ilevels",
