@@ -85,6 +85,7 @@ export default function SimResultClient() {
         if (active) setJob(data);
         if (
           active &&
+          !document.hidden &&
           (data.status === 'pending' || data.status === 'running' || data.status === 'paused')
         ) {
           timer = setTimeout(poll, 2000);
@@ -93,10 +94,15 @@ export default function SimResultClient() {
         if (active) setFetchError(err instanceof Error ? err.message : 'Failed to fetch status');
       }
     }
+    const onVisibility = () => {
+      if (active && !document.hidden) poll();
+    };
     poll();
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       active = false;
       clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [id]);
 
@@ -121,12 +127,17 @@ export default function SimResultClient() {
       } catch {
         /* ignore */
       }
-      if (active) timer = setTimeout(pollLogs, 1000);
+      if (active && !document.hidden) timer = setTimeout(pollLogs, 1000);
     }
+    const onVisibility = () => {
+      if (active && !document.hidden) pollLogs();
+    };
     pollLogs();
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       active = false;
       clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [showLogs, id, job?.status]);
 
