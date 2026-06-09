@@ -91,6 +91,7 @@ const ITEM_BASE_FIELDS = [
   "squishEra",        // legacy/timewalking ilevel conversion
   "itemSetId",        // catalyst tier set detection
   "allowableClasses", // catalyst class filtering
+  "itemLimit",        // inherent embellishment / unique-category constraint
 ];
 
 // Additional fields needed for droppable items (droptimizer, spec filtering)

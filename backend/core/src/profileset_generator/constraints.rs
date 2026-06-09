@@ -162,7 +162,8 @@ pub(super) fn validate_item_limits<V: Borrow<Value>>(gear_set: &HashMap<String, 
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
-        for (cat_id, max_qty) in game_data::get_item_limit_categories(&bonus_ids) {
+        let item_id = item.borrow().get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+        for (cat_id, max_qty) in game_data::item_limit_categories_for(item_id, &bonus_ids) {
             *category_counts.entry(cat_id).or_insert(0) += 1;
             category_limits.insert(cat_id, max_qty);
         }

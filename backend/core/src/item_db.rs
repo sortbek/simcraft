@@ -885,6 +885,23 @@ pub fn get_item_limit_categories(bonus_ids: &[u64]) -> HashMap<u64, u64> {
     result
 }
 
+/// Item-limit categories for an item INSTANCE: the categories conferred by its
+/// bonus_ids PLUS the base item's inherent `itemLimit` category (some crafted
+/// items — e.g. inherently-embellished rings — carry the limit on the base item,
+/// not via a bonus). Keyed `category_id -> max_quantity`.
+pub fn item_limit_categories_for(item_id: u64, bonus_ids: &[u64]) -> HashMap<u64, u64> {
+    let mut cats = get_item_limit_categories(bonus_ids);
+    if let Some(raw) = get_raw_item(item_id) {
+        if let Some(lim) = raw.get("itemLimit") {
+            if let Some(cat) = lim.get("category").and_then(|c| c.as_u64()) {
+                let qty = lim.get("quantity").and_then(|q| q.as_u64()).unwrap_or(0);
+                cats.entry(cat).or_insert(qty);
+            }
+        }
+    }
+    cats
+}
+
 /// Get inventory type for an item (e.g. 1=head, 7=legs, 13=one-hand, 17=two-hand).
 pub fn get_inventory_type(item_id: u64) -> Option<u64> {
     get_raw_item(item_id)?.get("inventoryType")?.as_u64()
@@ -1683,6 +1700,21 @@ mod tests {
         ensure_game_data_loaded();
         let cats = get_item_limit_categories(&[]);
         assert!(cats.is_empty());
+    }
+
+    #[test]
+    fn item_limit_categories_honors_base_itemlimit_for_inherent_embellishment() {
+        ensure_game_data_loaded();
+        // Loa Worshiper's Band (251513) is inherently embellished: its BASE
+        // itemLimit.category is 512, NOT conferred by a bonus. The bonus-only
+        // path misses it; item_limit_categories_for must include it.
+        let bonus_only = get_item_limit_categories(&[]);
+        assert!(!bonus_only.contains_key(&512), "sanity: no bonuses => no cat");
+        let merged = item_limit_categories_for(251513, &[]);
+        assert!(
+            merged.contains_key(&512),
+            "base itemLimit cat 512 must be honored for 251513, got {merged:?}"
+        );
     }
 
     #[test]
