@@ -727,6 +727,13 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
     // Scale factors
     result.push_str("scale_only=strength,intellect,agility,crit,mastery,vers,haste,weapon_dps,weapon_offhand_dps\n");
 
+    // Fight style must precede the raid buff overrides: parsing
+    // fight_style=DungeonSlice resets all override.* values to 0, so any
+    // overrides emitted before it would be silently discarded.
+    if !is_dungeon_route {
+        result.push_str(&format!("fight_style={}\n", fight_style));
+    }
+
     // Raid buff overrides (skip for dungeon routes)
     if !is_dungeon_route {
         for opt in OVERRIDES {
@@ -756,9 +763,6 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
         result.push_str("single_actor_batch=1\n");
     }
     result.push_str("optimize_expressions=1\n");
-    if !is_dungeon_route {
-        result.push_str(&format!("fight_style={}\n", fight_style));
-    }
     result.push_str(&format!("target_error={}\n", target_error));
 
     // Run profilesets in parallel (each on one thread) instead of the default
