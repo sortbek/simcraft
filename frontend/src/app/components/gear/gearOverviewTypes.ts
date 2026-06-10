@@ -4,6 +4,7 @@ export interface GearItem {
   ilevel: number;
   name: string;
   bonus_ids?: number[];
+  crafted_stats?: number[];
   enchant_id?: number;
   gem_id?: number;
   /**

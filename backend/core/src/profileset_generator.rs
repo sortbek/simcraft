@@ -189,12 +189,19 @@ pub fn count_top_gear_combos_with_talents(
     )
 }
 
+/// Crafted "Preferred Stats": bonus IDs for the sim, stat IDs for display.
+#[derive(Clone, Copy, Debug)]
+pub struct CraftedStats {
+    pub stat_ids: [u64; 2],
+    pub bonus_ids: [u64; 2],
+}
+
 pub fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],
-    crafted_stat_bonus_ids: Option<[u64; 2]>,
+    crafted_stats: Option<CraftedStats>,
 ) -> (String, usize, HashMap<String, Value>) {
-    droptimizer::generate_droptimizer_input(base_profile, drop_items, crafted_stat_bonus_ids)
+    droptimizer::generate_droptimizer_input(base_profile, drop_items, crafted_stats)
 }
 
 pub fn generate_upgrade_compare_input(

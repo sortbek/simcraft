@@ -672,7 +672,7 @@ export default function DropFinderContent() {
           {/* Difficulty + upgrade level */}
           {activeDifficulties.length > 0 && (
             <div
-              className={`grid gap-4 ${currentTrackInfo && drops ? 'grid-cols-1 sm:grid-cols-2' : ''}`}
+              className={`grid gap-4 ${currentTrackInfo && drops && !isCrafted ? 'grid-cols-1 sm:grid-cols-2' : ''}`}
             >
               <div>
                 <label className="label-text">{t('dropFinder.difficulty')}</label>
@@ -694,7 +694,8 @@ export default function DropFinderContent() {
                 />
               </div>
 
-              {currentTrackInfo && drops && (
+              {/* Crafted gear has no in-game upgrade track. */}
+              {currentTrackInfo && drops && !isCrafted && (
                 <div>
                   <label className="label-text">{t('dropFinder.upgradeLevel')}</label>
                   <UpgradeSelect

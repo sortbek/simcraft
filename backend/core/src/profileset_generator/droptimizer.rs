@@ -60,7 +60,7 @@ fn drop_combo_is_valid(
 pub(super) fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],
-    crafted_stat_bonus_ids: Option<[u64; 2]>,
+    crafted_stats: Option<super::CraftedStats>,
 ) -> (String, usize, HashMap<String, Value>) {
     let (base_lines, equipped_gear, talents_string, spec) = parse_base_profile(base_profile);
 
@@ -115,18 +115,11 @@ pub(super) fn generate_droptimizer_input(
             .get("inventory_type")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
-        let mut bonus_ids: Vec<u64> = item
+        let bonus_ids: Vec<u64> = item
             .get("bonus_ids")
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
-        // Crafted "Preferred Stats": append the two chosen bonus IDs (the
-        // handler guarantees every item here is crafted). Missives add no
-        // sockets, so socket detection below uses the inherent prefix.
-        let inherent_bonus_count = bonus_ids.len();
-        if let Some(stat_bonus_ids) = crafted_stat_bonus_ids {
-            bonus_ids.extend_from_slice(&stat_bonus_ids);
-        }
         // `slot_inherits` is intentionally ignored; kept in the type for
         // backwards-compatible API requests but no longer authoritative.
         let mut slots = class_data::inv_type_to_slots(inv_type, &spec);
@@ -140,12 +133,16 @@ pub(super) fn generate_droptimizer_input(
         }
 
         let mut base_simc_str = format!(",id={},ilevel={}", item_id, ilevel);
-        if !bonus_ids.is_empty() {
-            let bonus_str = bonus_ids
-                .iter()
-                .map(|b| b.to_string())
-                .collect::<Vec<_>>()
-                .join("/");
+        // Crafted stat bonus IDs go into the simc string, not `bonus_ids`.
+        let crafted_bonus_ids = crafted_stats.map(|cs| cs.bonus_ids).into_iter().flatten();
+        let bonus_str = bonus_ids
+            .iter()
+            .copied()
+            .chain(crafted_bonus_ids)
+            .map(|b| b.to_string())
+            .collect::<Vec<_>>()
+            .join("/");
+        if !bonus_str.is_empty() {
             base_simc_str.push_str(&format!(",bonus_id={}", bonus_str));
         }
 
@@ -190,11 +187,10 @@ pub(super) fn generate_droptimizer_input(
                 // bonus IDs, so empty bonus_ids ⇒ 0 sockets without needing
                 // to hit the bonus DB (also keeps unit tests that don't load
                 // game data working).
-                let inherent_bonus_ids = &bonus_ids[..inherent_bonus_count];
-                let drop_sockets = if inherent_bonus_ids.is_empty() {
+                let drop_sockets = if bonus_ids.is_empty() {
                     0
                 } else {
-                    crate::item_db::resolve_bonuses(inherent_bonus_ids)
+                    crate::item_db::resolve_bonuses(&bonus_ids)
                         .sockets
                         .unwrap_or(0)
                 };
@@ -240,6 +236,7 @@ pub(super) fn generate_droptimizer_input(
                     "ilevel": ilevel,
                     "name": name,
                     "bonus_ids": bonus_ids,
+                    "crafted_stats": crafted_stats.map(|cs| cs.stat_ids.to_vec()).unwrap_or_default(),
                     "enchant_id": applied_enchant,
                     "gem_id": applied_gem,
                     "is_kept": false,
@@ -278,14 +275,32 @@ mod tests {
     }
 
     #[test]
-    fn crafted_stats_appended_to_bonus_ids() {
+    fn crafted_stat_bonus_ids_go_into_the_simc_string() {
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![drop(207157, 11, vec![])]; // finger, no inherent bonus IDs
-        let (input, _, _) = generate_droptimizer_input(profile, &drops, Some([11137, 11138]));
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats { stat_ids: [49, 36], bonus_ids: [11137, 11138] }),
+        );
         assert!(
             input.contains("bonus_id=11137/11138"),
-            "expected crafted stat bonus IDs in order, got:\n{input}"
+            "expected crafted stat bonus IDs in the simc string, got:\n{input}"
         );
+    }
+
+    #[test]
+    fn crafted_stats_surface_in_metadata_not_display_bonus_ids() {
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let drops = vec![drop(207157, 11, vec![12345])];
+        let (_, _, metadata) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats { stat_ids: [49, 36], bonus_ids: [11137, 11138] }),
+        );
+        let entry = &metadata.values().next().unwrap()[0];
+        assert_eq!(entry["bonus_ids"], json!([12345]));
+        assert_eq!(entry["crafted_stats"], json!([49, 36]));
     }
 
     #[test]
@@ -293,7 +308,11 @@ mod tests {
         // Finger drop into unequipped slots avoids the game-data gem path.
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![drop(207157, 11, vec![12345])];
-        let (input, _, _) = generate_droptimizer_input(profile, &drops, Some([11137, 11138]));
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats { stat_ids: [49, 36], bonus_ids: [11137, 11138] }),
+        );
         assert!(
             input.contains("bonus_id=12345/11137/11138"),
             "expected crafted stat bonus IDs appended after the upgrade bonus, got:\n{input}"
@@ -306,7 +325,11 @@ mod tests {
         // not inherit the equipped gem just because missives were appended.
         let profile = "mage=test\nspec=frost\nhead=,id=100\nfinger1=,id=200,gem_id=999\n";
         let drops = vec![drop(207157, 11, vec![])];
-        let (input, _, _) = generate_droptimizer_input(profile, &drops, Some([11137, 11138]));
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats { stat_ids: [49, 36], bonus_ids: [11137, 11138] }),
+        );
         assert!(input.contains("bonus_id=11137/11138"), "stats still applied:\n{input}");
         // The gem appears in the baseline (Combo 1); assert the drop lines don't.
         let drop_lines_inherit_gem = input
