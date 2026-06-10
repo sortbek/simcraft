@@ -293,6 +293,7 @@
   "dropFinder.selectDungeon": "Select Dungeon",
   "dropFinder.difficulty": "Difficulty",
   "dropFinder.upgradeLevel": "Upgrade Level",
+  "dropFinder.preferredStats": "Preferred Stats",
   "dropFinder.base": "Base",
   "dropFinder.showingLoot": "Showing loot for {class}",
   "dropFinder.mainSpec": "main",

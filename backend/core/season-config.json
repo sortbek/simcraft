@@ -1,5 +1,6 @@
 {
   "season": "Midnight Season 1",
+  "crafted_secondary_stats": { "32": 11136, "49": 11137, "36": 11138, "40": 11139 },
   "raidDifficulties": [
     {
       "key": "lfr",
