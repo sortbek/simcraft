@@ -20,6 +20,7 @@ export function useSharedSimPayload(): Record<string, unknown> {
     threads,
     selectedTalent,
     targetError,
+    iterations,
     customApl,
     rotationMode,
     simcHeader,
@@ -48,7 +49,7 @@ export function useSharedSimPayload(): Record<string, unknown> {
 
   return useMemo(
     () => ({
-      iterations: 100000,
+      iterations,
       target_error: targetError,
       threads,
       ...(selectedTalent ? { talents: selectedTalent } : {}),
@@ -88,6 +89,7 @@ export function useSharedSimPayload(): Record<string, unknown> {
       threads,
       selectedTalent,
       targetError,
+      iterations,
       customApl,
       rotationMode,
       simcHeader,

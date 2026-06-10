@@ -18,7 +18,7 @@
   "layout.desktopApp": "Desktop-App",
   "layout.routes": "Routen",
   "layout.routeNamePlaceholder": "Routenname...",
-  "layout.pasteMdtString": "MDT-Routenstring einfügen...",
+  "layout.pasteMdtString": "Keystone-Guru-SimC-String einfügen...",
   "layout.saveNewRoute": "Neue Route speichern",
   "layout.updateAvailable": "Update verfügbar",
   "layout.updateReady": "SimHammer v{version} ist bereit zur Installation.",

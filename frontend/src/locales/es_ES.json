@@ -18,7 +18,7 @@
   "layout.desktopApp": "Aplicación de escritorio",
   "layout.routes": "Rutas",
   "layout.routeNamePlaceholder": "Nombre de la ruta...",
-  "layout.pasteMdtString": "Pega la cadena de ruta MDT...",
+  "layout.pasteMdtString": "Pega la cadena SimC de Keystone Guru...",
   "layout.saveNewRoute": "Guardar nueva ruta",
   "layout.updateAvailable": "Actualización disponible",
   "layout.updateReady": "SimHammer v{version} está lista para instalar.",

@@ -18,7 +18,7 @@
   "layout.desktopApp": "Application de bureau",
   "layout.routes": "Parcours",
   "layout.routeNamePlaceholder": "Nom du parcours...",
-  "layout.pasteMdtString": "Colle la chaîne de parcours MDT...",
+  "layout.pasteMdtString": "Colle la chaîne SimC de Keystone Guru...",
   "layout.saveNewRoute": "Enregistrer le nouveau parcours",
   "layout.updateAvailable": "Mise à jour disponible",
   "layout.updateReady": "SimHammer v{version} est prêt à être installé.",

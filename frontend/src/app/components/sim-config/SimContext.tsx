@@ -25,6 +25,8 @@ interface SimContextType {
   setFightLength: (v: number) => void;
   targetError: number;
   setTargetError: (v: number) => void;
+  iterations: number;
+  setIterations: (v: number) => void;
   customApl: string;
   setCustomApl: (v: string) => void;
   rotationMode: RotationMode;
@@ -110,6 +112,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [targetCount, setTargetCount] = useState(1);
   const [fightLength, setFightLength] = useState(300);
   const [targetError, _setTargetError] = useState(0.1);
+  const [iterations, _setIterations] = useState(100000);
   const [customApl, setCustomApl] = useState('');
   const [rotationMode, _setRotationMode] = useState<RotationMode>('default');
   const [simcHeader, setSimcHeader] = useState('');
@@ -137,6 +140,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         const n = parseFloat(storedError);
         if (Number.isFinite(n) && n > 0) _setTargetError(n);
       }
+      _setIterations(readStoredPositiveInt('simhammer_iterations', 100000));
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
       _setTriageMaxBatchProfilesets(
         readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
@@ -229,6 +233,13 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const setIterations = useCallback((v: number) => {
+    _setIterations(v);
+    try {
+      localStorage.setItem('simhammer_iterations', String(v));
+    } catch {}
+  }, []);
+
   const setRotationMode = useCallback((v: RotationMode) => {
     _setRotationMode(v);
     try {
@@ -268,6 +279,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setFightLength,
         targetError,
         setTargetError,
+        iterations,
+        setIterations,
         customApl,
         setCustomApl,
         rotationMode,

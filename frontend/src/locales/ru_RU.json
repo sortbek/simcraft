@@ -18,7 +18,7 @@
   "layout.desktopApp": "Десктоп-приложение",
   "layout.routes": "Маршруты",
   "layout.routeNamePlaceholder": "Название маршрута...",
-  "layout.pasteMdtString": "Вставь строку маршрута MDT...",
+  "layout.pasteMdtString": "Вставь строку SimC из Keystone Guru...",
   "layout.saveNewRoute": "Сохранить новый маршрут",
   "layout.updateAvailable": "Доступно обновление",
   "layout.updateReady": "SimHammer v{version} готов к установке.",

@@ -545,10 +545,13 @@ impl SimParams {
                 .get("target_error")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.1),
-            iterations: options
+            // Clamp to a sane range so hand-crafted requests can't ask for
+            // absurd iteration counts (same spirit as `resolve_threads`).
+            iterations: (options
                 .get("iterations")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(10_000) as u32,
+                .unwrap_or(10_000) as u32)
+                .clamp(100, 1_000_000),
             desired_targets: options
                 .get("desired_targets")
                 .and_then(|v| v.as_u64())
@@ -1827,6 +1830,18 @@ mod tests {
         assert_eq!(p2.desired_targets, 3);
         assert_eq!(p2.max_time, 180);
         assert!(!p2.single_actor_batch);
+    }
+
+    #[test]
+    fn sim_params_clamps_iterations() {
+        let low = SimParams::from_options(&serde_json::json!({ "iterations": 1 }));
+        assert_eq!(low.iterations, 100);
+
+        let high = SimParams::from_options(&serde_json::json!({ "iterations": 5_000_000 }));
+        assert_eq!(high.iterations, 1_000_000);
+
+        let ok = SimParams::from_options(&serde_json::json!({ "iterations": 250_000 }));
+        assert_eq!(ok.iterations, 250_000);
     }
 
     #[tokio::test]

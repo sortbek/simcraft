@@ -12,6 +12,17 @@ import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
 
+const ITERATION_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
+
+/** Nearest preset index at-or-below the value, so the slider can represent any stored value. */
+function iterationSliderIndex(value: number): number {
+  let idx = 0;
+  for (let i = 0; i < ITERATION_PRESETS.length; i++) {
+    if (value >= ITERATION_PRESETS[i]) idx = i;
+  }
+  return idx;
+}
+
 interface ConfigDrawerProps {
   children?: ReactNode;
   activeTab: 'simulation' | 'buffs';
@@ -42,6 +53,8 @@ export default function ConfigDrawer({
     setFightLength,
     targetError,
     setTargetError,
+    iterations,
+    setIterations,
     customApl,
     setCustomApl,
     rotationMode,
@@ -335,6 +348,37 @@ export default function ConfigDrawer({
                 </div>
                 <p className="text-[11px] text-on-surface-variant/40">
                   Lower = more precise but slower. Default: 0.05%
+                </p>
+              </div>
+              <div className="space-y-2 border-t border-outline-variant/10 pt-3">
+                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  {t('config.iterations')}
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={ITERATION_PRESETS.length - 1}
+                    step={1}
+                    value={iterationSliderIndex(iterations)}
+                    onChange={(event) => setIterations(ITERATION_PRESETS[Number(event.target.value)])}
+                    className="flex-1 accent-primary"
+                  />
+                  <input
+                    type="number"
+                    min={100}
+                    max={1000000}
+                    step={1000}
+                    value={iterations}
+                    onChange={(event) => {
+                      const value = Math.max(100, Math.min(1000000, Number(event.target.value) || 0));
+                      setIterations(value);
+                    }}
+                    className="w-20 rounded border border-outline-variant/20 bg-surface-container-lowest px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"
+                  />
+                </div>
+                <p className="text-[11px] text-on-surface-variant/40">
+                  {t('config.iterationsHelp')}
                 </p>
               </div>
               <div className="space-y-2 border-t border-outline-variant/10 pt-3">
