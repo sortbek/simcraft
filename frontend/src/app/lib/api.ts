@@ -191,12 +191,21 @@ export interface MdtConversion {
   map: MdtMap;
 }
 
-/** Decode an MDT export string into a SimC DungeonRoute conversion. */
-export async function decodeMdt(importString: string): Promise<MdtConversion> {
+/** Decode an MDT export string into a SimC DungeonRoute conversion.
+ *  `keystoneLevel` overrides the level encoded in the string; `hpPercent` is the
+ *  fraction of full enemy HP to sim (1–100, backend default 20). */
+export async function decodeMdt(
+  importString: string,
+  opts?: { keystoneLevel?: number; hpPercent?: number },
+): Promise<MdtConversion> {
   const res = await fetch(apiUrl('/api/mdt/decode'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ import: importString }),
+    body: JSON.stringify({
+      import: importString,
+      ...(opts?.keystoneLevel != null ? { keystone_level: opts.keystoneLevel } : {}),
+      ...(opts?.hpPercent != null ? { hp_percent: opts.hpPercent } : {}),
+    }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
