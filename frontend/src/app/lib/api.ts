@@ -112,6 +112,36 @@ export async function simRow(sourceJobId: string, comboId: number): Promise<stri
   return data.id;
 }
 
+/** One mob instance on the map. `(x, y)` are MDT map coordinates; plot the
+ *  marker center at `(x * s, -y * s)` from the map image top-left (y is flipped). */
+export interface MdtMapMarker {
+  x: number;
+  y: number;
+  sublevel: number;
+  name: string;
+  is_boss: boolean;
+  scale: number;
+  count: number;
+}
+
+export interface MdtMapPull {
+  index: number;
+  /** 6-char hex color, no `#`. */
+  color: string;
+  enemies: MdtMapMarker[];
+}
+
+export interface MdtMapSublevel {
+  index: number;
+  name: string;
+}
+
+export interface MdtMap {
+  dungeon_idx: number;
+  sublevels: MdtMapSublevel[];
+  pulls: MdtMapPull[];
+}
+
 /** Result of decoding an MDT export string into a SimC DungeonRoute. */
 export interface MdtConversion {
   dungeon_name: string;
@@ -126,6 +156,8 @@ export interface MdtConversion {
   raid_events: string;
   /** The full `fight_style=DungeonRoute` + pulls block. */
   simc: string;
+  /** Map-render data: colored mob markers per pull, positioned on the dungeon map. */
+  map: MdtMap;
 }
 
 /** Decode an MDT export string into a SimC DungeonRoute conversion. */

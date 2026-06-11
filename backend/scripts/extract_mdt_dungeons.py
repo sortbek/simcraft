@@ -173,6 +173,16 @@ def extract_dungeon(text: str, idx: int):
     for enemy_idx, e in enemies_raw.items():
         if not isinstance(e, dict) or "id" not in e:
             continue
+        raw_clones = e.get("clones") if isinstance(e.get("clones"), dict) else {}
+        clones = {
+            str(ci): {
+                "x": c.get("x", 0),
+                "y": c.get("y", 0),
+                "sublevel": c.get("sublevel", 1),
+            }
+            for ci, c in raw_clones.items()
+            if isinstance(c, dict)
+        }
         enemies[str(enemy_idx)] = {
             "id": e["id"],
             "name": e.get("name", ""),
@@ -181,7 +191,8 @@ def extract_dungeon(text: str, idx: int):
             "creatureType": e.get("creatureType", "Humanoid"),
             "isBoss": bool(e.get("isBoss", False)),
             "ignoreFortified": bool(e.get("ignoreFortified", False)),
-            "cloneCount": len(e["clones"]) if isinstance(e.get("clones"), dict) else 0,
+            "scale": e.get("scale", 1),
+            "clones": clones,
         }
 
     name_m = re.search(r"MDT.dungeonList\[dungeonIndex\]\s*=\s*", text)
@@ -189,10 +200,17 @@ def extract_dungeon(text: str, idx: int):
     if name_m:
         name = LuaParser(text[name_m.end() :]).parse_value()
     total = _find_table(text, "MDT.dungeonTotalCount[dungeonIndex]") or {}
+    sublevels_raw = _find_table(text, "MDT.dungeonSubLevels[dungeonIndex]") or {}
+    sublevels = [
+        {"index": k, "name": v}
+        for k, v in sorted(sublevels_raw.items())
+        if isinstance(k, int)
+    ]
 
     return {
         "name": name,
         "totalCount": total.get("normal", 0),
+        "sublevels": sublevels,
         "enemies": enemies,
     }
 

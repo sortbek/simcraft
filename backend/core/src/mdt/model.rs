@@ -24,6 +24,8 @@ pub struct MdtRoute {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MdtPull {
     pub enemies: Vec<MdtPullEnemy>,
+    /// Pull color as a 6-char hex string (no `#`), if the route set one.
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,7 +90,11 @@ fn parse_pull(pull: &AceValue) -> Result<MdtPull, String> {
             clone_indices: clone_indices(clones),
         })
         .collect();
-    Ok(MdtPull { enemies })
+    let color = match pull.get_str("color") {
+        Some(AceValue::Str(s)) => Some(s.clone()),
+        _ => None,
+    };
+    Ok(MdtPull { enemies, color })
 }
 
 /// The value for an enemy key is a sequence table of clone indices.

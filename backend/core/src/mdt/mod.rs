@@ -106,6 +106,27 @@ mod tests {
     }
 
     #[test]
+    fn builds_map_markers() {
+        let out = convert(EXAMPLE, &load_db()).unwrap();
+        let map = &out.map;
+        assert_eq!(map.dungeon_idx, 11);
+        assert_eq!(map.sublevels.len(), 1);
+        assert_eq!(map.sublevels[0].index, 1);
+
+        // Pull 1: color "ff3eff" (from the example), first marker is enemy 1
+        // (Merciless Subjugator) on sublevel 1 within map bounds. The y-axis is
+        // negative in MDT coordinate space — the key invariant the frontend flips.
+        let p1 = &map.pulls[0];
+        assert_eq!(p1.index, 1);
+        assert_eq!(p1.color, "ff3eff");
+        let m = &p1.enemies[0];
+        assert_eq!(m.name, "Merciless Subjugator");
+        assert_eq!(m.sublevel, 1);
+        assert!(m.x > 0.0 && m.x < 840.0, "x {} should be in [0,840]", m.x);
+        assert!(m.y < 0.0 && m.y > -560.0, "y {} should be in [-560,0]", m.y);
+    }
+
+    #[test]
     fn load_populates_global_and_converts() {
         // Exercises enemy_db::load + global() — the startup wiring the endpoint
         // relies on — by pointing it at a temp data dir holding the fixture.

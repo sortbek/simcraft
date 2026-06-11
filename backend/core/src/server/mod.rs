@@ -448,6 +448,12 @@ pub async fn start_server(
                     actix_files::Files::new("/api/data/static", static_dir).prefer_utf8(true),
                 );
             }
+            let mdt_maps_dir = dir.join("mdt-maps");
+            if mdt_maps_dir.exists() {
+                app = app.service(
+                    actix_files::Files::new("/api/data/mdt-maps", mdt_maps_dir).prefer_utf8(true),
+                );
+            }
         }
 
         // Serve static frontend files in production (not in dev mode)

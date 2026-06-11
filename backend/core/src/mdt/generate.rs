@@ -15,6 +15,9 @@ use serde::Serialize;
 /// default is used (configurable later).
 const DEFAULT_DELAY_SECONDS: i64 = 0;
 
+/// MDT's default pull color (forest green) when a pull set none.
+const DEFAULT_PULL_COLOR: &str = "228b22";
+
 #[derive(Debug, Clone, Serialize)]
 pub struct MdtSimc {
     pub dungeon_name: String,
@@ -33,6 +36,45 @@ pub struct MdtSimc {
     pub raid_events: String,
     /// The complete SimC fight definition (`fight_style=DungeonRoute` + pulls).
     pub simc: String,
+    /// Map-render data: per-pull colored mob markers positioned on the dungeon map.
+    pub map: MdtMap,
+}
+
+/// Everything the frontend needs to draw the route on the dungeon map.
+#[derive(Debug, Clone, Serialize)]
+pub struct MdtMap {
+    pub dungeon_idx: i64,
+    pub sublevels: Vec<MapSublevel>,
+    pub pulls: Vec<MapPull>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MapSublevel {
+    pub index: i64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MapPull {
+    /// 1-based pull number in route order.
+    pub index: usize,
+    /// 6-char hex color (no `#`).
+    pub color: String,
+    pub enemies: Vec<MapMarker>,
+}
+
+/// One mob instance positioned on the map. `(x, y)` are MDT map coordinates;
+/// the frontend plots the marker center at `(x * s, -y * s)` from the map's
+/// top-left (note the y-axis sign flip).
+#[derive(Debug, Clone, Serialize)]
+pub struct MapMarker {
+    pub x: f64,
+    pub y: f64,
+    pub sublevel: i64,
+    pub name: String,
+    pub is_boss: bool,
+    pub scale: f64,
+    pub count: i64,
 }
 
 pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
@@ -41,12 +83,14 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
         .ok_or_else(|| format!("dungeon index {} not in MDT database", route.dungeon_idx))?;
 
     let mut pull_lines = Vec::new();
+    let mut map_pulls = Vec::new();
     let mut enemy_count = 0;
     let mut total_health = 0;
     let mut unresolved = 0;
 
     for (i, pull) in route.pulls.iter().enumerate() {
         let mut specifiers = Vec::new();
+        let mut markers = Vec::new();
         for entry in &pull.enemies {
             let Some(enemy) = dungeon.enemies.get(&entry.enemy_idx) else {
                 unresolved += entry.clone_indices.len();
@@ -60,12 +104,34 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
             );
             let race = enemy.creature_type.to_lowercase();
             let name = sanitize_name(&enemy.name, enemy.is_boss);
-            // One specifier per clone in this pull — each clone is its own mob.
-            for _ in &entry.clone_indices {
+            // One specifier + one map marker per clone in this pull — each clone
+            // is its own mob.
+            for &clone_idx in &entry.clone_indices {
                 specifiers.push(format!("\"{name}\":{health}:{race}"));
                 enemy_count += 1;
                 total_health += health;
+                if let Some(pos) = enemy.clones.get(&clone_idx) {
+                    markers.push(MapMarker {
+                        x: pos.x,
+                        y: pos.y,
+                        sublevel: pos.sublevel,
+                        name: enemy.name.clone(),
+                        is_boss: enemy.is_boss,
+                        scale: enemy.scale,
+                        count: enemy.count,
+                    });
+                }
             }
+        }
+        if !markers.is_empty() {
+            map_pulls.push(MapPull {
+                index: i + 1,
+                color: pull
+                    .color
+                    .clone()
+                    .unwrap_or_else(|| DEFAULT_PULL_COLOR.to_string()),
+                enemies: markers,
+            });
         }
         if specifiers.is_empty() {
             continue;
@@ -77,6 +143,19 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
             specifiers.join("|")
         ));
     }
+
+    let map = MdtMap {
+        dungeon_idx: route.dungeon_idx,
+        sublevels: dungeon
+            .sublevels
+            .iter()
+            .map(|s| MapSublevel {
+                index: s.index,
+                name: s.name.clone(),
+            })
+            .collect(),
+        pulls: map_pulls,
+    };
 
     let raid_events = pull_lines.join("\n");
     let simc = if raid_events.is_empty() {
@@ -95,6 +174,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
         unresolved,
         raid_events,
         simc,
+        map,
     })
 }
 

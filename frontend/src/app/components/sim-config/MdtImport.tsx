@@ -1,9 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { decodeMdt, type MdtConversion } from '../../lib/api';
+import { ROUTES } from '../../lib/routes';
+import { MDT_ROUTE_SESSION_KEY } from '../../route/page';
 
 /** Remove a previously-imported route from the custom options so re-importing
  *  replaces it cleanly without clobbering the user's other custom lines. */
@@ -19,6 +22,7 @@ function stripPriorRoute(s: string): string {
 
 export default function MdtImport() {
   const { t } = useLanguage();
+  const router = useRouter();
   const { setFightStyle, customApl, setCustomApl } = useSimContext();
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
@@ -83,6 +87,18 @@ export default function MdtImport() {
               {t('config.mdtUnresolvedWarning', { count: result.unresolved })}
             </p>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, value.trim());
+              } catch {}
+              router.push(ROUTES.dungeonRoute);
+            }}
+            className="mt-1.5 text-[13px] font-medium text-gold transition-colors hover:text-gold/80"
+          >
+            {t('config.mdtViewOnMap')} →
+          </button>
         </div>
       )}
     </div>

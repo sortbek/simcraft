@@ -7,6 +7,7 @@ export const ROUTES = {
   quickSim: '/quick-sim',
   topGear: '/top-gear',
   dropFinder: '/drop-finder',
+  dungeonRoute: '/route',
   upgradeCompare: '/upgrade-compare',
   advanced: '/advanced',
   sims: '/sims',

@@ -22,7 +22,14 @@ pub struct DungeonDb {
 pub struct Dungeon {
     pub name: String,
     pub total_count: i64,
+    pub sublevels: Vec<Sublevel>,
     pub enemies: HashMap<i64, Enemy>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Sublevel {
+    pub index: i64,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -35,7 +42,16 @@ pub struct Enemy {
     pub creature_type: String,
     pub is_boss: bool,
     pub ignore_fortified: bool,
-    pub clone_count: i64,
+    pub scale: f64,
+    /// Per-clone map positions, keyed by clone index (matches the route's clone refs).
+    pub clones: HashMap<i64, ClonePos>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClonePos {
+    pub x: f64,
+    pub y: f64,
+    pub sublevel: i64,
 }
 
 impl DungeonDb {
