@@ -185,6 +185,33 @@ def _clone_pos(c: dict) -> dict:
     return pos
 
 
+def _map_geometry(text: str) -> dict:
+    """Travel-time geometry the SimC delay estimate needs: the Blizzard UiMap id
+    (`MDT.mapInfo[dungeonIndex].mapID`, used downstream to look up world-yard
+    bounds) and the dungeon entrance (the `dungeonEntrance` POI in
+    `MDT.mapPOIs[dungeonIndex]`, the start point for the first pull's delay).
+    `yards_per_unit` and the keystone timer are joined from Blizzard DBC later and
+    are NOT produced here."""
+    geo = {}
+    info = _find_table(text, "MDT.mapInfo[dungeonIndex]")
+    if isinstance(info, dict) and info.get("mapID"):
+        geo["mapId"] = info["mapID"]
+    pois = _find_table(text, "MDT.mapPOIs[dungeonIndex]")
+    if isinstance(pois, dict):
+        for sublevel, sub in sorted(pois.items()):
+            if not isinstance(sub, dict):
+                continue
+            for poi in sub.values():
+                if isinstance(poi, dict) and poi.get("type") == "dungeonEntrance":
+                    geo["entrance"] = {
+                        "x": poi.get("x", 0),
+                        "y": poi.get("y", 0),
+                        "sublevel": sublevel if isinstance(sublevel, int) else 1,
+                    }
+                    return geo  # one entrance per dungeon
+    return geo
+
+
 def extract_dungeon(text: str, idx: int):
     enemies_raw = _find_table(text, f"MDT.dungeonEnemies[dungeonIndex]")
     if enemies_raw is None:
@@ -228,6 +255,7 @@ def extract_dungeon(text: str, idx: int):
         "name": name,
         "totalCount": total.get("normal", 0),
         "sublevels": sublevels,
+        **_map_geometry(text),
         "enemies": enemies,
     }
 
