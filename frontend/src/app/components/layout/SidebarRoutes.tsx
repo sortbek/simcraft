@@ -10,6 +10,16 @@ import {
 } from '../../lib/saved-routes';
 import { useLanguage } from '../../lib/i18n';
 
+/** Strip a previously-injected DungeonRoute so loading another replaces it
+ *  cleanly (mirrors the MDT importer). */
+function stripPriorRoute(s: string): string {
+  return s
+    .split('\n')
+    .filter((l) => !l.startsWith('raid_events+=/pull') && l.trim() !== 'fight_style=DungeonRoute')
+    .join('\n')
+    .trim();
+}
+
 export default function SidebarRoutes() {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -17,7 +27,13 @@ export default function SidebarRoutes() {
   const [routeName, setRouteName] = useState('');
   const [routeString, setRouteString] = useState('');
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
-  const { setFightStyle, simcFooter, setSimcFooter } = useSimContext();
+  const { setFightStyle, simcFooter, setSimcFooter, customApl, setCustomApl } = useSimContext();
+
+  // A route is "active" when its definition is currently injected into the sim.
+  const isRouteActive = useCallback(
+    (r: SavedRoute) => (r.simc ? customApl.includes(r.simc) : simcFooter === r.mdt_string),
+    [customApl, simcFooter]
+  );
 
   const refreshRoutes = useCallback(() => {
     getSavedRoutes().then(setSavedRoutes);
@@ -28,17 +44,24 @@ export default function SidebarRoutes() {
   }, [refreshRoutes]);
 
   const activeRouteName = useMemo(() => {
-    if (!simcFooter) return null;
-    const match = savedRoutes.find((r) => r.mdt_string === simcFooter);
+    const match = savedRoutes.find(isRouteActive);
     return match?.name ?? null;
-  }, [simcFooter, savedRoutes]);
+  }, [savedRoutes, isRouteActive]);
 
   const handleLoadRoute = useCallback(
-    (mdtString: string) => {
-      setSimcFooter(mdtString);
-      setFightStyle('Patchwerk');
+    (route: SavedRoute) => {
+      if (route.simc) {
+        // Edited route: inject the regenerated DungeonRoute, like the MDT importer.
+        setFightStyle('DungeonRoute');
+        const base = stripPriorRoute(customApl);
+        setCustomApl(base ? `${base}\n${route.simc}` : route.simc);
+      } else {
+        // Legacy bookmark: keep the previous footer behaviour.
+        setSimcFooter(route.mdt_string);
+        setFightStyle('Patchwerk');
+      }
     },
-    [setSimcFooter, setFightStyle]
+    [customApl, setCustomApl, setSimcFooter, setFightStyle]
   );
 
   const handleSaveRoute = useCallback(() => {
@@ -98,7 +121,7 @@ export default function SidebarRoutes() {
         <div className="space-y-1 px-3 pb-3">
           <div className="max-h-48 space-y-0.5 overflow-y-auto">
             {savedRoutes.map((route) => {
-              const isActive = simcFooter === route.mdt_string;
+              const isActive = isRouteActive(route);
               return (
                 <div
                   key={route.id}
@@ -107,7 +130,7 @@ export default function SidebarRoutes() {
                   }`}
                 >
                   <button
-                    onClick={() => handleLoadRoute(route.mdt_string)}
+                    onClick={() => handleLoadRoute(route)}
                     className={`min-w-0 flex-1 truncate px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                       isActive
                         ? 'font-medium text-gold'

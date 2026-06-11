@@ -7,6 +7,9 @@ pub struct SavedRoute {
     pub id: String,
     pub name: String,
     pub mdt_string: String,
+    /// Regenerated SimC fight definition for edited routes (`None` for legacy
+    /// bookmark rows that only stored the MDT string).
+    pub simc: Option<String>,
     pub created_at: String,
 }
 
@@ -14,6 +17,8 @@ pub struct SavedRoute {
 pub struct CreateRouteRequest {
     pub name: String,
     pub mdt_string: String,
+    #[serde(default)]
+    pub simc: Option<String>,
 }
 
 #[derive(Clone)]
@@ -44,7 +49,7 @@ impl RouteRepo {
         match &self.backend {
             RouteBackend::Database(pool) => {
                 let rows = sqlx::query(
-                    "SELECT id, name, mdt_string, created_at FROM saved_routes ORDER BY created_at DESC",
+                    "SELECT id, name, mdt_string, simc, created_at FROM saved_routes ORDER BY created_at DESC",
                 )
                 .fetch_all(pool)
                 .await?;
@@ -55,6 +60,7 @@ impl RouteRepo {
                         id: r.get("id"),
                         name: r.get("name"),
                         mdt_string: r.get("mdt_string"),
+                        simc: r.get("simc"),
                         created_at: r.get("created_at"),
                     })
                     .collect())
@@ -67,24 +73,31 @@ impl RouteRepo {
         }
     }
 
-    pub async fn insert(&self, name: &str, mdt_string: &str) -> Result<SavedRoute, sqlx::Error> {
+    pub async fn insert(
+        &self,
+        name: &str,
+        mdt_string: &str,
+        simc: Option<&str>,
+    ) -> Result<SavedRoute, sqlx::Error> {
         let id = uuid::Uuid::new_v4().to_string();
         let created_at = chrono::Utc::now().to_rfc3339();
         let route = SavedRoute {
             id,
             name: name.to_string(),
             mdt_string: mdt_string.to_string(),
+            simc: simc.map(str::to_string),
             created_at,
         };
 
         match &self.backend {
             RouteBackend::Database(pool) => {
                 sqlx::query(
-                    "INSERT INTO saved_routes (id, name, mdt_string, created_at) VALUES ($1, $2, $3, $4)",
+                    "INSERT INTO saved_routes (id, name, mdt_string, simc, created_at) VALUES ($1, $2, $3, $4, $5)",
                 )
                 .bind(&route.id)
                 .bind(&route.name)
                 .bind(&route.mdt_string)
+                .bind(&route.simc)
                 .bind(&route.created_at)
                 .execute(pool)
                 .await?;

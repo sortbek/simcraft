@@ -63,6 +63,15 @@ pub struct ClonePos {
     pub x: f64,
     pub y: f64,
     pub sublevel: i64,
+    /// Patrol waypoints (MDT base coords), in order. Empty for stationary mobs.
+    #[serde(default)]
+    pub patrol: Vec<Point>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
 }
 
 impl DungeonDb {

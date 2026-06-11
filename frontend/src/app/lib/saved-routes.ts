@@ -4,6 +4,8 @@ export interface SavedRoute {
   id: string;
   name: string;
   mdt_string: string;
+  /** Regenerated SimC fight definition for edited routes (null for legacy bookmarks). */
+  simc?: string | null;
   created_at: string;
 }
 
@@ -15,11 +17,15 @@ export async function getSavedRoutes(): Promise<SavedRoute[]> {
   }
 }
 
-export async function saveRoute(name: string, mdtString: string): Promise<SavedRoute> {
+export async function saveRoute(
+  name: string,
+  mdtString: string,
+  simc?: string
+): Promise<SavedRoute> {
   return fetchJson<SavedRoute>(`${API_URL}/api/routes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, mdt_string: mdtString }),
+    body: JSON.stringify({ name, mdt_string: mdtString, simc }),
   });
 }
 

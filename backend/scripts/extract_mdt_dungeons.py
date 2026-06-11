@@ -164,6 +164,27 @@ def _find_table(text: str, lua_key: str):
     return LuaParser(block).parse_value()
 
 
+def _clone_pos(c: dict) -> dict:
+    """A single clone's map position, plus its patrol waypoints when present.
+    `patrol` is a positional Lua table ([1]={x,y}, [2]=...); keep it ordered and
+    omit it entirely when absent so the JSON stays compact."""
+    pos = {
+        "x": c.get("x", 0),
+        "y": c.get("y", 0),
+        "sublevel": c.get("sublevel", 1),
+    }
+    patrol = c.get("patrol")
+    if isinstance(patrol, dict):
+        pts = [
+            {"x": p.get("x", 0), "y": p.get("y", 0)}
+            for _, p in sorted(patrol.items())
+            if isinstance(p, dict)
+        ]
+        if pts:
+            pos["patrol"] = pts
+    return pos
+
+
 def extract_dungeon(text: str, idx: int):
     enemies_raw = _find_table(text, f"MDT.dungeonEnemies[dungeonIndex]")
     if enemies_raw is None:
@@ -175,11 +196,7 @@ def extract_dungeon(text: str, idx: int):
             continue
         raw_clones = e.get("clones") if isinstance(e.get("clones"), dict) else {}
         clones = {
-            str(ci): {
-                "x": c.get("x", 0),
-                "y": c.get("y", 0),
-                "sublevel": c.get("sublevel", 1),
-            }
+            str(ci): _clone_pos(c)
             for ci, c in raw_clones.items()
             if isinstance(c, dict)
         }

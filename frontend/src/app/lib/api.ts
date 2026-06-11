@@ -136,10 +136,38 @@ export interface MdtMapSublevel {
   name: string;
 }
 
+export interface MdtMapPoint {
+  x: number;
+  y: number;
+}
+
+/** One clone in the full mob layer. `pull`/`color` are null when the mob is not
+ *  part of the route (drawn dimmed). `patrol` is empty for stationary mobs. */
+export interface MdtMapEnemy {
+  x: number;
+  y: number;
+  sublevel: number;
+  name: string;
+  is_boss: boolean;
+  scale: number;
+  count: number;
+  /** Keystone-scaled health (same value the sim uses). */
+  health: number;
+  /** Lowercased creature type (SimC enemy race), for re-serializing after edits. */
+  race: string;
+  patrol: MdtMapPoint[];
+  pull: number | null;
+  color: string | null;
+}
+
 export interface MdtMap {
   dungeon_idx: number;
+  /** Total enemy-forces required for the dungeon (the 100% threshold). */
+  total_count: number;
   sublevels: MdtMapSublevel[];
   pulls: MdtMapPull[];
+  /** Every clone of every enemy in the dungeon (pulled + unpulled). */
+  enemies: MdtMapEnemy[];
 }
 
 /** Result of decoding an MDT export string into a SimC DungeonRoute. */

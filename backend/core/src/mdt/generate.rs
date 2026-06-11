@@ -48,8 +48,15 @@ pub struct MdtSimc {
 #[derive(Debug, Clone, Serialize)]
 pub struct MdtMap {
     pub dungeon_idx: i64,
+    /// Total enemy-forces required for the dungeon (MDT `dungeonTotalCount.normal`),
+    /// the 100% threshold pull forces are measured against.
+    pub total_count: i64,
     pub sublevels: Vec<MapSublevel>,
     pub pulls: Vec<MapPull>,
+    /// Every clone of every enemy in the dungeon — the full mob layer the map
+    /// draws. Clones not in any pull have `pull`/`color` unset (drawn dimmed);
+    /// pulled clones carry their pull number and color.
+    pub enemies: Vec<MapEnemy>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +86,36 @@ pub struct MapMarker {
     pub is_boss: bool,
     pub scale: f64,
     pub count: i64,
+}
+
+/// One clone in the full mob layer. Like [`MapMarker`] but tagged with its pull
+/// membership (`None` = not pulled, drawn dimmed) and its patrol path.
+#[derive(Debug, Clone, Serialize)]
+pub struct MapEnemy {
+    pub x: f64,
+    pub y: f64,
+    pub sublevel: i64,
+    pub name: String,
+    pub is_boss: bool,
+    pub scale: f64,
+    pub count: i64,
+    /// Keystone-scaled health for this mob (same value used in the sim).
+    pub health: i64,
+    /// Lowercased creature type (the SimC enemy `race`), so the route can be
+    /// re-serialized to a `DungeonRoute` after client-side pull edits.
+    pub race: String,
+    /// Patrol waypoints (same coord space as `x`/`y`), in order. Empty if none.
+    pub patrol: Vec<MapPoint>,
+    /// 1-based pull number this clone belongs to, or `None` if unpulled.
+    pub pull: Option<usize>,
+    /// The pull's 6-char hex color (no `#`), or `None` if unpulled.
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MapPoint {
+    pub x: f64,
+    pub y: f64,
 }
 
 pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
@@ -152,8 +189,64 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
         ));
     }
 
+    // Full mob layer: every clone of every enemy, tagged with pull membership.
+    // First map (enemy_idx, clone_idx) -> (pull number, color) from the route.
+    let mut pull_of: std::collections::HashMap<(i64, i64), (usize, String)> =
+        std::collections::HashMap::new();
+    for (i, pull) in route.pulls.iter().enumerate() {
+        let color = pull
+            .color
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PULL_COLOR.to_string());
+        for entry in &pull.enemies {
+            for &clone_idx in &entry.clone_indices {
+                pull_of.insert((entry.enemy_idx, clone_idx), (i + 1, color.clone()));
+            }
+        }
+    }
+
+    let mut all_enemies = Vec::new();
+    for (&enemy_idx, enemy) in &dungeon.enemies {
+        for (&clone_idx, pos) in &enemy.clones {
+            let (pull, color) = match pull_of.get(&(enemy_idx, clone_idx)) {
+                Some((p, c)) => (Some(*p), Some(c.clone())),
+                None => (None, None),
+            };
+            all_enemies.push(MapEnemy {
+                x: pos.x,
+                y: pos.y,
+                sublevel: pos.sublevel,
+                name: enemy.name.clone(),
+                is_boss: enemy.is_boss,
+                scale: enemy.scale,
+                count: enemy.count,
+                health: calculate_enemy_health(
+                    enemy.is_boss,
+                    enemy.health,
+                    route.keystone_level,
+                    enemy.ignore_fortified,
+                ),
+                race: enemy.creature_type.to_lowercase(),
+                patrol: pos.patrol.iter().map(|p| MapPoint { x: p.x, y: p.y }).collect(),
+                pull,
+                color,
+            });
+        }
+    }
+    // Stable order: unpulled first (drawn underneath), then by pull number, so
+    // pulled mobs paint on top — and the output is deterministic despite the
+    // HashMap iteration above.
+    all_enemies.sort_by(|a, b| {
+        a.pull
+            .is_some()
+            .cmp(&b.pull.is_some())
+            .then(a.pull.cmp(&b.pull))
+            .then(a.name.cmp(&b.name))
+    });
+
     let map = MdtMap {
         dungeon_idx: route.dungeon_idx,
+        total_count: dungeon.total_count,
         sublevels: dungeon
             .sublevels
             .iter()
@@ -163,6 +256,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
             })
             .collect(),
         pulls: map_pulls,
+        enemies: all_enemies,
     };
 
     let raid_events = pull_lines.join("\n");

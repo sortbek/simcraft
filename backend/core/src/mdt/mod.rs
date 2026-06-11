@@ -127,6 +127,29 @@ mod tests {
     }
 
     #[test]
+    fn full_mob_layer_covers_all_clones() {
+        let out = convert(EXAMPLE, &load_db()).unwrap();
+        let enemies = &out.map.enemies;
+
+        // Every clone of every enemy is present (186 for Seat), not just pulled ones.
+        assert_eq!(enemies.len(), 186);
+
+        // Pulled clones carry a pull number + color; with no unresolved enemies
+        // their count matches the simmed enemy total.
+        let pulled = enemies.iter().filter(|e| e.pull.is_some()).count();
+        assert_eq!(out.unresolved, 0);
+        assert_eq!(pulled, out.enemy_count);
+        assert!(enemies.iter().any(|e| e.pull.is_none()), "unpulled trash shown");
+        assert!(enemies.iter().all(|e| e.pull.is_some() == e.color.is_some()));
+
+        // Patrols are surfaced (Seat has a handful of patrolling clones).
+        assert!(
+            enemies.iter().any(|e| !e.patrol.is_empty()),
+            "at least one patrol path"
+        );
+    }
+
+    #[test]
     fn missing_clone_counts_as_unresolved() {
         // A clone index the DB doesn't know (MDT version drift): the enemy is
         // still simmed (health is known), but no map marker can be placed —

@@ -18,7 +18,8 @@ pub(super) async fn create_route(
         return HttpResponse::BadRequest()
             .json(json!({"detail": "name and mdt_string are required"}));
     }
-    match repo.insert(req.name.trim(), req.mdt_string.trim()).await {
+    let simc = req.simc.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    match repo.insert(req.name.trim(), req.mdt_string.trim(), simc).await {
         Ok(route) => HttpResponse::Ok().json(route),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
