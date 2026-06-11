@@ -170,10 +170,14 @@ mod tests {
 
     #[test]
     fn geometry_fields_default_when_absent() {
-        // The existing Seat fixture has none of the new fields and must still load.
-        let db = DungeonDb::from_json(include_str!("testdata/mdt_dungeons.json")).unwrap();
-        let d = db.dungeon(11).unwrap();
+        // A dungeon JSON carrying none of the geometry fields must still load,
+        // with the optional fields defaulting to None/empty.
+        let json = r#"{"dungeons":{"1":{"name":"X","totalCount":0,"sublevels":[],"enemies":{}}}}"#;
+        let db = DungeonDb::from_json(json).unwrap();
+        let d = db.dungeon(1).unwrap();
         assert_eq!(d.map_id, None);
+        assert_eq!(d.timer_max_seconds, None);
+        assert!(d.entrance.is_none());
         assert!(d.sublevel_links.is_empty());
         assert_eq!(d.yards_per_unit, None);
     }
