@@ -16,7 +16,7 @@ pub(super) async fn decode_mdt(body: web::Json<DecodeMdtRequest>) -> HttpRespons
         return HttpResponse::ServiceUnavailable()
             .json(json!({ "error": "MDT dungeon database not loaded" }));
     };
-    match mdt::convert(&body.import, db) {
+    match mdt::convert(&body.import, db, &mdt::ConvertOptions::default()) {
         Ok(out) => HttpResponse::Ok().json(out),
         Err(e) => HttpResponse::BadRequest().json(json!({ "error": e })),
     }

@@ -36,11 +36,25 @@ pub fn decode(import: &str) -> Result<MdtRoute, String> {
     model::parse_route(&value)
 }
 
+/// Caller-supplied conversion parameters.
+pub struct ConvertOptions {
+    /// Keystone level to scale health to. `None` uses the string's `difficulty`.
+    pub keystone_level: Option<i64>,
+    /// Percentage of full enemy HP to sim (1–100). keystone.guru default: 20.
+    pub hp_percent: i64,
+}
+
+impl Default for ConvertOptions {
+    fn default() -> Self {
+        Self { keystone_level: None, hp_percent: 20 }
+    }
+}
+
 /// Decode an MDT export string and convert it to a SimC `DungeonRoute` fight
 /// definition using the static enemy database.
-pub fn convert(import: &str, db: &DungeonDb) -> Result<MdtSimc, String> {
+pub fn convert(import: &str, db: &DungeonDb, opts: &ConvertOptions) -> Result<MdtSimc, String> {
     let route = decode(import)?;
-    generate::generate(&route, db)
+    generate::generate(&route, db, opts)
 }
 
 /// Raw DEFLATE inflate (no zlib/gzip header), matching LibDeflate's
@@ -119,28 +133,27 @@ mod tests {
 
     #[test]
     fn converts_example_to_dungeonroute() {
-        let out = convert(EXAMPLE, &load_db()).expect("convert example MDT string");
+        let out = convert(EXAMPLE, &load_db(), &ConvertOptions::default()).expect("convert example MDT string");
 
         assert_eq!(out.dungeon_name, "Seat of the Triumvirate");
         assert_eq!(out.keystone_level, 2);
         assert_eq!(out.pull_count, 16);
         assert_eq!(out.unresolved, 0, "all enemies should resolve in the DB");
 
-        // First line is the fight style; one pull line per pull follows.
-        let lines: Vec<&str> = out.simc.lines().collect();
-        assert_eq!(lines[0], "fight_style=DungeonRoute");
-        assert_eq!(lines.len(), 1 + out.pull_count);
+        assert!(out.simc.starts_with("fight_style=DungeonRoute"));
+        assert!(out.simc.contains("single_actor_batch=1"));
 
-        // Pull 1 has enemy 1 (Merciless Subjugator) with 2 clones at level-2
-        // scaled health 2112714, listed twice.
-        assert!(lines[1].starts_with("raid_events+=/pull,pull=1,bloodlust=0,delay=0,enemies="));
-        let occurrences = lines[1].matches("\"Merciless_Subjugator\":2112714:humanoid").count();
-        assert_eq!(occurrences, 2);
+        let pull1 = out.simc.lines().find(|l| l.starts_with("raid_events+=/pull,pull=01,")).unwrap();
+        assert!(pull1.contains("bloodlust=0,delay="));
+        // hp_percent default 20 → fractioned health; slug name, no creatureType suffix.
+        let occurrences = pull1.matches("\"merciless-subjugator_").count();
+        assert_eq!(occurrences, 2, "two Merciless Subjugator clones, slug_N named");
+        assert!(!pull1.contains(":humanoid"), "no creatureType suffix in new format");
     }
 
     #[test]
     fn builds_map_markers() {
-        let out = convert(EXAMPLE, &load_db()).unwrap();
+        let out = convert(EXAMPLE, &load_db(), &ConvertOptions::default()).unwrap();
         let map = &out.map;
         assert_eq!(map.dungeon_idx, 11);
         assert_eq!(map.sublevels.len(), 1);
@@ -161,7 +174,7 @@ mod tests {
 
     #[test]
     fn full_mob_layer_covers_all_clones() {
-        let out = convert(EXAMPLE, &load_db()).unwrap();
+        let out = convert(EXAMPLE, &load_db(), &ConvertOptions::default()).unwrap();
         let enemies = &out.map.enemies;
 
         // Every clone of every enemy is present (186 for Seat), not just pulled ones.
@@ -201,10 +214,31 @@ mod tests {
             }],
             lines: vec![],
         };
-        let out = generate::generate(&route, &load_db()).unwrap();
+        let out = generate::generate(&route, &load_db(), &ConvertOptions::default()).unwrap();
         assert_eq!(out.enemy_count, 2, "both clones are simmed");
         assert_eq!(out.unresolved, 1, "the unknown clone must be reported");
         assert_eq!(out.map.pulls[0].enemies.len(), 1, "only the known clone gets a marker");
+    }
+
+    #[test]
+    fn emits_keystone_guru_format() {
+        let opts = ConvertOptions { keystone_level: Some(14), hp_percent: 100 };
+        let out = convert(SKYREACH_ROUTE, &load_skyreach_db(), &opts).unwrap();
+
+        assert!(out.simc.starts_with("fight_style=DungeonRoute"));
+        assert!(out.simc.contains("override.bloodlust=0"));
+        assert!(out.simc.contains("single_actor_batch=1"));
+        assert!(out.simc.contains("max_time=1680"));
+        assert!(out.simc.contains("enemy=\"PUG-Friendly: Raider.IO's Weekly Route\""));
+        assert!(out.simc.contains("enemy_health=999999"));
+        assert!(out.simc.contains("keystone_level=14"));
+        assert!(out.simc.contains("raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1"));
+
+        let pull1 = out.simc.lines().find(|l| l.starts_with("raid_events+=/pull,pull=01,")).unwrap();
+        assert!(pull1.contains("bloodlust=0,delay="));
+        assert!(pull1.contains("\"soaring-chakram-master_1\":"));
+        assert!(!pull1.contains(":humanoid"), "no creatureType suffix");
+        assert_eq!(out.keystone_level, 14);
     }
 
     #[test]
@@ -221,6 +255,6 @@ mod tests {
 
         let db = enemy_db::global().expect("global db loaded");
         assert!(db.dungeon(11).is_some());
-        assert_eq!(convert(EXAMPLE, db).unwrap().pull_count, 16);
+        assert_eq!(convert(EXAMPLE, db, &ConvertOptions::default()).unwrap().pull_count, 16);
     }
 }

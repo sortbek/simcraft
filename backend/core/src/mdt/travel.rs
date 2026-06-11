@@ -15,7 +15,6 @@ const MOVE_SPEED_YPS: f64 = 7.0;
 /// straight-line centroid estimate. Empty or fully-unresolved pulls get delay `0`
 /// and do not advance the reference position. Distance = MDT-coordinate distance
 /// × `yards_per_unit` ÷ 7 yd/s.
-#[allow(dead_code)] // wired in by generate.rs (Task 6)
 pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
     let centroids: Vec<Option<(f64, f64)>> = route
         .pulls

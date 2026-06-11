@@ -1,19 +1,16 @@
 //! Generate a SimulationCraft `DungeonRoute` fight definition from a decoded MDT
 //! route plus the static enemy database.
 //!
-//! Output: a `fight_style=DungeonRoute` line followed by one
-//! `raid_events+=/pull,...` line per pull, each listing its enemies as
-//! `"name":health:creatureType` specifiers (one per clone, bosses prefixed
-//! `BOSS_`). SimC has no NPC-id concept, so health is resolved and scaled here.
+//! Output: a multi-line header (`fight_style=DungeonRoute`, overrides, `max_time`,
+//! `enemy`, `keystone_level`, invulnerable event) followed by one
+//! `raid_events+=/pull,...` line per pull. Each enemy specifier uses keystone.guru's
+//! slug-N format: `"slug_N":health` (bosses prefixed `BOSS_`), no `:creatureType`
+//! suffix. Health in the SimC specifier is scaled to `hp_percent` of full health.
 
 use super::enemy_db::DungeonDb;
 use super::health_scaling::calculate_enemy_health;
 use super::model::MdtRoute;
 use serde::Serialize;
-
-/// Travel time between pulls. MDT stores no per-pull travel time, so a fixed
-/// default is used (configurable later).
-const DEFAULT_DELAY_SECONDS: i64 = 0;
 
 /// MDT's default pull color (forest green) when a pull set none.
 const DEFAULT_PULL_COLOR: &str = "228b22";
@@ -35,10 +32,10 @@ pub struct MdtSimc {
     /// Enemy instances referenced by the route but missing from the database
     /// (e.g. MDT version drift). Zero for a clean conversion.
     pub unresolved: usize,
-    /// The `raid_events+=/pull,...` lines only (no `fight_style`), for injecting
+    /// The `raid_events+=/pull,...` lines only (no header), for injecting
     /// alongside a `DungeonRoute` fight-style selection.
     pub raid_events: String,
-    /// The complete SimC fight definition (`fight_style=DungeonRoute` + pulls).
+    /// The complete SimC fight definition (header + pulls).
     pub simc: String,
     /// Map-render data: per-pull colored mob markers positioned on the dungeon map.
     pub map: MdtMap,
@@ -118,10 +115,14 @@ pub struct MapPoint {
     pub y: f64,
 }
 
-pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
+pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) -> Result<MdtSimc, String> {
     let dungeon = db
         .dungeon(route.dungeon_idx)
         .ok_or_else(|| format!("dungeon index {} not in MDT database", route.dungeon_idx))?;
+
+    let keystone_level = opts.keystone_level.unwrap_or(route.keystone_level);
+
+    let delays = super::travel::calculate_delays(route, dungeon);
 
     let mut pull_lines = Vec::new();
     let mut map_pulls = Vec::new();
@@ -132,25 +133,26 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
     for (i, pull) in route.pulls.iter().enumerate() {
         let mut specifiers = Vec::new();
         let mut markers = Vec::new();
+        let mut npc_counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
         for entry in &pull.enemies {
             let Some(enemy) = dungeon.enemies.get(&entry.enemy_idx) else {
                 unresolved += entry.clone_indices.len();
                 continue;
             };
-            let health = calculate_enemy_health(
+            let full_health = calculate_enemy_health(
                 enemy.is_boss,
                 enemy.health,
-                route.keystone_level,
+                keystone_level,
                 enemy.ignore_fortified,
             );
-            let race = enemy.creature_type.to_lowercase();
-            let name = sanitize_name(&enemy.name, enemy.is_boss);
             // One specifier + one map marker per clone in this pull — each clone
             // is its own mob.
             for &clone_idx in &entry.clone_indices {
-                specifiers.push(format!("\"{name}\":{health}:{race}"));
+                let n = { let c = npc_counts.entry(enemy.id).or_default(); *c += 1; *c };
+                let sim_health = full_health * opts.hp_percent / 100;
+                specifiers.push(format!("\"{}_{}\":{}", sim_slug(&enemy.name, enemy.is_boss), n, sim_health));
                 enemy_count += 1;
-                total_health += health;
+                total_health += full_health;
                 if let Some(pos) = enemy.clones.get(&clone_idx) {
                     markers.push(MapMarker {
                         x: pos.x,
@@ -182,9 +184,9 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
             continue;
         }
         pull_lines.push(format!(
-            "raid_events+=/pull,pull={},bloodlust=0,delay={},enemies={}",
+            "raid_events+=/pull,pull={:02},bloodlust=0,delay={:03},enemies={}",
             i + 1,
-            DEFAULT_DELAY_SECONDS,
+            delays.get(i).copied().unwrap_or(0),
             specifiers.join("|")
         ));
     }
@@ -223,7 +225,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
                 health: calculate_enemy_health(
                     enemy.is_boss,
                     enemy.health,
-                    route.keystone_level,
+                    keystone_level,
                     enemy.ignore_fortified,
                 ),
                 race: enemy.creature_type.to_lowercase(),
@@ -259,18 +261,37 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
         enemies: all_enemies,
     };
 
+    let header = format!(
+"fight_style=DungeonRoute
+override.bloodlust=0
+override.arcane_intellect=0
+override.power_word_fortitude=0
+override.mark_of_the_wild=0
+override.battle_shout=0
+override.mystic_touch=0
+override.chaos_brand=0
+override.skyfury=0
+override.hunters_mark=0
+override.power_infusion=0
+override.bleeding=0
+single_actor_batch=1
+max_time={max_time}
+enemy=\"{title}\"
+enemy_health=999999
+keystone_level={keystone_level}
+raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1",
+        max_time = dungeon.timer_max_seconds.unwrap_or(0),
+        title = route.text,
+        keystone_level = keystone_level,
+    );
     let raid_events = pull_lines.join("\n");
-    let simc = if raid_events.is_empty() {
-        "fight_style=DungeonRoute".to_string()
-    } else {
-        format!("fight_style=DungeonRoute\n{raid_events}")
-    };
+    let simc = if raid_events.is_empty() { header.clone() } else { format!("{header}\n{raid_events}") };
 
     Ok(MdtSimc {
         mdt_version: db.mdt_version().to_string(),
         dungeon_name: dungeon.name.clone(),
         week: route.week,
-        keystone_level: route.keystone_level,
+        keystone_level,
         pull_count: route.pulls.len(),
         enemy_count,
         total_health,
@@ -281,16 +302,20 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
     })
 }
 
-/// Make an enemy name safe for a SimC enemy specifier (no spaces or `:`/`|`/`"`)
-/// and apply the `BOSS_` prefix that SimC uses to spawn a boss-type actor.
-fn sanitize_name(name: &str, is_boss: bool) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '_' })
-        .collect();
-    if is_boss {
-        format!("BOSS_{cleaned}")
-    } else {
-        cleaned
+/// Slugify an NPC name like keystone.guru's `Str::slug`: lowercase, runs of
+/// non-alphanumerics collapse to a single '-', trimmed; bosses get `BOSS_`.
+fn sim_slug(name: &str, is_boss: bool) -> String {
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for c in name.chars() {
+        if c.is_alphanumeric() {
+            slug.extend(c.to_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            slug.push('-');
+            prev_dash = true;
+        }
     }
+    let slug = slug.trim_matches('-').to_string();
+    if is_boss { format!("BOSS_{slug}") } else { slug }
 }
