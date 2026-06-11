@@ -1,0 +1,11 @@
+{
+  "_comment": "Per-UiMap travel geometry for the SimC DungeonRoute delay estimate, derived from Blizzard DBC and keyed by MDT mapId (MDT.mapInfo[idx].mapID). yardsPerUnit = world-yard extent / MDT canvas axis, where the dungeon map fills MDT's 840x560 base canvas and the UiMapAssignment world bounds give the extent: yardsPerUnit = max(extentX, extentY) / 840 (equals min(.) / 560 when the UiMap aspect is the canvas 1.5:1). Omitted for maps whose UiMap aspect is not ~1.5 (their mapID points at a zone/parent UiMap, not the dungeon floor) so they fall back to delay 0. timerSeconds = MapChallengeMode.CriteriaCount_0 (the +1 par timer). Regenerate from DBC when the season/dungeon set changes.",
+  "161": { "yardsPerUnit": 0.738, "timerSeconds": 1680 },
+  "239": { "yardsPerUnit": 0.952, "timerSeconds": 2040 },
+  "402": { "yardsPerUnit": 0.670, "timerSeconds": 1860 },
+  "556": { "yardsPerUnit": 0.902, "timerSeconds": 1800 },
+  "557": { "yardsPerUnit": 1.131, "timerSeconds": 1980 },
+  "558": { "yardsPerUnit": 0.670, "timerSeconds": 2040 },
+  "559": { "timerSeconds": 1800 },
+  "560": { "timerSeconds": 1980 }
+}

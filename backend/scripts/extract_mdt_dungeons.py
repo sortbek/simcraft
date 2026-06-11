@@ -185,17 +185,37 @@ def _clone_pos(c: dict) -> dict:
     return pos
 
 
+def _load_dbc_geometry() -> dict:
+    """DBC-derived per-mapId geometry (yardsPerUnit + keystone timer), if the
+    committed snapshot sits next to this script. Keyed by mapId as a string."""
+    path = Path(__file__).with_name("mdt_map_geometry.json")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
+_DBC_GEOMETRY = _load_dbc_geometry()
+
+
 def _map_geometry(text: str) -> dict:
     """Travel-time geometry the SimC delay estimate needs: the Blizzard UiMap id
-    (`MDT.mapInfo[dungeonIndex].mapID`, used downstream to look up world-yard
-    bounds) and the dungeon entrance (the `dungeonEntrance` POI in
-    `MDT.mapPOIs[dungeonIndex]`, the start point for the first pull's delay).
-    `yards_per_unit` and the keystone timer are joined from Blizzard DBC later and
-    are NOT produced here."""
+    (`MDT.mapInfo[dungeonIndex].mapID`) and the dungeon entrance (the
+    `dungeonEntrance` POI in `MDT.mapPOIs[dungeonIndex]`, the start point for the
+    first pull's delay). When a DBC snapshot is present, also joins
+    `yardsPerUnit` (world-yard scale) and `timerMaxSeconds` (keystone par timer)
+    by mapId."""
     geo = {}
     info = _find_table(text, "MDT.mapInfo[dungeonIndex]")
     if isinstance(info, dict) and info.get("mapID"):
-        geo["mapId"] = info["mapID"]
+        map_id = info["mapID"]
+        geo["mapId"] = map_id
+        dbc = _DBC_GEOMETRY.get(str(map_id), {})
+        if "yardsPerUnit" in dbc:
+            geo["yardsPerUnit"] = dbc["yardsPerUnit"]
+        if "timerSeconds" in dbc:
+            geo["timerMaxSeconds"] = dbc["timerSeconds"]
     pois = _find_table(text, "MDT.mapPOIs[dungeonIndex]")
     if isinstance(pois, dict):
         for sublevel, sub in sorted(pois.items()):

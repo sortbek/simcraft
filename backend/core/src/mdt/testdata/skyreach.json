@@ -10,6 +10,14 @@
           "name": "Skyreach"
         }
       ],
+      "mapId": 161,
+      "yardsPerUnit": 0.738,
+      "timerMaxSeconds": 1680,
+      "entrance": {
+        "x": 307.66540372089,
+        "y": -120.59112999673,
+        "sublevel": 1
+      },
       "enemies": {
         "1": {
           "id": 76132,
@@ -785,15 +793,7 @@
             }
           }
         }
-      },
-      "mapId": 161,
-      "timerMaxSeconds": 1680,
-      "entrance": {
-        "x": 307.66540372089,
-        "y": -120.59112999673,
-        "sublevel": 1
-      },
-      "yardsPerUnit": 0.55
+      }
     }
   }
 }
