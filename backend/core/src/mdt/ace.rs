@@ -63,6 +63,20 @@ impl AceTable {
         out.sort_by_key(|(i, _)| *i);
         out
     }
+
+    /// Integer-keyed entries in original (serialized) order. Used where MDT's
+    /// `pairs()` order is significant — the SimC export lists a pull's enemies in
+    /// this order, not sorted.
+    pub fn int_entries_ordered(&self) -> Vec<(i64, &AceValue)> {
+        self.pairs
+            .iter()
+            .filter_map(|(k, v)| match k {
+                AceValue::Int(i) => Some((*i, v)),
+                AceValue::Float(f) if f.fract() == 0.0 => Some((*f as i64, v)),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 impl AceValue {
@@ -228,5 +242,14 @@ mod tests {
     fn unescapes_caret() {
         // "a^b" serializes the '^' as ~}
         assert_eq!(unescape("a~}b"), "a^b");
+    }
+
+    #[test]
+    fn int_entries_ordered_preserves_insertion_order() {
+        // { [5]=.., [1]=.., [3]=.. } must stay 5,1,3 — not sorted to 1,3,5.
+        let v = deserialize("^1^T^N5^Sa^N1^Sb^N3^Sc^t^^").unwrap();
+        let t = v.as_table().unwrap();
+        let keys: Vec<i64> = t.int_entries_ordered().iter().map(|(k, _)| *k).collect();
+        assert_eq!(keys, vec![5, 1, 3]);
     }
 }

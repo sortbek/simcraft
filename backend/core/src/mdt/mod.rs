@@ -158,6 +158,7 @@ mod tests {
             dungeon_idx: 11,
             week: 2,
             keystone_level: 2,
+            text: String::new(),
             pulls: vec![MdtPull {
                 enemies: vec![MdtPullEnemy {
                     enemy_idx: 1,

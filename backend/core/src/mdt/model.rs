@@ -17,6 +17,8 @@ pub struct MdtRoute {
     pub week: i64,
     /// Keystone level (`difficulty`); 0 if the string did not include it.
     pub keystone_level: i64,
+    /// The preset's display name (`text`), used for the SimC `enemy="..."` line.
+    pub text: String,
     /// Pulls in route order.
     pub pulls: Vec<MdtPull>,
 }
@@ -42,6 +44,10 @@ pub fn parse_route(preset: &AceValue) -> Result<MdtRoute, String> {
         .as_table()
         .ok_or("preset is not a table")?;
 
+    let text = preset
+        .get_str("text")
+        .and_then(|v| match v { AceValue::Str(s) => Some(s.clone()), _ => None })
+        .unwrap_or_default();
     let week = preset
         .get_str("week")
         .and_then(AceValue::as_int)
@@ -75,6 +81,7 @@ pub fn parse_route(preset: &AceValue) -> Result<MdtRoute, String> {
         dungeon_idx,
         week,
         keystone_level,
+        text,
         pulls,
     })
 }
@@ -83,7 +90,7 @@ fn parse_pull(pull: &AceValue) -> Result<MdtPull, String> {
     let pull = pull.as_table().ok_or("pull is not a table")?;
     // Integer keys are enemy indices; string keys (e.g. "color") are metadata.
     let enemies = pull
-        .int_entries()
+        .int_entries_ordered()
         .into_iter()
         .map(|(enemy_idx, clones)| MdtPullEnemy {
             enemy_idx,
@@ -95,6 +102,27 @@ fn parse_pull(pull: &AceValue) -> Result<MdtPull, String> {
         _ => None,
     };
     Ok(MdtPull { enemies, color })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mdt::ace;
+
+    #[test]
+    fn parses_text_and_preserves_enemy_order() {
+        // preset { text="My Route", week=2, difficulty=14,
+        //          value={ currentDungeonIdx=151,
+        //                  pulls={ [1]={ [5]={[1]=1}, [1]={[1]=1} } } } }
+        let s = "^1^T^Stext^SMy Route^Sweek^N2^Sdifficulty^N14^Svalue^T\
+                 ^ScurrentDungeonIdx^N151^Spulls^T^N1^T^N5^T^N1^N1^t^N1^T^N1^N1^t^t^t^t^t^^";
+        let v = ace::deserialize(s).unwrap();
+        let route = parse_route(&v).unwrap();
+        assert_eq!(route.text, "My Route");
+        assert_eq!(route.keystone_level, 14);
+        let order: Vec<i64> = route.pulls[0].enemies.iter().map(|e| e.enemy_idx).collect();
+        assert_eq!(order, vec![5, 1], "enemy order must follow storage, not be sorted");
+    }
 }
 
 /// The value for an enemy key is a sequence table of clone indices.
