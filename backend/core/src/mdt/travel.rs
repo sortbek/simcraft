@@ -7,17 +7,19 @@ use super::model::{MdtLine, MdtPull, MdtRoute};
 /// On-foot movement speed (yards/second), from keystone.guru's config.
 const MOVE_SPEED_YPS: f64 = 7.0;
 
-/// One delay (seconds, rounded) per non-empty pull, in route order, aligned with
-/// the pull lines `generate.rs` emits. Pull 1 is measured from the dungeon
-/// entrance. When the route carries a drawn polyline, travel follows the path
-/// (arc-length between consecutive pull projections); otherwise it is a
-/// straight-line centroid estimate. Distances are MDT units × `yards_per_unit`.
+/// Returns one delay (seconds, rounded) per pull in `route.pulls`, in order
+/// (aligned by index — callers index by the pull's position). Pull 1 is measured
+/// from the dungeon entrance; each subsequent pull is measured from the previous
+/// resolvable centroid. When the route carries a drawn polyline, travel follows
+/// the path (arc-length between consecutive pull projections); otherwise it is a
+/// straight-line centroid estimate. Empty or fully-unresolved pulls get delay `0`
+/// and do not advance the reference position. Distance = MDT-coordinate distance
+/// × `yards_per_unit` ÷ 7 yd/s.
 #[allow(dead_code)] // wired in by generate.rs (Task 6)
 pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
     let centroids: Vec<Option<(f64, f64)>> = route
         .pulls
         .iter()
-        .filter(|p| !p.enemies.is_empty())
         .map(|p| pull_centroid(p, dungeon))
         .collect();
 
@@ -129,6 +131,7 @@ fn delays_along_path(
     centroids: &[Option<(f64, f64)>],
     scale: f64,
 ) -> Vec<i64> {
+    debug_assert!(path.len() >= 2);
     let mut cum = vec![0.0; path.len()];
     for i in 1..path.len() {
         cum[i] = cum[i - 1] + dist(path[i - 1], path[i]);
@@ -139,14 +142,12 @@ fn delays_along_path(
         let delay = match (prev_s, c) {
             (Some(ps), Some(b)) => {
                 let s = project_onto(path, &cum, *b);
+                prev_s = Some(s);
                 seconds((s - ps).abs(), scale)
             }
             _ => 0,
         };
         delays.push(delay);
-        if let Some(b) = c {
-            prev_s = Some(project_onto(path, &cum, *b));
-        }
     }
     delays
 }
@@ -227,5 +228,27 @@ mod tests {
         enemies.insert(2, enemy_at(3.0, 11.0));
         let d = dungeon(enemies, None);
         assert_eq!(calculate_delays(&route(vec![]), &d), vec![0, 0]);
+    }
+
+    #[test]
+    fn unresolvable_middle_pull_gets_zero_and_does_not_advance_reference() {
+        // 3 pulls; the middle pull references an enemy_idx absent from the DB.
+        // Expect: one delay per pull (len 3); middle = 0; pull 3 measured from pull 1
+        // (reference did not advance across the gap). scale 7 → delay == MDT distance.
+        let mut enemies = HashMap::new();
+        enemies.insert(1, enemy_at(0.0, 10.0)); // pull 1 centroid, dist 10 from entrance (0,0)
+        enemies.insert(3, enemy_at(0.0, 40.0)); // pull 3 centroid
+        // note: enemy_idx 2 is intentionally NOT inserted -> pull 2 is unresolvable
+        let d = dungeon(enemies, Some(7.0));
+        let r = MdtRoute {
+            dungeon_idx: 1, week: 1, keystone_level: 2, text: String::new(),
+            lines: vec![],
+            pulls: vec![pull(1), pull(2), pull(3)],
+        };
+        let delays = calculate_delays(&r, &d);
+        assert_eq!(delays.len(), 3, "one delay per pull");
+        assert_eq!(delays[0], 10, "pull 1 from entrance (0,0) to (0,10)");
+        assert_eq!(delays[1], 0, "unresolvable middle pull");
+        assert_eq!(delays[2], 30, "pull 3 from pull 1 (0,10) to (0,40), not from the gap");
     }
 }
