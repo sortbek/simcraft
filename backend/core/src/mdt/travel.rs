@@ -15,6 +15,14 @@ const MOVE_SPEED_YPS: f64 = 7.0;
 /// straight-line centroid estimate. Empty or fully-unresolved pulls get delay `0`
 /// and do not advance the reference position. Distance = MDT-coordinate distance
 /// × `yards_per_unit` ÷ 7 yd/s.
+/// A drawn line is treated as a real traversal path (rather than a partial
+/// annotation scribble) only when the route's projection onto it spans at least
+/// this fraction of the straight-line tour. A genuine route line's projected
+/// length is comparable to — or longer than, because it winds — the straight
+/// tour; a short scribble collapses most pull projections onto the same point,
+/// so its projected length is near zero.
+const PATH_COVERAGE: f64 = 0.5;
+
 pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
     let centroids: Vec<Option<(f64, f64)>> = route
         .pulls
@@ -29,10 +37,22 @@ pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
 
     let entrance = dungeon.entrance.as_ref().map(|e| (e.x, e.y));
 
-    match longest_line(&route.lines) {
-        Some(path) => delays_along_path(&path.points, entrance, &centroids, scale),
-        None => delays_straight(entrance, &centroids, scale),
-    }
+    let straight = straight_distances(entrance, &centroids);
+    let distances = match longest_line(&route.lines) {
+        Some(path) => {
+            let along = path_distances(&path.points, entrance, &centroids);
+            let straight_total: f64 = straight.iter().sum();
+            let path_total: f64 = along.iter().sum();
+            if straight_total > 0.0 && path_total >= PATH_COVERAGE * straight_total {
+                along
+            } else {
+                straight
+            }
+        }
+        None => straight,
+    };
+
+    distances.iter().map(|d| seconds(*d, scale)).collect()
 }
 
 /// Average MDT-coordinate position of a pull's resolved clones, or `None` if none
@@ -62,24 +82,23 @@ fn seconds(distance_units: f64, scale: f64) -> i64 {
     ((distance_units * scale) / MOVE_SPEED_YPS).round() as i64
 }
 
-fn delays_straight(
-    entrance: Option<(f64, f64)>,
-    centroids: &[Option<(f64, f64)>],
-    scale: f64,
-) -> Vec<i64> {
-    let mut delays = Vec::with_capacity(centroids.len());
+/// Straight-line MDT-unit distance to each pull from the previous resolved
+/// position (entrance for pull 1). `0.0` for an unresolvable pull, which also
+/// does not advance the reference.
+fn straight_distances(entrance: Option<(f64, f64)>, centroids: &[Option<(f64, f64)>]) -> Vec<f64> {
+    let mut out = Vec::with_capacity(centroids.len());
     let mut prev = entrance;
     for c in centroids {
-        let delay = match (prev, c) {
-            (Some(a), Some(b)) => seconds(dist(a, *b), scale),
-            _ => 0,
+        let d = match (prev, c) {
+            (Some(a), Some(b)) => dist(a, *b),
+            _ => 0.0,
         };
-        delays.push(delay);
+        out.push(d);
         if c.is_some() {
             prev = *c;
         }
     }
-    delays
+    out
 }
 
 fn line_len(l: &MdtLine) -> f64 {
@@ -124,31 +143,33 @@ fn project_onto(path: &[(f64, f64)], cum: &[f64], p: (f64, f64)) -> f64 {
     best_s
 }
 
-fn delays_along_path(
+/// Arc-length distance along `path` between consecutive pull projections
+/// (entrance for pull 1). `0.0` for an unresolvable pull, which also does not
+/// advance the reference.
+fn path_distances(
     path: &[(f64, f64)],
     entrance: Option<(f64, f64)>,
     centroids: &[Option<(f64, f64)>],
-    scale: f64,
-) -> Vec<i64> {
+) -> Vec<f64> {
     debug_assert!(path.len() >= 2);
     let mut cum = vec![0.0; path.len()];
     for i in 1..path.len() {
         cum[i] = cum[i - 1] + dist(path[i - 1], path[i]);
     }
-    let mut delays = Vec::with_capacity(centroids.len());
+    let mut out = Vec::with_capacity(centroids.len());
     let mut prev_s = entrance.map(|e| project_onto(path, &cum, e));
     for c in centroids {
-        let delay = match (prev_s, c) {
+        let d = match (prev_s, c) {
             (Some(ps), Some(b)) => {
                 let s = project_onto(path, &cum, *b);
                 prev_s = Some(s);
-                seconds((s - ps).abs(), scale)
+                (s - ps).abs()
             }
-            _ => 0,
+            _ => 0.0,
         };
-        delays.push(delay);
+        out.push(d);
     }
-    delays
+    out
 }
 
 #[cfg(test)]
@@ -216,6 +237,21 @@ mod tests {
         enemies.insert(2, enemy_at(5.0, 40.0));
         let d = dungeon(enemies, Some(7.0));
         let line = MdtLine { sublevel: 1, points: vec![(0.0, 0.0), (0.0, 100.0)] };
+        let r = route(vec![line]);
+        assert_eq!(calculate_delays(&r, &d), vec![10, 30]);
+    }
+
+    #[test]
+    fn partial_line_falls_back_to_straight() {
+        // A short scribble line (0,0)→(1,0) while the pulls are spread far along y.
+        // Every pull centroid projects onto ~the same spot (s≈0), so the projected
+        // length ≈ 0 << the straight tour → the gate rejects the line and uses the
+        // straight-line estimate: entrance(0,0)→(0,10)=10, (0,10)→(0,40)=30.
+        let mut enemies = HashMap::new();
+        enemies.insert(1, enemy_at(0.0, 10.0));
+        enemies.insert(2, enemy_at(0.0, 40.0));
+        let d = dungeon(enemies, Some(7.0));
+        let line = MdtLine { sublevel: 1, points: vec![(0.0, 0.0), (1.0, 0.0)] };
         let r = route(vec![line]);
         assert_eq!(calculate_delays(&r, &d), vec![10, 30]);
     }
