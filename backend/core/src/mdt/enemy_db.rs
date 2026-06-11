@@ -35,6 +35,17 @@ pub struct Dungeon {
     pub total_count: i64,
     pub sublevels: Vec<Sublevel>,
     pub enemies: HashMap<i64, Enemy>,
+    #[serde(default)]
+    pub map_id: Option<i64>,
+    #[serde(default)]
+    pub timer_max_seconds: Option<i64>,
+    #[serde(default)]
+    pub entrance: Option<MapPoint>,
+    #[serde(default)]
+    pub sublevel_links: Vec<SublevelLink>,
+    /// Per-sublevel world-yard bounds, keyed by sublevel index.
+    #[serde(default)]
+    pub ingame_bounds: HashMap<i64, IngameBounds>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +83,28 @@ pub struct ClonePos {
 pub struct Point {
     pub x: f64,
     pub y: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MapPoint {
+    pub x: f64,
+    pub y: f64,
+    pub sublevel: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SublevelLink {
+    pub a: MapPoint,
+    pub b: MapPoint,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngameBounds {
+    pub min_x: f64,
+    pub max_x: f64,
+    pub min_y: f64,
+    pub max_y: f64,
 }
 
 impl DungeonDb {
@@ -114,4 +147,43 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
 /// The process-wide database, if [`load`] has run.
 pub fn global() -> Option<&'static DungeonDb> {
     DUNGEON_DB.get()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_geometry_fields() {
+        let json = r#"{
+          "mdtVersion": "6.1.16",
+          "dungeons": {
+            "151": {
+              "name": "Skyreach", "totalCount": 431, "sublevels": [{"index":1,"name":"Skyreach"}],
+              "mapId": 161, "timerMaxSeconds": 1680,
+              "entrance": {"x": 307.6, "y": -120.5, "sublevel": 1},
+              "sublevelLinks": [{"a":{"x":1,"y":2,"sublevel":1},"b":{"x":3,"y":4,"sublevel":2}}],
+              "ingameBounds": {"1": {"minX": 0.0, "maxX": 100.0, "minY": -50.0, "maxY": 0.0}},
+              "enemies": {}
+            }
+          }
+        }"#;
+        let db = DungeonDb::from_json(json).unwrap();
+        let d = db.dungeon(151).unwrap();
+        assert_eq!(d.map_id, Some(161));
+        assert_eq!(d.timer_max_seconds, Some(1680));
+        assert_eq!(d.entrance.as_ref().unwrap().sublevel, 1);
+        assert_eq!(d.sublevel_links.len(), 1);
+        assert_eq!(d.ingame_bounds.get(&1).unwrap().max_x, 100.0);
+    }
+
+    #[test]
+    fn geometry_fields_default_when_absent() {
+        // The existing Seat fixture has none of the new fields and must still load.
+        let db = DungeonDb::from_json(include_str!("testdata/mdt_dungeons.json")).unwrap();
+        let d = db.dungeon(11).unwrap();
+        assert_eq!(d.map_id, None);
+        assert!(d.sublevel_links.is_empty());
+        assert!(d.ingame_bounds.is_empty());
+    }
 }
