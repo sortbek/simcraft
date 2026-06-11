@@ -13,6 +13,7 @@ mod generate;
 mod health_scaling;
 mod model;
 mod print_decode;
+mod travel;
 
 pub use enemy_db::DungeonDb;
 pub use generate::MdtSimc;
