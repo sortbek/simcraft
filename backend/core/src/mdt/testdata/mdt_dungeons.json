@@ -1,0 +1,238 @@
+{
+  "11": {
+    "name": "Seat of the Triumvirate",
+    "totalCount": 568,
+    "enemies": {
+      "1": {
+        "id": 124171,
+        "name": "Merciless Subjugator",
+        "count": 10,
+        "health": 1974499,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 7
+      },
+      "2": {
+        "id": 122571,
+        "name": "Rift Warden",
+        "count": 20,
+        "health": 2885806,
+        "creatureType": "Aberration",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 4
+      },
+      "3": {
+        "id": 122413,
+        "name": "Ruthless Riftstalker",
+        "count": 9,
+        "health": 1594787,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 17
+      },
+      "4": {
+        "id": 255320,
+        "name": "Ravenous Umbralfin",
+        "count": 8,
+        "health": 1442903,
+        "creatureType": "Beast",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 15
+      },
+      "5": {
+        "id": 122421,
+        "name": "Umbral War-Adept",
+        "count": 15,
+        "health": 2733921,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 7
+      },
+      "6": {
+        "id": 122404,
+        "name": "Dire Voidbender",
+        "count": 8,
+        "health": 1442903,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 10
+      },
+      "7": {
+        "id": 252756,
+        "name": "Void-Infused Destroyer",
+        "count": 15,
+        "health": 2733921,
+        "creatureType": "Mechanical",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 6
+      },
+      "8": {
+        "id": 122423,
+        "name": "Grand Shadow-Weaver",
+        "count": 15,
+        "health": 2202325,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 4
+      },
+      "9": {
+        "id": 122056,
+        "name": "Viceroy Nezhar",
+        "count": 0,
+        "health": 11074911,
+        "creatureType": "Humanoid",
+        "isBoss": true,
+        "ignoreFortified": false,
+        "cloneCount": 1
+      },
+      "10": {
+        "id": 122313,
+        "name": "Zuraal the Ascended",
+        "count": 0,
+        "health": 8859929,
+        "creatureType": "Humanoid",
+        "isBoss": true,
+        "ignoreFortified": false,
+        "cloneCount": 1
+      },
+      "11": {
+        "id": 122316,
+        "name": "Saprish",
+        "count": 0,
+        "health": 23731952,
+        "creatureType": "Humanoid",
+        "isBoss": true,
+        "ignoreFortified": false,
+        "cloneCount": 1
+      },
+      "12": {
+        "id": 122319,
+        "name": "Darkfang",
+        "count": 0,
+        "health": 23731952,
+        "creatureType": "Beast",
+        "isBoss": true,
+        "ignoreFortified": false,
+        "cloneCount": 1
+      },
+      "13": {
+        "id": 122322,
+        "name": "Famished Broken",
+        "count": 1,
+        "health": 607538,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 45
+      },
+      "14": {
+        "id": 122403,
+        "name": "Shadowguard Champion",
+        "count": 3,
+        "health": 1670730,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 31
+      },
+      "15": {
+        "id": 122405,
+        "name": "Dark Conjurer",
+        "count": 7,
+        "health": 1291018,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 11
+      },
+      "16": {
+        "id": 122412,
+        "name": "Bound Voidcaller",
+        "count": 0,
+        "health": 759423,
+        "creatureType": "Aberration",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 11
+      },
+      "17": {
+        "id": 122716,
+        "name": "Coalesced Void",
+        "count": 0,
+        "health": 349334,
+        "creatureType": "Aberration",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 3
+      },
+      "18": {
+        "id": 122827,
+        "name": "Umbral Tentacle",
+        "count": 0,
+        "health": 209199,
+        "creatureType": "Aberration",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 2
+      },
+      "19": {
+        "id": 124729,
+        "name": "L'ura",
+        "count": 0,
+        "health": 22016924,
+        "creatureType": "Not specified",
+        "isBoss": true,
+        "ignoreFortified": false,
+        "cloneCount": 1
+      },
+      "20": {
+        "id": 125340,
+        "name": "Shadewing",
+        "count": 0,
+        "health": 23731952,
+        "creatureType": "Beast",
+        "isBoss": true,
+        "ignoreFortified": false,
+        "cloneCount": 1
+      },
+      "21": {
+        "id": 255551,
+        "name": "Depravation Wave Stalker",
+        "count": 0,
+        "health": 197939,
+        "creatureType": "Not specified",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 4
+      },
+      "22": {
+        "id": 256424,
+        "name": "Void Tentacle",
+        "count": 0,
+        "health": 303769,
+        "creatureType": "Aberration",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 2
+      },
+      "23": {
+        "id": 256574,
+        "name": "Shadowguard Champion",
+        "count": 0,
+        "health": 1670730,
+        "creatureType": "Humanoid",
+        "isBoss": false,
+        "ignoreFortified": false,
+        "cloneCount": 1
+      }
+    }
+  }
+}

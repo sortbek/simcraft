@@ -112,6 +112,36 @@ export async function simRow(sourceJobId: string, comboId: number): Promise<stri
   return data.id;
 }
 
+/** Result of decoding an MDT export string into a SimC DungeonRoute. */
+export interface MdtConversion {
+  dungeon_name: string;
+  week: number;
+  keystone_level: number;
+  pull_count: number;
+  enemy_count: number;
+  total_health: number;
+  /** Enemy instances the route referenced but the DB couldn't resolve (version drift). */
+  unresolved: number;
+  /** The `raid_events+=/pull,...` lines (no fight_style). */
+  raid_events: string;
+  /** The full `fight_style=DungeonRoute` + pulls block. */
+  simc: string;
+}
+
+/** Decode an MDT export string into a SimC DungeonRoute conversion. */
+export async function decodeMdt(importString: string): Promise<MdtConversion> {
+  const res = await fetch(apiUrl('/api/mdt/decode'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ import: importString }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
 export type JobStatus = 'pending' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
 export interface JobOverviewSummary {

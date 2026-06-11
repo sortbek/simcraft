@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
+import MdtImport from './MdtImport';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
@@ -214,6 +215,8 @@ export default function AdvancedOptions() {
               <p className="text-[13px] text-on-surface-variant/40">{t('config.iterationsHelp')}</p>
             </div>
           </div>
+
+          <MdtImport />
 
           <RaidBuffsConsumables />
 

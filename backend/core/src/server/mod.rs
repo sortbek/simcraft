@@ -9,6 +9,7 @@ mod game_data_handlers;
 mod handler_prep;
 pub(crate) mod helpers;
 mod job_handlers;
+mod mdt_handlers;
 pub mod request_json;
 mod provider_handlers;
 mod route_handlers;
