@@ -85,6 +85,38 @@ mod tests {
         DungeonDb::from_json(include_str!("testdata/mdt_dungeons.json")).unwrap()
     }
 
+    // A real keystone.guru Skyreach weekly-route MDT string, plus the matching
+    // Skyreach (idx 151) fixture carrying the travel geometry (entrance,
+    // yards_per_unit). Used to sanity-check the travel-time delay estimate.
+    const SKYREACH_ROUTE: &str = include_str!("testdata/skyreach_route.txt");
+
+    fn load_skyreach_db() -> DungeonDb {
+        DungeonDb::from_json(include_str!("testdata/skyreach.json")).unwrap()
+    }
+
+    #[test]
+    fn skyreach_delays_are_plausible() {
+        // The route carries no drawn line, so delays are the straight-line
+        // centroid estimate (yards_per_unit 0.55 / 7 yd/s). We assert plausibility,
+        // NOT an exact match to keystone.guru's path-based reference (~114s total):
+        // those per-pull values come from the drawn route line, which this string
+        // does not contain.
+        let route = decode(SKYREACH_ROUTE).expect("decode Skyreach route");
+        let db = load_skyreach_db();
+        let dungeon = db.dungeon(151).expect("Skyreach in fixture");
+        let delays = travel::calculate_delays(&route, dungeon);
+
+        assert_eq!(delays.len(), route.pulls.len(), "one delay per pull");
+        assert_eq!(delays.len(), 13, "Skyreach weekly route has 13 pulls");
+        assert!(delays.iter().all(|&d| d >= 0), "no negative delays");
+        assert!(delays[0] > 0, "first pull travels from the entrance");
+        let total: i64 = delays.iter().sum();
+        assert!(
+            (80..=160).contains(&total),
+            "total pace {total}s should sit near the ~114s reference"
+        );
+    }
+
     #[test]
     fn converts_example_to_dungeonroute() {
         let out = convert(EXAMPLE, &load_db()).expect("convert example MDT string");

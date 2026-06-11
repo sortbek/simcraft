@@ -1,0 +1,799 @@
+{
+  "mdtVersion": "6.1.16",
+  "dungeons": {
+    "151": {
+      "name": "Skyreach",
+      "totalCount": 431,
+      "sublevels": [
+        {
+          "index": 1,
+          "name": "Skyreach"
+        }
+      ],
+      "enemies": {
+        "1": {
+          "id": 76132,
+          "name": "Soaring Chakram Master",
+          "count": 5,
+          "health": 1518845,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 297.1089419236,
+              "y": -93.164240577981,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 330.88868107226,
+              "y": -175.87448362392,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 316.08677304877,
+              "y": -176.71381764532,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 653.0613894879,
+              "y": -369.38000899949,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 668.97652560479,
+              "y": -377.00573600793,
+              "sublevel": 1
+            },
+            "6": {
+              "x": 681.92024143178,
+              "y": -259.75812928901,
+              "sublevel": 1
+            },
+            "7": {
+              "x": 612.05157109739,
+              "y": -285.77253587833,
+              "sublevel": 1
+            }
+          }
+        },
+        "2": {
+          "id": 78932,
+          "name": "Driving Gale-Caller",
+          "count": 7,
+          "health": 1366961,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 327.261118128,
+              "y": -57.021636877413,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 358.93159363372,
+              "y": -184.32287479255,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 368.73638732875,
+              "y": -197.31414478528,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 321.75402346167,
+              "y": -223.9840330104,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 613.24666333293,
+              "y": -421.71984358546,
+              "sublevel": 1
+            },
+            "6": {
+              "x": 650.15233071087,
+              "y": -231.21645484633,
+              "sublevel": 1
+            },
+            "7": {
+              "x": 635.69860181863,
+              "y": -221.49557135515,
+              "sublevel": 1
+            }
+          }
+        },
+        "3": {
+          "id": 250992,
+          "name": "Raging Squall",
+          "count": 1,
+          "health": 911307,
+          "creatureType": "Elemental",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 331.21997696204,
+              "y": -70.226247532974,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 317.27884513495,
+              "y": -69.020278548877,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 363.47859804773,
+              "y": -87.589097413197,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 382.73246949274,
+              "y": -109.88559920491,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 306.60102338789,
+              "y": -229.22507182552,
+              "sublevel": 1
+            },
+            "6": {
+              "x": 373.89580430612,
+              "y": -75.345311473007,
+              "sublevel": 1
+            },
+            "7": {
+              "x": 319.25212167237,
+              "y": -241.04411779215,
+              "sublevel": 1
+            },
+            "8": {
+              "x": 597.49631543231,
+              "y": -420.13790308264,
+              "sublevel": 1
+            },
+            "9": {
+              "x": 605.4547652815,
+              "y": -434.1543366455,
+              "sublevel": 1
+            }
+          }
+        },
+        "4": {
+          "id": 75976,
+          "name": "Outcast Servant",
+          "count": 1,
+          "health": 911307,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 375.84687323363,
+              "y": -136.09503804853,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 361.57284754096,
+              "y": -143.40566717851,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 224.07212439818,
+              "y": -329.44951837998,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 237.16746008528,
+              "y": -324.37000796723,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 251.44530280977,
+              "y": -330.44417283933,
+              "sublevel": 1
+            },
+            "6": {
+              "x": 255.29304163717,
+              "y": -346.36813159702,
+              "sublevel": 1
+            },
+            "7": {
+              "x": 187.44035403294,
+              "y": -332.77300145432,
+              "sublevel": 1
+            },
+            "8": {
+              "x": 175.33169452662,
+              "y": -342.8795856102,
+              "sublevel": 1
+            },
+            "9": {
+              "x": 263.55237731604,
+              "y": -401.78095760724,
+              "sublevel": 1
+            },
+            "10": {
+              "x": 249.73798807584,
+              "y": -405.89004161394,
+              "sublevel": 1
+            }
+          }
+        },
+        "5": {
+          "id": 79462,
+          "name": "Blinding Sun Priestess",
+          "count": 5,
+          "health": 1366961,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 299.89375718249,
+              "y": -256.97025969638,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 249.59115142292,
+              "y": -280.9074765994,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 270.18487072118,
+              "y": -386.51633142507,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 470.82922019576,
+              "y": -319.70671744726,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 587.17197189606,
+              "y": -288.63364915492,
+              "sublevel": 1
+            }
+          }
+        },
+        "6": {
+          "id": 79466,
+          "name": "Initiate of the Rising Sun",
+          "count": 7,
+          "health": 1215076,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 287.49766687302,
+              "y": -314.43441599681,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 576.93879269587,
+              "y": -212.76840841049,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 301.30460135129,
+              "y": -322.77720584474,
+              "sublevel": 1
+            }
+          }
+        },
+        "7": {
+          "id": 79467,
+          "name": "Adept of the Dawn",
+          "count": 7,
+          "health": 1518845,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 297.13008910146,
+              "y": -273.6422490371,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 285.414137014,
+              "y": -262.51354893559,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 236.37816177023,
+              "y": -271.02474716808,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 175.32947162623,
+              "y": -359.42396103093,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 591.81459525,
+              "y": -217.68125064989,
+              "sublevel": 1
+            },
+            "6": {
+              "x": 480.17386887116,
+              "y": -334.19112653504,
+              "sublevel": 1
+            },
+            "7": {
+              "x": 463.42891543445,
+              "y": -334.4624540929,
+              "sublevel": 1
+            },
+            "8": {
+              "x": 598.25449073909,
+              "y": -275.32344363078,
+              "sublevel": 1
+            }
+          }
+        },
+        "8": {
+          "id": 78933,
+          "name": "Herald of Sunrise",
+          "count": 15,
+          "health": 2354210,
+          "creatureType": "Elemental",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 2.2,
+          "clones": {
+            "1": {
+              "x": 250.37644906618,
+              "y": -263.89473394974,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 490.93332902586,
+              "y": -432.13660873074,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 589.82484764014,
+              "y": -199.62584227135,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 499.29696043173,
+              "y": -263.87175268484,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 302.33328004316,
+              "y": -305.16620835124,
+              "sublevel": 1
+            }
+          }
+        },
+        "9": {
+          "id": 76087,
+          "name": "Solar Construct",
+          "count": 12,
+          "health": 2278268,
+          "creatureType": "Mechanical",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 2.8,
+          "clones": {
+            "1": {
+              "x": 651.87324594334,
+              "y": -209.85143223262,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 235.58493490621,
+              "y": -345.80998654785,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 192.73804915602,
+              "y": -352.16962398446,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 250.25380198657,
+              "y": -385.26363414614,
+              "sublevel": 1
+            }
+          }
+        },
+        "10": {
+          "id": 79093,
+          "name": "Skyreach Sun Talon",
+          "count": 2,
+          "health": 607538,
+          "creatureType": "Beast",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1,
+          "clones": {
+            "1": {
+              "x": 161.35490514577,
+              "y": -506.87848759574,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 160.24300477915,
+              "y": -520.40881647656,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 148.75398081917,
+              "y": -525.48152133552,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 139.0596539916,
+              "y": -517.99896881172,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 138.99685078172,
+              "y": -506.98812735126,
+              "sublevel": 1
+            },
+            "6": {
+              "x": 147.36318583614,
+              "y": -501.12146798682,
+              "sublevel": 1
+            },
+            "7": {
+              "x": 113.26336495581,
+              "y": -471.21924759762,
+              "sublevel": 1
+            },
+            "8": {
+              "x": 101.16006481726,
+              "y": -472.33866038638,
+              "sublevel": 1
+            },
+            "9": {
+              "x": 97.260880229485,
+              "y": -486.35530136067,
+              "sublevel": 1
+            },
+            "10": {
+              "x": 106.55733021414,
+              "y": -496.07577429108,
+              "sublevel": 1
+            },
+            "11": {
+              "x": 118.02891229287,
+              "y": -492.90773935392,
+              "sublevel": 1
+            },
+            "12": {
+              "x": 121.74748154346,
+              "y": -479.80285634156,
+              "sublevel": 1
+            }
+          }
+        },
+        "11": {
+          "id": 76154,
+          "name": "Sun Talon Tamer",
+          "count": 5,
+          "health": 1564410,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 149.98628647585,
+              "y": -512.66468893557,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 109.2018690822,
+              "y": -482.66376910911,
+              "sublevel": 1
+            }
+          }
+        },
+        "12": {
+          "id": 75964,
+          "name": "Ranjit",
+          "count": 0,
+          "health": 11074911,
+          "creatureType": "Humanoid",
+          "isBoss": true,
+          "ignoreFortified": false,
+          "scale": 2,
+          "clones": {
+            "1": {
+              "x": 373.49370317295,
+              "y": -250.78202670405,
+              "sublevel": 1
+            }
+          }
+        },
+        "13": {
+          "id": 76141,
+          "name": "Araknath",
+          "count": 0,
+          "health": 11074911,
+          "creatureType": "Mechanical",
+          "isBoss": true,
+          "ignoreFortified": false,
+          "scale": 2,
+          "clones": {
+            "1": {
+              "x": 186.52256360853,
+              "y": -417.43518271115,
+              "sublevel": 1
+            }
+          }
+        },
+        "14": {
+          "id": 76142,
+          "name": "Skyreach Sun Construct Prototype",
+          "count": 0,
+          "health": 11074911,
+          "creatureType": "Mechanical",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.5,
+          "clones": {
+            "1": {
+              "x": 208.04171663154,
+              "y": -411.15856301812,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 207.30122360597,
+              "y": -428.10517583068,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 195.17190036349,
+              "y": -438.21295794694,
+              "sublevel": 1
+            }
+          }
+        },
+        "15": {
+          "id": 76143,
+          "name": "Rukhran",
+          "count": 0,
+          "health": 8543503,
+          "creatureType": "Beast",
+          "isBoss": true,
+          "ignoreFortified": false,
+          "scale": 2,
+          "clones": {
+            "1": {
+              "x": 188.78702170219,
+              "y": -486.95453949683,
+              "sublevel": 1
+            }
+          }
+        },
+        "16": {
+          "id": 76149,
+          "name": "Dread Raven",
+          "count": 15,
+          "health": 2733921,
+          "creatureType": "Beast",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 2.2,
+          "clones": {
+            "1": {
+              "x": 257.2226712025,
+              "y": -76.638028128983,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 375.49211578603,
+              "y": -153.50034387855,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 673.73743652773,
+              "y": -179.84053354758,
+              "sublevel": 1
+            }
+          }
+        },
+        "17": {
+          "id": 76205,
+          "name": "Blooded Bladefeather",
+          "count": 5,
+          "health": 1670730,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.8,
+          "clones": {
+            "1": {
+              "x": 281.41367755229,
+              "y": -91.783006382767,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 355.52887851201,
+              "y": -38.203986678791,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 352.09908664649,
+              "y": -54.585029056273,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 607.06675438791,
+              "y": -406.49732728827,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 620.6023200959,
+              "y": -435.26935819856,
+              "sublevel": 1
+            },
+            "6": {
+              "x": 694.57970018032,
+              "y": -270.62473177815,
+              "sublevel": 1
+            },
+            "7": {
+              "x": 601.30890343696,
+              "y": -297.40527247294,
+              "sublevel": 1
+            }
+          }
+        },
+        "18": {
+          "id": 76227,
+          "name": "Sunwings",
+          "count": 0,
+          "health": 1012563,
+          "creatureType": "Elemental",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.5,
+          "clones": {
+            "1": {
+              "x": 207.13061901358,
+              "y": -504.61655290711,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 210.45125803319,
+              "y": -492.74139046824,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 209.53949180009,
+              "y": -478.99522095972,
+              "sublevel": 1
+            }
+          }
+        },
+        "19": {
+          "id": 76266,
+          "name": "High Sage Viryx",
+          "count": 0,
+          "health": 10283846,
+          "creatureType": "Humanoid",
+          "isBoss": true,
+          "ignoreFortified": false,
+          "scale": 2,
+          "clones": {
+            "1": {
+              "x": 700.67366897754,
+              "y": -152.75994965879,
+              "sublevel": 1
+            }
+          }
+        },
+        "20": {
+          "id": 76285,
+          "name": "Arakkoa Magnifying Glass",
+          "count": 0,
+          "health": 303769,
+          "creatureType": "Mechanical",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.5,
+          "clones": {
+            "1": {
+              "x": 722.36668174564,
+              "y": -144.50848244025,
+              "sublevel": 1
+            }
+          }
+        },
+        "21": {
+          "id": 79303,
+          "name": "Adorned Bladetalon",
+          "count": 12,
+          "health": 2582037,
+          "creatureType": "Humanoid",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 2.2,
+          "clones": {
+            "1": {
+              "x": 291.53881351985,
+              "y": -59.5199849489,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 342.72049861794,
+              "y": -205.73131126137,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 506.86066318135,
+              "y": -443.6914262666,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 654.34198529594,
+              "y": -386.6068768315,
+              "sublevel": 1
+            },
+            "5": {
+              "x": 698.45393398002,
+              "y": -252.01130606044,
+              "sublevel": 1
+            }
+          }
+        },
+        "22": {
+          "id": 251880,
+          "name": "Solar Orb",
+          "count": 0,
+          "health": 10283846,
+          "creatureType": "Not specified",
+          "isBoss": false,
+          "ignoreFortified": false,
+          "scale": 1.2,
+          "clones": {
+            "1": {
+              "x": 504.57714325449,
+              "y": -426.97876896634,
+              "sublevel": 1
+            },
+            "2": {
+              "x": 509.98226153075,
+              "y": -277.22557138535,
+              "sublevel": 1
+            },
+            "3": {
+              "x": 581.3805062149,
+              "y": -224.18004378913,
+              "sublevel": 1
+            },
+            "4": {
+              "x": 236.33086852421,
+              "y": -283.63798864303,
+              "sublevel": 1
+            }
+          }
+        }
+      },
+      "mapId": 161,
+      "timerMaxSeconds": 1680,
+      "entrance": {
+        "x": 307.66540372089,
+        "y": -120.59112999673,
+        "sublevel": 1
+      },
+      "yardsPerUnit": 0.55
+    }
+  }
+}
