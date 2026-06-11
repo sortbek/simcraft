@@ -1425,7 +1425,15 @@
             }
           }
         }
-      }
+      },
+      "mapId": 239,
+      "timerMaxSeconds": 2040,
+      "entrance": {
+        "x": 159.40872979789,
+        "y": -517.60056502833,
+        "sublevel": 1
+      },
+      "yardsPerUnit": 0.99
     }
   }
 }
