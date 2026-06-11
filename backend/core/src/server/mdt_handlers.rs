@@ -24,7 +24,7 @@ pub(super) async fn decode_mdt(body: web::Json<DecodeMdtRequest>) -> HttpRespons
     };
     let opts = mdt::ConvertOptions {
         keystone_level: body.keystone_level,
-        hp_percent: body.hp_percent.unwrap_or(20),
+        hp_percent: body.hp_percent.unwrap_or(20).clamp(1, 100),
     };
     match mdt::convert(&body.import, db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),

@@ -281,7 +281,7 @@ enemy_health=999999
 keystone_level={keystone_level}
 raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1",
         max_time = dungeon.timer_max_seconds.unwrap_or(0),
-        title = route.text,
+        title = route.text.replace('"', "'"),
         keystone_level = keystone_level,
     );
     let raid_events = pull_lines.join("\n");
