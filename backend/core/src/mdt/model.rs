@@ -21,6 +21,16 @@ pub struct MdtRoute {
     pub text: String,
     /// Pulls in route order.
     pub pulls: Vec<MdtPull>,
+    /// Drawn polyline annotations from the preset's `objects` table.
+    pub lines: Vec<MdtLine>,
+}
+
+/// A drawn polyline annotation from the MDT preset's `objects`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MdtLine {
+    pub sublevel: i64,
+    /// Polyline vertices in MDT map coordinates, in draw order.
+    pub points: Vec<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,13 +87,53 @@ pub fn parse_route(preset: &AceValue) -> Result<MdtRoute, String> {
         .map(|(_, pull)| parse_pull(pull))
         .collect::<Result<Vec<_>, _>>()?;
 
+    let lines = parse_lines(preset);
+
     Ok(MdtRoute {
         dungeon_idx,
         week,
         keystone_level,
         text,
         pulls,
+        lines,
     })
+}
+
+fn parse_lines(preset: &super::ace::AceTable) -> Vec<MdtLine> {
+    let Some(objects) = preset.get_str("objects").and_then(AceValue::as_table) else {
+        return Vec::new();
+    };
+    let mut lines = Vec::new();
+    for (_, obj) in objects.int_entries_ordered() {
+        let Some(obj) = obj.as_table() else { continue };
+        // Notes have a truthy `n`; lines have `l`.
+        if matches!(obj.get_str("n"), Some(AceValue::Bool(true))) {
+            continue;
+        }
+        let Some(l) = obj.get_str("l").and_then(AceValue::as_table) else { continue };
+        let coords: Vec<f64> = l.int_entries().into_iter().filter_map(|(_, v)| as_f64(v)).collect();
+        if coords.len() < 4 {
+            continue; // need at least two points
+        }
+        let sublevel = obj
+            .get_str("d")
+            .and_then(AceValue::as_table)
+            .and_then(|d| d.int_entries().into_iter().find(|(k, _)| *k == 3).and_then(|(_, v)| v.as_int()))
+            .unwrap_or(1);
+        let points = coords.chunks_exact(2).map(|c| (c[0], c[1])).collect();
+        lines.push(MdtLine { sublevel, points });
+    }
+    lines
+}
+
+/// Coerce an AceValue number or numeric string to f64 (MDT stores some coords as strings).
+fn as_f64(v: &AceValue) -> Option<f64> {
+    match v {
+        AceValue::Int(i) => Some(*i as f64),
+        AceValue::Float(f) => Some(*f),
+        AceValue::Str(s) => s.parse().ok(),
+        _ => None,
+    }
 }
 
 fn parse_pull(pull: &AceValue) -> Result<MdtPull, String> {
@@ -122,6 +172,22 @@ mod tests {
         assert_eq!(route.keystone_level, 14);
         let order: Vec<i64> = route.pulls[0].enemies.iter().map(|e| e.enemy_idx).collect();
         assert_eq!(order, vec![5, 1], "enemy order must follow storage, not be sorted");
+    }
+
+    #[test]
+    fn parses_line_objects_skipping_notes() {
+        // objects = { [1] = { n=true, d={...} },              -- a note, skipped
+        //             [2] = { l={0,0,10,5}, d={ [3]=1 } } }   -- a line on sublevel 1
+        let s = "^1^T^Stext^SR^Sweek^N1^Sdifficulty^N2^Svalue^T^ScurrentDungeonIdx^N151^Spulls^T^t^t\
+                 ^Sobjects^T\
+                 ^N1^T^Sn^B^Sd^T^N1^N5^N2^N5^t^t\
+                 ^N2^T^Sl^T^N1^N0^N2^N0^N3^N10^N4^N5^t^Sd^T^N3^N1^t^t\
+                 ^t^t^^";
+        let v = crate::mdt::ace::deserialize(s).unwrap();
+        let route = parse_route(&v).unwrap();
+        assert_eq!(route.lines.len(), 1, "one line, the note is skipped");
+        assert_eq!(route.lines[0].sublevel, 1);
+        assert_eq!(route.lines[0].points, vec![(0.0, 0.0), (10.0, 5.0)]);
     }
 }
 

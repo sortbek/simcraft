@@ -167,6 +167,7 @@ mod tests {
                 }],
                 color: None,
             }],
+            lines: vec![],
         };
         let out = generate::generate(&route, &load_db()).unwrap();
         assert_eq!(out.enemy_count, 2, "both clones are simmed");

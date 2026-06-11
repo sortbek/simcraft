@@ -43,9 +43,9 @@ pub struct Dungeon {
     pub entrance: Option<MapPoint>,
     #[serde(default)]
     pub sublevel_links: Vec<SublevelLink>,
-    /// Per-sublevel world-yard bounds, keyed by sublevel index.
+    /// Scale factor: MDT map units to in-game world yards.
     #[serde(default)]
-    pub ingame_bounds: HashMap<i64, IngameBounds>,
+    pub yards_per_unit: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -96,15 +96,6 @@ pub struct MapPoint {
 pub struct SublevelLink {
     pub a: MapPoint,
     pub b: MapPoint,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IngameBounds {
-    pub min_x: f64,
-    pub max_x: f64,
-    pub min_y: f64,
-    pub max_y: f64,
 }
 
 impl DungeonDb {
@@ -163,7 +154,7 @@ mod tests {
               "mapId": 161, "timerMaxSeconds": 1680,
               "entrance": {"x": 307.6, "y": -120.5, "sublevel": 1},
               "sublevelLinks": [{"a":{"x":1,"y":2,"sublevel":1},"b":{"x":3,"y":4,"sublevel":2}}],
-              "ingameBounds": {"1": {"minX": 0.0, "maxX": 100.0, "minY": -50.0, "maxY": 0.0}},
+              "yardsPerUnit": 0.55,
               "enemies": {}
             }
           }
@@ -174,7 +165,7 @@ mod tests {
         assert_eq!(d.timer_max_seconds, Some(1680));
         assert_eq!(d.entrance.as_ref().unwrap().sublevel, 1);
         assert_eq!(d.sublevel_links.len(), 1);
-        assert_eq!(d.ingame_bounds.get(&1).unwrap().max_x, 100.0);
+        assert_eq!(d.yards_per_unit, Some(0.55));
     }
 
     #[test]
@@ -184,6 +175,6 @@ mod tests {
         let d = db.dungeon(11).unwrap();
         assert_eq!(d.map_id, None);
         assert!(d.sublevel_links.is_empty());
-        assert!(d.ingame_bounds.is_empty());
+        assert_eq!(d.yards_per_unit, None);
     }
 }
