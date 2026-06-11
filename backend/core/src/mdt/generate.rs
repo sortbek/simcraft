@@ -20,6 +20,10 @@ const DEFAULT_PULL_COLOR: &str = "228b22";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MdtSimc {
+    /// MDT addon version the enemy DB was extracted from (`""` if unknown).
+    /// Mob positions shift between MDT releases, so the UI shows this to make
+    /// route-vs-map discrepancies explainable.
+    pub mdt_version: String,
     pub dungeon_name: String,
     pub week: i64,
     pub keystone_level: i64,
@@ -120,6 +124,10 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
                         scale: enemy.scale,
                         count: enemy.count,
                     });
+                } else {
+                    // Clone index unknown to the DB (MDT version drift): the
+                    // mob is still simmed but cannot be drawn on the map.
+                    unresolved += 1;
                 }
             }
         }
@@ -165,6 +173,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb) -> Result<MdtSimc, String> {
     };
 
     Ok(MdtSimc {
+        mdt_version: db.mdt_version().to_string(),
         dungeon_name: dungeon.name.clone(),
         week: route.week,
         keystone_level: route.keystone_level,

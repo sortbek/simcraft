@@ -14,6 +14,17 @@ static DUNGEON_DB: OnceCell<DungeonDb> = OnceCell::new();
 
 #[derive(Debug, Clone, Default)]
 pub struct DungeonDb {
+    /// MDT addon version the data was extracted from (`""` if unknown).
+    mdt_version: String,
+    dungeons: HashMap<i64, Dungeon>,
+}
+
+/// On-disk shape of `mdt_dungeons.json`.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DbFile {
+    #[serde(default)]
+    mdt_version: String,
     dungeons: HashMap<i64, Dungeon>,
 }
 
@@ -56,9 +67,17 @@ pub struct ClonePos {
 
 impl DungeonDb {
     pub fn from_json(json: &str) -> Result<Self, String> {
-        let dungeons = serde_json::from_str(json)
+        let file: DbFile = serde_json::from_str(json)
             .map_err(|e| format!("invalid MDT dungeon database: {e}"))?;
-        Ok(Self { dungeons })
+        Ok(Self {
+            mdt_version: file.mdt_version,
+            dungeons: file.dungeons,
+        })
+    }
+
+    /// MDT addon version the data was extracted from (`""` if unknown).
+    pub fn mdt_version(&self) -> &str {
+        &self.mdt_version
     }
 
     pub fn dungeon(&self, idx: i64) -> Option<&Dungeon> {

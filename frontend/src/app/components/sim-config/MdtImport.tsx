@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { decodeMdt, type MdtConversion } from '../../lib/api';
-import { ROUTES } from '../../lib/routes';
-import { MDT_ROUTE_SESSION_KEY } from '../../route/page';
+import { MDT_ROUTE_SESSION_KEY, ROUTES } from '../../lib/routes';
 
 /** Remove a previously-imported route from the custom options so re-importing
  *  replaces it cleanly without clobbering the user's other custom lines. */
@@ -39,7 +38,11 @@ export default function MdtImport() {
       const conv = await decodeMdt(trimmed);
       setFightStyle('DungeonRoute');
       const base = stripPriorRoute(customApl);
-      setCustomApl(base ? `${base}\n${conv.raid_events}` : conv.raid_events);
+      // Inject `simc` (fight_style=DungeonRoute + raid_events), not just the
+      // raid_events: the backend detects dungeon-route sims by scanning the
+      // input for the literal fight_style line (simc_runner), and that
+      // detection drives skipping max_time and the raid-buff overrides.
+      setCustomApl(base ? `${base}\n${conv.simc}` : conv.simc);
       setResult(conv);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

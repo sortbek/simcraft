@@ -215,6 +215,18 @@ def extract_dungeon(text: str, idx: int):
     }
 
 
+def mdt_version(repo: Path) -> str:
+    """Addon version from the .toc (`## Version: 6.1.16`), or "" if absent.
+    Stamped into the JSON so the app can tell which MDT data snapshot the
+    enemy positions come from (they shift between MDT releases)."""
+    toc = repo / "MythicDungeonTools.toc"
+    try:
+        m = re.search(r"^## Version:\s*(\S+)", toc.read_text(encoding="utf-8"), re.M)
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -246,9 +258,10 @@ def main():
             print(f"  extracted dungeon {idx}: {dungeon['name']} "
                   f"({len(dungeon['enemies'])} enemies, {dungeon['totalCount']} forces)")
 
+    out = {"mdtVersion": mdt_version(repo), "dungeons": result}
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"wrote {len(result)} dungeon(s) to {out_path}")
+    out_path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"wrote {len(result)} dungeon(s) (MDT {out['mdtVersion'] or 'unknown'}) to {out_path}")
 
 
 if __name__ == "__main__":

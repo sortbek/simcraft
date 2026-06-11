@@ -6,9 +6,7 @@ import RouteMap from '../components/route-map/RouteMap';
 import PullList from '../components/route-map/PullList';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import { useLanguage } from '../lib/i18n';
-
-/** Key the sim-config import uses to hand an MDT string to this page. */
-export const MDT_ROUTE_SESSION_KEY = 'simhammer_mdt_route';
+import { MDT_ROUTE_SESSION_KEY } from '../lib/routes';
 
 export default function RoutePage() {
   const { t } = useLanguage();
@@ -84,6 +82,14 @@ export default function RoutePage() {
             <span className="text-on-surface-variant/70">
               {conv.pull_count} pulls · {conv.enemy_count} enemies
             </span>
+            {conv.mdt_version && (
+              <span
+                className="text-on-surface-variant/40"
+                title={t('route.mdtVersionTitle')}
+              >
+                MDT {conv.mdt_version}
+              </span>
+            )}
             {conv.unresolved > 0 && (
               <span className="text-amber-400">{conv.unresolved} unresolved</span>
             )}

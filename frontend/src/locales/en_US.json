@@ -92,6 +92,7 @@
   "route.placeholder": "!DAvYoo...  (MDT export string)",
   "route.load": "Load",
   "route.loading": "Loading…",
+  "route.mdtVersionTitle": "Enemy positions come from this MDT data version; they can differ from routes made with another MDT version.",
   "config.rotationMode": "Rotation Mode",
   "config.rotationModeDefault": "Default APL",
   "config.rotationModeAssisted": "Assisted Combat",

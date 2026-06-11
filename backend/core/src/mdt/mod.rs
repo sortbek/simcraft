@@ -127,6 +127,29 @@ mod tests {
     }
 
     #[test]
+    fn missing_clone_counts_as_unresolved() {
+        // A clone index the DB doesn't know (MDT version drift): the enemy is
+        // still simmed (health is known), but no map marker can be placed —
+        // that must surface in `unresolved` instead of vanishing silently.
+        let route = MdtRoute {
+            dungeon_idx: 11,
+            week: 2,
+            keystone_level: 2,
+            pulls: vec![MdtPull {
+                enemies: vec![MdtPullEnemy {
+                    enemy_idx: 1,
+                    clone_indices: vec![1, 999],
+                }],
+                color: None,
+            }],
+        };
+        let out = generate::generate(&route, &load_db()).unwrap();
+        assert_eq!(out.enemy_count, 2, "both clones are simmed");
+        assert_eq!(out.unresolved, 1, "the unknown clone must be reported");
+        assert_eq!(out.map.pulls[0].enemies.len(), 1, "only the known clone gets a marker");
+    }
+
+    #[test]
     fn load_populates_global_and_converts() {
         // Exercises enemy_db::load + global() — the startup wiring the endpoint
         // relies on — by pointing it at a temp data dir holding the fixture.

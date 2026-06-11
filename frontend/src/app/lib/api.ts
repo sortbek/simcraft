@@ -144,6 +144,9 @@ export interface MdtMap {
 
 /** Result of decoding an MDT export string into a SimC DungeonRoute. */
 export interface MdtConversion {
+  /** MDT addon version the enemy DB was extracted from (`''` if unknown).
+   *  Mob positions shift between MDT releases. */
+  mdt_version: string;
   dungeon_name: string;
   week: number;
   keystone_level: number;
