@@ -74,3 +74,42 @@ pub(super) async fn dungeon_overview(
         Err(e) => HttpResponse::BadRequest().json(json!({ "error": e })),
     }
 }
+
+#[derive(Deserialize)]
+pub(super) struct CloneRef {
+    pub enemy_idx: i64,
+    pub clone_idx: i64,
+}
+
+#[derive(Deserialize)]
+pub(super) struct SerializeRequest {
+    pub dungeon_idx: i64,
+    #[serde(default)]
+    pub keystone_level: Option<i64>,
+    #[serde(default)]
+    pub hp_percent: Option<i64>,
+    /// Pulls in route order; each a list of clone references.
+    pub pulls: Vec<Vec<CloneRef>>,
+}
+
+/// Re-serialize an edited/built pull assignment into a SimC DungeonRoute (with
+/// delays) — used to sim and save routes made on the map (no MDT string needed).
+pub(super) async fn serialize_route(body: web::Json<SerializeRequest>) -> HttpResponse {
+    let Some(db) = mdt::enemy_db::global() else {
+        return HttpResponse::ServiceUnavailable()
+            .json(json!({ "error": "MDT dungeon database not loaded" }));
+    };
+    let opts = mdt::ConvertOptions {
+        keystone_level: body.keystone_level,
+        hp_percent: body.hp_percent.unwrap_or(20).clamp(1, 100),
+    };
+    let pulls: Vec<Vec<(i64, i64)>> = body
+        .pulls
+        .iter()
+        .map(|p| p.iter().map(|c| (c.enemy_idx, c.clone_idx)).collect())
+        .collect();
+    match mdt::serialize(body.dungeon_idx, pulls, db, &opts) {
+        Ok(out) => HttpResponse::Ok().json(out),
+        Err(e) => HttpResponse::BadRequest().json(json!({ "error": e })),
+    }
+}

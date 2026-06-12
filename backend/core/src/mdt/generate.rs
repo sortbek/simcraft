@@ -89,6 +89,10 @@ pub struct MapMarker {
 /// membership (`None` = not pulled, drawn dimmed) and its patrol path.
 #[derive(Debug, Clone, Serialize)]
 pub struct MapEnemy {
+    /// MDT enemy index + clone index — the stable reference the frontend sends
+    /// back to `/api/mdt/serialize` to rebuild an edited pull assignment.
+    pub enemy_idx: i64,
+    pub clone_idx: i64,
     pub x: f64,
     pub y: f64,
     pub sublevel: i64,
@@ -215,6 +219,8 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
                 None => (None, None),
             };
             all_enemies.push(MapEnemy {
+                enemy_idx,
+                clone_idx,
                 x: pos.x,
                 y: pos.y,
                 sublevel: pos.sublevel,

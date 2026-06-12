@@ -71,6 +71,47 @@ pub fn overview(dungeon_idx: i64, db: &DungeonDb, opts: &ConvertOptions) -> Resu
     generate::generate(&route, db, opts)
 }
 
+/// Re-serialize an edited pull assignment — clone `(enemy_idx, clone_idx)`
+/// references grouped per pull — into a SimC `DungeonRoute` with travel-time
+/// delays. Used to save/sim routes built or edited on the map (no MDT string).
+/// No drawn line is involved, so delays use the straight-line estimate.
+pub fn serialize(
+    dungeon_idx: i64,
+    pulls: Vec<Vec<(i64, i64)>>,
+    db: &DungeonDb,
+    opts: &ConvertOptions,
+) -> Result<MdtSimc, String> {
+    let pulls = pulls
+        .into_iter()
+        .map(|clones| {
+            // Group clone indices by enemy index, preserving first-seen order.
+            let mut by_enemy: Vec<(i64, Vec<i64>)> = Vec::new();
+            for (enemy_idx, clone_idx) in clones {
+                match by_enemy.iter_mut().find(|(e, _)| *e == enemy_idx) {
+                    Some((_, cis)) => cis.push(clone_idx),
+                    None => by_enemy.push((enemy_idx, vec![clone_idx])),
+                }
+            }
+            MdtPull {
+                enemies: by_enemy
+                    .into_iter()
+                    .map(|(enemy_idx, clone_indices)| MdtPullEnemy { enemy_idx, clone_indices })
+                    .collect(),
+                color: None,
+            }
+        })
+        .collect();
+    let route = MdtRoute {
+        dungeon_idx,
+        week: 0,
+        keystone_level: opts.keystone_level.unwrap_or(0),
+        text: String::new(),
+        lines: Vec::new(),
+        pulls,
+    };
+    generate::generate(&route, db, opts)
+}
+
 /// Raw DEFLATE inflate (no zlib/gzip header), matching LibDeflate's
 /// `CompressDeflate`.
 fn inflate_raw(data: &[u8]) -> Result<Vec<u8>, String> {
@@ -125,6 +166,21 @@ mod tests {
             out.map.enemies.iter().all(|e| e.pull.is_none()),
             "no enemy is pulled in an overview"
         );
+    }
+
+    #[test]
+    fn serialize_builds_route_from_clone_refs() {
+        // Seat enemy 1 (Merciless Subjugator) has clones 1 and 2; one pull of both.
+        let opts = ConvertOptions { keystone_level: Some(10), hp_percent: 100 };
+        let out = serialize(11, vec![vec![(1, 1), (1, 2)]], &load_db(), &opts).unwrap();
+        assert_eq!(out.pull_count, 1);
+        assert_eq!(out.keystone_level, 10);
+        let pull1 = out
+            .simc
+            .lines()
+            .find(|l| l.starts_with("raid_events+=/pull,pull=01,"))
+            .unwrap();
+        assert_eq!(pull1.matches("\"merciless-subjugator_").count(), 2);
     }
 
     #[test]

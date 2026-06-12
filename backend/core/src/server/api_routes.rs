@@ -45,6 +45,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(mdt_handlers::dungeon_overview),
         )
         .route(
+            "/api/mdt/serialize",
+            web::post().to(mdt_handlers::serialize_route),
+        )
+        .route(
             "/api/enchant-gem/sim",
             web::post().to(enchant_gem_handlers::create_enchant_gem_sim),
         )
