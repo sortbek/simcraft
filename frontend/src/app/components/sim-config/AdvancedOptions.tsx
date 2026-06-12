@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
-import MdtImport from './MdtImport';
+import ActiveRouteIndicator from './ActiveRouteIndicator';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
@@ -216,7 +216,7 @@ export default function AdvancedOptions() {
             </div>
           </div>
 
-          <MdtImport />
+          <ActiveRouteIndicator />
 
           <RaidBuffsConsumables />
 
