@@ -14,12 +14,27 @@ pub(super) async fn create_route(
     req: web::Json<CreateRouteRequest>,
     repo: web::Data<RouteRepo>,
 ) -> HttpResponse {
-    if req.name.trim().is_empty() || req.mdt_string.trim().is_empty() {
+    // A route is identified either by an MDT string (imported) or by a dungeon +
+    // pull assignment (built on the map); at least one must be present.
+    let has_route = !req.mdt_string.trim().is_empty()
+        || (req.dungeon_idx.is_some()
+            && req.pulls.as_deref().is_some_and(|p| !p.trim().is_empty()));
+    if req.name.trim().is_empty() || !has_route {
         return HttpResponse::BadRequest()
-            .json(json!({"detail": "name and mdt_string are required"}));
+            .json(json!({"detail": "name and either mdt_string or dungeon_idx+pulls are required"}));
     }
     let simc = req.simc.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    match repo.insert(req.name.trim(), req.mdt_string.trim(), simc).await {
+    let pulls = req.pulls.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    match repo
+        .insert(
+            req.name.trim(),
+            req.mdt_string.trim(),
+            simc,
+            req.dungeon_idx,
+            pulls,
+        )
+        .await
+    {
         Ok(route) => HttpResponse::Ok().json(route),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
