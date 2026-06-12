@@ -12,8 +12,18 @@ use super::health_scaling::calculate_enemy_health;
 use super::model::MdtRoute;
 use serde::Serialize;
 
-/// MDT's default pull color (forest green) when a pull set none.
-const DEFAULT_PULL_COLOR: &str = "228b22";
+/// Palette for pulls that carry no color of their own — e.g. routes built on the
+/// map and saved as bare clone refs (serialize drops color), which would
+/// otherwise all collapse to one color on reload. Matches the frontend's drawing
+/// palette (NEW_PULL_COLORS) so a reloaded route keeps the colors it was drawn with.
+const PULL_PALETTE: [&str; 7] =
+    ["e08a3f", "c95fd6", "5fb0d6", "d6c45f", "6fd65f", "d65f7a", "7f9fe0"];
+
+/// A colorless pull's display color: a palette slot chosen by pull index, so
+/// consecutive pulls stay visually distinct instead of all rendering identically.
+fn pull_palette_color(i: usize) -> String {
+    PULL_PALETTE[i % PULL_PALETTE.len()].to_string()
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MdtSimc {
@@ -190,10 +200,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
         if !markers.is_empty() {
             map_pulls.push(MapPull {
                 index: i + 1,
-                color: pull
-                    .color
-                    .clone()
-                    .unwrap_or_else(|| DEFAULT_PULL_COLOR.to_string()),
+                color: pull.color.clone().unwrap_or_else(|| pull_palette_color(i)),
                 enemies: markers,
             });
         }
@@ -213,10 +220,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
     let mut pull_of: std::collections::HashMap<(i64, i64), (usize, String)> =
         std::collections::HashMap::new();
     for (i, pull) in route.pulls.iter().enumerate() {
-        let color = pull
-            .color
-            .clone()
-            .unwrap_or_else(|| DEFAULT_PULL_COLOR.to_string());
+        let color = pull.color.clone().unwrap_or_else(|| pull_palette_color(i));
         for entry in &pull.enemies {
             for &clone_idx in &entry.clone_indices {
                 pull_of.insert((entry.enemy_idx, clone_idx), (i + 1, color.clone()));
