@@ -144,6 +144,9 @@ export interface MdtMapPoint {
 /** One clone in the full mob layer. `pull`/`color` are null when the mob is not
  *  part of the route (drawn dimmed). `patrol` is empty for stationary mobs. */
 export interface MdtMapEnemy {
+  /** Stable MDT clone reference, sent back to /api/mdt/serialize to rebuild edits. */
+  enemy_idx: number;
+  clone_idx: number;
   x: number;
   y: number;
   sublevel: number;
@@ -238,6 +241,36 @@ export async function getDungeonOverview(
   if (opts?.hpPercent != null) params.set('hp_percent', String(opts.hpPercent));
   const qs = params.toString();
   const res = await fetch(apiUrl(`/api/mdt/dungeon/${idx}${qs ? `?${qs}` : ''}`));
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
+/** A clone reference into a dungeon's mob layer. */
+export interface CloneRef {
+  enemy_idx: number;
+  clone_idx: number;
+}
+
+/** Regenerate a SimC DungeonRoute (with delays) from an edited/built pull
+ *  assignment at a chosen keystone level. */
+export async function serializeRoute(
+  dungeonIdx: number,
+  pulls: CloneRef[][],
+  opts?: { keystoneLevel?: number; hpPercent?: number }
+): Promise<MdtConversion> {
+  const res = await fetch(apiUrl('/api/mdt/serialize'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dungeon_idx: dungeonIdx,
+      pulls,
+      ...(opts?.keystoneLevel != null ? { keystone_level: opts.keystoneLevel } : {}),
+      ...(opts?.hpPercent != null ? { hp_percent: opts.hpPercent } : {}),
+    }),
+  });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || `Server error ${res.status}`);

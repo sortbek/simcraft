@@ -33,10 +33,20 @@ export default function RouteViewer({
   const doSave = async (name: string) => {
     setModal(false);
     try {
-      // Persist to the backend library with the edited SimC so the route is
-      // re-simulable directly (not just re-derivable from the MDT string).
-      await saveRoute(name, mdtString, editor.simc);
-      flash(`“${name}” opgeslagen in library`);
+      // Save level-agnostically: dungeon + pull assignment (clone refs). The SimC
+      // is regenerated at the chosen keystone level on load, not baked here.
+      const pulls = editor.pulls.map((p) =>
+        p.cloneIdxs.map((i) => {
+          const e = conv.map.enemies[i];
+          return { enemy_idx: e.enemy_idx, clone_idx: e.clone_idx };
+        })
+      );
+      await saveRoute(name, {
+        mdtString,
+        dungeonIdx: conv.map.dungeon_idx,
+        pulls: JSON.stringify(pulls),
+      });
+      flash(`”${name}” opgeslagen in library`);
     } catch (e) {
       flash(`Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`);
     }

@@ -8,6 +8,7 @@ import {
   deleteSavedRoute,
   type SavedRoute,
 } from '../../lib/saved-routes';
+import { serializeRoute } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 
 /** Strip a previously-injected DungeonRoute so loading another replaces it
@@ -49,14 +50,26 @@ export default function SidebarRoutes() {
   }, [savedRoutes, isRouteActive]);
 
   const handleLoadRoute = useCallback(
-    (route: SavedRoute) => {
+    async (route: SavedRoute) => {
+      if (route.dungeon_idx != null && route.pulls) {
+        // Level-agnostic route: regenerate the DungeonRoute at a default level
+        // (the per-sim keystone level control overrides this on import).
+        try {
+          const pulls = JSON.parse(route.pulls);
+          const conv = await serializeRoute(route.dungeon_idx, pulls, { keystoneLevel: 10 });
+          setFightStyle('DungeonRoute');
+          const base = stripPriorRoute(customApl);
+          setCustomApl(base ? `${base}\n${conv.simc}` : conv.simc);
+        } catch {
+          // fall through to legacy handling below on parse/serialize failure
+        }
+        return;
+      }
       if (route.simc) {
-        // Edited route: inject the regenerated DungeonRoute, like the MDT importer.
         setFightStyle('DungeonRoute');
         const base = stripPriorRoute(customApl);
         setCustomApl(base ? `${base}\n${route.simc}` : route.simc);
       } else {
-        // Legacy bookmark: keep the previous footer behaviour.
         setSimcFooter(route.mdt_string);
         setFightStyle('Patchwerk');
       }
@@ -66,7 +79,7 @@ export default function SidebarRoutes() {
 
   const handleSaveRoute = useCallback(() => {
     if (!routeName.trim() || !routeString.trim()) return;
-    saveRoute(routeName.trim(), routeString.trim()).then(() => {
+    saveRoute(routeName.trim(), { mdtString: routeString.trim() }).then(() => {
       setRouteName('');
       setRouteString('');
       setShowForm(false);
