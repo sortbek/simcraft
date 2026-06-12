@@ -8,6 +8,7 @@ export const ROUTES = {
   topGear: '/top-gear',
   dropFinder: '/drop-finder',
   dungeonRoute: '/route',
+  routesManager: '/routes',
   upgradeCompare: '/upgrade-compare',
   advanced: '/advanced',
   sims: '/sims',
@@ -20,6 +21,10 @@ export const ROUTES = {
  *  the dungeon-route page. Lives here because Next.js page files may not have
  *  extra exports (breaks the `next build` page type check). */
 export const MDT_ROUTE_SESSION_KEY = 'simhammer_mdt_route';
+
+/** sessionStorage key the routes manager uses to hand a built (`dungeon_idx` +
+ *  `pulls`) route to the `/route` map viewer. JSON `{ dungeonIdx, pulls }`. */
+export const MDT_ROUTE_PULLS_SESSION_KEY = 'simhammer_mdt_route_pulls';
 
 /** Result page for a single sim run. */
 export function simResultRoute(id: string): string {
