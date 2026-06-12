@@ -57,3 +57,15 @@ export const IMinus = (p: IconProps) => (
     <line x1="3" y1="7" x2="11" y2="7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </Svg>
 );
+export const IPlay = (p: IconProps) => (
+  <Svg {...p}>
+    <polygon points="3,2 11.5,7 3,12" fill="currentColor" />
+  </Svg>
+);
+export const IList = (p: IconProps) => (
+  <Svg {...p}>
+    <line x1="2.5" y1="3.5" x2="11.5" y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <line x1="2.5" y1="7" x2="11.5" y2="7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <line x1="2.5" y1="10.5" x2="8" y2="10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </Svg>
+);

@@ -4,7 +4,28 @@ import { useState } from 'react';
 import { decodeMdt, type DungeonSummary } from '../../lib/api';
 import { saveRoute } from '../../lib/saved-routes';
 import { detectDungeonFromSimc } from '../../lib/routes-model';
-import { useLanguage } from '../../lib/i18n';
+import { T } from '../route-map/routeTheme';
+import { IImport } from '../route-map/routeIcons';
+
+const SourceTag = ({ label, color }: { label: string; color: string }) => (
+  <span
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 5,
+      fontSize: 9.5,
+      fontWeight: 600,
+      color: T.muted,
+      padding: '3px 9px',
+      borderRadius: 5,
+      background: 'rgba(255,255,255,0.03)',
+      border: `1px solid ${T.border}`,
+    }}
+  >
+    <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
+    {label}
+  </span>
+);
 
 /** One smart field: an MDT export string (starts with `!`) is decoded and saved
  *  level-agnostically as its mdt_string; a keystone.guru SimC block
@@ -16,14 +37,22 @@ export default function RouteImportPanel({
   dungeons: DungeonSummary[];
   onSaved: () => void;
 }) {
-  const { t } = useLanguage();
-  const [value, setValue] = useState('');
+  const [txt, setTxt] = useState('');
   const [name, setName] = useState('');
+  const [focus, setFocus] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [btnHover, setBtnHover] = useState(false);
+
+  const trimmed = txt.trim();
+  const isMdt = trimmed.startsWith('!');
+  const isKsg = !isMdt && trimmed.includes('fight_style=DungeonRoute');
+  const detected = trimmed.length > 0;
+  const fmt = isMdt ? 'MDT string' : isKsg ? 'keystone.guru SimC' : 'unknown format';
+  const enabled = detected && !busy;
 
   const onImport = async () => {
-    const s = value.trim();
+    const s = trimmed;
     if (!s) return;
     setBusy(true);
     setError('');
@@ -42,10 +71,10 @@ export default function RouteImportPanel({
           ...(dungeonIdx != null ? { dungeonIdx } : {}),
         });
       } else {
-        setError(t('route.import.unknownFormat'));
+        setError('Unrecognized input — paste an MDT string (starts with !) or a keystone.guru SimC.');
         return;
       }
-      setValue('');
+      setTxt('');
       setName('');
       onSaved();
     } catch (e) {
@@ -56,32 +85,121 @@ export default function RouteImportPanel({
   };
 
   return (
-    <div className="space-y-2 rounded-lg border border-outline-variant/20 bg-surface-container p-4">
-      <label className="label-text">{t('route.import.label')}</label>
-      <textarea
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder={t('route.import.placeholder')}
-        className="input-field h-20 resize-y font-mono text-xs"
-      />
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('route.import.namePlaceholder')}
-          className="input-field flex-1 text-[13px]"
-        />
-        <button
-          type="button"
-          onClick={onImport}
-          disabled={busy || !value.trim()}
-          className="rounded bg-gold/10 px-3 py-1.5 text-[13px] font-medium text-gold transition-colors hover:bg-gold/20 disabled:opacity-40"
+    <div style={{ background: T.panel, border: `1px solid ${T.border}`, borderRadius: 13, overflow: 'hidden' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '14px 18px',
+          borderBottom: `1px solid ${T.border}`,
+        }}
+      >
+        <span style={{ color: T.gold, display: 'flex' }}>
+          <IImport s={15} />
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: T.text,
+          }}
         >
-          {busy ? t('route.import.importing') : t('route.import.button')}
-        </button>
+          Import route
+        </span>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 7 }}>
+          <SourceTag label="MDT" color="#6ea7cc" />
+          <SourceTag label="keystone.guru" color="#c95fd6" />
+        </div>
       </div>
-      {error && <p className="text-[13px] text-red-400">{error}</p>}
+      <div style={{ padding: 18 }}>
+        <textarea
+          value={txt}
+          onChange={(e) => setTxt(e.target.value)}
+          onFocus={() => setFocus(true)}
+          onBlur={() => setFocus(false)}
+          placeholder="Paste an MDT export string or a keystone.guru SimC here…"
+          style={{
+            width: '100%',
+            height: 96,
+            resize: 'none',
+            padding: '12px 14px',
+            borderRadius: 9,
+            background: T.bg,
+            border: `1px solid ${focus ? T.goldBord : T.borderHi}`,
+            color: T.text2,
+            fontSize: 11.5,
+            lineHeight: 1.6,
+            fontFamily: 'monospace',
+            outline: 'none',
+            transition: 'border-color .12s',
+            boxShadow: focus ? `0 0 0 3px ${T.goldSub}` : 'none',
+          }}
+        />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Route name (optional)"
+            style={{
+              flex: 1,
+              padding: '10px 13px',
+              borderRadius: 8,
+              background: T.surface,
+              border: `1px solid ${T.borderHi}`,
+              color: T.text,
+              fontSize: 12,
+              fontFamily: 'inherit',
+              outline: 'none',
+            }}
+          />
+          <div
+            style={{
+              minWidth: 158,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 10.5,
+              color: detected ? (isMdt || isKsg ? '#7fd693' : T.red) : T.muted,
+            }}
+          >
+            {detected && (isMdt || isKsg) && (
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5fbf6a' }} />
+            )}
+            {detected ? `Detected ${fmt}` : 'Auto-detects format'}
+          </div>
+          <button
+            type="button"
+            disabled={!enabled}
+            onClick={onImport}
+            onMouseEnter={() => setBtnHover(true)}
+            onMouseLeave={() => setBtnHover(false)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 22px',
+              borderRadius: 8,
+              fontFamily: 'inherit',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              cursor: enabled ? 'pointer' : 'not-allowed',
+              background: enabled ? (btnHover ? T.gold : T.goldSub) : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${enabled ? (btnHover ? T.gold : T.goldBord) : T.border}`,
+              color: enabled ? (btnHover ? '#141414' : T.gold) : T.dim,
+              transition: 'all .12s',
+            }}
+          >
+            <IImport s={13} /> {busy ? 'Importing…' : 'Import'}
+          </button>
+        </div>
+        {error && <p style={{ marginTop: 12, fontSize: 11.5, color: T.red }}>{error}</p>}
+      </div>
     </div>
   );
 }

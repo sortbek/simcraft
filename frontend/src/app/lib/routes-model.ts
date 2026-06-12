@@ -38,6 +38,46 @@ export function routeToActiveRoute(r: SavedRoute): ActiveRoute | null {
   }
 }
 
+/** Display stats for a route card. `pulls`/`enemies` are derived where free —
+ *  built routes from their pull JSON, KSG routes by parsing the SimC — and left
+ *  null for MDT imports (which would need a decode). `source` labels the origin. */
+export function routeStats(r: SavedRoute): {
+  source: string;
+  pulls: number | null;
+  enemies: number | null;
+} {
+  const kind = classifyRoute(r);
+  if (kind === 'pulls') {
+    try {
+      const pulls = JSON.parse(r.pulls!) as unknown[][];
+      return {
+        source: 'MDT',
+        pulls: pulls.length,
+        enemies: pulls.reduce((s: number, p: unknown[]) => s + p.length, 0),
+      };
+    } catch {
+      return { source: 'MDT', pulls: null, enemies: null };
+    }
+  }
+  if (kind === 'simc') {
+    const lines = r.simc!.split('\n').filter((l) => l.startsWith('raid_events+=/pull'));
+    const enemies = lines.reduce((s, l) => {
+      const m = l.match(/enemies=(.*)$/);
+      return s + (m ? m[1].split('|').length : 0);
+    }, 0);
+    return { source: 'keystone.guru', pulls: lines.length || null, enemies: enemies || null };
+  }
+  return { source: kind === 'mdt' ? 'MDT' : 'SimC', pulls: null, enemies: null };
+}
+
+/** Stable non-negative integer seed from a route id, so a card's deterministic
+ *  thumbnail looks the same across renders. */
+export function seedFromId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % 2147483647 || 1;
+}
+
 /** keystone.guru-style slug: lowercase, non-alphanumeric runs → single `-`. */
 export function slugify(s: string): string {
   return s
