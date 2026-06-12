@@ -7,14 +7,28 @@ import { useLanguage } from '../../lib/i18n';
 import { decodeMdt, type MdtConversion } from '../../lib/api';
 import { MDT_ROUTE_SESSION_KEY, ROUTES } from '../../lib/routes';
 
-/** Remove a previously-imported route from the custom options so re-importing
- *  replaces it cleanly without clobbering the user's other custom lines. */
-function stripPriorRoute(s: string): string {
+/** Remove a previously-injected route block from the custom options. Prefers
+ *  removing the exact block we last injected; falls back to filtering the route's
+ *  known lines (a self-contained keystone.guru block) so a stale/cross-session
+ *  reference can't leave a duplicated header behind. User lines are preserved. */
+const ROUTE_LINE_PREFIXES = [
+  'fight_style=DungeonRoute',
+  'single_actor_batch=',
+  'max_time=',
+  'enemy=',
+  'enemy_health=',
+  'keystone_level=',
+  'raid_events=',
+  'raid_events+=',
+  'override.',
+];
+function stripPriorRoute(s: string, injected: string): string {
+  if (injected && s.includes(injected)) {
+    return s.replace(injected, '').replace(/\n{2,}/g, '\n').trim();
+  }
   return s
     .split('\n')
-    .filter(
-      (l) => !l.startsWith('raid_events+=/pull') && l.trim() !== 'fight_style=DungeonRoute'
-    )
+    .filter((l) => !ROUTE_LINE_PREFIXES.some((p) => l.trim().startsWith(p)))
     .join('\n')
     .trim();
 }
@@ -25,31 +39,49 @@ export default function MdtImport() {
   const { setFightStyle, customApl, setCustomApl } = useSimContext();
   const [value, setValue] = useState('');
   const [keyLevel, setKeyLevel] = useState(10);
+  // The imported route's MDT string is level-agnostic — kept so changing the
+  // keystone level re-generates the route at that level (sim-time choice), and
+  // the exact block we last injected so re-injection replaces it cleanly.
+  const [importedMdt, setImportedMdt] = useState('');
+  const [injected, setInjected] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<MdtConversion | null>(null);
 
-  const onImport = async () => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
+  /** Generate the route's SimC at `level` and (re)inject it, replacing any
+   *  prior route. The level is a sim-time choice, so one imported route can be
+   *  re-simmed at any keystone level without re-importing. */
+  const applyRoute = async (mdt: string, level: number) => {
     setBusy(true);
     setError('');
-    setResult(null);
     try {
-      const conv = await decodeMdt(trimmed, { keystoneLevel: keyLevel });
+      const conv = await decodeMdt(mdt, { keystoneLevel: level });
       setFightStyle('DungeonRoute');
-      const base = stripPriorRoute(customApl);
-      // Inject `simc` (fight_style=DungeonRoute + raid_events), not just the
-      // raid_events: the backend detects dungeon-route sims by scanning the
-      // input for the literal fight_style line (simc_runner), and that
-      // detection drives skipping max_time and the raid-buff overrides.
+      // Inject `simc` (fight_style=DungeonRoute + header + raid_events): the
+      // backend detects dungeon-route sims by scanning for the literal
+      // fight_style line (simc_runner), which drives the route-specific config.
+      const base = stripPriorRoute(customApl, injected);
       setCustomApl(base ? `${base}\n${conv.simc}` : conv.simc);
+      setInjected(conv.simc);
+      setImportedMdt(mdt);
       setResult(conv);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
+  };
+
+  const onImport = () => {
+    const trimmed = value.trim();
+    if (trimmed) applyRoute(trimmed, keyLevel);
+  };
+
+  const onLevelChange = (raw: number) => {
+    const level = Math.max(2, Math.min(40, Math.round(raw) || 2));
+    setKeyLevel(level);
+    // Live re-generate the already-imported route at the new level.
+    if (importedMdt) applyRoute(importedMdt, level);
   };
 
   return (
@@ -69,9 +101,8 @@ export default function MdtImport() {
             min={2}
             max={40}
             value={keyLevel}
-            onChange={(e) =>
-              setKeyLevel(Math.max(2, Math.min(40, Math.round(Number(e.target.value)) || 2)))
-            }
+            onChange={(e) => onLevelChange(Number(e.target.value))}
+            disabled={busy}
             className="input-field w-16 text-center"
           />
         </label>
@@ -108,7 +139,7 @@ export default function MdtImport() {
             type="button"
             onClick={() => {
               try {
-                sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, value.trim());
+                sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, importedMdt);
               } catch {}
               router.push(ROUTES.dungeonRoute);
             }}
