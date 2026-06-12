@@ -9,6 +9,7 @@ import {
   type SavedRoute,
 } from '../../lib/saved-routes';
 import { serializeRoute } from '../../lib/api';
+import { getRouteSimParams } from '../../lib/route-sim-params';
 import { useLanguage } from '../../lib/i18n';
 
 /** Strip a previously-injected DungeonRoute so loading another replaces it
@@ -56,7 +57,7 @@ export default function SidebarRoutes() {
         // (the per-sim keystone level control overrides this on import).
         try {
           const pulls = JSON.parse(route.pulls);
-          const conv = await serializeRoute(route.dungeon_idx, pulls, { keystoneLevel: 10 });
+          const conv = await serializeRoute(route.dungeon_idx, pulls, getRouteSimParams());
           setFightStyle('DungeonRoute');
           const base = stripPriorRoute(customApl);
           setCustomApl(base ? `${base}\n${conv.simc}` : conv.simc);

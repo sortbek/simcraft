@@ -28,13 +28,6 @@ export interface DerivedPull {
   cloneIdxs: number[];
 }
 
-/** SimC enemy specifier name: alphanumerics kept, rest `_`, bosses `BOSS_`-prefixed.
- *  Mirrors `sanitize_name` in generate.rs so re-serialized routes match the backend. */
-function sanitizeName(name: string, isBoss: boolean): string {
-  const cleaned = name.replace(/[^a-zA-Z0-9]/g, '_');
-  return isBoss ? `BOSS_${cleaned}` : cleaned;
-}
-
 export interface RouteEditor {
   enemies: MdtMapEnemy[];
   /** Per-clone pull membership (null = unpulled), index-aligned with `enemies`. */
@@ -45,8 +38,6 @@ export interface RouteEditor {
   coveragePct: number;
   /** Total pulled clone instances (the KeyChip "enemies" figure). */
   enemyCount: number;
-  /** SimC `fight_style=DungeonRoute` + pulls, rebuilt from the current edit. */
-  simc: string;
 
   selected: number | null;
   setSelected: (n: number | null) => void;
@@ -230,19 +221,6 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
   );
   const coveragePct = pulls.length ? pulls[pulls.length - 1].forces : 0;
 
-  const simc = useMemo(() => {
-    const lines = pulls.map((p) => {
-      const specs = p.cloneIdxs.map((i) => {
-        const e = enemies[i];
-        return `"${sanitizeName(e.name, e.is_boss)}":${e.health}:${e.race}`;
-      });
-      return `raid_events+=/pull,pull=${p.n},bloodlust=0,delay=0,enemies=${specs.join('|')}`;
-    });
-    return lines.length
-      ? `fight_style=DungeonRoute\n${lines.join('\n')}`
-      : 'fight_style=DungeonRoute';
-  }, [pulls, enemies]);
-
   return {
     enemies,
     assignment,
@@ -250,7 +228,6 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     totalCount,
     coveragePct,
     enemyCount,
-    simc,
     selected,
     setSelected,
     mode,

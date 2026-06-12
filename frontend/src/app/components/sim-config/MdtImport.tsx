@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { decodeMdt, type MdtConversion } from '../../lib/api';
+import { getRouteSimParams, setRouteSimParams } from '../../lib/route-sim-params';
 import { MDT_ROUTE_SESSION_KEY, ROUTES } from '../../lib/routes';
 
 /** Remove a previously-injected route block from the custom options. Prefers
@@ -38,24 +39,27 @@ export default function MdtImport() {
   const router = useRouter();
   const { setFightStyle, customApl, setCustomApl } = useSimContext();
   const [value, setValue] = useState('');
-  const [keyLevel, setKeyLevel] = useState(10);
+  // Keystone level + HP-damage share are route-generation params (persisted via
+  // route-sim-params, shared with saved-route loading), not general sim config.
+  const [keyLevel, setKeyLevel] = useState(() => getRouteSimParams().keystoneLevel);
+  const [hpPercent, setHpPercent] = useState(() => getRouteSimParams().hpPercent);
   // The imported route's MDT string is level-agnostic — kept so changing the
-  // keystone level re-generates the route at that level (sim-time choice), and
-  // the exact block we last injected so re-injection replaces it cleanly.
+  // level/hp% re-generates the route (sim-time choices), and the exact block we
+  // last injected so re-injection replaces it cleanly.
   const [importedMdt, setImportedMdt] = useState('');
   const [injected, setInjected] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<MdtConversion | null>(null);
 
-  /** Generate the route's SimC at `level` and (re)inject it, replacing any
-   *  prior route. The level is a sim-time choice, so one imported route can be
-   *  re-simmed at any keystone level without re-importing. */
-  const applyRoute = async (mdt: string, level: number) => {
+  /** Generate the route's SimC at the given level + HP share and (re)inject it,
+   *  replacing any prior route. These are sim-time choices, so one imported
+   *  route can be re-simmed at any keystone level without re-importing. */
+  const applyRoute = async (mdt: string, level: number, hp: number) => {
     setBusy(true);
     setError('');
     try {
-      const conv = await decodeMdt(mdt, { keystoneLevel: level });
+      const conv = await decodeMdt(mdt, { keystoneLevel: level, hpPercent: hp });
       setFightStyle('DungeonRoute');
       // Inject `simc` (fight_style=DungeonRoute + header + raid_events): the
       // backend detects dungeon-route sims by scanning for the literal
@@ -74,14 +78,21 @@ export default function MdtImport() {
 
   const onImport = () => {
     const trimmed = value.trim();
-    if (trimmed) applyRoute(trimmed, keyLevel);
+    if (trimmed) applyRoute(trimmed, keyLevel, hpPercent);
   };
 
   const onLevelChange = (raw: number) => {
     const level = Math.max(2, Math.min(40, Math.round(raw) || 2));
     setKeyLevel(level);
-    // Live re-generate the already-imported route at the new level.
-    if (importedMdt) applyRoute(importedMdt, level);
+    setRouteSimParams({ keystoneLevel: level });
+    if (importedMdt) applyRoute(importedMdt, level, hpPercent);
+  };
+
+  const onHpChange = (raw: number) => {
+    const hp = Math.max(1, Math.min(100, Math.round(raw) || 1));
+    setHpPercent(hp);
+    setRouteSimParams({ hpPercent: hp });
+    if (importedMdt) applyRoute(importedMdt, keyLevel, hp);
   };
 
   return (
@@ -103,6 +114,19 @@ export default function MdtImport() {
             value={keyLevel}
             onChange={(e) => onLevelChange(Number(e.target.value))}
             disabled={busy}
+            className="input-field w-16 text-center"
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-[13px] text-on-surface-variant">
+          {t('config.mdtHpPercent')}
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={hpPercent}
+            onChange={(e) => onHpChange(Number(e.target.value))}
+            disabled={busy}
+            title={t('config.mdtHpPercentHelp')}
             className="input-field w-16 text-center"
           />
         </label>
