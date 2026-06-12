@@ -64,7 +64,8 @@ export default function RoutePage() {
       const raw = sessionStorage.getItem(MDT_ROUTE_SESSION_KEY);
       if (!raw) return;
       sessionStorage.removeItem(MDT_ROUTE_SESSION_KEY);
-      const ar = JSON.parse(raw) as ActiveRoute;
+      const ar = JSON.parse(raw) as ActiveRoute | null;
+      if (!ar) return;
       if (ar.kind === 'mdt') {
         setInput(ar.mdtString);
         load(ar.mdtString);

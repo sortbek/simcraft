@@ -322,7 +322,9 @@ raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1",
         dungeon_name: dungeon.name.clone(),
         week: route.week,
         keystone_level,
-        pull_count: route.pulls.len(),
+        // Pulls that produced a raid_events line — a fully-unresolved pull (all
+        // enemies missing from the DB) emits nothing, so it isn't counted.
+        pull_count: pull_lines.len(),
         enemy_count,
         total_health,
         unresolved,

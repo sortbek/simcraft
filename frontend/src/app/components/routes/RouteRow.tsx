@@ -214,14 +214,18 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
   };
 
   const onMap = () => {
-    // Hand the route to the map viewer as a serialized ActiveRoute (mdt/pulls).
+    const ar = routeToActiveRoute(route);
+    if (!ar) return;
+    // Render the map at the same key/HP the row's steppers show.
+    setRouteSimParams({ keystoneLevel: key, hpPercent: hp });
     try {
-      sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, JSON.stringify(routeToActiveRoute(route)));
+      sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, JSON.stringify(ar));
     } catch {}
     router.push(ROUTES.dungeonRoute);
   };
 
-  const sourceColor = stats.source === 'keystone.guru' ? '#c95fd6' : '#6ea7cc';
+  const sourceColor =
+    stats.source === 'keystone.guru' ? '#c95fd6' : stats.source === 'Built' ? '#5fbf6a' : '#6ea7cc';
 
   return (
     <div

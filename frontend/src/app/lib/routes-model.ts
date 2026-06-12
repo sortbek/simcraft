@@ -48,15 +48,16 @@ export function routeStats(r: SavedRoute): {
 } {
   const kind = classifyRoute(r);
   if (kind === 'pulls') {
+    // Built/edited on the map — not imported from an MDT string.
     try {
       const pulls = JSON.parse(r.pulls!) as unknown[][];
       return {
-        source: 'MDT',
+        source: 'Built',
         pulls: pulls.length,
         enemies: pulls.reduce((s: number, p: unknown[]) => s + p.length, 0),
       };
     } catch {
-      return { source: 'MDT', pulls: null, enemies: null };
+      return { source: 'Built', pulls: null, enemies: null };
     }
   }
   if (kind === 'simc') {

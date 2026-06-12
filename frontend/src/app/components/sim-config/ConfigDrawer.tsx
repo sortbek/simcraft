@@ -11,6 +11,7 @@ import FightStyleSelector from './FightStyleSelector';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
+import ActiveRouteIndicator from './ActiveRouteIndicator';
 
 const ITERATION_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 
@@ -148,6 +149,7 @@ export default function ConfigDrawer({
 
         {activeTab === 'simulation' && (
           <div className="animate-fade-in space-y-6">
+            <ActiveRouteIndicator />
             <div className="grid grid-cols-4 gap-6">
               <div className="space-y-2">
                 <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
