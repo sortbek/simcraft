@@ -5,12 +5,14 @@ import {
   decodeMdt,
   getDungeonOverview,
   listDungeons,
+  serializeRoute,
+  type CloneRef,
   type DungeonSummary,
   type MdtConversion,
 } from '../lib/api';
 import { useLanguage } from '../lib/i18n';
 import { getRouteSimParams } from '../lib/route-sim-params';
-import { MDT_ROUTE_SESSION_KEY } from '../lib/routes';
+import { MDT_ROUTE_SESSION_KEY, MDT_ROUTE_PULLS_SESSION_KEY } from '../lib/routes';
 import RouteViewer from '../components/route-map/RouteViewer';
 import { T } from '../components/route-map/routeTheme';
 import { IImport } from '../components/route-map/routeIcons';
@@ -56,6 +58,23 @@ export default function RoutePage() {
     }
   };
 
+  // Render a saved built route (dungeon + pull assignment) on the map by
+  // serializing it at the chosen level (same path used to sim it).
+  const loadPulls = async (dungeonIdx: number, pulls: CloneRef[][]) => {
+    setBusy(true);
+    setError('');
+    setInput('');
+    try {
+      setConv(await serializeRoute(dungeonIdx, pulls, getRouteSimParams()));
+      setLoadId((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setConv(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   useEffect(() => {
     listDungeons().then(setDungeons).catch(() => {});
   }, []);
@@ -68,6 +87,12 @@ export default function RoutePage() {
         sessionStorage.removeItem(MDT_ROUTE_SESSION_KEY);
         setInput(stashed);
         load(stashed);
+      }
+      const stashedPulls = sessionStorage.getItem(MDT_ROUTE_PULLS_SESSION_KEY);
+      if (stashedPulls) {
+        sessionStorage.removeItem(MDT_ROUTE_PULLS_SESSION_KEY);
+        const { dungeonIdx, pulls } = JSON.parse(stashedPulls);
+        loadPulls(dungeonIdx, pulls);
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
