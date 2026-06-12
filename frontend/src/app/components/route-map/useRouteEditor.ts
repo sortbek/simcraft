@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { MdtConversion, MdtMapEnemy } from '../../lib/api';
+import { useLanguage } from '../../lib/i18n';
 import { DEFAULT_PULL_COLOR, NEW_PULL_COLORS } from './routeTheme';
 
 export type EditMode = 'view' | 'draw' | 'merge' | 'delete';
@@ -60,6 +61,7 @@ export interface RouteEditor {
  *  flat clone list is immutable; edits live in `assignment` (clone → pull) and
  *  `colors`, and every derived view recomputes from those. */
 export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void): RouteEditor {
+  const { t } = useLanguage();
   const enemies = conv.map.enemies;
   const totalCount = conv.map.total_count || enemies.reduce((s, e) => s + e.count, 0) || 1;
 
@@ -107,7 +109,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     setAssignment(nextAsg);
     setColors(nextCols);
     setSelected(null);
-    flash('Pull deleted');
+    flash(t('route.editor.pullDeleted'));
   };
 
   const mergePulls = (a: number, b: number) => {
@@ -119,7 +121,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     setSelected(null);
     setPick([]);
     setMode('view');
-    flash('Pulls merged');
+    flash(t('route.editor.pullsMerged'));
   };
 
   const onPullClick = (n: number) => {
@@ -172,7 +174,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     setColors((c) => ({ ...c, [newN]: color }));
     setDraft([]);
     setMode('view');
-    flash(`Pull ${newN} added (${draft.length} mobs)`);
+    flash(t('route.editor.pullAdded', { n: newN, count: draft.length }));
   };
 
   const pulls = useMemo<DerivedPull[]>(() => {

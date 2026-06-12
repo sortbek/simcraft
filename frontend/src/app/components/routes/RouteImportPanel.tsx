@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { decodeMdt, type DungeonSummary } from '../../lib/api';
 import { saveRoute } from '../../lib/saved-routes';
 import { detectDungeonFromSimc } from '../../lib/routes-model';
+import { useLanguage } from '../../lib/i18n';
 import { T } from '../route-map/routeTheme';
 import { IImport } from '../route-map/routeIcons';
 
@@ -37,6 +38,7 @@ export default function RouteImportPanel({
   dungeons: DungeonSummary[];
   onSaved: () => void;
 }) {
+  const { t } = useLanguage();
   const [txt, setTxt] = useState('');
   const [name, setName] = useState('');
   const [focus, setFocus] = useState(false);
@@ -48,7 +50,11 @@ export default function RouteImportPanel({
   const isMdt = trimmed.startsWith('!');
   const isKsg = !isMdt && trimmed.includes('fight_style=DungeonRoute');
   const detected = trimmed.length > 0;
-  const fmt = isMdt ? 'MDT string' : isKsg ? 'keystone.guru SimC' : 'unknown format';
+  const fmt = isMdt
+    ? t('route.import.fmtMdt')
+    : isKsg
+      ? t('route.import.fmtKsg')
+      : t('route.import.fmtUnknown');
   const enabled = detected && !busy;
 
   const onImport = async () => {
@@ -71,7 +77,7 @@ export default function RouteImportPanel({
           ...(dungeonIdx != null ? { dungeonIdx } : {}),
         });
       } else {
-        setError('Unrecognized input — paste an MDT string (starts with !) or a keystone.guru SimC.');
+        setError(t('route.import.unknownFormat'));
         return;
       }
       setTxt('');
@@ -107,7 +113,7 @@ export default function RouteImportPanel({
             color: T.text,
           }}
         >
-          Import route
+          {t('route.import.label')}
         </span>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 7 }}>
@@ -121,7 +127,7 @@ export default function RouteImportPanel({
           onChange={(e) => setTxt(e.target.value)}
           onFocus={() => setFocus(true)}
           onBlur={() => setFocus(false)}
-          placeholder="Paste an MDT export string or a keystone.guru SimC here…"
+          placeholder={t('route.import.placeholder')}
           style={{
             width: '100%',
             height: 96,
@@ -144,7 +150,7 @@ export default function RouteImportPanel({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Route name (optional)"
+            placeholder={t('route.import.namePlaceholder')}
             style={{
               flex: 1,
               padding: '10px 13px',
@@ -170,7 +176,7 @@ export default function RouteImportPanel({
             {detected && (isMdt || isKsg) && (
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5fbf6a' }} />
             )}
-            {detected ? `Detected ${fmt}` : 'Auto-detects format'}
+            {detected ? t('route.import.detected', { fmt }) : t('route.import.autoDetect')}
           </div>
           <button
             type="button"
@@ -195,7 +201,7 @@ export default function RouteImportPanel({
               transition: 'all .12s',
             }}
           >
-            <IImport s={13} /> {busy ? 'Importing…' : 'Import'}
+            <IImport s={13} /> {busy ? t('route.import.importing') : t('route.import.button')}
           </button>
         </div>
         {error && <p style={{ marginTop: 12, fontSize: 11.5, color: T.red }}>{error}</p>}

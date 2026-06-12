@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import type { MdtConversion } from '../../lib/api';
 import { saveRoute } from '../../lib/saved-routes';
+import { useLanguage } from '../../lib/i18n';
 import { T } from './routeTheme';
 import RouteHeader from './RouteHeader';
 import RouteMap from './RouteMap';
@@ -19,6 +20,7 @@ export default function RouteViewer({
   mdtString: string;
   onImport: () => void;
 }) {
+  const { t } = useLanguage();
   const [toast, setToast] = useState<string | null>(null);
   const [modal, setModal] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,9 +48,9 @@ export default function RouteViewer({
         dungeonIdx: conv.map.dungeon_idx,
         pulls: JSON.stringify(pulls),
       });
-      flash(`"${name}" saved to library`);
+      flash(t('route.toast.saved', { name }));
     } catch (e) {
-      flash(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+      flash(t('route.toast.saveFailed', { error: e instanceof Error ? e.message : String(e) }));
     }
   };
 

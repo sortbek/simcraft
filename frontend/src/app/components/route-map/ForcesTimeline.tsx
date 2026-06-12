@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
 import { T } from './routeTheme';
 import { IBoss } from './routeIcons';
 import type { DerivedPull } from './useRouteEditor';
@@ -14,6 +15,7 @@ interface NodeProps {
 }
 
 function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
+  const { t } = useLanguage();
   const [h, setH] = useState(false);
   const accent = picked ? T.picked : T.gold;
   return (
@@ -79,7 +81,7 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: T.text, display: 'flex', alignItems: 'center', gap: 6 }}>
-              Pull {p.n}
+              {t('route.pullN', { n: p.n })}
               {p.boss && (
                 <span style={{ display: 'flex', color: T.boss }}>
                   <IBoss s={11} />
@@ -92,7 +94,7 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
             <span style={{ fontSize: 10, color: T.muted, whiteSpace: 'nowrap' }}>
-              {p.mobs} {p.mobs === 1 ? 'mob' : 'mobs'}
+              {t('route.timeline.mobs', { count: p.mobs })}
             </span>
             <div style={{ flex: 1, height: 3, background: T.faint, borderRadius: 2, overflow: 'hidden' }}>
               <div style={{ width: `${Math.min(100, p.forces)}%`, height: '100%', background: `#${p.color}`, opacity: 0.85 }} />
@@ -121,6 +123,7 @@ export default function ForcesTimeline({
   pick,
   onSelect,
 }: ForcesTimelineProps) {
+  const { t } = useLanguage();
   const shown = Math.round(coveragePct);
   return (
     <div
@@ -135,13 +138,17 @@ export default function ForcesTimeline({
       }}
     >
       <div style={{ padding: '16px 18px', borderBottom: `1px solid ${T.border}` }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, marginBottom: 9 }}>Route progression</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, marginBottom: 9 }}>
+          {t('route.timeline.progression')}
+        </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 9 }}>
           <span style={{ fontSize: 26, fontWeight: 800, color: T.gold, lineHeight: 1 }}>
             {shown}
             <span style={{ fontSize: 15 }}>%</span>
           </span>
-          <span style={{ fontSize: 11, color: T.muted }}>{enemyCount} enemy forces</span>
+          <span style={{ fontSize: 11, color: T.muted }}>
+            {t('route.timeline.enemyForces', { count: enemyCount })}
+          </span>
         </div>
         <div style={{ height: 7, background: T.faint, borderRadius: 4, overflow: 'hidden' }}>
           <div
@@ -166,7 +173,7 @@ export default function ForcesTimeline({
           />
         ))}
         {pulls.length === 0 && (
-          <div style={{ padding: '8px 18px', fontSize: 11, color: T.muted }}>No pulls.</div>
+          <div style={{ padding: '8px 18px', fontSize: 11, color: T.muted }}>{t('route.timeline.noPulls')}</div>
         )}
       </div>
     </div>

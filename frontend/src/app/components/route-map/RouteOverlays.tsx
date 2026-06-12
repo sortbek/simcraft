@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
 import { T } from './routeTheme';
 import { IPencil, IMerge, ITrash, ISave } from './routeIcons';
 import type { EditMode } from './useRouteEditor';
@@ -12,14 +13,15 @@ interface ModeBannerProps {
   onDone: () => void;
 }
 export function ModeBanner({ mode, pickCount, draftCount, onDone }: ModeBannerProps) {
+  const { t } = useLanguage();
   const txt =
     mode === 'draw'
-      ? `Drag a box or click unpulled mobs — ${draftCount} selected`
+      ? t('route.banner.draw', { count: draftCount })
       : mode === 'merge'
         ? pickCount === 0
-          ? 'Select two pulls to merge'
-          : `${pickCount}/2 selected — pick ${2 - pickCount} more`
-        : 'Click a pull to delete';
+          ? t('route.banner.mergeEmpty')
+          : t('route.banner.mergePick', { count: pickCount, remaining: 2 - pickCount })
+        : t('route.banner.delete');
   const icon = mode === 'draw' ? <IPencil s={14} /> : mode === 'merge' ? <IMerge s={14} /> : <ITrash s={14} />;
   return (
     <div
@@ -58,7 +60,7 @@ export function ModeBanner({ mode, pickCount, draftCount, onDone }: ModeBannerPr
           letterSpacing: '0.04em',
         }}
       >
-        {mode === 'draw' ? 'Make pull' : 'Done'}
+        {mode === 'draw' ? t('route.banner.makePull') : t('route.banner.done')}
       </button>
     </div>
   );
@@ -117,6 +119,7 @@ interface SaveModalProps {
   onSave: (name: string) => void;
 }
 export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, onClose, onSave }: SaveModalProps) {
+  const { t } = useLanguage();
   const [name, setName] = useState(`${dungeonName} +${keystoneLevel}`);
   return (
     <div
@@ -147,12 +150,12 @@ export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, o
             <span style={{ color: T.gold, display: 'flex' }}>
               <ISave s={15} />
             </span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Save to library</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{t('route.save.title')}</span>
           </div>
         </div>
         <div style={{ padding: '18px 20px' }}>
           <label style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>
-            Route name
+            {t('route.save.nameLabel')}
           </label>
           <input
             value={name}
@@ -179,9 +182,9 @@ export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, o
               {dungeonName} +{keystoneLevel}
             </span>
             <span style={{ color: T.dim }}>·</span>
-            <span>{pullCount} pulls</span>
+            <span>{t('route.row.pulls', { count: pullCount })}</span>
             <span style={{ color: T.dim }}>·</span>
-            <span>{enemyCount} enemies</span>
+            <span>{t('route.row.enemies', { count: enemyCount })}</span>
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9, padding: '0 20px 18px' }}>
@@ -200,7 +203,7 @@ export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, o
               cursor: 'pointer',
             }}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -217,7 +220,7 @@ export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, o
               cursor: 'pointer',
             }}
           >
-            Save route
+            {t('route.save.confirm')}
           </button>
         </div>
       </div>

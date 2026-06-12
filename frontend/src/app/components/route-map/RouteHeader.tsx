@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { useLanguage } from '../../lib/i18n';
 import { T } from './routeTheme';
 import { IPencil, IMerge, ITrash, ISave, IImport } from './routeIcons';
 import type { EditMode } from './useRouteEditor';
@@ -66,6 +67,7 @@ export default function RouteHeader({
   onImport,
   onSave,
 }: RouteHeaderProps) {
+  const { t } = useLanguage();
   const [impHov, setImpHov] = useState(false);
   return (
     <div
@@ -99,9 +101,13 @@ export default function RouteHeader({
           +{keystoneLevel}
         </span>
         <span style={{ width: 1, height: 14, background: T.border }} />
-        <span style={{ fontSize: 11.5, color: T.text2, whiteSpace: 'nowrap' }}>{pullCount} pulls</span>
+        <span style={{ fontSize: 11.5, color: T.text2, whiteSpace: 'nowrap' }}>
+          {t('route.row.pulls', { count: pullCount })}
+        </span>
         <span style={{ color: T.dim }}>·</span>
-        <span style={{ fontSize: 11.5, color: T.text2, whiteSpace: 'nowrap' }}>{enemyCount} enemies</span>
+        <span style={{ fontSize: 11.5, color: T.text2, whiteSpace: 'nowrap' }}>
+          {t('route.row.enemies', { count: enemyCount })}
+        </span>
         {mdtVersion && (
           <>
             <span style={{ width: 1, height: 14, background: T.border }} />
@@ -115,9 +121,9 @@ export default function RouteHeader({
       <div style={{ flex: 1 }} />
 
       <div style={{ display: 'flex', gap: 4 }}>
-        <ToolBtn icon={<IPencil s={13} />} label="Draw" active={mode === 'draw'} onClick={() => onToggleMode('draw')} />
-        <ToolBtn icon={<IMerge s={13} />} label="Merge" active={mode === 'merge'} onClick={() => onToggleMode('merge')} />
-        <ToolBtn icon={<ITrash s={13} />} label="Delete" danger active={mode === 'delete'} onClick={() => onToggleMode('delete')} />
+        <ToolBtn icon={<IPencil s={13} />} label={t('route.header.draw')} active={mode === 'draw'} onClick={() => onToggleMode('draw')} />
+        <ToolBtn icon={<IMerge s={13} />} label={t('route.header.merge')} active={mode === 'merge'} onClick={() => onToggleMode('merge')} />
+        <ToolBtn icon={<ITrash s={13} />} label={t('route.header.delete')} danger active={mode === 'delete'} onClick={() => onToggleMode('delete')} />
       </div>
       <span style={{ width: 1, height: 22, background: T.border }} />
       <button
@@ -142,9 +148,9 @@ export default function RouteHeader({
           transition: 'all .12s',
         }}
       >
-        <IImport s={13} /> Import route
+        <IImport s={13} /> {t('route.header.import')}
       </button>
-      <ToolBtn icon={<ISave s={13} />} label="Save to library" active onClick={onSave} />
+      <ToolBtn icon={<ISave s={13} />} label={t('route.header.save')} active onClick={onSave} />
     </div>
   );
 }

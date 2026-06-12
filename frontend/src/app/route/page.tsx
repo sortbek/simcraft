@@ -204,7 +204,7 @@ export default function RoutePage() {
               color: T.muted,
             }}
           >
-            MDT import string
+            {t('route.mdtImportLabel')}
           </label>
           <textarea
             value={input}

@@ -7,19 +7,22 @@ import { deleteSavedRoute, type SavedRoute } from '../../lib/saved-routes';
 import { classifyRoute, routeToActiveRoute, routeStats, seedFromId } from '../../lib/routes-model';
 import { getRouteSimParams, setRouteSimParams } from '../../lib/route-sim-params';
 import { ROUTES, MDT_ROUTE_SESSION_KEY, MDT_ROUTE_PULLS_SESSION_KEY } from '../../lib/routes';
+import { useLanguage } from '../../lib/i18n';
 import { T } from '../route-map/routeTheme';
 import { IPlay, IList, ITrash, IPlus, IMinus } from '../route-map/routeIcons';
 import RouteMiniMap from './RouteMiniMap';
 
-function relTime(iso: string): string {
+type TFn = (key: string, params?: Record<string, string | number>) => string;
+
+function relTime(iso: string, t: TFn): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return '';
   const m = Math.floor((Date.now() - then) / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return t('route.time.justNow');
+  if (m < 60) return t('route.time.minutes', { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return t('route.time.hours', { count: h });
+  return t('route.time.days', { count: Math.floor(h / 24) });
 }
 
 const Stepper = ({
@@ -182,6 +185,7 @@ const ActBtn = ({
 /** One saved route, rendered as a library card. [Sim] sets the chosen key/HP +
  *  activates the route, then navigates to Quick Sim (activate-only flow). */
 export default function RouteRow({ route, onChanged }: { route: SavedRoute; onChanged: () => void }) {
+  const { t } = useLanguage();
   const router = useRouter();
   const { setActiveRoute, setSimcFooter, setFightStyle } = useSimContext();
   const kind = classifyRoute(route);
@@ -263,13 +267,13 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
         >
           {stats.pulls != null && (
             <>
-              <span>{stats.pulls} pulls</span>
+              <span>{t('route.row.pulls', { count: stats.pulls })}</span>
               <span style={{ color: T.dim }}>·</span>
             </>
           )}
           {stats.enemies != null && (
             <>
-              <span>{stats.enemies} enemies</span>
+              <span>{t('route.row.enemies', { count: stats.enemies })}</span>
               <span style={{ color: T.dim }}>·</span>
             </>
           )}
@@ -278,22 +282,22 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
             {stats.source}
           </span>
           <span style={{ color: T.dim }}>·</span>
-          <span>updated {relTime(route.created_at)}</span>
+          <span>{t('route.row.updated', { time: relTime(route.created_at, t) })}</span>
         </div>
       </div>
 
       {levelAgnostic && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Stepper label="Key" value={key} min={2} max={40} prefix="+" onChange={setKey} />
-          <Stepper label="HP%" value={hp} min={1} max={100} onChange={setHp} />
+          <Stepper label={t('route.row.keyLevel')} value={key} min={2} max={40} prefix="+" onChange={setKey} />
+          <Stepper label={t('route.row.hpPercent')} value={hp} min={1} max={100} onChange={setHp} />
         </div>
       )}
 
       <span style={{ width: 1, height: 30, background: T.border }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <ActBtn icon={<IPlay s={12} />} label="Sim" primary onClick={onSim} />
-        {mappable && <ActBtn icon={<IList s={13} />} label="Map" onClick={onMap} />}
+        <ActBtn icon={<IPlay s={12} />} label={t('route.row.sim')} primary onClick={onSim} />
+        {mappable && <ActBtn icon={<IList s={13} />} label={t('route.row.map')} onClick={onMap} />}
         <ActBtn icon={<ITrash s={13} />} danger onClick={() => deleteSavedRoute(route.id).then(onChanged)} />
       </div>
     </div>
