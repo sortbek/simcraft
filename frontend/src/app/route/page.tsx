@@ -9,6 +9,7 @@ import {
   type MdtConversion,
 } from '../lib/api';
 import { useLanguage } from '../lib/i18n';
+import { getRouteSimParams } from '../lib/route-sim-params';
 import { MDT_ROUTE_SESSION_KEY } from '../lib/routes';
 import RouteViewer from '../components/route-map/RouteViewer';
 import { T } from '../components/route-map/routeTheme';
@@ -29,7 +30,7 @@ export default function RoutePage() {
     setBusy(true);
     setError('');
     try {
-      setConv(await decodeMdt(trimmed));
+      setConv(await decodeMdt(trimmed, getRouteSimParams()));
       setLoadId((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -45,7 +46,7 @@ export default function RoutePage() {
     setError('');
     setInput('');
     try {
-      setConv(await getDungeonOverview(idx));
+      setConv(await getDungeonOverview(idx, getRouteSimParams()));
       setLoadId((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

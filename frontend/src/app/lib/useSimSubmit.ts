@@ -6,6 +6,7 @@ import { useLanguage } from './i18n';
 import type { FightScenario } from './types';
 import { storeScenarioSiblings, clearScenarioSiblings } from './scenario-siblings';
 import { useSharedSimPayload } from './useSharedSimPayload';
+import { materializeRoute } from './active-route';
 
 interface UseSimSubmitOptions {
   /** API endpoint path, e.g. "/api/sim" */
@@ -29,7 +30,8 @@ export function useSimSubmit({
 }: UseSimSubmitOptions) {
   const { t } = useLanguage();
   const router = useRouter();
-  const { fightStyle, targetCount, fightLength, scenarios, clearScenarios } = useSimContext();
+  const { fightStyle, targetCount, fightLength, scenarios, clearScenarios, activeRoute } =
+    useSimContext();
 
   const sharedSimPayload = useSharedSimPayload();
 
@@ -70,6 +72,17 @@ export function useSimSubmit({
         ...sharedSimPayload,
         ...(batchId ? { batch_id: batchId } : {}),
       };
+
+      // Materialize the active dungeon route to SimC at sim time, applying the
+      // currently-chosen keystone level + HP share, and prepend it to custom_apl
+      // (its `fight_style=DungeonRoute` line is what the backend detects). Held as
+      // data until now so one route sims at any level without re-importing.
+      if (activeRoute) {
+        const routeSimc = await materializeRoute(activeRoute);
+        const payload = sharedPayload as Record<string, unknown>;
+        const existing = payload.custom_apl as string | undefined;
+        payload.custom_apl = existing ? `${routeSimc}\n${existing}` : routeSimc;
+      }
 
       const computeChoice = (sharedPayload as { compute_provider?: string }).compute_provider;
       const results = await Promise.allSettled(
@@ -144,6 +157,7 @@ export function useSimSubmit({
     sharedSimPayload,
     scenarios,
     clearScenarios,
+    activeRoute,
     t,
   ]);
 

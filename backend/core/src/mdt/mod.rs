@@ -40,13 +40,14 @@ pub fn decode(import: &str) -> Result<MdtRoute, String> {
 pub struct ConvertOptions {
     /// Keystone level to scale health to. `None` uses the string's `difficulty`.
     pub keystone_level: Option<i64>,
-    /// Percentage of full enemy HP to sim (1–100). keystone.guru default: 20.
+    /// Percentage of full enemy HP to sim (1–100). keystone.guru default: 27
+    /// ("your share of the group's damage").
     pub hp_percent: i64,
 }
 
 impl Default for ConvertOptions {
     fn default() -> Self {
-        Self { keystone_level: None, hp_percent: 20 }
+        Self { keystone_level: None, hp_percent: 27 }
     }
 }
 
@@ -238,7 +239,7 @@ mod tests {
 
         let pull1 = out.simc.lines().find(|l| l.starts_with("raid_events+=/pull,pull=01,")).unwrap();
         assert!(pull1.contains("bloodlust=0,delay="));
-        // hp_percent default 20 → fractioned health; slug name, no creatureType suffix.
+        // hp_percent default 27 → fractioned health; slug name, no creatureType suffix.
         let occurrences = pull1.matches("\"merciless-subjugator_").count();
         assert_eq!(occurrences, 2, "two Merciless Subjugator clones, slug_N named");
         assert!(!pull1.contains(":humanoid"), "no creatureType suffix in new format");

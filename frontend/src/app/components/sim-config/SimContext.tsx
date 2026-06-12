@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { FightScenario } from '../../lib/types';
+import type { ActiveRoute } from '../../lib/active-route';
 import { API_URL } from '../../lib/api';
 import { readSessionString, readStoredJson, readStoredPositiveInt } from '../../lib/storage';
 import { TRIAGE_BATCH_DEFAULT } from '../../lib/triageBatch';
@@ -29,6 +30,10 @@ interface SimContextType {
   setIterations: (v: number) => void;
   customApl: string;
   setCustomApl: (v: string) => void;
+  /** The active dungeon route, held as data and materialized to SimC at sim
+   *  time (see useSimSubmit). `null` when no route is loaded. */
+  activeRoute: ActiveRoute | null;
+  setActiveRoute: (v: ActiveRoute | null) => void;
   rotationMode: RotationMode;
   setRotationMode: (v: RotationMode) => void;
   // Expert Mode injection points
@@ -114,6 +119,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [targetError, _setTargetError] = useState(0.1);
   const [iterations, _setIterations] = useState(100000);
   const [customApl, setCustomApl] = useState('');
+  const [activeRoute, _setActiveRoute] = useState<ActiveRoute | null>(null);
   const [rotationMode, _setRotationMode] = useState<RotationMode>('default');
   const [simcHeader, setSimcHeader] = useState('');
   const [simcBasePlayer, setSimcBasePlayer] = useState('');
@@ -142,6 +148,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
       }
       _setIterations(readStoredPositiveInt('simhammer_iterations', 100000));
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
+      // Active route survives a reload (it's the live sim input, not just config).
+      const storedRoute = sessionStorage.getItem('simhammer_active_route');
+      if (storedRoute) _setActiveRoute(JSON.parse(storedRoute));
       _setTriageMaxBatchProfilesets(
         readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
       );
@@ -247,6 +256,14 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const setActiveRoute = useCallback((v: ActiveRoute | null) => {
+    _setActiveRoute(v);
+    try {
+      if (v) sessionStorage.setItem('simhammer_active_route', JSON.stringify(v));
+      else sessionStorage.removeItem('simhammer_active_route');
+    } catch {}
+  }, []);
+
   const setStatWeights = useCallback((v: boolean) => {
     _setStatWeights(v);
     try {
@@ -283,6 +300,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setIterations,
         customApl,
         setCustomApl,
+        activeRoute,
+        setActiveRoute,
         rotationMode,
         setRotationMode,
         simcHeader,

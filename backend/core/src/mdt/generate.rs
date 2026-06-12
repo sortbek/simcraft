@@ -126,6 +126,19 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
 
     let keystone_level = opts.keystone_level.unwrap_or(route.keystone_level);
 
+    // max_time is required: a 0 would make SimC end every iteration at t=0.
+    let max_time = dungeon
+        .timer_max_seconds
+        .ok_or_else(|| format!("dungeon '{}' has no timer; cannot build a route", dungeon.name))?;
+    // keystone.guru names the primary enemy actor after the route, or after the
+    // dungeon when there's no route text (an overview or a map-built route).
+    let title = if route.text.trim().is_empty() {
+        dungeon.name.clone()
+    } else {
+        route.text.clone()
+    }
+    .replace('"', "'");
+
     let delays = super::travel::calculate_delays(route, dungeon);
 
     let mut pull_lines = Vec::new();
@@ -286,9 +299,6 @@ enemy=\"{title}\"
 enemy_health=999999
 keystone_level={keystone_level}
 raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1",
-        max_time = dungeon.timer_max_seconds.unwrap_or(0),
-        title = route.text.replace('"', "'"),
-        keystone_level = keystone_level,
     );
     let raid_events = pull_lines.join("\n");
     let simc = if raid_events.is_empty() { header.clone() } else { format!("{header}\n{raid_events}") };

@@ -8,18 +8,13 @@ import {
   deleteSavedRoute,
   type SavedRoute,
 } from '../../lib/saved-routes';
-import { serializeRoute } from '../../lib/api';
-import { getRouteSimParams } from '../../lib/route-sim-params';
 import { useLanguage } from '../../lib/i18n';
 
-/** Strip a previously-injected DungeonRoute so loading another replaces it
- *  cleanly (mirrors the MDT importer). */
-function stripPriorRoute(s: string): string {
-  return s
-    .split('\n')
-    .filter((l) => !l.startsWith('raid_events+=/pull') && l.trim() !== 'fight_style=DungeonRoute')
-    .join('\n')
-    .trim();
+/** A legacy (pre-MDT) route: a raw SimC footer snippet, not a dungeon route.
+ *  MDT import strings always start with `!`, so anything else with no dungeon /
+ *  pulls / baked SimC is an old footer-style route. */
+function isLegacyFooter(r: SavedRoute): boolean {
+  return r.dungeon_idx == null && !r.simc && !r.mdt_string.startsWith('!');
 }
 
 export default function SidebarRoutes() {
@@ -29,12 +24,14 @@ export default function SidebarRoutes() {
   const [routeName, setRouteName] = useState('');
   const [routeString, setRouteString] = useState('');
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
-  const { setFightStyle, simcFooter, setSimcFooter, customApl, setCustomApl } = useSimContext();
+  const { setFightStyle, simcFooter, setSimcFooter, activeRoute, setActiveRoute } = useSimContext();
 
-  // A route is "active" when its definition is currently injected into the sim.
+  // A route is "active" when it's the loaded route (by id), or — for a legacy
+  // footer route — when its snippet is the current sim footer.
   const isRouteActive = useCallback(
-    (r: SavedRoute) => (r.simc ? customApl.includes(r.simc) : simcFooter === r.mdt_string),
-    [customApl, simcFooter]
+    (r: SavedRoute) =>
+      isLegacyFooter(r) ? simcFooter === r.mdt_string : activeRoute?.id === r.id,
+    [activeRoute, simcFooter]
   );
 
   const refreshRoutes = useCallback(() => {
@@ -46,36 +43,56 @@ export default function SidebarRoutes() {
   }, [refreshRoutes]);
 
   const activeRouteName = useMemo(() => {
-    const match = savedRoutes.find(isRouteActive);
-    return match?.name ?? null;
-  }, [savedRoutes, isRouteActive]);
+    if (activeRoute) {
+      return activeRoute.name ?? savedRoutes.find((r) => r.id === activeRoute.id)?.name ?? null;
+    }
+    return savedRoutes.find(isRouteActive)?.name ?? null;
+  }, [activeRoute, savedRoutes, isRouteActive]);
 
+  // Load a route as *data* (the active route); it's materialized to SimC at the
+  // chosen keystone level when the sim is submitted (see useSimSubmit). Legacy
+  // footer routes are still injected verbatim as a Patchwerk footer.
   const handleLoadRoute = useCallback(
-    async (route: SavedRoute) => {
-      if (route.dungeon_idx != null && route.pulls) {
-        // Level-agnostic route: regenerate the DungeonRoute at a default level
-        // (the per-sim keystone level control overrides this on import).
-        try {
-          const pulls = JSON.parse(route.pulls);
-          const conv = await serializeRoute(route.dungeon_idx, pulls, getRouteSimParams());
-          setFightStyle('DungeonRoute');
-          const base = stripPriorRoute(customApl);
-          setCustomApl(base ? `${base}\n${conv.simc}` : conv.simc);
-        } catch {
-          // fall through to legacy handling below on parse/serialize failure
-        }
+    (route: SavedRoute) => {
+      // Clicking the active route again unloads it (back to a plain sim).
+      if (isRouteActive(route)) {
+        setActiveRoute(null);
+        setSimcFooter('');
+        setFightStyle('Patchwerk');
         return;
       }
-      if (route.simc) {
+      if (route.dungeon_idx != null && route.pulls) {
+        let pulls;
+        try {
+          pulls = JSON.parse(route.pulls);
+        } catch {
+          return;
+        }
+        setActiveRoute({
+          kind: 'pulls',
+          id: route.id,
+          name: route.name,
+          dungeonIdx: route.dungeon_idx,
+          pulls,
+        });
+        setSimcFooter('');
         setFightStyle('DungeonRoute');
-        const base = stripPriorRoute(customApl);
-        setCustomApl(base ? `${base}\n${route.simc}` : route.simc);
+      } else if (route.simc) {
+        setActiveRoute({ kind: 'simc', id: route.id, name: route.name, simc: route.simc });
+        setSimcFooter('');
+        setFightStyle('DungeonRoute');
+      } else if (route.mdt_string.startsWith('!')) {
+        setActiveRoute({ kind: 'mdt', id: route.id, name: route.name, mdtString: route.mdt_string });
+        setSimcFooter('');
+        setFightStyle('DungeonRoute');
       } else {
+        // Legacy pre-MDT route: a raw SimC footer snippet, simmed as Patchwerk.
+        setActiveRoute(null);
         setSimcFooter(route.mdt_string);
         setFightStyle('Patchwerk');
       }
     },
-    [customApl, setCustomApl, setSimcFooter, setFightStyle]
+    [isRouteActive, setActiveRoute, setSimcFooter, setFightStyle]
   );
 
   const handleSaveRoute = useCallback(() => {

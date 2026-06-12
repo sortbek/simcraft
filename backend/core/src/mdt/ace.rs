@@ -120,6 +120,12 @@ fn tokenize(input: &str) -> Result<Vec<(u8, &str)>, String> {
             return Err("truncated control token".into());
         }
         let ctl = bytes[i + 1];
+        // Control chars are ASCII; a non-ASCII byte here means `start` (i+2) could
+        // fall inside a multi-byte char, panicking the `input[start..j]` slice
+        // below. Reject crafted input instead of crashing the handler.
+        if !ctl.is_ascii() {
+            return Err(format!("non-ASCII control byte at {}", i + 1));
+        }
         let start = i + 2;
         let mut j = start;
         while j < bytes.len() && bytes[j] != b'^' {
@@ -242,6 +248,12 @@ mod tests {
     fn unescapes_caret() {
         // "a^b" serializes the '^' as ~}
         assert_eq!(unescape("a~}b"), "a^b");
+    }
+
+    #[test]
+    fn caret_before_multibyte_char_errors_not_panics() {
+        // A '^' followed by a multi-byte char used to panic the byte-offset slice.
+        assert!(deserialize("^1^\u{03c0}").is_err());
     }
 
     #[test]

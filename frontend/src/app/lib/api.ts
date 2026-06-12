@@ -196,7 +196,7 @@ export interface MdtConversion {
 
 /** Decode an MDT export string into a SimC DungeonRoute conversion.
  *  `keystoneLevel` overrides the level encoded in the string; `hpPercent` is the
- *  fraction of full enemy HP to sim (1–100, backend default 20). */
+ *  fraction of full enemy HP to sim (1–100, backend default 27). */
 export async function decodeMdt(
   importString: string,
   opts?: { keystoneLevel?: number; hpPercent?: number },

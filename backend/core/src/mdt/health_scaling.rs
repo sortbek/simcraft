@@ -42,6 +42,9 @@ pub fn calculate_enemy_health(
     level: i64,
     ignore_fortified: bool,
 ) -> i64 {
+    // Keystones start at 2; a 0/1 default (e.g. an overview with no level chosen)
+    // would otherwise yield a negative scaling exponent and sub-base health.
+    let level = level.max(2);
     let mult = scaling(fort_tyr_mult(level, boss, ignore_fortified), level);
     round(mult * base_health as f64, 0) as i64
 }
@@ -62,5 +65,16 @@ mod tests {
         // level 10 boss: tyr 1.25 * 1.07^9. round(1.25*1.838459..,2)=2.30; *1000000.
         let h = calculate_enemy_health(true, 1_000_000, 10, false);
         assert_eq!(h, 2_300_000);
+    }
+
+    #[test]
+    fn sub_keystone_level_clamps_to_level_2() {
+        // level 0 (an overview default) must not give sub-base health: it clamps
+        // to level 2 (scaling 1.07^1 = 1.07), matching a real key floor.
+        assert_eq!(
+            calculate_enemy_health(false, 1_000_000, 0, false),
+            calculate_enemy_health(false, 1_000_000, 2, false)
+        );
+        assert_eq!(calculate_enemy_health(false, 1_000_000, 0, false), 1_070_000);
     }
 }

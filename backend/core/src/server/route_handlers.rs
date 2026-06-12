@@ -25,6 +25,17 @@ pub(super) async fn create_route(
     }
     let simc = req.simc.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let pulls = req.pulls.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    // A map-built route's pulls must be a JSON array with at least one populated
+    // pull — otherwise the saved route would later sim only the placeholder.
+    if let Some(p) = pulls {
+        let ok = serde_json::from_str::<Vec<Vec<serde_json::Value>>>(p)
+            .map(|parsed| parsed.iter().any(|pull| !pull.is_empty()))
+            .unwrap_or(false);
+        if !ok {
+            return HttpResponse::BadRequest()
+                .json(json!({"detail": "pulls must be a JSON array with at least one non-empty pull"}));
+        }
+    }
     match repo
         .insert(
             req.name.trim(),

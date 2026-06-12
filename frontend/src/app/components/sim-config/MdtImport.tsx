@@ -8,65 +8,50 @@ import { decodeMdt, type MdtConversion } from '../../lib/api';
 import { getRouteSimParams, setRouteSimParams } from '../../lib/route-sim-params';
 import { MDT_ROUTE_SESSION_KEY, ROUTES } from '../../lib/routes';
 
-/** Remove a previously-injected route block from the custom options. Prefers
- *  removing the exact block we last injected; falls back to filtering the route's
- *  known lines (a self-contained keystone.guru block) so a stale/cross-session
- *  reference can't leave a duplicated header behind. User lines are preserved. */
-const ROUTE_LINE_PREFIXES = [
-  'fight_style=DungeonRoute',
-  'single_actor_batch=',
-  'max_time=',
-  'enemy=',
-  'enemy_health=',
-  'keystone_level=',
-  'raid_events=',
-  'raid_events+=',
-  'override.',
-];
-function stripPriorRoute(s: string, injected: string): string {
-  if (injected && s.includes(injected)) {
-    return s.replace(injected, '').replace(/\n{2,}/g, '\n').trim();
-  }
-  return s
-    .split('\n')
-    .filter((l) => !ROUTE_LINE_PREFIXES.some((p) => l.trim().startsWith(p)))
-    .join('\n')
-    .trim();
-}
-
 export default function MdtImport() {
   const { t } = useLanguage();
   const router = useRouter();
-  const { setFightStyle, customApl, setCustomApl } = useSimContext();
+  const { setFightStyle, setActiveRoute } = useSimContext();
   const [value, setValue] = useState('');
   // Keystone level + HP-damage share are route-generation params (persisted via
-  // route-sim-params, shared with saved-route loading), not general sim config.
+  // route-sim-params): they're applied when the route is materialized at sim
+  // time, so they're plain editable numbers here, not re-decode triggers. The
+  // draft strings let the user type a multi-digit value before it's clamped.
   const [keyLevel, setKeyLevel] = useState(() => getRouteSimParams().keystoneLevel);
   const [hpPercent, setHpPercent] = useState(() => getRouteSimParams().hpPercent);
-  // The imported route's MDT string is level-agnostic — kept so changing the
-  // level/hp% re-generates the route (sim-time choices), and the exact block we
-  // last injected so re-injection replaces it cleanly.
+  const [levelDraft, setLevelDraft] = useState(() => String(getRouteSimParams().keystoneLevel));
+  const [hpDraft, setHpDraft] = useState(() => String(getRouteSimParams().hpPercent));
+  // The imported MDT string, kept for the "view on map" deep-link.
   const [importedMdt, setImportedMdt] = useState('');
-  const [injected, setInjected] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<MdtConversion | null>(null);
 
-  /** Generate the route's SimC at the given level + HP share and (re)inject it,
-   *  replacing any prior route. These are sim-time choices, so one imported
-   *  route can be re-simmed at any keystone level without re-importing. */
-  const applyRoute = async (mdt: string, level: number, hp: number) => {
+  const commitLevel = () => {
+    const level = Math.max(2, Math.min(40, Math.round(Number(levelDraft)) || 2));
+    setKeyLevel(level);
+    setLevelDraft(String(level));
+    setRouteSimParams({ keystoneLevel: level });
+  };
+  const commitHp = () => {
+    const hp = Math.max(1, Math.min(100, Math.round(Number(hpDraft)) || 1));
+    setHpPercent(hp);
+    setHpDraft(String(hp));
+    setRouteSimParams({ hpPercent: hp });
+  };
+
+  /** Decode the MDT string for a preview and set it as the active route. The
+   *  route stays level-agnostic — the keystone level + HP share apply when it's
+   *  materialized at sim time, so one import sims at any level. */
+  const onImport = async () => {
+    const mdt = value.trim();
+    if (!mdt) return;
     setBusy(true);
     setError('');
     try {
-      const conv = await decodeMdt(mdt, { keystoneLevel: level, hpPercent: hp });
+      const conv = await decodeMdt(mdt, { keystoneLevel: keyLevel, hpPercent });
       setFightStyle('DungeonRoute');
-      // Inject `simc` (fight_style=DungeonRoute + header + raid_events): the
-      // backend detects dungeon-route sims by scanning for the literal
-      // fight_style line (simc_runner), which drives the route-specific config.
-      const base = stripPriorRoute(customApl, injected);
-      setCustomApl(base ? `${base}\n${conv.simc}` : conv.simc);
-      setInjected(conv.simc);
+      setActiveRoute({ kind: 'mdt', name: conv.dungeon_name, mdtString: mdt });
       setImportedMdt(mdt);
       setResult(conv);
     } catch (e) {
@@ -74,25 +59,6 @@ export default function MdtImport() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const onImport = () => {
-    const trimmed = value.trim();
-    if (trimmed) applyRoute(trimmed, keyLevel, hpPercent);
-  };
-
-  const onLevelChange = (raw: number) => {
-    const level = Math.max(2, Math.min(40, Math.round(raw) || 2));
-    setKeyLevel(level);
-    setRouteSimParams({ keystoneLevel: level });
-    if (importedMdt) applyRoute(importedMdt, level, hpPercent);
-  };
-
-  const onHpChange = (raw: number) => {
-    const hp = Math.max(1, Math.min(100, Math.round(raw) || 1));
-    setHpPercent(hp);
-    setRouteSimParams({ hpPercent: hp });
-    if (importedMdt) applyRoute(importedMdt, keyLevel, hp);
   };
 
   return (
@@ -111,9 +77,12 @@ export default function MdtImport() {
             type="number"
             min={2}
             max={40}
-            value={keyLevel}
-            onChange={(e) => onLevelChange(Number(e.target.value))}
-            disabled={busy}
+            value={levelDraft}
+            onChange={(e) => setLevelDraft(e.target.value)}
+            onBlur={commitLevel}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitLevel();
+            }}
             className="input-field w-16 text-center"
           />
         </label>
@@ -123,9 +92,12 @@ export default function MdtImport() {
             type="number"
             min={1}
             max={100}
-            value={hpPercent}
-            onChange={(e) => onHpChange(Number(e.target.value))}
-            disabled={busy}
+            value={hpDraft}
+            onChange={(e) => setHpDraft(e.target.value)}
+            onBlur={commitHp}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitHp();
+            }}
             title={t('config.mdtHpPercentHelp')}
             className="input-field w-16 text-center"
           />
@@ -148,7 +120,7 @@ export default function MdtImport() {
           <p className="font-medium text-on-surface">
             {t('config.mdtRouteApplied', {
               dungeon: result.dungeon_name,
-              level: result.keystone_level,
+              level: keyLevel,
               pulls: result.pull_count,
               enemies: result.enemy_count,
             })}
@@ -159,18 +131,32 @@ export default function MdtImport() {
               {t('config.mdtUnresolvedWarning', { count: result.unresolved })}
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              try {
-                sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, importedMdt);
-              } catch {}
-              router.push(ROUTES.dungeonRoute);
-            }}
-            className="mt-1.5 text-[13px] font-medium text-gold transition-colors hover:text-gold/80"
-          >
-            {t('config.mdtViewOnMap')} →
-          </button>
+          <div className="mt-1.5 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, importedMdt);
+                } catch {}
+                router.push(ROUTES.dungeonRoute);
+              }}
+              className="text-[13px] font-medium text-gold transition-colors hover:text-gold/80"
+            >
+              {t('config.mdtViewOnMap')} →
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveRoute(null);
+                setFightStyle('Patchwerk');
+                setResult(null);
+                setImportedMdt('');
+              }}
+              className="text-[13px] text-on-surface-variant/50 transition-colors hover:text-on-surface"
+            >
+              {t('common.clear')}
+            </button>
+          </div>
         </div>
       )}
     </div>

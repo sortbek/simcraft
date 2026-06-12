@@ -11,7 +11,7 @@ pub(super) struct DecodeMdtRequest {
     /// Keystone level to scale health to; falls back to the string's difficulty.
     #[serde(default)]
     pub keystone_level: Option<i64>,
-    /// Percentage of full enemy HP to sim (1–100). Defaults to 20 when absent.
+    /// Percentage of full enemy HP to sim (1–100). Defaults to 27 when absent.
     #[serde(default)]
     pub hp_percent: Option<i64>,
 }
@@ -24,7 +24,7 @@ pub(super) async fn decode_mdt(body: web::Json<DecodeMdtRequest>) -> HttpRespons
     };
     let opts = mdt::ConvertOptions {
         keystone_level: body.keystone_level,
-        hp_percent: body.hp_percent.unwrap_or(20).clamp(1, 100),
+        hp_percent: body.hp_percent.unwrap_or(27).clamp(1, 100),
     };
     match mdt::convert(&body.import, db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),
@@ -101,7 +101,7 @@ pub(super) async fn serialize_route(body: web::Json<SerializeRequest>) -> HttpRe
     };
     let opts = mdt::ConvertOptions {
         keystone_level: body.keystone_level,
-        hp_percent: body.hp_percent.unwrap_or(20).clamp(1, 100),
+        hp_percent: body.hp_percent.unwrap_or(27).clamp(1, 100),
     };
     let pulls: Vec<Vec<(i64, i64)>> = body
         .pulls
