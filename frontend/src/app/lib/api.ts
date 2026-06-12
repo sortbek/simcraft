@@ -214,6 +214,37 @@ export async function decodeMdt(
   return res.json();
 }
 
+/** A browsable dungeon in the current keystone season. */
+export interface DungeonSummary {
+  idx: number;
+  name: string;
+}
+
+/** List the current-season dungeons available to browse on the route map. */
+export async function listDungeons(): Promise<DungeonSummary[]> {
+  const res = await fetch(apiUrl('/api/mdt/dungeons'));
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
+}
+
+/** Fetch a dungeon overview (full mob layer, no pulls) for browsing without an
+ *  imported route. Same shape as `decodeMdt`, so it drops into the route viewer. */
+export async function getDungeonOverview(
+  idx: number,
+  opts?: { keystoneLevel?: number; hpPercent?: number }
+): Promise<MdtConversion> {
+  const params = new URLSearchParams();
+  if (opts?.keystoneLevel != null) params.set('keystone_level', String(opts.keystoneLevel));
+  if (opts?.hpPercent != null) params.set('hp_percent', String(opts.hpPercent));
+  const qs = params.toString();
+  const res = await fetch(apiUrl(`/api/mdt/dungeon/${idx}${qs ? `?${qs}` : ''}`));
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
 export type JobStatus = 'pending' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
 export interface JobOverviewSummary {

@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { decodeMdt, type MdtConversion } from '../lib/api';
+import {
+  decodeMdt,
+  getDungeonOverview,
+  listDungeons,
+  type DungeonSummary,
+  type MdtConversion,
+} from '../lib/api';
 import { useLanguage } from '../lib/i18n';
 import { MDT_ROUTE_SESSION_KEY } from '../lib/routes';
 import RouteViewer from '../components/route-map/RouteViewer';
@@ -15,6 +21,7 @@ export default function RoutePage() {
   const [error, setError] = useState('');
   const [conv, setConv] = useState<MdtConversion | null>(null);
   const [loadId, setLoadId] = useState(0);
+  const [dungeons, setDungeons] = useState<DungeonSummary[]>([]);
 
   const load = async (str: string) => {
     const trimmed = str.trim();
@@ -31,6 +38,26 @@ export default function RoutePage() {
       setBusy(false);
     }
   };
+
+  // Browse a dungeon's map + enemies without an imported route (no pulls).
+  const loadOverview = async (idx: number) => {
+    setBusy(true);
+    setError('');
+    setInput('');
+    try {
+      setConv(await getDungeonOverview(idx));
+      setLoadId((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setConv(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    listDungeons().then(setDungeons).catch(() => {});
+  }, []);
 
   // Deep-link: an MDT string stashed by the sim-config import opens here.
   useEffect(() => {
@@ -90,6 +117,58 @@ export default function RoutePage() {
             padding: 18,
           }}
         >
+          {dungeons.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label
+                style={{
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  color: T.muted,
+                }}
+              >
+                {t('route.browseDungeon')}
+              </label>
+              <select
+                defaultValue=""
+                disabled={busy}
+                onChange={(e) => {
+                  const idx = Number(e.target.value);
+                  if (idx) loadOverview(idx);
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: 8,
+                  padding: '10px 12px',
+                  borderRadius: 7,
+                  background: T.surface,
+                  border: `1px solid ${T.borderHi}`,
+                  color: T.text,
+                  fontSize: 12,
+                  outline: 'none',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <option value="">{t('route.selectDungeon')}</option>
+                {dungeons.map((d) => (
+                  <option key={d.idx} value={d.idx}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <div
+                style={{
+                  textAlign: 'center',
+                  fontSize: 11,
+                  color: T.muted,
+                  margin: '14px 0 2px',
+                }}
+              >
+                {t('route.or')}
+              </div>
+            </div>
+          )}
           <label
             style={{
               fontSize: 9.5,
