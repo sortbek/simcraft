@@ -491,7 +491,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
             width: Math.abs(lasso.x1 - lasso.x0),
             height: Math.abs(lasso.y1 - lasso.y0),
             border: `1px dashed ${T.gold}`,
-            background: 'rgba(245,166,35,0.08)',
+            background: T.goldSub,
             zIndex: 25,
             pointerEvents: 'none',
           }}

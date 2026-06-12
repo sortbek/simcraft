@@ -1,25 +1,27 @@
-/* Design tokens for the M+ Route Viewer (Forces Timeline direction).
- * Ported verbatim from the Claude Design handoff so the viewer matches the
- * approved mock pixel-for-pixel — dark surfaces + warm gold accent. */
+/* Design tokens for the M+ Route screens. Mapped to the app's own palette
+ * (tailwind.config.ts: primary/gold #f2bf4e, warm dark surfaces, warm-grey
+ * text + outlines) so the route pages match the rest of SimHammer rather than
+ * the standalone design mock's cooler/oranger tones. Pull-marker colors below
+ * stay as-is — they're semantic, not chrome. */
 export const T = {
-  bg: '#181818',
-  panel: '#1d1d1d',
-  surface: '#232323',
-  surfaceHi: '#2b2b2b',
-  border: '#2a2a2a',
-  borderHi: '#383838',
-  gold: '#f5a623',
-  goldDim: '#c98718',
-  goldSub: 'rgba(245,166,35,0.12)',
-  goldBord: 'rgba(245,166,35,0.35)',
-  text: '#e4e4e4',
-  text2: '#a8a8a8',
-  muted: '#6e6e6e',
-  dim: '#454545',
-  faint: '#2f2f2f',
-  red: '#e0524a',
-  boss: '#ffcf5a',
-  picked: '#5fbfff',
+  bg: '#131313', // background
+  panel: '#201f1f', // surface-container (cards/panels)
+  surface: '#2a2a2a', // surface-container-high (inputs, steppers)
+  surfaceHi: '#353534', // surface-container-highest (hover)
+  border: 'rgba(79,70,53,0.5)', // outline-variant, ghost border
+  borderHi: 'rgba(155,143,124,0.35)', // outline, on hover
+  gold: '#f2bf4e', // primary / gold
+  goldDim: '#c8992a', // gold-dark
+  goldSub: 'rgba(242,191,78,0.12)',
+  goldBord: 'rgba(242,191,78,0.35)',
+  text: '#e5e2e1', // on-surface
+  text2: '#d2c5b0', // on-surface-variant
+  muted: '#9b8f7c', // muted / outline
+  dim: '#4f4635', // outline-variant (separators, faint labels)
+  faint: '#353534', // surface-container-highest (tracks, grid)
+  red: '#f87171', // destructive accent (matches app red-400)
+  boss: '#ffcf5a', // boss marker accent (semantic)
+  picked: '#5fbfff', // selection highlight (semantic)
 } as const;
 
 /** Fallback pull color used by the design when a pull declares none. */
