@@ -24,6 +24,7 @@ export default function MdtImport() {
   const router = useRouter();
   const { setFightStyle, customApl, setCustomApl } = useSimContext();
   const [value, setValue] = useState('');
+  const [keyLevel, setKeyLevel] = useState(10);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<MdtConversion | null>(null);
@@ -35,7 +36,7 @@ export default function MdtImport() {
     setError('');
     setResult(null);
     try {
-      const conv = await decodeMdt(trimmed);
+      const conv = await decodeMdt(trimmed, { keystoneLevel: keyLevel });
       setFightStyle('DungeonRoute');
       const base = stripPriorRoute(customApl);
       // Inject `simc` (fight_style=DungeonRoute + raid_events), not just the
@@ -61,6 +62,19 @@ export default function MdtImport() {
         className="input-field h-20 resize-y font-mono text-xs"
       />
       <div className="flex items-center gap-3">
+        <label className="flex items-center gap-1.5 text-[13px] text-on-surface-variant">
+          {t('config.mdtKeyLevel')}
+          <input
+            type="number"
+            min={2}
+            max={40}
+            value={keyLevel}
+            onChange={(e) =>
+              setKeyLevel(Math.max(2, Math.min(40, Math.round(Number(e.target.value)) || 2)))
+            }
+            className="input-field w-16 text-center"
+          />
+        </label>
         <button
           type="button"
           onClick={onImport}

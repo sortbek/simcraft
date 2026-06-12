@@ -83,6 +83,7 @@
   "config.mdtImportPlaceholder": "!DAvYoo...  (MDT export string)",
   "config.mdtImportButton": "Import route",
   "config.mdtImporting": "Importing…",
+  "config.mdtKeyLevel": "Key level",
   "config.mdtRouteApplied": "{dungeon} +{level}: {pulls} pulls, {enemies} enemies",
   "config.mdtAppliedNote": "Fight style set to DungeonRoute and the route added to Custom APL / SimC Options below.",
   "config.mdtUnresolvedWarning": "{count} enemies could not be matched (MDT version mismatch) and were skipped.",
