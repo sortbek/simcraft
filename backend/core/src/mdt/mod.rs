@@ -57,6 +57,20 @@ pub fn convert(import: &str, db: &DungeonDb, opts: &ConvertOptions) -> Result<Md
     generate::generate(&route, db, opts)
 }
 
+/// Build a dungeon overview — the full mob layer with no pulls — for browsing a
+/// dungeon's map and enemies without an imported route.
+pub fn overview(dungeon_idx: i64, db: &DungeonDb, opts: &ConvertOptions) -> Result<MdtSimc, String> {
+    let route = MdtRoute {
+        dungeon_idx,
+        week: 0,
+        keystone_level: opts.keystone_level.unwrap_or(0),
+        text: String::new(),
+        lines: Vec::new(),
+        pulls: Vec::new(),
+    };
+    generate::generate(&route, db, opts)
+}
+
 /// Raw DEFLATE inflate (no zlib/gzip header), matching LibDeflate's
 /// `CompressDeflate`.
 fn inflate_raw(data: &[u8]) -> Result<Vec<u8>, String> {
@@ -97,6 +111,29 @@ mod tests {
         // Committed fixture (the runtime mdt_dungeons.json lives under the
         // gitignored resources/data and is produced by the extraction script).
         DungeonDb::from_json(include_str!("testdata/mdt_dungeons.json")).unwrap()
+    }
+
+    #[test]
+    fn overview_has_all_enemies_no_pulls() {
+        let db = load_db();
+        let out = overview(11, &db, &ConvertOptions::default()).unwrap();
+        assert_eq!(out.dungeon_name, "Seat of the Triumvirate");
+        assert_eq!(out.pull_count, 0);
+        assert!(out.map.pulls.is_empty());
+        assert!(!out.map.enemies.is_empty(), "full mob layer present");
+        assert!(
+            out.map.enemies.iter().all(|e| e.pull.is_none()),
+            "no enemy is pulled in an overview"
+        );
+    }
+
+    #[test]
+    fn season_dungeons_lists_timered_dungeons() {
+        // The Seat fixture carries a keystone timer, so it is a season dungeon.
+        let list = load_db().season_dungeons();
+        assert!(list
+            .iter()
+            .any(|(idx, name)| *idx == 11 && name == "Seat of the Triumvirate"));
     }
 
     // A real keystone.guru Skyreach weekly-route MDT string, plus the matching

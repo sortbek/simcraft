@@ -117,6 +117,19 @@ impl DungeonDb {
         self.dungeons.get(&idx)
     }
 
+    /// Current-season dungeons (those joined with a keystone timer) as
+    /// `(index, name)`, sorted by name — the set the dungeon browser offers.
+    pub fn season_dungeons(&self) -> Vec<(i64, String)> {
+        let mut out: Vec<(i64, String)> = self
+            .dungeons
+            .iter()
+            .filter(|(_, d)| d.timer_max_seconds.is_some())
+            .map(|(idx, d)| (*idx, d.name.clone()))
+            .collect();
+        out.sort_by(|a, b| a.1.cmp(&b.1));
+        out
+    }
+
     pub fn is_empty(&self) -> bool {
         self.dungeons.is_empty()
     }

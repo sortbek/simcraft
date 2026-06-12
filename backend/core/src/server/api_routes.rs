@@ -39,6 +39,11 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::post().to(droptimizer_handlers::create_droptimizer_sim),
         )
         .route("/api/mdt/decode", web::post().to(mdt_handlers::decode_mdt))
+        .route("/api/mdt/dungeons", web::get().to(mdt_handlers::list_dungeons))
+        .route(
+            "/api/mdt/dungeon/{idx}",
+            web::get().to(mdt_handlers::dungeon_overview),
+        )
         .route(
             "/api/enchant-gem/sim",
             web::post().to(enchant_gem_handlers::create_enchant_gem_sim),
