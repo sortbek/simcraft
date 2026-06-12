@@ -14,12 +14,12 @@ interface ModeBannerProps {
 export function ModeBanner({ mode, pickCount, draftCount, onDone }: ModeBannerProps) {
   const txt =
     mode === 'draw'
-      ? `Sleep een kader of klik ongepulde mobs — ${draftCount} geselecteerd`
+      ? `Drag a box or click unpulled mobs — ${draftCount} selected`
       : mode === 'merge'
         ? pickCount === 0
-          ? 'Selecteer twee pulls om samen te voegen'
-          : `${pickCount}/2 geselecteerd — kies nog ${2 - pickCount}`
-        : 'Klik een pull aan om te verwijderen';
+          ? 'Select two pulls to merge'
+          : `${pickCount}/2 selected — pick ${2 - pickCount} more`
+        : 'Click a pull to delete';
   const icon = mode === 'draw' ? <IPencil s={14} /> : mode === 'merge' ? <IMerge s={14} /> : <ITrash s={14} />;
   return (
     <div
@@ -58,7 +58,7 @@ export function ModeBanner({ mode, pickCount, draftCount, onDone }: ModeBannerPr
           letterSpacing: '0.04em',
         }}
       >
-        {mode === 'draw' ? 'Pull maken' : 'Klaar'}
+        {mode === 'draw' ? 'Make pull' : 'Done'}
       </button>
     </div>
   );

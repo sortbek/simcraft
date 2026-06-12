@@ -471,7 +471,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
               {hover.enemy.name}
             </div>
             <div style={{ fontSize: 10.5, color: T.muted, marginTop: 3 }}>
-              {hover.pull !== null ? `Pull ${hover.pull}` : 'Niet gepulld'} · {formatHp(hover.enemy.health)} hp ·{' '}
+              {hover.pull !== null ? `Pull ${hover.pull}` : 'Not pulled'} · {formatHp(hover.enemy.health)} hp ·{' '}
               {hover.enemy.count} forces
             </div>
           </div>
@@ -523,7 +523,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
       {/* Zoom control (bottom-left) */}
       <div style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 20, display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(20,20,20,0.82)', backdropFilter: 'blur(8px)', border: `1px solid ${T.border}`, borderRadius: 7, padding: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
         <button type="button" onClick={() => zoomAround(1 / 1.2)} style={zbtn} title="Zoom out"><IMinus s={12} /></button>
-        <button type="button" onClick={fit} style={{ fontSize: 11, color: T.text2, width: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }} title="Vul scherm">
+        <button type="button" onClick={fit} style={{ fontSize: 11, color: T.text2, width: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }} title="Fit to screen">
           {Number.isFinite(zoomPct) ? `${zoomPct}%` : '100%'}
         </button>
         <button type="button" onClick={() => zoomAround(1.2)} style={zbtn} title="Zoom in"><IPlus s={12} /></button>
@@ -532,7 +532,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
       {/* Legend (bottom-right) */}
       <div style={{ position: 'absolute', right: 16, bottom: 16, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 11px', fontSize: 10, color: T.text2, background: 'rgba(20,20,20,0.82)', backdropFilter: 'blur(8px)', border: `1px solid ${T.border}`, borderRadius: 7, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: T.gold }} /> In pull</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: UNPULLED_COLOR }} /> Niet gepulld</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: UNPULLED_COLOR }} /> Not pulled</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ color: T.boss, display: 'flex' }}><IBoss s={11} /></span> Boss</div>
       </div>
     </div>

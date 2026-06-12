@@ -107,7 +107,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     setAssignment(nextAsg);
     setColors(nextCols);
     setSelected(null);
-    flash('Pull verwijderd');
+    flash('Pull deleted');
   };
 
   const mergePulls = (a: number, b: number) => {
@@ -119,7 +119,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     setSelected(null);
     setPick([]);
     setMode('view');
-    flash('Pulls samengevoegd');
+    flash('Pulls merged');
   };
 
   const onPullClick = (n: number) => {
@@ -172,7 +172,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     setColors((c) => ({ ...c, [newN]: color }));
     setDraft([]);
     setMode('view');
-    flash(`Pull ${newN} toegevoegd (${draft.length} mobs)`);
+    flash(`Pull ${newN} added (${draft.length} mobs)`);
   };
 
   const pulls = useMemo<DerivedPull[]>(() => {

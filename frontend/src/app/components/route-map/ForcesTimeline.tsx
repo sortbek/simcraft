@@ -166,7 +166,7 @@ export default function ForcesTimeline({
           />
         ))}
         {pulls.length === 0 && (
-          <div style={{ padding: '8px 18px', fontSize: 11, color: T.muted }}>Geen pulls.</div>
+          <div style={{ padding: '8px 18px', fontSize: 11, color: T.muted }}>No pulls.</div>
         )}
       </div>
     </div>

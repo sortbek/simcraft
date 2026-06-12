@@ -46,9 +46,9 @@ export default function RouteViewer({
         dungeonIdx: conv.map.dungeon_idx,
         pulls: JSON.stringify(pulls),
       });
-      flash(`”${name}” opgeslagen in library`);
+      flash(`"${name}" saved to library`);
     } catch (e) {
-      flash(`Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`);
+      flash(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
