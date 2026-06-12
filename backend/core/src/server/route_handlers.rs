@@ -14,11 +14,12 @@ pub(super) async fn create_route(
     req: web::Json<CreateRouteRequest>,
     repo: web::Data<RouteRepo>,
 ) -> HttpResponse {
-    // A route is identified either by an MDT string (imported) or by a dungeon +
-    // pull assignment (built on the map); at least one must be present.
+    // A route is identified by an MDT string (imported), a dungeon + pull
+    // assignment (built on the map), or a pasted SimC block (keystone.guru).
     let has_route = !req.mdt_string.trim().is_empty()
         || (req.dungeon_idx.is_some()
-            && req.pulls.as_deref().is_some_and(|p| !p.trim().is_empty()));
+            && req.pulls.as_deref().is_some_and(|p| !p.trim().is_empty()))
+        || req.simc.as_deref().is_some_and(|s| !s.trim().is_empty());
     if req.name.trim().is_empty() || !has_route {
         return HttpResponse::BadRequest()
             .json(json!({"detail": "name and either mdt_string or dungeon_idx+pulls are required"}));
