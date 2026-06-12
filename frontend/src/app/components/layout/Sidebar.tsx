@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
-import SidebarRoutes from './SidebarRoutes';
 import LanguageSelector from './LanguageSelector';
 import { ScaleSelector } from './ContentScaler';
 import UpdateChecker from './UpdateChecker';
@@ -140,7 +139,7 @@ export default function Sidebar() {
         <GroupLabel>{t('nav.simTools')}</GroupLabel>
         <NavItem href={ROUTES.topGear} label={t('nav.topGear')} pathname={pathname} />
         <NavItem href={ROUTES.dropFinder} label={t('nav.dropFinder')} pathname={pathname} />
-        <NavItem href={ROUTES.dungeonRoute} label={t('nav.dungeonRoute')} pathname={pathname} />
+        <NavItem href={ROUTES.routesManager} label={t('nav.routes')} pathname={pathname} />
         <NavItem href={ROUTES.upgradeCompare} label={t('nav.crestUpgrades')} pathname={pathname} />
         <NavItem href={ROUTES.advanced} label={t('nav.advancedSim')} pathname={pathname} />
 
@@ -151,7 +150,6 @@ export default function Sidebar() {
           matchPaths={[ROUTES.sims, SIM_RESULT_PREFIX, ROUTES.history]}
           pathname={pathname}
         />
-        <SidebarRoutes />
       </nav>
 
       <div className="mt-auto shrink-0 border-t border-outline-variant/20">
