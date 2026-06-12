@@ -22,7 +22,7 @@ pub(super) async fn create_route(
         || req.simc.as_deref().is_some_and(|s| !s.trim().is_empty());
     if req.name.trim().is_empty() || !has_route {
         return HttpResponse::BadRequest()
-            .json(json!({"detail": "name and either mdt_string or dungeon_idx+pulls are required"}));
+            .json(json!({"detail": "name and one of mdt_string, dungeon_idx+pulls, or simc are required"}));
     }
     let simc = req.simc.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let pulls = req.pulls.as_deref().map(str::trim).filter(|s| !s.is_empty());
