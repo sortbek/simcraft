@@ -169,7 +169,8 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     const newN = (present.length ? Math.max(...present) : 0) + 1;
     const color = NEW_PULL_COLORS[colorCursor.current % NEW_PULL_COLORS.length];
     colorCursor.current += 1;
-    const asg = assignment.map((p, i) => (draft.includes(i) ? newN : p));
+    const drafted = new Set(draft);
+    const asg = assignment.map((p, i) => (drafted.has(i) ? newN : p));
     setAssignment(asg);
     setColors((c) => ({ ...c, [newN]: color }));
     setDraft([]);

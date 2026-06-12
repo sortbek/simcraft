@@ -11,8 +11,9 @@ import {
   type MdtConversion,
 } from '../lib/api';
 import { useLanguage } from '../lib/i18n';
+import type { ActiveRoute } from '../lib/active-route';
 import { getRouteSimParams } from '../lib/route-sim-params';
-import { MDT_ROUTE_SESSION_KEY, MDT_ROUTE_PULLS_SESSION_KEY } from '../lib/routes';
+import { MDT_ROUTE_SESSION_KEY } from '../lib/routes';
 import RouteViewer from '../components/route-map/RouteViewer';
 import { T } from '../components/route-map/routeTheme';
 import { IImport } from '../components/route-map/routeIcons';
@@ -26,73 +27,49 @@ export default function RoutePage() {
   const [loadId, setLoadId] = useState(0);
   const [dungeons, setDungeons] = useState<DungeonSummary[]>([]);
 
-  const load = async (str: string) => {
+  // Shared load: drive a conversion request into view state (busy/error/conv).
+  const run = async (req: Promise<MdtConversion>, clearInput: boolean) => {
+    setBusy(true);
+    setError('');
+    if (clearInput) setInput('');
+    try {
+      setConv(await req);
+      setLoadId((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setConv(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const load = (str: string) => {
     const trimmed = str.trim();
-    if (!trimmed) return;
-    setBusy(true);
-    setError('');
-    try {
-      setConv(await decodeMdt(trimmed, getRouteSimParams()));
-      setLoadId((n) => n + 1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setConv(null);
-    } finally {
-      setBusy(false);
-    }
+    if (trimmed) run(decodeMdt(trimmed, getRouteSimParams()), false);
   };
-
   // Browse a dungeon's map + enemies without an imported route (no pulls).
-  const loadOverview = async (idx: number) => {
-    setBusy(true);
-    setError('');
-    setInput('');
-    try {
-      setConv(await getDungeonOverview(idx, getRouteSimParams()));
-      setLoadId((n) => n + 1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setConv(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Render a saved built route (dungeon + pull assignment) on the map by
-  // serializing it at the chosen level (same path used to sim it).
-  const loadPulls = async (dungeonIdx: number, pulls: CloneRef[][]) => {
-    setBusy(true);
-    setError('');
-    setInput('');
-    try {
-      setConv(await serializeRoute(dungeonIdx, pulls, getRouteSimParams()));
-      setLoadId((n) => n + 1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setConv(null);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const loadOverview = (idx: number) => run(getDungeonOverview(idx, getRouteSimParams()), true);
+  // Render a saved built route (dungeon + pull assignment) by serializing it at
+  // the chosen level (same path used to sim it).
+  const loadPulls = (dungeonIdx: number, pulls: CloneRef[][]) =>
+    run(serializeRoute(dungeonIdx, pulls, getRouteSimParams()), true);
 
   useEffect(() => {
     listDungeons().then(setDungeons).catch(() => {});
   }, []);
 
-  // Deep-link: an MDT string stashed by the sim-config import opens here.
+  // Deep-link: the routes manager stashes a route (serialized ActiveRoute) here.
   useEffect(() => {
     try {
-      const stashed = sessionStorage.getItem(MDT_ROUTE_SESSION_KEY);
-      if (stashed) {
-        sessionStorage.removeItem(MDT_ROUTE_SESSION_KEY);
-        setInput(stashed);
-        load(stashed);
-      }
-      const stashedPulls = sessionStorage.getItem(MDT_ROUTE_PULLS_SESSION_KEY);
-      if (stashedPulls) {
-        sessionStorage.removeItem(MDT_ROUTE_PULLS_SESSION_KEY);
-        const { dungeonIdx, pulls } = JSON.parse(stashedPulls);
-        loadPulls(dungeonIdx, pulls);
+      const raw = sessionStorage.getItem(MDT_ROUTE_SESSION_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(MDT_ROUTE_SESSION_KEY);
+      const ar = JSON.parse(raw) as ActiveRoute;
+      if (ar.kind === 'mdt') {
+        setInput(ar.mdtString);
+        load(ar.mdtString);
+      } else if (ar.kind === 'pulls') {
+        loadPulls(ar.dungeonIdx, ar.pulls);
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps

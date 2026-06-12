@@ -6,7 +6,7 @@ import { useSimContext } from '../sim-config/SimContext';
 import { deleteSavedRoute, type SavedRoute } from '../../lib/saved-routes';
 import { classifyRoute, routeToActiveRoute, routeStats, seedFromId } from '../../lib/routes-model';
 import { getRouteSimParams, setRouteSimParams } from '../../lib/route-sim-params';
-import { ROUTES, MDT_ROUTE_SESSION_KEY, MDT_ROUTE_PULLS_SESSION_KEY } from '../../lib/routes';
+import { ROUTES, MDT_ROUTE_SESSION_KEY } from '../../lib/routes';
 import { useLanguage } from '../../lib/i18n';
 import { T } from '../route-map/routeTheme';
 import { IPlay, IList, ITrash, IPlus, IMinus } from '../route-map/routeIcons';
@@ -189,15 +189,16 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
   const router = useRouter();
   const { setActiveRoute, setSimcFooter, setFightStyle } = useSimContext();
   const kind = classifyRoute(route);
-  const levelAgnostic = kind === 'mdt' || kind === 'pulls';
-  const mappable = kind === 'mdt' || kind === 'pulls';
+  // mdt + pulls routes are level-agnostic (sim at any key) and have map data;
+  // simc is baked and footer is legacy — neither shows steppers or a map.
+  const isDungeonRoute = kind === 'mdt' || kind === 'pulls';
   const stats = routeStats(route);
   const [h, setH] = useState(false);
   const [key, setKey] = useState(() => getRouteSimParams().keystoneLevel);
   const [hp, setHp] = useState(() => getRouteSimParams().hpPercent);
 
   const onSim = () => {
-    if (levelAgnostic) setRouteSimParams({ keystoneLevel: key, hpPercent: hp });
+    if (isDungeonRoute) setRouteSimParams({ keystoneLevel: key, hpPercent: hp });
     if (kind === 'footer') {
       setActiveRoute(null);
       setSimcFooter(route.mdt_string);
@@ -213,17 +214,9 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
   };
 
   const onMap = () => {
+    // Hand the route to the map viewer as a serialized ActiveRoute (mdt/pulls).
     try {
-      if (kind === 'mdt') {
-        sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, route.mdt_string);
-        sessionStorage.removeItem(MDT_ROUTE_PULLS_SESSION_KEY);
-      } else if (kind === 'pulls') {
-        sessionStorage.setItem(
-          MDT_ROUTE_PULLS_SESSION_KEY,
-          JSON.stringify({ dungeonIdx: route.dungeon_idx, pulls: JSON.parse(route.pulls!) })
-        );
-        sessionStorage.removeItem(MDT_ROUTE_SESSION_KEY);
-      }
+      sessionStorage.setItem(MDT_ROUTE_SESSION_KEY, JSON.stringify(routeToActiveRoute(route)));
     } catch {}
     router.push(ROUTES.dungeonRoute);
   };
@@ -286,7 +279,7 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
         </div>
       </div>
 
-      {levelAgnostic && (
+      {isDungeonRoute && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Stepper label={t('route.row.keyLevel')} value={key} min={2} max={40} prefix="+" onChange={setKey} />
           <Stepper label={t('route.row.hpPercent')} value={hp} min={1} max={100} onChange={setHp} />
@@ -297,7 +290,7 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <ActBtn icon={<IPlay s={12} />} label={t('route.row.sim')} primary onClick={onSim} />
-        {mappable && <ActBtn icon={<IList s={13} />} label={t('route.row.map')} onClick={onMap} />}
+        {isDungeonRoute && <ActBtn icon={<IList s={13} />} label={t('route.row.map')} onClick={onMap} />}
         <ActBtn icon={<ITrash s={13} />} danger onClick={() => deleteSavedRoute(route.id).then(onChanged)} />
       </div>
     </div>

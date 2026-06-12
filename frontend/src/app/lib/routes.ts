@@ -17,14 +17,11 @@ export const ROUTES = {
   history: '/history',
 } as const;
 
-/** sessionStorage key the sim-config MDT import uses to hand an MDT string to
- *  the dungeon-route page. Lives here because Next.js page files may not have
- *  extra exports (breaks the `next build` page type check). */
+/** sessionStorage key the routes manager uses to hand a route to the `/route`
+ *  map viewer: a serialized `ActiveRoute` (`mdt` or `pulls` variant). Lives here
+ *  because Next.js page files may not have extra exports (breaks the `next
+ *  build` page type check). */
 export const MDT_ROUTE_SESSION_KEY = 'simhammer_mdt_route';
-
-/** sessionStorage key the routes manager uses to hand a built (`dungeon_idx` +
- *  `pulls`) route to the `/route` map viewer. JSON `{ dungeonIdx, pulls }`. */
-export const MDT_ROUTE_PULLS_SESSION_KEY = 'simhammer_mdt_route_pulls';
 
 /** Result page for a single sim run. */
 export function simResultRoute(id: string): string {

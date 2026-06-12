@@ -4,6 +4,13 @@ use serde_json::json;
 
 use crate::mdt;
 
+/// The loaded MDT database, or a 503 response when it isn't ready yet.
+fn require_db() -> Result<&'static mdt::enemy_db::DungeonDb, HttpResponse> {
+    mdt::enemy_db::global().ok_or_else(|| {
+        HttpResponse::ServiceUnavailable().json(json!({ "detail": "MDT dungeon database not loaded" }))
+    })
+}
+
 #[derive(Deserialize)]
 pub(super) struct DecodeMdtRequest {
     /// The MDT export string (e.g. `!DAvYoo...`).
@@ -18,9 +25,9 @@ pub(super) struct DecodeMdtRequest {
 
 /// Decode an MDT export string and return the SimC `DungeonRoute` conversion.
 pub(super) async fn decode_mdt(body: web::Json<DecodeMdtRequest>) -> HttpResponse {
-    let Some(db) = mdt::enemy_db::global() else {
-        return HttpResponse::ServiceUnavailable()
-            .json(json!({ "error": "MDT dungeon database not loaded" }));
+    let db = match require_db() {
+        Ok(db) => db,
+        Err(resp) => return resp,
     };
     let opts = mdt::ConvertOptions {
         keystone_level: body.keystone_level,
@@ -28,15 +35,15 @@ pub(super) async fn decode_mdt(body: web::Json<DecodeMdtRequest>) -> HttpRespons
     };
     match mdt::convert(&body.import, db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),
-        Err(e) => HttpResponse::BadRequest().json(json!({ "error": e })),
+        Err(e) => HttpResponse::BadRequest().json(json!({ "detail": e })),
     }
 }
 
 /// List the current-season dungeons available to browse, as `[{idx, name}]`.
 pub(super) async fn list_dungeons() -> HttpResponse {
-    let Some(db) = mdt::enemy_db::global() else {
-        return HttpResponse::ServiceUnavailable()
-            .json(json!({ "error": "MDT dungeon database not loaded" }));
+    let db = match require_db() {
+        Ok(db) => db,
+        Err(resp) => return resp,
     };
     let dungeons: Vec<_> = db
         .season_dungeons()
@@ -61,17 +68,17 @@ pub(super) async fn dungeon_overview(
     path: web::Path<i64>,
     query: web::Query<OverviewQuery>,
 ) -> HttpResponse {
-    let Some(db) = mdt::enemy_db::global() else {
-        return HttpResponse::ServiceUnavailable()
-            .json(json!({ "error": "MDT dungeon database not loaded" }));
+    let db = match require_db() {
+        Ok(db) => db,
+        Err(resp) => return resp,
     };
     let opts = mdt::ConvertOptions {
         keystone_level: query.keystone_level,
-        hp_percent: query.hp_percent.unwrap_or(20).clamp(1, 100),
+        hp_percent: query.hp_percent.unwrap_or(27).clamp(1, 100),
     };
     match mdt::overview(path.into_inner(), db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),
-        Err(e) => HttpResponse::BadRequest().json(json!({ "error": e })),
+        Err(e) => HttpResponse::BadRequest().json(json!({ "detail": e })),
     }
 }
 
@@ -95,9 +102,9 @@ pub(super) struct SerializeRequest {
 /// Re-serialize an edited/built pull assignment into a SimC DungeonRoute (with
 /// delays) — used to sim and save routes made on the map (no MDT string needed).
 pub(super) async fn serialize_route(body: web::Json<SerializeRequest>) -> HttpResponse {
-    let Some(db) = mdt::enemy_db::global() else {
-        return HttpResponse::ServiceUnavailable()
-            .json(json!({ "error": "MDT dungeon database not loaded" }));
+    let db = match require_db() {
+        Ok(db) => db,
+        Err(resp) => return resp,
     };
     let opts = mdt::ConvertOptions {
         keystone_level: body.keystone_level,
@@ -110,6 +117,6 @@ pub(super) async fn serialize_route(body: web::Json<SerializeRequest>) -> HttpRe
         .collect();
     match mdt::serialize(body.dungeon_idx, pulls, db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),
-        Err(e) => HttpResponse::BadRequest().json(json!({ "error": e })),
+        Err(e) => HttpResponse::BadRequest().json(json!({ "detail": e })),
     }
 }

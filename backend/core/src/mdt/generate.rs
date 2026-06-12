@@ -151,16 +151,26 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
 
     let delays = super::travel::calculate_delays(route, dungeon);
 
+    // Each pull's display color, resolved once (its own, or a palette slot by
+    // index) so the pull lines and the full mob layer below agree.
+    let pull_colors: Vec<String> = route
+        .pulls
+        .iter()
+        .enumerate()
+        .map(|(i, p)| p.color.clone().unwrap_or_else(|| pull_palette_color(i)))
+        .collect();
+
     let mut pull_lines = Vec::new();
     let mut map_pulls = Vec::new();
     let mut enemy_count = 0;
     let mut total_health = 0;
     let mut unresolved = 0;
+    let mut npc_counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
 
     for (i, pull) in route.pulls.iter().enumerate() {
         let mut specifiers = Vec::new();
         let mut markers = Vec::new();
-        let mut npc_counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+        npc_counts.clear();
         for entry in &pull.enemies {
             let Some(enemy) = dungeon.enemies.get(&entry.enemy_idx) else {
                 unresolved += entry.clone_indices.len();
@@ -172,12 +182,14 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
                 keystone_level,
                 enemy.ignore_fortified,
             );
+            // slug + simmed health are the same for every clone of this enemy.
+            let slug = sim_slug(&enemy.name, enemy.is_boss);
+            let sim_health = full_health * opts.hp_percent / 100;
             // One specifier + one map marker per clone in this pull — each clone
             // is its own mob.
             for &clone_idx in &entry.clone_indices {
                 let n = { let c = npc_counts.entry(enemy.id).or_default(); *c += 1; *c };
-                let sim_health = full_health * opts.hp_percent / 100;
-                specifiers.push(format!("\"{}_{}\":{}", sim_slug(&enemy.name, enemy.is_boss), n, sim_health));
+                specifiers.push(format!("\"{slug}_{n}\":{sim_health}"));
                 enemy_count += 1;
                 total_health += full_health;
                 if let Some(pos) = enemy.clones.get(&clone_idx) {
@@ -200,7 +212,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
         if !markers.is_empty() {
             map_pulls.push(MapPull {
                 index: i + 1,
-                color: pull.color.clone().unwrap_or_else(|| pull_palette_color(i)),
+                color: pull_colors[i].clone(),
                 enemies: markers,
             });
         }
@@ -220,16 +232,19 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
     let mut pull_of: std::collections::HashMap<(i64, i64), (usize, String)> =
         std::collections::HashMap::new();
     for (i, pull) in route.pulls.iter().enumerate() {
-        let color = pull.color.clone().unwrap_or_else(|| pull_palette_color(i));
         for entry in &pull.enemies {
             for &clone_idx in &entry.clone_indices {
-                pull_of.insert((entry.enemy_idx, clone_idx), (i + 1, color.clone()));
+                pull_of.insert((entry.enemy_idx, clone_idx), (i + 1, pull_colors[i].clone()));
             }
         }
     }
 
     let mut all_enemies = Vec::new();
     for (&enemy_idx, enemy) in &dungeon.enemies {
+        // health + race are identical for every clone of this enemy.
+        let health =
+            calculate_enemy_health(enemy.is_boss, enemy.health, keystone_level, enemy.ignore_fortified);
+        let race = enemy.creature_type.to_lowercase();
         for (&clone_idx, pos) in &enemy.clones {
             let (pull, color) = match pull_of.get(&(enemy_idx, clone_idx)) {
                 Some((p, c)) => (Some(*p), Some(c.clone())),
@@ -245,13 +260,8 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
                 is_boss: enemy.is_boss,
                 scale: enemy.scale,
                 count: enemy.count,
-                health: calculate_enemy_health(
-                    enemy.is_boss,
-                    enemy.health,
-                    keystone_level,
-                    enemy.ignore_fortified,
-                ),
-                race: enemy.creature_type.to_lowercase(),
+                health,
+                race: race.clone(),
                 patrol: pos.patrol.iter().map(|p| MapPoint { x: p.x, y: p.y }).collect(),
                 pull,
                 color,

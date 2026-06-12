@@ -63,13 +63,13 @@ export default function RouteImportPanel({
     setBusy(true);
     setError('');
     try {
-      if (s.startsWith('!')) {
+      if (isMdt) {
         const conv = await decodeMdt(s);
         await saveRoute(name.trim() || conv.dungeon_name, {
           mdtString: s,
           dungeonIdx: conv.map.dungeon_idx,
         });
-      } else if (s.includes('fight_style=DungeonRoute')) {
+      } else if (isKsg) {
         const dungeonIdx = detectDungeonFromSimc(s, dungeons);
         const title = s.match(/^enemy="([^"]*)"/m)?.[1];
         await saveRoute(name.trim() || title || 'Route', {
