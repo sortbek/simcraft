@@ -112,23 +112,12 @@ export async function simRow(sourceJobId: string, comboId: number): Promise<stri
   return data.id;
 }
 
-/** One mob instance on the map. `(x, y)` are MDT map coordinates; plot the
- *  marker center at `(x * s, -y * s)` from the map image top-left (y is flipped). */
-export interface MdtMapMarker {
-  x: number;
-  y: number;
-  sublevel: number;
-  name: string;
-  is_boss: boolean;
-  scale: number;
-  count: number;
-}
-
+/** A pull's identity for the map: its number + color. The mobs themselves come
+ *  from the full `MdtMap.enemies` layer (each clone tagged with its pull/color). */
 export interface MdtMapPull {
   index: number;
   /** 6-char hex color, no `#`. */
   color: string;
-  enemies: MdtMapMarker[];
 }
 
 export interface MdtMapSublevel {
@@ -154,7 +143,7 @@ export interface MdtMapEnemy {
   is_boss: boolean;
   scale: number;
   count: number;
-  /** Keystone-scaled health (same value the sim uses). */
+  /** Full keystone-scaled health (mob max HP). The sim uses `hp_percent` of this. */
   health: number;
   /** Lowercased creature type (SimC enemy race), for re-serializing after edits. */
   race: string;
@@ -186,8 +175,6 @@ export interface MdtConversion {
   total_health: number;
   /** Enemy instances the route referenced but the DB couldn't resolve (version drift). */
   unresolved: number;
-  /** The `raid_events+=/pull,...` lines (no fight_style). */
-  raid_events: string;
   /** The full `fight_style=DungeonRoute` + pulls block. */
   simc: string;
   /** Map-render data: colored mob markers per pull, positioned on the dungeon map. */

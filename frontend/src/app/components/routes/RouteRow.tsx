@@ -1,29 +1,31 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSimContext } from '../sim-config/SimContext';
 import { deleteSavedRoute, type SavedRoute } from '../../lib/saved-routes';
-import { classifyRoute, routeToActiveRoute, routeStats, seedFromId } from '../../lib/routes-model';
+import {
+  classifyRoute,
+  routeToActiveRoute,
+  routeStats,
+  seedFromId,
+  type RouteKind,
+} from '../../lib/routes-model';
 import { getRouteSimParams, setRouteSimParams } from '../../lib/route-sim-params';
 import { ROUTES, MDT_ROUTE_SESSION_KEY } from '../../lib/routes';
 import { useLanguage } from '../../lib/i18n';
-import { T } from '../route-map/routeTheme';
+import { timeAgo } from '../../sims/_components/shared';
+import { T, SOURCE_COLORS } from '../route-map/routeTheme';
 import { IPlay, IList, ITrash, IPlus, IMinus } from '../route-map/routeIcons';
 import RouteMiniMap from './RouteMiniMap';
 
-type TFn = (key: string, params?: Record<string, string | number>) => string;
-
-function relTime(iso: string, t: TFn): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return '';
-  const m = Math.floor((Date.now() - then) / 60000);
-  if (m < 1) return t('route.time.justNow');
-  if (m < 60) return t('route.time.minutes', { count: m });
-  const h = Math.floor(m / 60);
-  if (h < 24) return t('route.time.hours', { count: h });
-  return t('route.time.days', { count: Math.floor(h / 24) });
-}
+/** Localized source label per route kind (the badge next to the source dot). */
+const KIND_LABEL_KEY: Record<RouteKind, string> = {
+  mdt: 'route.row.kindMdt',
+  pulls: 'route.row.kindBuilt',
+  simc: 'route.row.kindKsg',
+  footer: 'route.row.kindLegacy',
+};
 
 const Stepper = ({
   label,
@@ -187,35 +189,35 @@ const ActBtn = ({
 export default function RouteRow({ route, onChanged }: { route: SavedRoute; onChanged: () => void }) {
   const { t } = useLanguage();
   const router = useRouter();
-  const { setActiveRoute, setSimcFooter, setFightStyle } = useSimContext();
-  const kind = classifyRoute(route);
+  const { activateRoute } = useSimContext();
+  const kind = useMemo(() => classifyRoute(route), [route]);
   // mdt + pulls routes are level-agnostic (sim at any key) and have map data;
   // simc is baked and footer is legacy — neither shows steppers or a map.
   const isDungeonRoute = kind === 'mdt' || kind === 'pulls';
-  const stats = routeStats(route);
+  const stats = useMemo(() => routeStats(route), [route]);
+  const seed = useMemo(() => seedFromId(route.id), [route.id]);
   const [h, setH] = useState(false);
+  const [err, setErr] = useState('');
   const [key, setKey] = useState(() => getRouteSimParams().keystoneLevel);
   const [hp, setHp] = useState(() => getRouteSimParams().hpPercent);
 
   const onSim = () => {
-    if (isDungeonRoute) setRouteSimParams({ keystoneLevel: key, hpPercent: hp });
-    if (kind === 'footer') {
-      setActiveRoute(null);
-      setSimcFooter(route.mdt_string);
-      setFightStyle('Patchwerk');
-    } else {
-      const ar = routeToActiveRoute(route);
-      if (!ar) return;
-      setActiveRoute(ar);
-      setSimcFooter('');
-      setFightStyle('DungeonRoute');
+    const ar = routeToActiveRoute(route);
+    if (!ar) {
+      setErr(t('route.row.loadFailed'));
+      return;
     }
+    if (isDungeonRoute) setRouteSimParams({ keystoneLevel: key, hpPercent: hp });
+    activateRoute(ar);
     router.push(ROUTES.quickSim);
   };
 
   const onMap = () => {
     const ar = routeToActiveRoute(route);
-    if (!ar) return;
+    if (!ar) {
+      setErr(t('route.row.loadFailed'));
+      return;
+    }
     // Render the map at the same key/HP the row's steppers show.
     setRouteSimParams({ keystoneLevel: key, hpPercent: hp });
     try {
@@ -224,8 +226,14 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
     router.push(ROUTES.dungeonRoute);
   };
 
-  const sourceColor =
-    stats.source === 'keystone.guru' ? '#c95fd6' : stats.source === 'Built' ? '#5fbf6a' : '#6ea7cc';
+  const onDelete = () => {
+    setErr('');
+    deleteSavedRoute(route.id)
+      .then(onChanged)
+      .catch((e) => setErr(e instanceof Error ? e.message : t('route.row.deleteFailed')));
+  };
+
+  const sourceColor = SOURCE_COLORS[kind] ?? T.muted;
 
   return (
     <div
@@ -242,7 +250,7 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
         transition: 'all .12s',
       }}
     >
-      <RouteMiniMap seed={seedFromId(route.id)} count={stats.pulls ?? 8} />
+      <RouteMiniMap seed={seed} count={stats.pulls ?? 8} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>
@@ -276,11 +284,12 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
           )}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: sourceColor }} />
-            {stats.source}
+            {t(KIND_LABEL_KEY[kind])}
           </span>
           <span style={{ color: T.dim }}>·</span>
-          <span>{t('route.row.updated', { time: relTime(route.created_at, t) })}</span>
+          <span>{t('route.row.updated', { time: timeAgo(route.created_at, t) })}</span>
         </div>
+        {err && <div style={{ marginTop: 6, fontSize: 11, color: T.red }}>{err}</div>}
       </div>
 
       {isDungeonRoute && (
@@ -295,7 +304,7 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <ActBtn icon={<IPlay s={12} />} label={t('route.row.sim')} primary onClick={onSim} />
         {isDungeonRoute && <ActBtn icon={<IList s={13} />} label={t('route.row.map')} onClick={onMap} />}
-        <ActBtn icon={<ITrash s={13} />} danger onClick={() => deleteSavedRoute(route.id).then(onChanged)} />
+        <ActBtn icon={<ITrash s={13} />} danger onClick={onDelete} />
       </div>
     </div>
   );

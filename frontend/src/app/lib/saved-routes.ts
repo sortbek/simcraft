@@ -39,5 +39,9 @@ export async function saveRoute(
 }
 
 export async function deleteSavedRoute(id: string): Promise<void> {
-  await fetch(`${API_URL}/api/routes/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${API_URL}/api/routes/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `Server error ${res.status}`);
+  }
 }

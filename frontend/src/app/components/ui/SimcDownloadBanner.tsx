@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../../lib/i18n';
 
 export default function SimcDownloadBanner() {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<SimcStatus | null>(null);
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function SimcDownloadBanner() {
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
             />
           </svg>
-          <span>Downloading SimC engine... {percent}%</span>
+          <span>{t('layout.downloadingSimc', { percent })}</span>
         </div>
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-outline-variant/20">
           <div
@@ -60,12 +62,12 @@ export default function SimcDownloadBanner() {
     return (
       <div className="rounded-lg bg-error-container/10 px-4 py-3 text-sm text-error">
         <div className="flex items-center justify-between">
-          <span>Failed to download SimC: {status.error}</span>
+          <span>{t('layout.downloadSimcFailed', { error: status.error })}</span>
           <Link
             href="/settings"
             className="rounded px-3 py-1 text-xs font-medium text-error hover:bg-error-container/20"
           >
-            Settings
+            {t('common.settings')}
           </Link>
         </div>
       </div>

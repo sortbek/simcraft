@@ -24,6 +24,16 @@ export const T = {
   picked: '#5fbfff', // selection highlight (semantic)
 } as const;
 
+/** Route-source identity colors — the dot next to a route's source label on
+ *  cards and the format tags in the import panel. Keyed by RouteKind (see
+ *  routes-model). One owner so the card dot and the import tag never disagree. */
+export const SOURCE_COLORS: Record<string, string> = {
+  pulls: '#5fbf6a', // Built
+  simc: '#c95fd6', // keystone.guru
+  mdt: '#6ea7cc', // MDT
+  footer: '#6ea7cc', // legacy SimC
+};
+
 /** Fallback pull color used by the design when a pull declares none. */
 export const DEFAULT_PULL_COLOR = '228b22';
 

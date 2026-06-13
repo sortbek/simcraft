@@ -16,7 +16,7 @@ export default function SettingsPage() {
         <h1 className="font-headline text-3xl font-extrabold uppercase tracking-tight text-primary">
           {t('common.settings')}
         </h1>
-        <p className="text-on-surface-variant">Configure the simulation engine and providers.</p>
+        <p className="text-on-surface-variant">{t('settings.pageDescription')}</p>
       </header>
       <ComputeProvidersSection />
       {isDesktop && (

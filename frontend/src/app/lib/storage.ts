@@ -18,6 +18,16 @@ export function readStoredJson<T>(key: string, fallback: T): T {
   }
 }
 
+/** JSON-decode a value from `sessionStorage`; return `fallback` on missing/invalid JSON. */
+export function readSessionJson<T>(key: string, fallback: T): T {
+  try {
+    const v = sessionStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /** Read a positive integer; return `fallback` if missing or unparseable.
  * Zero is treated as "not set" — callers wanting `0` to be a real value should
  * implement their own parse. */

@@ -253,14 +253,19 @@ mod tests {
         assert_eq!(map.sublevels.len(), 1);
         assert_eq!(map.sublevels[0].index, 1);
 
-        // Pull 1: color "ff3eff" (from the example), first marker is enemy 1
-        // (Merciless Subjugator) on sublevel 1 within map bounds. The y-axis is
-        // negative in MDT coordinate space — the key invariant the frontend flips.
+        // Pull 1 carries color "ff3eff" (from the example).
         let p1 = &map.pulls[0];
         assert_eq!(p1.index, 1);
         assert_eq!(p1.color, "ff3eff");
-        let m = &p1.enemies[0];
-        assert_eq!(m.name, "Merciless Subjugator");
+
+        // Its mobs live in the full layer, tagged with pull 1. A Merciless
+        // Subjugator sits on sublevel 1 within map bounds; the y-axis is negative
+        // in MDT coordinate space — the key invariant the frontend flips.
+        let m = map
+            .enemies
+            .iter()
+            .find(|e| e.pull == Some(1) && e.name == "Merciless Subjugator")
+            .expect("a Merciless Subjugator in pull 1");
         assert_eq!(m.sublevel, 1);
         assert!(m.x > 0.0 && m.x < 840.0, "x {} should be in [0,840]", m.x);
         assert!(m.y < 0.0 && m.y > -560.0, "y {} should be in [-560,0]", m.y);
@@ -311,7 +316,12 @@ mod tests {
         let out = generate::generate(&route, &load_db(), &ConvertOptions::default()).unwrap();
         assert_eq!(out.enemy_count, 2, "both clones are simmed");
         assert_eq!(out.unresolved, 1, "the unknown clone must be reported");
-        assert_eq!(out.map.pulls[0].enemies.len(), 1, "only the known clone gets a marker");
+        assert_eq!(out.map.pulls.len(), 1, "pull 1 has at least one mappable clone");
+        assert_eq!(
+            out.map.enemies.iter().filter(|e| e.pull == Some(1)).count(),
+            1,
+            "only the known clone gets a map marker"
+        );
     }
 
     #[test]

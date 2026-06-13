@@ -144,7 +144,7 @@ export default function UpgradeComparePage() {
 
   const validate = useCallback(() => {
     if (!hasInput) return t('validation.simcTooShort');
-    if (selectedSlots.size === 0) return 'Select at least one upgradeable item.';
+    if (selectedSlots.size === 0) return t('upgradeCompare.selectUpgradeable');
     return null;
   }, [hasInput, selectedSlots, t]);
 
@@ -211,11 +211,10 @@ export default function UpgradeComparePage() {
     <div className="space-y-6 pb-20">
       <div>
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          Crest Upgrades
+          {t('nav.crestUpgrades')}
         </h1>
         <p className="max-w-2xl text-sm text-on-surface-variant">
-          Compare upgrade paths for your equipped gear using crests. Find the most impactful
-          upgrades for your budget.
+          {t('page.crestUpgradesSubtitle')}
         </p>
       </div>
       <TalentPicker />

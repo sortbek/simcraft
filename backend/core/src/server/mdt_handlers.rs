@@ -11,6 +11,16 @@ fn require_db() -> Result<&'static mdt::enemy_db::DungeonDb, HttpResponse> {
     })
 }
 
+/// Build conversion options from the request fields, owning the hp_percent
+/// default + clamp in one place (the default is `ConvertOptions::default`).
+fn convert_opts(keystone_level: Option<i64>, hp_percent: Option<i64>) -> mdt::ConvertOptions {
+    mdt::ConvertOptions {
+        keystone_level,
+        hp_percent: hp_percent
+            .map_or(mdt::ConvertOptions::default().hp_percent, |h| h.clamp(1, 100)),
+    }
+}
+
 #[derive(Deserialize)]
 pub(super) struct DecodeMdtRequest {
     /// The MDT export string (e.g. `!DAvYoo...`).
@@ -29,10 +39,7 @@ pub(super) async fn decode_mdt(body: web::Json<DecodeMdtRequest>) -> HttpRespons
         Ok(db) => db,
         Err(resp) => return resp,
     };
-    let opts = mdt::ConvertOptions {
-        keystone_level: body.keystone_level,
-        hp_percent: body.hp_percent.unwrap_or(27).clamp(1, 100),
-    };
+    let opts = convert_opts(body.keystone_level, body.hp_percent);
     match mdt::convert(&body.import, db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),
         Err(e) => HttpResponse::BadRequest().json(json!({ "detail": e })),
@@ -72,10 +79,7 @@ pub(super) async fn dungeon_overview(
         Ok(db) => db,
         Err(resp) => return resp,
     };
-    let opts = mdt::ConvertOptions {
-        keystone_level: query.keystone_level,
-        hp_percent: query.hp_percent.unwrap_or(27).clamp(1, 100),
-    };
+    let opts = convert_opts(query.keystone_level, query.hp_percent);
     match mdt::overview(path.into_inner(), db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),
         Err(e) => HttpResponse::BadRequest().json(json!({ "detail": e })),
@@ -106,10 +110,7 @@ pub(super) async fn serialize_route(body: web::Json<SerializeRequest>) -> HttpRe
         Ok(db) => db,
         Err(resp) => return resp,
     };
-    let opts = mdt::ConvertOptions {
-        keystone_level: body.keystone_level,
-        hp_percent: body.hp_percent.unwrap_or(27).clamp(1, 100),
-    };
+    let opts = convert_opts(body.keystone_level, body.hp_percent);
     let pulls: Vec<Vec<(i64, i64)>> = body
         .pulls
         .iter()

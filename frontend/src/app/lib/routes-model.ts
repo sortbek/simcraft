@@ -13,8 +13,8 @@ export function classifyRoute(r: SavedRoute): RouteKind {
   return 'footer';
 }
 
-/** Map a saved route to the in-memory ActiveRoute. Returns null for a legacy
- *  footer route (handled via simcFooter, not activeRoute) or unparseable pulls. */
+/** Map a saved route to the in-memory ActiveRoute. Returns null only when a
+ *  `pulls` row's JSON is unparseable (corrupt/externally-edited data). */
 export function routeToActiveRoute(r: SavedRoute): ActiveRoute | null {
   switch (classifyRoute(r)) {
     case 'pulls':
@@ -34,15 +34,15 @@ export function routeToActiveRoute(r: SavedRoute): ActiveRoute | null {
     case 'mdt':
       return { kind: 'mdt', id: r.id, name: r.name, mdtString: r.mdt_string };
     case 'footer':
-      return null;
+      return { kind: 'footer', id: r.id, name: r.name, simc: r.mdt_string };
   }
 }
 
-/** Display stats for a route card. `pulls`/`enemies` are derived where free —
- *  built routes from their pull JSON, KSG routes by parsing the SimC — and left
- *  null for MDT imports (which would need a decode). `source` labels the origin. */
+/** Pull/enemy counts for a route card, derived where free — built routes from
+ *  their pull JSON, KSG routes by parsing the SimC — and left null for MDT
+ *  imports (which would need a decode). The source label/color come from the
+ *  route's `kind` (see classifyRoute), not from here. */
 export function routeStats(r: SavedRoute): {
-  source: string;
   pulls: number | null;
   enemies: number | null;
 } {
@@ -52,12 +52,11 @@ export function routeStats(r: SavedRoute): {
     try {
       const pulls = JSON.parse(r.pulls!) as unknown[][];
       return {
-        source: 'Built',
         pulls: pulls.length,
         enemies: pulls.reduce((s: number, p: unknown[]) => s + p.length, 0),
       };
     } catch {
-      return { source: 'Built', pulls: null, enemies: null };
+      return { pulls: null, enemies: null };
     }
   }
   if (kind === 'simc') {
@@ -66,9 +65,9 @@ export function routeStats(r: SavedRoute): {
       const m = l.match(/enemies=(.*)$/);
       return s + (m ? m[1].split('|').length : 0);
     }, 0);
-    return { source: 'keystone.guru', pulls: lines.length || null, enemies: enemies || null };
+    return { pulls: lines.length || null, enemies: enemies || null };
   }
-  return { source: kind === 'mdt' ? 'MDT' : 'SimC', pulls: null, enemies: null };
+  return { pulls: null, enemies: null };
 }
 
 /** Stable non-negative integer seed from a route id, so a card's deterministic

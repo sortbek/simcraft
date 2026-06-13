@@ -42,9 +42,6 @@ pub struct MdtSimc {
     /// Enemy instances referenced by the route but missing from the database
     /// (e.g. MDT version drift). Zero for a clean conversion.
     pub unresolved: usize,
-    /// The `raid_events+=/pull,...` lines only (no header), for injecting
-    /// alongside a `DungeonRoute` fight-style selection.
-    pub raid_events: String,
     /// The complete SimC fight definition (header + pulls).
     pub simc: String,
     /// Map-render data: per-pull colored mob markers positioned on the dungeon map.
@@ -72,31 +69,20 @@ pub struct MapSublevel {
     pub name: String,
 }
 
+/// A pull's identity for the map: its number and color. The mobs themselves are
+/// drawn from the full [`MapEnemy`] layer below (each clone is tagged with its
+/// pull number + color), so they are not duplicated here.
 #[derive(Debug, Clone, Serialize)]
 pub struct MapPull {
     /// 1-based pull number in route order.
     pub index: usize,
     /// 6-char hex color (no `#`).
     pub color: String,
-    pub enemies: Vec<MapMarker>,
 }
 
-/// One mob instance positioned on the map. `(x, y)` are MDT map coordinates;
-/// the frontend plots the marker center at `(x * s, -y * s)` from the map's
-/// top-left (note the y-axis sign flip).
-#[derive(Debug, Clone, Serialize)]
-pub struct MapMarker {
-    pub x: f64,
-    pub y: f64,
-    pub sublevel: i64,
-    pub name: String,
-    pub is_boss: bool,
-    pub scale: f64,
-    pub count: i64,
-}
-
-/// One clone in the full mob layer. Like [`MapMarker`] but tagged with its pull
-/// membership (`None` = not pulled, drawn dimmed) and its patrol path.
+/// One clone in the full mob layer, tagged with its pull membership
+/// (`None` = not pulled, drawn dimmed) and its patrol path. `(x, y)` are MDT map
+/// coordinates; the frontend plots the center at `(x * s, -y * s)` (y is flipped).
 #[derive(Debug, Clone, Serialize)]
 pub struct MapEnemy {
     /// MDT enemy index + clone index — the stable reference the frontend sends
@@ -110,7 +96,8 @@ pub struct MapEnemy {
     pub is_boss: bool,
     pub scale: f64,
     pub count: i64,
-    /// Keystone-scaled health for this mob (same value used in the sim).
+    /// Full keystone-scaled health for this mob (the mob's max HP shown on the
+    /// map). The sim specifier uses `hp_percent` of this value.
     pub health: i64,
     /// Lowercased creature type (the SimC enemy `race`), so the route can be
     /// re-serialized to a `DungeonRoute` after client-side pull edits.
@@ -134,7 +121,11 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
         .dungeon(route.dungeon_idx)
         .ok_or_else(|| format!("dungeon index {} not in MDT database", route.dungeon_idx))?;
 
-    let keystone_level = opts.keystone_level.unwrap_or(route.keystone_level);
+    // Clamp to the keystone floor (2) so the emitted `keystone_level=` and the
+    // enemy health (which `calculate_enemy_health` also floors at 2) agree — an
+    // overview/serialize with no level chosen would otherwise pair a declared
+    // level 0 with level-2-scaled health.
+    let keystone_level = opts.keystone_level.unwrap_or(route.keystone_level).max(2);
 
     // max_time is required: a 0 would make SimC end every iteration at t=0.
     let max_time = dungeon
@@ -169,7 +160,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
 
     for (i, pull) in route.pulls.iter().enumerate() {
         let mut specifiers = Vec::new();
-        let mut markers = Vec::new();
+        let mut mapped_clones = 0usize;
         npc_counts.clear();
         for entry in &pull.enemies {
             let Some(enemy) = dungeon.enemies.get(&entry.enemy_idx) else {
@@ -185,23 +176,15 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
             // slug + simmed health are the same for every clone of this enemy.
             let slug = sim_slug(&enemy.name, enemy.is_boss);
             let sim_health = full_health * opts.hp_percent / 100;
-            // One specifier + one map marker per clone in this pull — each clone
-            // is its own mob.
+            // One specifier per clone in this pull — each clone is its own mob.
             for &clone_idx in &entry.clone_indices {
                 let n = { let c = npc_counts.entry(enemy.id).or_default(); *c += 1; *c };
                 specifiers.push(format!("\"{slug}_{n}\":{sim_health}"));
                 enemy_count += 1;
                 total_health += full_health;
-                if let Some(pos) = enemy.clones.get(&clone_idx) {
-                    markers.push(MapMarker {
-                        x: pos.x,
-                        y: pos.y,
-                        sublevel: pos.sublevel,
-                        name: enemy.name.clone(),
-                        is_boss: enemy.is_boss,
-                        scale: enemy.scale,
-                        count: enemy.count,
-                    });
+                if enemy.clones.contains_key(&clone_idx) {
+                    // Drawn from the full mob layer below; here we only count it.
+                    mapped_clones += 1;
                 } else {
                     // Clone index unknown to the DB (MDT version drift): the
                     // mob is still simmed but cannot be drawn on the map.
@@ -209,11 +192,12 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
                 }
             }
         }
-        if !markers.is_empty() {
+        // Emit a map pull only when at least one of its clones can be placed, so
+        // a fully-unresolved pull contributes no orphan color entry.
+        if mapped_clones > 0 {
             map_pulls.push(MapPull {
                 index: i + 1,
                 color: pull_colors[i].clone(),
-                enemies: markers,
             });
         }
         if specifiers.is_empty() {
@@ -315,7 +299,7 @@ keystone_level={keystone_level}
 raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1",
     );
     let raid_events = pull_lines.join("\n");
-    let simc = if raid_events.is_empty() { header.clone() } else { format!("{header}\n{raid_events}") };
+    let simc = if raid_events.is_empty() { header } else { format!("{header}\n{raid_events}") };
 
     Ok(MdtSimc {
         mdt_version: db.mdt_version().to_string(),
@@ -328,7 +312,6 @@ raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1",
         enemy_count,
         total_health,
         unresolved,
-        raid_events,
         simc,
         map,
     })

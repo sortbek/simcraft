@@ -305,7 +305,7 @@ export default function TalentPicker({
               <path d="M2 2h12v12H2zM5 6h6M5 10h4" />
             </svg>
           </div>
-          <span className="text-xs font-medium text-on-surface-variant">Talents</span>
+          <span className="text-xs font-medium text-on-surface-variant">{t('config.talents')}</span>
           {allLoadouts.length >= 2 && (
             <select
               value={selectedLoadoutIdx}

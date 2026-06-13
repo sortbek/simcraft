@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { T } from '../route-map/routeTheme';
 
 /** Deterministic decorative thumbnail for a route card — a seeded scatter of
@@ -39,7 +40,7 @@ function makeDots(seed: number, count: number): Dot[] {
   return out;
 }
 
-export default function RouteMiniMap({
+function RouteMiniMap({
   seed,
   count,
   w = 124,
@@ -110,3 +111,7 @@ export default function RouteMiniMap({
     </div>
   );
 }
+
+// Props are stable primitives (seed/count from the row's useMemo), so memoizing
+// skips the seeded-scatter recompute on every row hover and stepper click.
+export default memo(RouteMiniMap);

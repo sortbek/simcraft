@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { MdtConversion } from '../../lib/api';
 import { saveRoute } from '../../lib/saved-routes';
 import { useLanguage } from '../../lib/i18n';
@@ -24,30 +24,40 @@ export default function RouteViewer({
   const [toast, setToast] = useState<string | null>(null);
   const [modal, setModal] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flash = (msg: string) => {
+  const flash = useCallback((msg: string) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2600);
-  };
+  }, []);
 
   const editor = useRouteEditor(conv, flash);
 
   const doSave = async (name: string) => {
     setModal(false);
     try {
-      // Save level-agnostically: dungeon + pull assignment (clone refs). The SimC
-      // is regenerated at the chosen keystone level on load, not baked here.
-      const pulls = editor.pulls.map((p) =>
-        p.cloneIdxs.map((i) => {
-          const e = conv.map.enemies[i];
-          return { enemy_idx: e.enemy_idx, clone_idx: e.clone_idx };
-        })
-      );
-      await saveRoute(name, {
-        mdtString,
-        dungeonIdx: conv.map.dungeon_idx,
-        pulls: JSON.stringify(pulls),
-      });
+      // An unedited MDT import is saved as its string alone, so it stays an "MDT"
+      // route and re-sims through decode (preserving the drawn-line travel delays
+      // and title the string carries). Once the pull assignment is edited — or the
+      // route was built from a dungeon overview (no string) — save it level-
+      // agnostically as dungeon + pull clone-refs; the SimC is then regenerated at
+      // the chosen keystone level on load.
+      const dirty = editor.assignment.some((p, i) => p !== conv.map.enemies[i].pull);
+      const isUneditedMdt = mdtString.trim().startsWith('!') && !dirty;
+      if (isUneditedMdt) {
+        await saveRoute(name, { mdtString, dungeonIdx: conv.map.dungeon_idx });
+      } else {
+        const pulls = editor.pulls.map((p) =>
+          p.cloneIdxs.map((i) => {
+            const e = conv.map.enemies[i];
+            return { enemy_idx: e.enemy_idx, clone_idx: e.clone_idx };
+          })
+        );
+        await saveRoute(name, {
+          mdtString,
+          dungeonIdx: conv.map.dungeon_idx,
+          pulls: JSON.stringify(pulls),
+        });
+      }
       flash(t('route.toast.saved', { name }));
     } catch (e) {
       flash(t('route.toast.saveFailed', { error: e instanceof Error ? e.message : String(e) }));

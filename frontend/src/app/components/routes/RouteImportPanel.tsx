@@ -5,7 +5,7 @@ import { decodeMdt, type DungeonSummary } from '../../lib/api';
 import { saveRoute } from '../../lib/saved-routes';
 import { detectDungeonFromSimc } from '../../lib/routes-model';
 import { useLanguage } from '../../lib/i18n';
-import { T } from '../route-map/routeTheme';
+import { T, SOURCE_COLORS } from '../route-map/routeTheme';
 import { IImport } from '../route-map/routeIcons';
 
 const SourceTag = ({ label, color }: { label: string; color: string }) => (
@@ -72,7 +72,7 @@ export default function RouteImportPanel({
       } else if (isKsg) {
         const dungeonIdx = detectDungeonFromSimc(s, dungeons);
         const title = s.match(/^enemy="([^"]*)"/m)?.[1];
-        await saveRoute(name.trim() || title || 'Route', {
+        await saveRoute(name.trim() || title || t('route.defaultName'), {
           simc: s,
           ...(dungeonIdx != null ? { dungeonIdx } : {}),
         });
@@ -117,8 +117,8 @@ export default function RouteImportPanel({
         </span>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 7 }}>
-          <SourceTag label="MDT" color="#6ea7cc" />
-          <SourceTag label="keystone.guru" color="#c95fd6" />
+          <SourceTag label="MDT" color={SOURCE_COLORS.mdt} />
+          <SourceTag label="keystone.guru" color={SOURCE_COLORS.simc} />
         </div>
       </div>
       <div style={{ padding: 18 }}>

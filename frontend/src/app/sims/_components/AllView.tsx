@@ -58,7 +58,7 @@ function HistoryRow({ job, trailing }: { job: JobOverviewSummary; trailing: Reac
       </div>
       <div className="col-span-3 min-w-0">
         <p className="truncate text-sm font-bold text-on-surface">
-          {job.player_name || (isFailed ? 'Failed simulation' : 'Simulation')}
+          {job.player_name || (isFailed ? t('sims.failedSimulation') : t('sims.simulation'))}
         </p>
         <p
           className={`truncate text-[11px] font-medium ${isFailed ? 'text-error' : 'text-on-surface-variant/70'}`}
@@ -105,6 +105,7 @@ interface RowProps {
 }
 
 function ActionableHistoryRow({ job, busy, onPause, onResume, onCancel, onDelete }: RowProps) {
+  const { t } = useLanguage();
   const trailing = isActiveStatus(job.status) ? (
     <JobActionButtons
       job={job}
@@ -121,7 +122,7 @@ function ActionableHistoryRow({ job, busy, onPause, onResume, onCancel, onDelete
         e.stopPropagation();
         onDelete(job.id);
       }}
-      title="Delete from history"
+      title={t('sims.deleteFromHistory')}
       className="ml-1 rounded px-1.5 py-0.5 text-[11px] text-on-surface-variant/40 hover:bg-red-500/10 hover:text-error disabled:opacity-40"
     >
       ✕
@@ -151,7 +152,7 @@ function BatchGroup({
 }) {
   const { t } = useLanguage();
   const first = entry.sims[0];
-  const simType = SIM_TYPE_LABELS[first?.sim_type ?? ''] || first?.sim_type || 'Sim';
+  const simType = SIM_TYPE_LABELS[first?.sim_type ?? ''] || first?.sim_type || t('sims.simFallback');
   return (
     <div className="border-b border-outline-variant/10">
       <div className="flex items-center justify-between border-b border-outline-variant/5 bg-surface-container/50 px-6 py-2">
@@ -166,7 +167,7 @@ function BatchGroup({
           >
             <path d="M2 4h12M2 8h12M2 12h12" />
           </svg>
-          {simType} batch · {entry.sims.length} scenarios
+          {t('sims.batchLabel', { simType, count: entry.sims.length })}
           {first?.player_name && (
             <span className="ml-2 normal-case tracking-normal text-on-surface-variant/60">
               {first.player_name}
@@ -215,6 +216,7 @@ export function AllView({
   onCancel,
   onDelete,
 }: Props) {
+  const { t } = useLanguage();
   const entries = useMemo(() => groupByBatch(jobs), [jobs]);
 
   if (loading) {
@@ -227,14 +229,14 @@ export function AllView({
   if (isDesktop === false && !character) {
     return (
       <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-12 text-center text-on-surface-variant/60">
-        Paste a SimC export to load this character&apos;s sim history.
+        {t('sims.pasteExport')}
       </div>
     );
   }
   if (jobs.length === 0) {
     return (
       <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-12 text-center text-on-surface-variant/60">
-        No sims yet.
+        {t('sims.noSimsYet')}
       </div>
     );
   }
@@ -243,11 +245,11 @@ export function AllView({
     <div className="overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-low">
       <div className="grid grid-cols-12 gap-2 border-b border-outline-variant/10 bg-surface-container-lowest px-6 py-3 font-headline text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">
         <div className="col-span-1"></div>
-        <div className="col-span-3">Simulation</div>
-        <div className="col-span-2 text-center">Type</div>
+        <div className="col-span-3">{t('sims.colSimulation')}</div>
+        <div className="col-span-2 text-center">{t('sims.colType')}</div>
         <div className="col-span-2 text-right">DPS</div>
-        <div className="col-span-2 text-center">Fight</div>
-        <div className="col-span-2 text-right">Time</div>
+        <div className="col-span-2 text-center">{t('sims.colFight')}</div>
+        <div className="col-span-2 text-right">{t('sims.colTime')}</div>
       </div>
       {entries.map((entry) => {
         if (entry.type === 'single') {

@@ -115,22 +115,22 @@ export default function RunButton({
 
   const targetLabel =
     value === 'auto'
-      ? 'Auto'
+      ? t('config.computeAuto')
       : value === 'local'
-        ? 'Local SimC'
+        ? t('config.computeLocal')
         : (providers?.find((p) => p.id === value)?.display_name ?? value);
 
   const remoteMeta = (providers ?? []).filter((p) => p.id !== 'local');
   const options: { id: ComputeChoice; label: string }[] = [
-    { id: 'auto', label: 'Auto' },
-    { id: 'local', label: 'Local SimC' },
+    { id: 'auto', label: t('config.computeAuto') },
+    { id: 'local', label: t('config.computeLocal') },
     ...remoteMeta.map((p) => ({ id: p.id as ComputeChoice, label: p.display_name })),
   ];
 
   const reasonFor = (id: ComputeChoice): string | null => {
     if (id === 'auto' || id === 'local') return null;
     if (targetDisabledReasons[id]) return targetDisabledReasons[id];
-    if (!readyRemotes.some((p) => p.id === id)) return 'configure in Settings';
+    if (!readyRemotes.some((p) => p.id === id)) return t('config.configureInSettings');
     return null;
   };
 
@@ -163,7 +163,7 @@ export default function RunButton({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Choose compute target"
+        aria-label={t('config.chooseComputeTarget')}
         onClick={() => setOpen((o) => !o)}
         disabled={submitting}
         className="flex items-center rounded-r-lg border-l border-on-primary/20 bg-primary-container px-3 py-4 text-on-primary transition-all hover:brightness-110 disabled:opacity-50"

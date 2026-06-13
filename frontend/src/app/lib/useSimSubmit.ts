@@ -62,10 +62,16 @@ export function useSimSubmit({
     clearScenarioSiblings();
 
     try {
-      const configs: FightScenario[] =
-        scenarios.length > 0 ? scenarios : [{ id: '', fightStyle, targetCount, fightLength }];
+      // An active route forces fight_style=DungeonRoute (the backend detects it in
+      // the materialized SimC and suppresses each config's fight style), so running
+      // a scenario sweep would silently run the same route N times. Ignore queued
+      // scenarios while a route is active.
+      const useScenarios = scenarios.length > 0 && !activeRoute;
+      const configs: FightScenario[] = useScenarios
+        ? scenarios
+        : [{ id: '', fightStyle, targetCount, fightLength }];
 
-      const batchId = scenarios.length > 0 ? crypto.randomUUID() : undefined;
+      const batchId = useScenarios ? crypto.randomUUID() : undefined;
 
       const sharedPayload = {
         ...pagePayload,
@@ -108,7 +114,7 @@ export function useSimSubmit({
         })
       );
 
-      if (scenarios.length === 0) {
+      if (!useScenarios) {
         const r = results[0];
         if (r.status === 'fulfilled') {
           onBeforeNavigate?.();

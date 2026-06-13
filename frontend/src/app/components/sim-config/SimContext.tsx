@@ -4,7 +4,12 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { FightScenario } from '../../lib/types';
 import type { ActiveRoute } from '../../lib/active-route';
 import { API_URL } from '../../lib/api';
-import { readSessionString, readStoredJson, readStoredPositiveInt } from '../../lib/storage';
+import {
+  readSessionJson,
+  readSessionString,
+  readStoredJson,
+  readStoredPositiveInt,
+} from '../../lib/storage';
 import { TRIAGE_BATCH_DEFAULT } from '../../lib/triageBatch';
 
 export type RotationMode = 'default' | 'assisted_combat' | 'one_button';
@@ -33,7 +38,13 @@ interface SimContextType {
   /** The active dungeon route, held as data and materialized to SimC at sim
    *  time (see useSimSubmit). `null` when no route is loaded. */
   activeRoute: ActiveRoute | null;
-  setActiveRoute: (v: ActiveRoute | null) => void;
+  /** Load a route as the active route. Owns the coupled state: persists it,
+   *  clears any queued scenarios (which can't coexist with a forced route), and
+   *  sets the fight style (DungeonRoute, except a legacy `footer` snippet which
+   *  may not be one). Use this instead of poking the pieces individually. */
+  activateRoute: (route: ActiveRoute) => void;
+  /** Unload the active route and restore the default fight style. */
+  clearRoute: () => void;
   rotationMode: RotationMode;
   setRotationMode: (v: RotationMode) => void;
   // Expert Mode injection points
@@ -149,8 +160,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
       _setIterations(readStoredPositiveInt('simhammer_iterations', 100000));
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
       // Active route survives a reload (it's the live sim input, not just config).
-      const storedRoute = sessionStorage.getItem('simhammer_active_route');
-      if (storedRoute) _setActiveRoute(JSON.parse(storedRoute));
+      // Read through the never-throw helper so a corrupt value yields null instead
+      // of aborting the restores that follow it in this shared try block.
+      _setActiveRoute(readSessionJson<ActiveRoute | null>('simhammer_active_route', null));
       _setTriageMaxBatchProfilesets(
         readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
       );
@@ -256,13 +268,32 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
-  const setActiveRoute = useCallback((v: ActiveRoute | null) => {
+  // Internal: set + persist the active route (the live sim input survives reload).
+  const persistActiveRoute = useCallback((v: ActiveRoute | null) => {
     _setActiveRoute(v);
     try {
       if (v) sessionStorage.setItem('simhammer_active_route', JSON.stringify(v));
       else sessionStorage.removeItem('simhammer_active_route');
     } catch {}
   }, []);
+
+  const activateRoute = useCallback(
+    (route: ActiveRoute) => {
+      persistActiveRoute(route);
+      // Scenarios sweep fight styles, but the route's own fight_style=DungeonRoute
+      // overrides them at sim time — so they'd silently all run the same route.
+      setScenarios([]);
+      // A footer snippet may be any SimC (not necessarily a DungeonRoute), so leave
+      // the fight style at the default for it; real route kinds force DungeonRoute.
+      setFightStyle(route.kind === 'footer' ? 'Patchwerk' : 'DungeonRoute');
+    },
+    [persistActiveRoute]
+  );
+
+  const clearRoute = useCallback(() => {
+    persistActiveRoute(null);
+    setFightStyle('Patchwerk');
+  }, [persistActiveRoute]);
 
   const setStatWeights = useCallback((v: boolean) => {
     _setStatWeights(v);
@@ -301,7 +332,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
         customApl,
         setCustomApl,
         activeRoute,
-        setActiveRoute,
+        activateRoute,
+        clearRoute,
         rotationMode,
         setRotationMode,
         simcHeader,

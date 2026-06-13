@@ -8,24 +8,22 @@ import { getRouteSimParams } from '../../lib/route-sim-params';
  *  the /routes manager; here we only show it and allow unloading. */
 export default function ActiveRouteIndicator() {
   const { t } = useLanguage();
-  const { activeRoute, setActiveRoute, setFightStyle } = useSimContext();
+  const { activeRoute, clearRoute } = useSimContext();
   if (!activeRoute) return null;
   const { keystoneLevel, hpPercent } = getRouteSimParams();
   const name = activeRoute.name ?? '—';
-  const label =
-    activeRoute.kind === 'simc'
-      ? t('route.activeIndicatorBaked', { name })
-      : t('route.activeIndicator', { name, level: keystoneLevel, hp: hpPercent });
+  // Baked routes (pre-rendered SimC) carry no level/HP knobs; mdt/pulls do.
+  const baked = activeRoute.kind === 'simc' || activeRoute.kind === 'footer';
+  const label = baked
+    ? t('route.activeIndicatorBaked', { name })
+    : t('route.activeIndicator', { name, level: keystoneLevel, hp: hpPercent });
 
   return (
     <div className="flex items-center justify-between border-t border-outline-variant/10 pt-2 text-[13px]">
       <span className="min-w-0 flex-1 truncate text-gold">{label}</span>
       <button
         type="button"
-        onClick={() => {
-          setActiveRoute(null);
-          setFightStyle('Patchwerk');
-        }}
+        onClick={clearRoute}
         className="ml-2 shrink-0 text-on-surface-variant/60 transition-colors hover:text-on-surface"
       >
         {t('common.clear')}

@@ -349,7 +349,7 @@ export default function ConfigDrawer({
                   <span className="text-[9px] text-on-surface-variant/50">%</span>
                 </div>
                 <p className="text-[11px] text-on-surface-variant/40">
-                  Lower = more precise but slower. Default: 0.05%
+                  {t('config.targetErrorHelp')}
                 </p>
               </div>
               <div className="space-y-2 border-t border-outline-variant/10 pt-3">
@@ -393,17 +393,14 @@ export default function ConfigDrawer({
                   />
                   <div className="flex-1">
                     <div className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                      Parallel profileset scheduling
+                      {t('config.parallelProfilesets')}
                     </div>
                     <p className="mt-1 text-[11px] text-on-surface-variant/40">
-                      When enabled, SimHammer adds{' '}
+                      {t('config.parallelProfilesetsHelpBefore')}{' '}
                       <code className="font-mono text-on-surface-variant/70">
                         profileset_work_threads=1
                       </code>{' '}
-                      to early Top Gear stages (4+ combos at target_error &gt; 0.2), running
-                      profilesets concurrently instead of sequentially. Measured to be modestly
-                      faster on those stages; disabled at tighter precision where iteration
-                      parallelism wins. Uncheck to never emit the flag.
+                      {t('config.parallelProfilesetsHelpAfter')}
                     </p>
                   </div>
                 </label>
@@ -411,7 +408,7 @@ export default function ConfigDrawer({
               {isTopGear && (
                 <div className="space-y-2 border-t border-outline-variant/10 pt-3">
                   <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                    Triage maximum batch size
+                    {t('config.triageMaxBatch')}
                   </label>
                   <select
                     value={triageMaxBatchProfilesets}
@@ -425,8 +422,7 @@ export default function ConfigDrawer({
                     ))}
                   </select>
                   <p className="text-[11px] text-on-surface-variant/40">
-                    Streamed Top Gear only. Larger batches reduce repeated baseline and retention
-                    overhead, but Pause waits until the current batch completes.
+                    {t('config.triageMaxBatchHelp')}
                   </p>
                 </div>
               )}

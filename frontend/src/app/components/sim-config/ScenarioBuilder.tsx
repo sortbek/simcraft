@@ -8,7 +8,7 @@ import { API_URL } from '../../lib/api';
 
 export default function ScenarioBuilder() {
   const { t } = useLanguage();
-  const { scenarios, addScenario, removeScenario, clearScenarios } = useSimContext();
+  const { scenarios, addScenario, removeScenario, clearScenarios, activeRoute } = useSimContext();
   const [maxScenarios, setMaxScenarios] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
@@ -21,6 +21,18 @@ export default function ScenarioBuilder() {
   }, []);
 
   if (!loaded || maxScenarios === 0) return null;
+
+  // A loaded route forces fight_style=DungeonRoute at sim time, so per-scenario
+  // fight styles would silently all run the same route. Disable scenarios while
+  // a route is active (activateRoute also clears any that were queued).
+  if (activeRoute) {
+    return (
+      <div className="space-y-2 border-t border-outline-variant/10 pt-2">
+        <label className="label-text">{t('config.scenarios')}</label>
+        <p className="text-[13px] text-on-surface-variant/40">{t('config.scenariosRouteActive')}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 border-t border-outline-variant/10 pt-2">
