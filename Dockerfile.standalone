@@ -45,6 +45,11 @@ COPY --from=backend-builder /build/target/release/simhammer-server /usr/local/bi
 COPY backend/scripts/compact-data.js /app/compact-data.js
 COPY backend/core/season-config.json /app/default_season_config.json
 
+# Bake in the offline-generated MDT route data (enemy DB + map tiles). It isn't
+# part of the Raidbots/Blizzard fetch, so the entrypoint drops it into DATA_DIR.
+COPY backend/resources/data/mdt_dungeons.json /app/mdt_dungeons.json
+COPY backend/resources/data/mdt-maps/ /app/mdt-maps/
+
 # Bake in the entrypoint
 COPY standalone-entrypoint.sh /app/standalone-entrypoint.sh
 RUN chmod +x /app/standalone-entrypoint.sh

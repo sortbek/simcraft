@@ -247,6 +247,14 @@ curl -sL -o "$DATA_FULL_DIR/blizzard-instances.json" https://simhammer.com/api/b
 echo "==> Compacting game data..."
 node /app/compact-data.js "$DATA_FULL_DIR" "$DATA_DIR"
 
+# MDT route data is generated offline and baked into the image (not part of the
+# Raidbots/Blizzard fetch or compaction). Drop it into DATA_DIR every startup so
+# MDT import (mdt_dungeons.json) and the route map page (mdt-maps) work on live.
+echo "==> Installing baked MDT route data..."
+cp /app/mdt_dungeons.json "$DATA_DIR/mdt_dungeons.json"
+mkdir -p "$DATA_DIR/mdt-maps"
+cp -r /app/mdt-maps/. "$DATA_DIR/mdt-maps/"
+
 export SIMC_DIR="$SIMC_CACHE_DIR"
 export DATA_DIR="$DATA_DIR"
 

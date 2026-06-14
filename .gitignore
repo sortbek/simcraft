@@ -19,7 +19,11 @@ docs/superpowers/
 
 # Build output and bundled resources
 backend/target/
-backend/resources/data/
+backend/resources/data/*
+# ...except the offline-generated MDT route data, which is baked into the
+# standalone image (see Dockerfile.standalone / standalone-entrypoint.sh).
+!backend/resources/data/mdt_dungeons.json
+!backend/resources/data/mdt-maps/
 backend/resources/data-full/
 backend/resources/data-compact/
 backend/resources/data-compacted/
