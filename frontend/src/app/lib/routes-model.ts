@@ -13,6 +13,14 @@ export function classifyRoute(r: SavedRoute): RouteKind {
   return 'footer';
 }
 
+/** Route kinds that are level-agnostic dungeon routes: they carry map data and
+ *  the key-level / HP-share knobs (`mdt`, `pulls`). `simc`/`footer` are baked
+ *  SimC snippets with neither. The single source for this predicate — callers
+ *  should use it instead of re-spelling the kind check (or its negation). */
+export function routeUsesLevelKnobs(kind: RouteKind): boolean {
+  return kind === 'mdt' || kind === 'pulls';
+}
+
 /** Map a saved route to the in-memory ActiveRoute. Returns null only when a
  *  `pulls` row's JSON is unparseable (corrupt/externally-edited data). */
 export function routeToActiveRoute(r: SavedRoute): ActiveRoute | null {
@@ -99,4 +107,37 @@ export function detectDungeonFromSimc(
   if (!titleSlug) return null;
   const hit = dungeons.find((d) => slugify(d.name) === titleSlug);
   return hit ? hit.idx : null;
+}
+
+export interface RouteGroup {
+  key: number | null;
+  name: string;
+  routes: SavedRoute[];
+}
+
+/** Group saved routes by dungeon for a list/picker: known-dungeon groups first,
+ *  in `dungeons` order, then unknown-dungeon routes under a final `otherLabel`
+ *  group. A route's dungeon is its stored `dungeon_idx` (set on import + build),
+ *  matched against the dungeon list. */
+export function groupRoutesByDungeon(
+  routes: SavedRoute[],
+  dungeons: DungeonSummary[],
+  otherLabel: string
+): RouteGroup[] {
+  const byKey = new Map<number | null, SavedRoute[]>();
+  for (const r of routes) {
+    const known = r.dungeon_idx != null && dungeons.some((d) => d.idx === r.dungeon_idx);
+    const key = known ? r.dungeon_idx! : null;
+    const arr = byKey.get(key) ?? [];
+    arr.push(r);
+    byKey.set(key, arr);
+  }
+  const out: RouteGroup[] = [];
+  for (const d of dungeons) {
+    const rs = byKey.get(d.idx);
+    if (rs?.length) out.push({ key: d.idx, name: d.name, routes: rs });
+  }
+  const other = byKey.get(null);
+  if (other?.length) out.push({ key: null, name: otherLabel, routes: other });
+  return out;
 }

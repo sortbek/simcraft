@@ -90,7 +90,7 @@ const EMPTY_OPTIONS = [DEFAULT_OPTIONS, NONE_OPTION];
 export default function RaidBuffsConsumables() {
   const { t } = useLanguage();
   const {
-    fightStyle,
+    isDungeonRoute,
     raidBuffs,
     setRaidBuffs,
     consumables,
@@ -162,7 +162,7 @@ export default function RaidBuffsConsumables() {
     <div className="space-y-4 pt-1">
       {/* Raid Buffs are forced off in Dungeon Route mode, so hide them there
           (consumables + expansion options still apply). */}
-      {fightStyle !== 'DungeonRoute' && (
+      {!isDungeonRoute && (
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <label className="label-text">{t('config.raidBuffs')}</label>

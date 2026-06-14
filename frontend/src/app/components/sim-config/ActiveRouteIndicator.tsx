@@ -10,7 +10,11 @@ import {
 } from '../../lib/route-sim-params';
 import { getSavedRoutes, type SavedRoute } from '../../lib/saved-routes';
 import { listDungeons, type DungeonSummary } from '../../lib/api';
-import { routeToActiveRoute } from '../../lib/routes-model';
+import {
+  groupRoutesByDungeon,
+  routeToActiveRoute,
+  routeUsesLevelKnobs,
+} from '../../lib/routes-model';
 import { IPlus, IMinus } from '../route-map/routeIcons';
 
 const IRoute = () => (
@@ -79,13 +83,15 @@ const Stepper = ({
  *  be loaded from the /routes manager. */
 export default function ActiveRouteIndicator() {
   const { t } = useLanguage();
-  const { fightStyle, activeRoute, activateRoute, clearRoute } = useSimContext();
+  const { isDungeonRoute, activeRoute, activateRoute, clearRoute } = useSimContext();
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
   const [dungeons, setDungeons] = useState<DungeonSummary[]>([]);
   const [open, setOpen] = useState(false);
   const [params, setParams] = useState<RouteSimParams>(getRouteSimParams);
 
+  // Only fetch when the control is shown (Dungeon Route mode); renders null otherwise.
   useEffect(() => {
+    if (!isDungeonRoute) return;
     let alive = true;
     getSavedRoutes().then((r) => {
       if (alive) setRoutes(r);
@@ -98,31 +104,16 @@ export default function ActiveRouteIndicator() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [isDungeonRoute]);
 
-  // Group saved routes by dungeon (same logic as the routes manager): dungeon
-  // groups in dungeon-list order, unknown-dungeon routes under "Other" last.
-  const groups = useMemo(() => {
-    const byKey = new Map<number | null, SavedRoute[]>();
-    for (const r of routes) {
-      const known = r.dungeon_idx != null && dungeons.some((d) => d.idx === r.dungeon_idx);
-      const key = known ? r.dungeon_idx! : null;
-      const arr = byKey.get(key) ?? [];
-      arr.push(r);
-      byKey.set(key, arr);
-    }
-    const out: { key: number | null; name: string; routes: SavedRoute[] }[] = [];
-    for (const d of dungeons) {
-      const rs = byKey.get(d.idx);
-      if (rs?.length) out.push({ key: d.idx, name: d.name, routes: rs });
-    }
-    const other = byKey.get(null);
-    if (other?.length) out.push({ key: null, name: t('route.group.other'), routes: other });
-    return out;
-  }, [routes, dungeons, t]);
+  // Group saved routes by dungeon for the picker (shared with the routes manager).
+  const groups = useMemo(
+    () => groupRoutesByDungeon(routes, dungeons, t('route.group.other')),
+    [routes, dungeons, t]
+  );
 
   // The route control belongs to Dungeon Route mode only.
-  if (fightStyle !== 'DungeonRoute') return null;
+  if (!isDungeonRoute) return null;
 
   const onPick = (id: string) => {
     setOpen(false);
@@ -138,7 +129,7 @@ export default function ActiveRouteIndicator() {
   };
 
   // Baked routes (pre-rendered SimC) carry no level/HP knobs; mdt/pulls do.
-  const baked = activeRoute?.kind === 'simc' || activeRoute?.kind === 'footer';
+  const baked = activeRoute ? !routeUsesLevelKnobs(activeRoute.kind) : false;
   const currentName = activeRoute?.name ?? null;
 
   return (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getSavedRoutes, type SavedRoute } from '../lib/saved-routes';
 import { listDungeons, type DungeonSummary } from '../lib/api';
+import { groupRoutesByDungeon } from '../lib/routes-model';
 import RouteImportPanel from '../components/routes/RouteImportPanel';
 import RouteRow from '../components/routes/RouteRow';
 import { T } from '../components/route-map/routeTheme';
@@ -52,26 +53,11 @@ export default function RoutesManagerPage() {
     listDungeons().then(setDungeons).catch(() => {});
   }, [refresh]);
 
-  // Group by dungeon (only when that dungeon is known); the rest → "Other".
-  // Dungeon groups follow the dungeon list order; "Other" is last.
-  const groups = useMemo(() => {
-    const byKey = new Map<number | null, SavedRoute[]>();
-    for (const r of routes) {
-      const known = r.dungeon_idx != null && dungeons.some((d) => d.idx === r.dungeon_idx);
-      const key = known ? r.dungeon_idx! : null;
-      const arr = byKey.get(key) ?? [];
-      arr.push(r);
-      byKey.set(key, arr);
-    }
-    const out: { key: number | null; name: string; routes: SavedRoute[] }[] = [];
-    for (const d of dungeons) {
-      const rs = byKey.get(d.idx);
-      if (rs && rs.length) out.push({ key: d.idx, name: d.name, routes: rs });
-    }
-    const other = byKey.get(null);
-    if (other && other.length) out.push({ key: null, name: t('route.group.other'), routes: other });
-    return out;
-  }, [routes, dungeons, t]);
+  // Group by dungeon (dungeon-list order; unknown-dungeon routes under "Other").
+  const groups = useMemo(
+    () => groupRoutesByDungeon(routes, dungeons, t('route.group.other')),
+    [routes, dungeons, t]
+  );
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: T.bg }}>

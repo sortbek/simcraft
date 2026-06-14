@@ -46,10 +46,9 @@ export default function ConfigDrawer({
   const { t } = useLanguage();
   const isTopGear = usePathname() === ROUTES.topGear;
   const {
-    activeRoute,
-    clearRoute,
     fightStyle,
     setFightStyle,
+    isDungeonRoute,
     targetCount,
     setTargetCount,
     fightLength,
@@ -123,15 +122,6 @@ export default function ConfigDrawer({
   const hasExpertContent = Object.values(expertValues).some((value) => value.trim());
   const expertActiveTabInfo = EXPERT_TABS.find((tab) => tab.key === expertActiveTab)!;
 
-  const isDungeonRoute = fightStyle === 'DungeonRoute';
-  // The route control + the controls a route overrides are gated on this fight
-  // style. Leaving it discards any loaded route (it only applies here); clearRoute
-  // resets to Patchwerk, so re-apply the chosen style afterwards.
-  const onFightStyleChange = (value: string) => {
-    if (value !== 'DungeonRoute' && activeRoute) clearRoute();
-    setFightStyle(value);
-  };
-
   return (
     <div className="animate-fade-in border-t border-outline-variant/10 bg-[#0e0e0e]/95 backdrop-blur-xl">
       <div className="mx-auto max-w-screen-2xl px-8 py-5">
@@ -167,7 +157,7 @@ export default function ConfigDrawer({
                 <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
                   {t('config.fightStyle')}
                 </label>
-                <FightStyleSelector value={fightStyle} onChange={onFightStyleChange} />
+                <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
               </div>
 
               {/* Fight Length and Number of Bosses are overridden by a dungeon

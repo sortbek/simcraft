@@ -21,6 +21,9 @@ interface SimContextType {
   hasInput: boolean;
   fightStyle: string;
   setFightStyle: (v: string) => void;
+  /** `fightStyle === 'DungeonRoute'` — the mode the route control and the controls
+   *  a route overrides are gated on. Derived; exposed so consumers don't re-derive. */
+  isDungeonRoute: boolean;
   threads: number;
   setThreads: (v: number) => void;
   selectedTalent: string;
@@ -122,7 +125,7 @@ export const DEFAULT_EXPANSION_OPTIONS: Record<string, boolean> = {
 
 export function SimProvider({ children }: { children: ReactNode }) {
   const [simcInput, _setSimcInput] = useState('');
-  const [fightStyle, setFightStyle] = useState('Patchwerk');
+  const [fightStyle, _setFightStyle] = useState('Patchwerk');
   const [threads, _setThreads] = useState(0);
   const [selectedTalent, setSelectedTalent] = useState('');
   const [targetCount, setTargetCount] = useState(1);
@@ -166,7 +169,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
       // gates on (footer snippets keep the default style — they aren't routes).
       const restoredRoute = readSessionJson<ActiveRoute | null>('simhammer_active_route', null);
       _setActiveRoute(restoredRoute);
-      if (restoredRoute && restoredRoute.kind !== 'footer') setFightStyle('DungeonRoute');
+      if (restoredRoute && restoredRoute.kind !== 'footer') _setFightStyle('DungeonRoute');
       _setTriageMaxBatchProfilesets(
         readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
       );
@@ -214,6 +217,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasInput = simcInput.trim().length >= 50;
+
+  // Dungeon Route mode: gates the route control and the controls a route overrides.
+  const isDungeonRoute = fightStyle === 'DungeonRoute';
 
   const setRaidBuffs = useCallback((v: Record<string, boolean>) => {
     _setRaidBuffs(v);
@@ -281,6 +287,18 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  // Exposed fight-style setter. A loaded route only applies in Dungeon Route mode,
+  // so switching to any other style discards it — keeping "route ⇒ DungeonRoute" a
+  // single invariant (with activateRoute/clearRoute) instead of each drawer
+  // re-implementing the coupling.
+  const setFightStyle = useCallback(
+    (v: string) => {
+      _setFightStyle(v);
+      if (v !== 'DungeonRoute') persistActiveRoute(null);
+    },
+    [persistActiveRoute]
+  );
+
   const activateRoute = useCallback(
     (route: ActiveRoute) => {
       persistActiveRoute(route);
@@ -289,14 +307,15 @@ export function SimProvider({ children }: { children: ReactNode }) {
       setScenarios([]);
       // A footer snippet may be any SimC (not necessarily a DungeonRoute), so leave
       // the fight style at the default for it; real route kinds force DungeonRoute.
-      setFightStyle(route.kind === 'footer' ? 'Patchwerk' : 'DungeonRoute');
+      // Raw setter: switching style here must not discard the route we just set.
+      _setFightStyle(route.kind === 'footer' ? 'Patchwerk' : 'DungeonRoute');
     },
     [persistActiveRoute]
   );
 
   const clearRoute = useCallback(() => {
     persistActiveRoute(null);
-    setFightStyle('Patchwerk');
+    _setFightStyle('Patchwerk');
   }, [persistActiveRoute]);
 
   const setStatWeights = useCallback((v: boolean) => {
@@ -321,6 +340,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         hasInput,
         fightStyle,
         setFightStyle,
+        isDungeonRoute,
         threads,
         setThreads,
         selectedTalent,

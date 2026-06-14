@@ -92,6 +92,15 @@ pub(super) struct CloneRef {
     pub clone_idx: i64,
 }
 
+/// Flatten a pulls payload (`[[{enemy_idx, clone_idx}, …], …]`) into the
+/// `(enemy_idx, clone_idx)` tuples `mdt::serialize` expects.
+pub(super) fn flatten_pulls(pulls: &[Vec<CloneRef>]) -> Vec<Vec<(i64, i64)>> {
+    pulls
+        .iter()
+        .map(|p| p.iter().map(|c| (c.enemy_idx, c.clone_idx)).collect())
+        .collect()
+}
+
 #[derive(Deserialize)]
 pub(super) struct SerializeRequest {
     pub dungeon_idx: i64,
@@ -111,11 +120,7 @@ pub(super) async fn serialize_route(body: web::Json<SerializeRequest>) -> HttpRe
         Err(resp) => return resp,
     };
     let opts = convert_opts(body.keystone_level, body.hp_percent);
-    let pulls: Vec<Vec<(i64, i64)>> = body
-        .pulls
-        .iter()
-        .map(|p| p.iter().map(|c| (c.enemy_idx, c.clone_idx)).collect())
-        .collect();
+    let pulls = flatten_pulls(&body.pulls);
     match mdt::serialize(body.dungeon_idx, pulls, db, &opts) {
         Ok(out) => HttpResponse::Ok().json(out),
         Err(e) => HttpResponse::BadRequest().json(json!({ "detail": e })),

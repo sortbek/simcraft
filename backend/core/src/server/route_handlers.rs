@@ -1,15 +1,9 @@
 use actix_web::{web, HttpResponse};
-use serde::Deserialize;
 use serde_json::json;
 
+use super::mdt_handlers::{flatten_pulls, CloneRef};
 use crate::db::{route_repo::CreateRouteRequest, RouteRepo};
 use crate::mdt;
-
-#[derive(Deserialize)]
-struct CloneRefJson {
-    enemy_idx: i64,
-    clone_idx: i64,
-}
 
 /// Compute the thumbnail shape (normalized pull centroids, JSON) for a route, or
 /// `None` when geometry isn't derivable (no MDT db, a keystone.guru SimC paste, a
@@ -21,12 +15,8 @@ fn route_shape(mdt_string: &str, dungeon_idx: Option<i64>, pulls: Option<&str>) 
     let opts = mdt::ConvertOptions::default();
     let conv = match (dungeon_idx, pulls) {
         (Some(idx), Some(pulls_json)) => {
-            let parsed: Vec<Vec<CloneRefJson>> = serde_json::from_str(pulls_json).ok()?;
-            let pulls_vec = parsed
-                .into_iter()
-                .map(|p| p.into_iter().map(|c| (c.enemy_idx, c.clone_idx)).collect())
-                .collect();
-            mdt::serialize(idx, pulls_vec, db, &opts).ok()?
+            let parsed: Vec<Vec<CloneRef>> = serde_json::from_str(pulls_json).ok()?;
+            mdt::serialize(idx, flatten_pulls(&parsed), db, &opts).ok()?
         }
         _ if mdt_string.trim_start().starts_with('!') => mdt::convert(mdt_string, db, &opts).ok()?,
         _ => return None,

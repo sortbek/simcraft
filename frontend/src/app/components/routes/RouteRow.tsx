@@ -8,6 +8,7 @@ import {
   classifyRoute,
   routeToActiveRoute,
   routeStats,
+  routeUsesLevelKnobs,
   seedFromId,
   type RouteKind,
 } from '../../lib/routes-model';
@@ -193,7 +194,7 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
   const kind = useMemo(() => classifyRoute(route), [route]);
   // mdt + pulls routes are level-agnostic (sim at any key) and have map data;
   // simc is baked and footer is legacy — neither shows steppers or a map.
-  const isDungeonRoute = kind === 'mdt' || kind === 'pulls';
+  const isDungeonRoute = routeUsesLevelKnobs(kind);
   const stats = useMemo(() => routeStats(route), [route]);
   const seed = useMemo(() => seedFromId(route.id), [route.id]);
   // Real route shape (pull centroids) when the backend has it; else the card

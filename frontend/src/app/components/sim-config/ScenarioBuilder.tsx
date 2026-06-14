@@ -8,7 +8,8 @@ import { API_URL } from '../../lib/api';
 
 export default function ScenarioBuilder() {
   const { t } = useLanguage();
-  const { scenarios, addScenario, removeScenario, clearScenarios, fightStyle } = useSimContext();
+  const { scenarios, addScenario, removeScenario, clearScenarios, isDungeonRoute } =
+    useSimContext();
   const [maxScenarios, setMaxScenarios] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
@@ -24,7 +25,7 @@ export default function ScenarioBuilder() {
 
   // Dungeon Route mode forces fight_style=DungeonRoute, so per-scenario fight
   // styles would silently all run the same route. Hide scenarios entirely there.
-  if (fightStyle === 'DungeonRoute') return null;
+  if (isDungeonRoute) return null;
 
   return (
     <div className="space-y-3 border-t border-outline-variant/10 pt-2">

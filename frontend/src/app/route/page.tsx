@@ -16,7 +16,7 @@ import type { ActiveRoute } from '../lib/active-route';
 import { getRouteSimParams } from '../lib/route-sim-params';
 import { ROUTES, MDT_ROUTE_SESSION_KEY } from '../lib/routes';
 import { getSavedRoutes, type SavedRoute } from '../lib/saved-routes';
-import { classifyRoute, routeToActiveRoute } from '../lib/routes-model';
+import { classifyRoute, routeToActiveRoute, routeUsesLevelKnobs } from '../lib/routes-model';
 import RouteViewer from '../components/route-map/RouteViewer';
 import { T } from '../components/route-map/routeTheme';
 import { IImport } from '../components/route-map/routeIcons';
@@ -94,9 +94,7 @@ export default function RoutePage() {
   if (conv) {
     // Other saved routes in this dungeon that can be shown on the map.
     const siblings = routes.filter(
-      (r) =>
-        r.dungeon_idx === conv.map.dungeon_idx &&
-        (classifyRoute(r) === 'mdt' || classifyRoute(r) === 'pulls')
+      (r) => r.dungeon_idx === conv.map.dungeon_idx && routeUsesLevelKnobs(classifyRoute(r))
     );
     const onSwitch = (r: SavedRoute) => {
       const ar = routeToActiveRoute(r);

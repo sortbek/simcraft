@@ -25,10 +25,9 @@ export default function AdvancedOptions() {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ExpertTabKey>('footer');
   const {
-    activeRoute,
-    clearRoute,
     fightStyle,
     setFightStyle,
+    isDungeonRoute,
     targetCount,
     setTargetCount,
     fightLength,
@@ -84,14 +83,6 @@ export default function AdvancedOptions() {
     !hasExpertContent;
   const activeTabInfo = EXPERT_TABS.find((t) => t.key === activeTab)!;
 
-  const isDungeonRoute = fightStyle === 'DungeonRoute';
-  // Leaving Dungeon Route mode discards any loaded route (it only applies there);
-  // clearRoute resets to Patchwerk, so re-apply the chosen style afterwards.
-  const onFightStyleChange = (value: string) => {
-    if (value !== 'DungeonRoute' && activeRoute) clearRoute();
-    setFightStyle(value);
-  };
-
   return (
     <div className="card overflow-hidden">
       <button
@@ -138,7 +129,7 @@ export default function AdvancedOptions() {
           <div className="grid grid-cols-2 gap-4 pt-4">
             <div className="space-y-2">
               <label className="label-text">{t('config.fightStyle')}</label>
-              <FightStyleSelector value={fightStyle} onChange={onFightStyleChange} />
+              <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
             </div>
             {/* Fight Length and Number of Bosses are overridden by a dungeon
                 route, so hide them in Dungeon Route mode. */}
