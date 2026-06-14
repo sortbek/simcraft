@@ -18,6 +18,7 @@ WORKDIR /build
 COPY backend/Cargo.toml ./
 COPY backend/core/ core/
 COPY backend/server/ server/
+COPY backend/calibration/ calibration/
 COPY backend/migrations/ migrations/
 RUN cargo build --release -p simhammer-server
 
