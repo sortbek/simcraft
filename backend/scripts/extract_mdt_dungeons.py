@@ -203,15 +203,20 @@ def _map_geometry(text: str) -> dict:
     """Travel-time geometry the SimC delay estimate needs: the Blizzard UiMap id
     (`MDT.mapInfo[dungeonIndex].mapID`) and the dungeon entrance (the
     `dungeonEntrance` POI in `MDT.mapPOIs[dungeonIndex]`, the start point for the
-    first pull's delay). When a DBC snapshot is present, also joins
-    `yardsPerUnit` (world-yard scale) and `timerMaxSeconds` (keystone par timer)
-    by mapId."""
+    first pull's delay). When a DBC snapshot is present, also joins the per-axis
+    `yardsPerUnitX`/`yardsPerUnitY` (world-yard scale; legacy single `yardsPerUnit`
+    still passed through) and `timerMaxSeconds` (keystone par timer) by mapId."""
     geo = {}
     info = _find_table(text, "MDT.mapInfo[dungeonIndex]")
     if isinstance(info, dict) and info.get("mapID"):
         map_id = info["mapID"]
         geo["mapId"] = map_id
         dbc = _DBC_GEOMETRY.get(str(map_id), {})
+        # Per-axis scale (preferred); legacy single yardsPerUnit kept for back-compat.
+        if "yardsPerUnitX" in dbc:
+            geo["yardsPerUnitX"] = dbc["yardsPerUnitX"]
+        if "yardsPerUnitY" in dbc:
+            geo["yardsPerUnitY"] = dbc["yardsPerUnitY"]
         if "yardsPerUnit" in dbc:
             geo["yardsPerUnit"] = dbc["yardsPerUnit"]
         if "timerSeconds" in dbc:

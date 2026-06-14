@@ -7,14 +7,24 @@ use super::model::{MdtLine, MdtPull, MdtRoute};
 /// On-foot movement speed (yards/second), from keystone.guru's config.
 const MOVE_SPEED_YPS: f64 = 7.0;
 
+/// World-yard scale used when a dungeon's UiMap has no calibrated `yards_per_unit`
+/// (its mapID resolves to a parent/zone map, so DBC bounds can't be trusted). The
+/// mean of the calibrated current-season maps (~0.85). Gives ballpark per-pull
+/// delays — approximate in absolute magnitude but correct in *relative* pattern,
+/// which is far better for the DPS sim than zeroing all delays (zero delays chain
+/// every pull back-to-back, starving cooldown/resource recovery between packs).
+const DEFAULT_YARDS_PER_UNIT: f64 = 0.85;
+
 /// Returns one delay (seconds, rounded) per pull in `route.pulls`, in order
 /// (aligned by index — callers index by the pull's position). Pull 1 is measured
 /// from the dungeon entrance; each subsequent pull is measured from the previous
 /// resolvable centroid. When the route carries a drawn polyline, travel follows
 /// the path (arc-length between consecutive pull projections); otherwise it is a
 /// straight-line centroid estimate. Empty or fully-unresolved pulls get delay `0`
-/// and do not advance the reference position. Distance = MDT-coordinate distance
-/// × `yards_per_unit` ÷ 7 yd/s.
+/// and do not advance the reference position. Coordinates are converted to world
+/// yards per-axis (`x·yards_per_unit_x`, `y·yards_per_unit_y` — each axis falling
+/// back to the legacy isotropic scale, then [`DEFAULT_YARDS_PER_UNIT`]) and the
+/// delay is the yard distance ÷ 7 yd/s.
 /// A drawn line is treated as a real traversal path (rather than a partial
 /// annotation scribble) only when the route's projection onto it spans at least
 /// this fraction of the straight-line tour. A genuine route line's projected
@@ -24,23 +34,32 @@ const MOVE_SPEED_YPS: f64 = 7.0;
 const PATH_COVERAGE: f64 = 0.5;
 
 pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
+    // Resolve a per-axis scale: the explicit per-axis value, else the legacy
+    // isotropic value, else a typical default. Every dungeon has a physical scale,
+    // so a missing calibration approximates rather than zeroing the whole route.
+    let resolve = |axis: Option<f64>| {
+        axis.or(dungeon.yards_per_unit)
+            .filter(|s| *s > 0.0)
+            .unwrap_or(DEFAULT_YARDS_PER_UNIT)
+    };
+    let sx = resolve(dungeon.yards_per_unit_x);
+    let sy = resolve(dungeon.yards_per_unit_y);
+    // Convert MDT coordinates to world yards up front, so all distance math runs in
+    // yards and each axis scales independently (handles non-1.5:1 floors).
+    let to_yd = |(x, y): (f64, f64)| (x * sx, y * sy);
+
     let centroids: Vec<Option<(f64, f64)>> = route
         .pulls
         .iter()
-        .map(|p| pull_centroid(p, dungeon))
+        .map(|p| pull_centroid(p, dungeon).map(to_yd))
         .collect();
-
-    let scale = dungeon.yards_per_unit.unwrap_or(0.0);
-    if scale <= 0.0 {
-        return vec![0; centroids.len()];
-    }
-
-    let entrance = dungeon.entrance.as_ref().map(|e| (e.x, e.y));
+    let entrance = dungeon.entrance.as_ref().map(|e| to_yd((e.x, e.y)));
 
     let straight = straight_distances(entrance, &centroids);
     let distances = match longest_line(&route.lines) {
         Some(path) => {
-            let along = path_distances(&path.points, entrance, &centroids);
+            let points: Vec<(f64, f64)> = path.points.iter().map(|&p| to_yd(p)).collect();
+            let along = path_distances(&points, entrance, &centroids);
             let straight_total: f64 = straight.iter().sum();
             let path_total: f64 = along.iter().sum();
             if straight_total > 0.0 && path_total >= PATH_COVERAGE * straight_total {
@@ -52,7 +71,7 @@ pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
         None => straight,
     };
 
-    distances.iter().map(|d| seconds(*d, scale)).collect()
+    distances.iter().map(|d| seconds(*d)).collect()
 }
 
 /// Average MDT-coordinate position of a pull's resolved clones, or `None` if none
@@ -78,8 +97,9 @@ fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }
 
-fn seconds(distance_units: f64, scale: f64) -> i64 {
-    ((distance_units * scale) / MOVE_SPEED_YPS).round() as i64
+/// Whole-second delay for a yard distance at on-foot speed.
+fn seconds(distance_yards: f64) -> i64 {
+    (distance_yards / MOVE_SPEED_YPS).round() as i64
 }
 
 /// Straight-line MDT-unit distance to each pull from the previous resolved
@@ -193,12 +213,13 @@ mod tests {
         }
     }
 
-    fn dungeon(enemies: HashMap<i64, Enemy>, scale: Option<f64>) -> Dungeon {
+    fn dungeon(enemies: HashMap<i64, Enemy>, sx: Option<f64>, sy: Option<f64>) -> Dungeon {
         Dungeon {
             name: "T".into(), total_count: 0, sublevels: vec![], enemies,
             map_id: None, timer_max_seconds: None,
             entrance: Some(MapPoint { x: 0.0, y: 0.0, sublevel: 1 }),
-            yards_per_unit: scale, sublevel_links: vec![],
+            yards_per_unit: None, yards_per_unit_x: sx, yards_per_unit_y: sy,
+            sublevel_links: vec![],
         }
     }
 
@@ -223,7 +244,7 @@ mod tests {
         let mut enemies = HashMap::new();
         enemies.insert(1, enemy_at(3.0, 4.0));
         enemies.insert(2, enemy_at(3.0, 11.0));
-        let d = dungeon(enemies, Some(7.0));
+        let d = dungeon(enemies, Some(7.0), Some(7.0));
         let r = route(vec![]); // no drawn line → straight-line estimate
         assert_eq!(calculate_delays(&r, &d), vec![5, 7]);
     }
@@ -235,7 +256,7 @@ mod tests {
         let mut enemies = HashMap::new();
         enemies.insert(1, enemy_at(5.0, 10.0));
         enemies.insert(2, enemy_at(5.0, 40.0));
-        let d = dungeon(enemies, Some(7.0));
+        let d = dungeon(enemies, Some(7.0), Some(7.0));
         let line = MdtLine { sublevel: 1, points: vec![(0.0, 0.0), (0.0, 100.0)] };
         let r = route(vec![line]);
         assert_eq!(calculate_delays(&r, &d), vec![10, 30]);
@@ -250,19 +271,40 @@ mod tests {
         let mut enemies = HashMap::new();
         enemies.insert(1, enemy_at(0.0, 10.0));
         enemies.insert(2, enemy_at(0.0, 40.0));
-        let d = dungeon(enemies, Some(7.0));
+        let d = dungeon(enemies, Some(7.0), Some(7.0));
         let line = MdtLine { sublevel: 1, points: vec![(0.0, 0.0), (1.0, 0.0)] };
         let r = route(vec![line]);
         assert_eq!(calculate_delays(&r, &d), vec![10, 30]);
     }
 
     #[test]
-    fn no_scale_yields_zero_delays() {
+    fn missing_scale_falls_back_to_default() {
+        // No calibrated yards_per_unit → the default scale is used (non-zero
+        // delays), not the old all-zero fallback. entrance(0,0)→(3,4)=5 units,
+        // (3,4)→(3,11)=7 units, converted at the default scale.
         let mut enemies = HashMap::new();
         enemies.insert(1, enemy_at(3.0, 4.0));
         enemies.insert(2, enemy_at(3.0, 11.0));
-        let d = dungeon(enemies, None);
-        assert_eq!(calculate_delays(&route(vec![]), &d), vec![0, 0]);
+        let d = dungeon(enemies, None, None);
+        assert_eq!(
+            calculate_delays(&route(vec![]), &d),
+            vec![
+                seconds(5.0 * DEFAULT_YARDS_PER_UNIT),
+                seconds(7.0 * DEFAULT_YARDS_PER_UNIT)
+            ]
+        );
+    }
+
+    #[test]
+    fn anisotropic_scales_apply_per_axis() {
+        // sx=1, sy=2: an x-move and an equal-magnitude y-move give different delays.
+        // entrance(0,0)→(7,0): 7 units on x → 7·1 = 7 yd → 1s.
+        // (7,0)→(7,7): 7 units on y → 7·2 = 14 yd → 2s.
+        let mut enemies = HashMap::new();
+        enemies.insert(1, enemy_at(7.0, 0.0));
+        enemies.insert(2, enemy_at(7.0, 7.0));
+        let d = dungeon(enemies, Some(1.0), Some(2.0));
+        assert_eq!(calculate_delays(&route(vec![]), &d), vec![1, 2]);
     }
 
     #[test]
@@ -274,7 +316,7 @@ mod tests {
         enemies.insert(1, enemy_at(0.0, 10.0)); // pull 1 centroid, dist 10 from entrance (0,0)
         enemies.insert(3, enemy_at(0.0, 40.0)); // pull 3 centroid
         // note: enemy_idx 2 is intentionally NOT inserted -> pull 2 is unresolvable
-        let d = dungeon(enemies, Some(7.0));
+        let d = dungeon(enemies, Some(7.0), Some(7.0));
         let r = MdtRoute {
             dungeon_idx: 1, week: 1, keystone_level: 2, text: String::new(),
             lines: vec![],

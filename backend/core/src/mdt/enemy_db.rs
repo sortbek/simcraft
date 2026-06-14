@@ -43,9 +43,17 @@ pub struct Dungeon {
     pub entrance: Option<MapPoint>,
     #[serde(default)]
     pub sublevel_links: Vec<SublevelLink>,
-    /// Scale factor: MDT map units to in-game world yards.
+    /// Legacy isotropic scale: MDT map units → in-game world yards. Used when the
+    /// per-axis pair below is absent (i.e. a 1.5:1 floor, where both axes match).
     #[serde(default)]
     pub yards_per_unit: Option<f64>,
+    /// Per-axis world-yard scale (MDT units → yards): `yards_per_unit_x = extentX/840`,
+    /// `yards_per_unit_y = extentY/560`. Lets non-1.5:1 floors convert correctly.
+    /// Each axis falls back to `yards_per_unit`, then to a default, when absent.
+    #[serde(default)]
+    pub yards_per_unit_x: Option<f64>,
+    #[serde(default)]
+    pub yards_per_unit_y: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -168,6 +176,7 @@ mod tests {
               "entrance": {"x": 307.6, "y": -120.5, "sublevel": 1},
               "sublevelLinks": [{"a":{"x":1,"y":2,"sublevel":1},"b":{"x":3,"y":4,"sublevel":2}}],
               "yardsPerUnit": 0.55,
+              "yardsPerUnitX": 0.6, "yardsPerUnitY": 0.7,
               "enemies": {}
             }
           }
@@ -179,6 +188,8 @@ mod tests {
         assert_eq!(d.entrance.as_ref().unwrap().sublevel, 1);
         assert_eq!(d.sublevel_links.len(), 1);
         assert_eq!(d.yards_per_unit, Some(0.55));
+        assert_eq!(d.yards_per_unit_x, Some(0.6));
+        assert_eq!(d.yards_per_unit_y, Some(0.7));
     }
 
     #[test]
@@ -193,5 +204,7 @@ mod tests {
         assert!(d.entrance.is_none());
         assert!(d.sublevel_links.is_empty());
         assert_eq!(d.yards_per_unit, None);
+        assert_eq!(d.yards_per_unit_x, None);
+        assert_eq!(d.yards_per_unit_y, None);
     }
 }
