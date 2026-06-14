@@ -138,7 +138,10 @@ export default function RouteHeader({
 
       {routes && routes.length > 0 && onSwitch && (
         <select
-          value={currentRouteId ?? ''}
+          // Fall back to the placeholder when the active route isn't among the
+          // options (e.g. a since-deleted or cross-dungeon deep-link) so the
+          // controlled value always matches a rendered option.
+          value={routes.some((r) => r.id === currentRouteId) ? currentRouteId! : ''}
           onChange={(e) => {
             const r = routes.find((x) => x.id === e.target.value);
             if (r) onSwitch(r);
@@ -157,7 +160,9 @@ export default function RouteHeader({
             cursor: 'pointer',
           }}
         >
-          {!currentRouteId && <option value="">{t('route.header.switchRoute')}</option>}
+          {!routes.some((r) => r.id === currentRouteId) && (
+            <option value="">{t('route.header.switchRoute')}</option>
+          )}
           {routes.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}

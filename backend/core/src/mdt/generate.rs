@@ -148,7 +148,9 @@ pub fn pull_shape(map: &MdtMap) -> Vec<ShapePull> {
     }
     acc.into_values()
         .map(|(sx, sy, n, boss)| {
-            let n = n.max(1) as f64;
+            // `n >= 1`: an accumulator entry is created only while iterating a
+            // pull's clones, so it always has at least one.
+            let n = n as f64;
             ShapePull {
                 x: (sx / n / MAP_W_UNITS).clamp(0.0, 1.0),
                 y: (-sy / n / MAP_H_UNITS).clamp(0.0, 1.0),

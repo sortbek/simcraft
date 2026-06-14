@@ -13,6 +13,8 @@ const MOVE_SPEED_YPS: f64 = 7.0;
 /// delays — approximate in absolute magnitude but correct in *relative* pattern,
 /// which is far better for the DPS sim than zeroing all delays (zero delays chain
 /// every pull back-to-back, starving cooldown/resource recovery between packs).
+/// Hand-derived from `mdt_map_geometry.json`; re-check it when that file is
+/// regenerated for a new season so it stays the mean of the current scales.
 const DEFAULT_YARDS_PER_UNIT: f64 = 0.85;
 
 /// Returns one delay (seconds, rounded) per pull in `route.pulls`, in order
@@ -102,7 +104,7 @@ fn seconds(distance_yards: f64) -> i64 {
     (distance_yards / MOVE_SPEED_YPS).round() as i64
 }
 
-/// Straight-line MDT-unit distance to each pull from the previous resolved
+/// Straight-line world-yard distance to each pull from the previous resolved
 /// position (entrance for pull 1). `0.0` for an unresolvable pull, which also
 /// does not advance the reference.
 fn straight_distances(entrance: Option<(f64, f64)>, centroids: &[Option<(f64, f64)>]) -> Vec<f64> {

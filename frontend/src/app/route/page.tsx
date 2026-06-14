@@ -85,6 +85,9 @@ export default function RoutePage() {
       sessionStorage.removeItem(MDT_ROUTE_SESSION_KEY);
       const ar = JSON.parse(raw) as ActiveRoute | null;
       if (!ar) return;
+      // Only mdt/pulls routes have a map to render here; baked simc/footer can't
+      // be shown, so don't strand an activeId pointing at an unrenderable route.
+      if (!routeUsesLevelKnobs(ar.kind)) return;
       setActiveId(ar.id ?? null);
       loadActiveRoute(ar);
     } catch {}

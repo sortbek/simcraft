@@ -201,9 +201,19 @@ export interface DungeonSummary {
   name: string;
 }
 
-/** List the current-season dungeons available to browse on the route map. */
+/** List the current-season dungeons available to browse on the route map.
+ *  Cached per session — the set is static within a running backend, and several
+ *  screens fetch it independently. The failed promise is not cached, so a later
+ *  call retries. */
+let dungeonsCache: Promise<DungeonSummary[]> | undefined;
 export function listDungeons(): Promise<DungeonSummary[]> {
-  return fetchJson<DungeonSummary[]>(apiUrl('/api/mdt/dungeons'));
+  if (!dungeonsCache) {
+    dungeonsCache = fetchJson<DungeonSummary[]>(apiUrl('/api/mdt/dungeons')).catch((e) => {
+      dungeonsCache = undefined;
+      throw e;
+    });
+  }
+  return dungeonsCache;
 }
 
 /** Fetch a dungeon overview (full mob layer, no pulls) for browsing without an
