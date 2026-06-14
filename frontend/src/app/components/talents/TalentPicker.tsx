@@ -261,7 +261,13 @@ export default function TalentPicker({
   // Sync talentBuilds from compareIndices
   useEffect(() => {
     if (!compareMode) return;
+    // Sort by loadout index (not checkbox-click order). The backend treats the
+    // first build as the "Currently Equipped" baseline — both for the sim and
+    // the label — and the active/equipped loadout is always allLoadouts[0], so
+    // ascending order keeps it as the baseline instead of whichever card the
+    // user happened to click first.
     const builds = [...compareIndices]
+      .sort((a, b) => a - b)
       .filter((idx) => idx < allLoadouts.length)
       .map((idx) => ({
         name: allLoadouts[idx].name,
