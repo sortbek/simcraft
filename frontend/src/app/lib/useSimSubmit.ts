@@ -30,8 +30,15 @@ export function useSimSubmit({
 }: UseSimSubmitOptions) {
   const { t } = useLanguage();
   const router = useRouter();
-  const { fightStyle, targetCount, fightLength, scenarios, clearScenarios, activeRoute } =
-    useSimContext();
+  const {
+    fightStyle,
+    targetCount,
+    fightLength,
+    scenarios,
+    clearScenarios,
+    activeRoute,
+    isDungeonRoute,
+  } = useSimContext();
 
   const sharedSimPayload = useSharedSimPayload();
 
@@ -62,11 +69,11 @@ export function useSimSubmit({
     clearScenarioSiblings();
 
     try {
-      // An active route forces fight_style=DungeonRoute (the backend detects it in
-      // the materialized SimC and suppresses each config's fight style), so running
-      // a scenario sweep would silently run the same route N times. Ignore queued
-      // scenarios while a route is active.
-      const useScenarios = scenarios.length > 0 && !activeRoute;
+      // Scenarios sweep fight styles, but Dungeon Route mode forces
+      // fight_style=DungeonRoute and a loaded route is applied to every run — either
+      // would silently run the same thing N times. Ignore queued scenarios in both
+      // cases (the scenario builder is hidden in the same cases).
+      const useScenarios = scenarios.length > 0 && !activeRoute && !isDungeonRoute;
       const configs: FightScenario[] = useScenarios
         ? scenarios
         : [{ id: '', fightStyle, targetCount, fightLength }];
@@ -164,6 +171,7 @@ export function useSimSubmit({
     scenarios,
     clearScenarios,
     activeRoute,
+    isDungeonRoute,
     t,
   ]);
 

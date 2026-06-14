@@ -89,9 +89,14 @@ export default function ActiveRouteIndicator() {
   const [open, setOpen] = useState(false);
   const [params, setParams] = useState<RouteSimParams>(getRouteSimParams);
 
-  // Only fetch when the control is shown (Dungeon Route mode); renders null otherwise.
+  // Shown in Dungeon Route mode (to pick a route) or whenever a route is loaded —
+  // including a legacy footer route, which keeps Patchwerk — so an active route is
+  // always visible and clearable.
+  const show = isDungeonRoute || activeRoute != null;
+
+  // Only fetch the lists the picker needs when the control is actually shown.
   useEffect(() => {
-    if (!isDungeonRoute) return;
+    if (!show) return;
     let alive = true;
     getSavedRoutes().then((r) => {
       if (alive) setRoutes(r);
@@ -104,7 +109,7 @@ export default function ActiveRouteIndicator() {
     return () => {
       alive = false;
     };
-  }, [isDungeonRoute]);
+  }, [show]);
 
   // Group saved routes by dungeon for the picker (shared with the routes manager).
   const groups = useMemo(
@@ -112,8 +117,7 @@ export default function ActiveRouteIndicator() {
     [routes, dungeons, t]
   );
 
-  // The route control belongs to Dungeon Route mode only.
-  if (!isDungeonRoute) return null;
+  if (!show) return null;
 
   const onPick = (id: string) => {
     setOpen(false);

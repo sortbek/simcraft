@@ -127,12 +127,13 @@ export default function ConfigDrawer({
       <div className="mx-auto max-w-screen-2xl px-8 py-5">
         <div className="mb-5 flex items-center gap-1">
           {[
-            { key: 'simulation' as const, label: t('config.simulation') },
+            { key: 'simulation' as const, label: t('config.simulation'), modified: false },
             {
               key: 'buffs' as const,
               label: `${t('config.raidBuffs')} & ${t('config.consumables')}`,
+              modified: false,
             },
-            { key: 'expert' as const, label: t('config.expertMode') },
+            { key: 'expert' as const, label: t('config.expertMode'), modified: hasExpertContent },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -145,6 +146,9 @@ export default function ConfigDrawer({
               }`}
             >
               {tab.label}
+              {tab.modified && activeTab !== tab.key && (
+                <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-gold align-middle" />
+              )}
             </button>
           ))}
         </div>
