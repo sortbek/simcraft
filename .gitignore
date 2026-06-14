@@ -28,3 +28,7 @@ backend/resources/frontend/
 desktop/resources/
 desktop/dist/
 backend/target-codex-verify/
+
+# Python bytecode (data-pipeline scripts)
+__pycache__/
+*.pyc

@@ -98,7 +98,9 @@ export default function DropSlotList({
         <p className="text-xs text-muted">
           {headerLabel} &mdash; {t('gear.itemsCount', { count: totalItems })}
           {selected.size > 0 && (
-            <span className="ml-1.5 text-gold">({selected.size} selected)</span>
+            <span className="ml-1.5 text-gold">
+              ({selected.size} {t('dropFinder.selected')})
+            </span>
           )}
         </p>
         <div className="flex items-center gap-3">
@@ -132,7 +134,7 @@ export default function DropSlotList({
             onClick={onClear}
             className="text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
           >
-            Clear
+            {t('common.clear')}
           </button>
         </div>
       </div>
@@ -215,7 +217,7 @@ function DropItemCard({
             className={`absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-bold ${
               embellishDisabled ? 'bg-red-500 text-white' : 'bg-purple-500 text-white'
             }`}
-            title={embellishDisabled ? 'Embellishment limit reached (2/2)' : 'Embellished'}
+            title={embellishDisabled ? t('loot.embellishmentLimit') : t('loot.embellished')}
           >
             E
           </div>

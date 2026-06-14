@@ -123,7 +123,7 @@ export default function TopBar() {
         const nameMatch = text.match(/^\w+="(.+)"$/m);
         const charName = nameMatch?.[1] ?? 'Unknown';
         setSimcInput(text);
-        setClipboardNotice(`Imported SimC data for ${charName}`);
+        setClipboardNotice(t('layout.clipboardImported', { charName }));
         setTimeout(() => setClipboardNotice(''), 4000);
       } catch {
         /* clipboard read failed, ignore */
@@ -132,7 +132,7 @@ export default function TopBar() {
 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [isDesktop, clipboardSync, setSimcInput]);
+  }, [isDesktop, clipboardSync, setSimcInput, t]);
 
   return (
     <div

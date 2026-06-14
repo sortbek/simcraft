@@ -88,10 +88,11 @@ interface Props {
 }
 
 export function ActiveView({ jobs, busy, onPause, onResume, onCancel }: Props) {
+  const { t } = useLanguage();
   if (jobs.length === 0) {
     return (
       <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-12 text-center text-on-surface-variant/60">
-        No active sims.
+        {t('sims.noActiveSims')}
       </div>
     );
   }
@@ -100,12 +101,12 @@ export function ActiveView({ jobs, busy, onPause, onResume, onCancel }: Props) {
       <table className="w-full">
         <thead className="border-b border-outline-variant/10 text-left text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/60">
           <tr>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">Type</th>
-            <th className="px-4 py-3">Character</th>
-            <th className="px-4 py-3">Progress</th>
-            <th className="px-4 py-3">Started</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th className="px-4 py-3">{t('sims.colStatus')}</th>
+            <th className="px-4 py-3">{t('sims.colType')}</th>
+            <th className="px-4 py-3">{t('sims.colCharacter')}</th>
+            <th className="px-4 py-3">{t('sims.colProgress')}</th>
+            <th className="px-4 py-3">{t('sims.colStarted')}</th>
+            <th className="px-4 py-3 text-right">{t('sims.colActions')}</th>
           </tr>
         </thead>
         <tbody>

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import FightStyleSelector from './FightStyleSelector';
+import ActiveRouteIndicator from './ActiveRouteIndicator';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
@@ -26,6 +27,7 @@ export default function AdvancedOptions() {
   const {
     fightStyle,
     setFightStyle,
+    isDungeonRoute,
     targetCount,
     setTargetCount,
     fightLength,
@@ -129,47 +131,53 @@ export default function AdvancedOptions() {
               <label className="label-text">{t('config.fightStyle')}</label>
               <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
             </div>
-            <div className="space-y-2">
-              <label className="label-text">{t('config.fightLength')}</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={30}
-                  max={1800}
-                  step={30}
-                  value={Math.min(fightLength, 1800)}
-                  onChange={(e) => setFightLength(Number(e.target.value))}
-                  className="flex-1 accent-gold"
-                />
-                <input
-                  type="number"
-                  min={10}
-                  max={3600}
-                  value={fightLength}
-                  onChange={(e) => {
-                    const v = Math.max(10, Math.min(3600, Number(e.target.value) || 0));
-                    setFightLength(v);
-                  }}
-                  className="w-16 rounded bg-transparent px-1 py-0.5 text-right font-mono text-sm tabular-nums text-on-surface focus:outline-none focus:ring-1 focus:ring-gold/30"
-                />
+            {/* Fight Length and Number of Bosses are overridden by a dungeon
+                route, so hide them in Dungeon Route mode. */}
+            {!isDungeonRoute && (
+              <div className="space-y-2">
+                <label className="label-text">{t('config.fightLength')}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={30}
+                    max={1800}
+                    step={30}
+                    value={Math.min(fightLength, 1800)}
+                    onChange={(e) => setFightLength(Number(e.target.value))}
+                    className="flex-1 accent-gold"
+                  />
+                  <input
+                    type="number"
+                    min={10}
+                    max={3600}
+                    value={fightLength}
+                    onChange={(e) => {
+                      const v = Math.max(10, Math.min(3600, Number(e.target.value) || 0));
+                      setFightLength(v);
+                    }}
+                    className="w-16 rounded bg-transparent px-1 py-0.5 text-right font-mono text-sm tabular-nums text-on-surface focus:outline-none focus:ring-1 focus:ring-gold/30"
+                  />
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <label className="label-text">{t('config.numberOfBosses')}</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={targetCount}
-                  onChange={(e) => setTargetCount(Number(e.target.value))}
-                  className="flex-1 accent-gold"
-                />
-                <span className="w-6 text-right font-mono text-sm tabular-nums text-on-surface">
-                  {targetCount}
-                </span>
+            )}
+            {!isDungeonRoute && (
+              <div className="space-y-2">
+                <label className="label-text">{t('config.numberOfBosses')}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={10}
+                    value={targetCount}
+                    onChange={(e) => setTargetCount(Number(e.target.value))}
+                    className="flex-1 accent-gold"
+                  />
+                  <span className="w-6 text-right font-mono text-sm tabular-nums text-on-surface">
+                    {targetCount}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
             <div className="space-y-2">
               <label className="label-text">{t('config.targetError')}</label>
               <div className="flex items-center gap-3">
@@ -214,6 +222,8 @@ export default function AdvancedOptions() {
               <p className="text-[13px] text-on-surface-variant/40">{t('config.iterationsHelp')}</p>
             </div>
           </div>
+
+          <ActiveRouteIndicator />
 
           <RaidBuffsConsumables />
 

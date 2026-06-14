@@ -1,5 +1,6 @@
 import type { JobOverviewSummary } from '../../lib/api';
 import { isActiveStatus } from '../../lib/useActiveSims';
+import { useLanguage } from '../../lib/i18n';
 
 interface Props {
   job: JobOverviewSummary;
@@ -22,6 +23,7 @@ export function JobActionButtons({
   onCancel,
   compact = false,
 }: Props) {
+  const { t } = useLanguage();
   const text = compact ? 'text-[11px]' : 'text-[12px]';
   const pad = compact ? 'px-2 py-0.5' : 'px-2 py-1';
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -37,7 +39,7 @@ export function JobActionButtons({
           }}
           className={`rounded ${pad} ${text} text-on-surface-variant/60 hover:bg-white/5 hover:text-on-surface disabled:opacity-40`}
         >
-          {job.pause_requested ? 'Pausing…' : 'Pause'}
+          {job.pause_requested ? t('sims.pausing') : t('sims.pause')}
         </button>
       )}
       {job.status === 'paused' && (
@@ -49,7 +51,7 @@ export function JobActionButtons({
           }}
           className={`rounded ${pad} ${text} text-primary hover:bg-primary/10 disabled:opacity-40`}
         >
-          Resume
+          {t('sims.resume')}
         </button>
       )}
       {isActiveStatus(job.status) && (
@@ -61,7 +63,7 @@ export function JobActionButtons({
           }}
           className={`rounded ${pad} ${text} text-on-surface-variant/60 hover:bg-red-500/10 hover:text-error disabled:opacity-40`}
         >
-          Cancel
+          {t('common.cancel')}
         </button>
       )}
     </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLanguage } from '../lib/i18n';
 import SettingsToggle from './SettingsToggle';
 
 interface DesktopAvailableUpdate {
@@ -15,6 +16,7 @@ function formatVersionTag(tag: string): string {
 }
 
 export default function SimcEngineSection() {
+  const { t } = useLanguage();
   const [versions, setVersions] = useState<SimcVersion[]>([]);
   const [updates, setUpdates] = useState<DesktopAvailableUpdate[]>([]);
   const [checking, setChecking] = useState(false);
@@ -44,10 +46,10 @@ export default function SimcEngineSection() {
       const result = await window.electronAPI!.checkSimcUpdates();
       setUpdates(result);
       if (result.length === 0) {
-        setError('No SimC releases were found for this platform.');
+        setError(t('settings.noReleasesFound'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check for updates');
+      setError(err instanceof Error ? err.message : t('settings.checkUpdatesFailed'));
     } finally {
       setChecking(false);
     }
@@ -70,7 +72,7 @@ export default function SimcEngineSection() {
         current.map((item) => (item.tag === update.tag ? { ...item, installed: true } : item))
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Install failed');
+      setError(err instanceof Error ? err.message : t('settings.installFailed'));
     } finally {
       setInstalling(null);
     }
@@ -85,7 +87,7 @@ export default function SimcEngineSection() {
       }
       await loadVersions();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove version');
+      setError(err instanceof Error ? err.message : t('settings.removeFailed'));
     }
   };
 
@@ -114,7 +116,7 @@ export default function SimcEngineSection() {
           disabled={checking || !!sourceVersion}
           className="rounded bg-surface-container-highest px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-surface-bright disabled:opacity-50"
         >
-          {checking ? 'Checking...' : 'Check for Updates'}
+          {checking ? t('settings.checking') : t('settings.checkForUpdates')}
         </button>
       </div>
 
@@ -127,7 +129,7 @@ export default function SimcEngineSection() {
                   <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
                   </svg>
-                  <p className="text-sm font-semibold text-primary">Built from Source</p>
+                  <p className="text-sm font-semibold text-primary">{t('settings.builtFromSource')}</p>
                 </div>
                 <p className="mt-0.5 text-[10px] text-on-surface-variant/70">
                   {formatVersionTag(sourceVersion.tag)}
@@ -137,7 +139,7 @@ export default function SimcEngineSection() {
                 onClick={() => handleRemove(sourceVersion.tag)}
                 className="rounded px-3 py-1 text-[10px] font-bold uppercase text-error/60 transition-all hover:bg-error/10 hover:text-error"
               >
-                Remove
+                {t('settings.remove')}
               </button>
             </div>
           </div>
@@ -145,13 +147,13 @@ export default function SimcEngineSection() {
 
         <div className="flex items-center border-b border-outline-variant/20 px-3 pb-2">
           <span className="w-12 shrink-0 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-            Auto
+            {t('settings.auto')}
           </span>
           <span className="ml-4 flex-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-            Branch / Version
+            {t('settings.branchVersion')}
           </span>
           <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-            Actions
+            {t('settings.actions')}
           </span>
         </div>
 
@@ -182,16 +184,18 @@ export default function SimcEngineSection() {
                 </div>
                 {installed ? (
                   <p className="text-[10px] text-on-surface-variant/70">
-                    Installed: {formatVersionTag(installed.tag)}
+                    {t('settings.installedTag', { tag: formatVersionTag(installed.tag) })}
                     {available && (
                       <span className="ml-2 text-primary">
-                        Update available: {formatVersionTag(available.tag)}
+                        {t('settings.updateAvailableTag', { tag: formatVersionTag(available.tag) })}
                       </span>
                     )}
                   </p>
                 ) : (
                   <p className="text-[10px] text-on-surface-variant/50">
-                    {available ? `Available: ${formatVersionTag(available.tag)}` : 'Not installed'}
+                    {available
+                      ? t('settings.availableTag', { tag: formatVersionTag(available.tag) })
+                      : t('settings.notInstalled')}
                   </p>
                 )}
               </div>
@@ -206,8 +210,8 @@ export default function SimcEngineSection() {
                     {installing === available.tag
                       ? `${Math.round(progress * 100)}%`
                       : installed
-                        ? 'Update'
-                        : 'Install'}
+                        ? t('settings.update')
+                        : t('settings.install')}
                   </button>
                 )}
                 {installed && (
@@ -215,7 +219,7 @@ export default function SimcEngineSection() {
                     onClick={() => handleRemove(installed.tag)}
                     className="rounded px-3 py-1 text-[10px] font-bold uppercase text-error/60 transition-all hover:bg-error/10 hover:text-error"
                   >
-                    Remove
+                    {t('settings.remove')}
                   </button>
                 )}
               </div>
@@ -225,7 +229,7 @@ export default function SimcEngineSection() {
 
         {sourceVersion && (
           <p className="text-[10px] text-on-surface-variant/50">
-            Weekly and Nightly branches are disabled while a source build is active.
+            {t('settings.sourceBuildNote')}
           </p>
         )}
 

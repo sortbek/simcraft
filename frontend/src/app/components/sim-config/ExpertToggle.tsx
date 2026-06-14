@@ -41,6 +41,7 @@ export default function ExpertToggle({
   expertSetters,
   activeTabInfo,
   children,
+  embedded = false,
 }: {
   hasContent: boolean;
   activeTab: ExpertTabKey;
@@ -49,34 +50,39 @@ export default function ExpertToggle({
   expertSetters: Record<ExpertTabKey, (v: string) => void>;
   activeTabInfo: (typeof EXPERT_TABS)[number];
   children?: React.ReactNode;
+  /** When true, skip the collapsible toggle and render the panel directly —
+   *  used when this lives in its own dedicated tab rather than inline. */
+  embedded?: boolean;
 }) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(hasContent);
 
   return (
-    <div className="space-y-3 border-t border-outline-variant/10 pt-3">
-      <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-2.5">
-        <div
-          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-            open ? 'bg-gold' : 'bg-surface-container-highest'
-          }`}
-        >
+    <div className={embedded ? 'space-y-3' : 'space-y-3 border-t border-outline-variant/10 pt-3'}>
+      {!embedded && (
+        <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-2.5">
           <div
-            className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-              open ? 'left-[18px] bg-black' : 'left-0.5 bg-on-surface-variant'
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+              open ? 'bg-gold' : 'bg-surface-container-highest'
             }`}
-          />
-        </div>
-        <span className="text-sm font-medium text-on-surface-variant">
-          {t('config.expertMode')}
-        </span>
-        {!open && hasContent && (
-          <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
-            {t('config.modified')}
+          >
+            <div
+              className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
+                open ? 'left-[18px] bg-black' : 'left-0.5 bg-on-surface-variant'
+              }`}
+            />
+          </div>
+          <span className="text-sm font-medium text-on-surface-variant">
+            {t('config.expertMode')}
           </span>
-        )}
-      </button>
-      {open && (
+          {!open && hasContent && (
+            <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
+              {t('config.modified')}
+            </span>
+          )}
+        </button>
+      )}
+      {(embedded || open) && (
         <div className="space-y-3">
           <div className="flex gap-1 overflow-x-auto">
             {EXPERT_TABS.map((tab) => (

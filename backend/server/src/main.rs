@@ -67,6 +67,11 @@ async fn main() {
         eprintln!("FATAL: failed to load game data: {}", e);
         std::process::exit(1);
     }
+    // MDT enemy database is optional — a missing file leaves it empty and the
+    // import endpoint reports unknown dungeons rather than failing startup.
+    if let Err(e) = simhammer_core::mdt::enemy_db::load(&data_dir) {
+        eprintln!("WARNING: failed to load MDT dungeon database: {}", e);
+    }
 
     // Database URL: auto-prefix sqlite:// if no scheme is present
     let db_url = env_or("DATABASE_URL", "simhammer.db");

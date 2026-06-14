@@ -107,11 +107,10 @@ export default function QuickSimPage() {
     <div className="space-y-6 pb-20">
       <div>
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          Quick Sim
+          {t('nav.quickSim')}
         </h1>
         <p className="max-w-2xl text-sm text-on-surface-variant">
-          Run a quick simulation to check your DPS and stat weights with your current gear and
-          talents.
+          {t('page.quickSimSubtitle')}
         </p>
       </div>
 

@@ -7,6 +7,7 @@ use super::droptimizer_handlers;
 use super::enchant_gem_handlers;
 use super::game_data_handlers;
 use super::job_handlers;
+use super::mdt_handlers;
 use super::provider_handlers;
 use super::route_handlers;
 use super::sim_handlers;
@@ -36,6 +37,16 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/droptimizer/sim",
             web::post().to(droptimizer_handlers::create_droptimizer_sim),
+        )
+        .route("/api/mdt/decode", web::post().to(mdt_handlers::decode_mdt))
+        .route("/api/mdt/dungeons", web::get().to(mdt_handlers::list_dungeons))
+        .route(
+            "/api/mdt/dungeon/{idx}",
+            web::get().to(mdt_handlers::dungeon_overview),
+        )
+        .route(
+            "/api/mdt/serialize",
+            web::post().to(mdt_handlers::serialize_route),
         )
         .route(
             "/api/enchant-gem/sim",

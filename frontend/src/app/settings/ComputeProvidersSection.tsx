@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../lib/i18n';
 import { API_URL } from '../lib/api';
 import {
   useProviders,
@@ -18,6 +19,7 @@ interface TestResult {
 }
 
 function ProviderRow({ providerId, displayName }: { providerId: string; displayName: string }) {
+  const { t } = useLanguage();
   const isDesktop = useIsDesktop();
   const [key, setKey] = useState<string>('');
   const [stored, setStored] = useState<boolean>(false);
@@ -89,7 +91,7 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
         });
         setTest(await res.json());
       } catch (e: any) {
-        setTest({ ok: false, detail: e?.message ?? 'network error' });
+        setTest({ ok: false, detail: e?.message ?? t('settings.networkError') });
       } finally {
         setTesting(false);
       }
@@ -106,7 +108,7 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
       });
       setTest(await res.json());
     } catch (e: any) {
-      setTest({ ok: false, detail: e?.message ?? 'network error' });
+      setTest({ ok: false, detail: e?.message ?? t('settings.networkError') });
     } finally {
       setTesting(false);
     }
@@ -125,7 +127,7 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
                   : 'bg-outline-variant/10 text-on-surface-variant/70'
               }`}
             >
-              {ready ? 'Ready' : 'Not configured'}
+              {ready ? t('settings.ready') : t('settings.notConfigured')}
             </span>
           </div>
           <p className="text-[10px] text-on-surface-variant/70">{providerId}</p>
@@ -137,8 +139,8 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
           type="password"
           placeholder={
             stored
-              ? 'Key on file — paste a new key to replace'
-              : `Paste your ${displayName} API key`
+              ? t('settings.keyOnFile')
+              : t('settings.pasteApiKey', { displayName })
           }
           value={key}
           onChange={(e) => setKey(e.target.value)}
@@ -148,21 +150,21 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
           onClick={save}
           className="rounded bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary transition-all hover:bg-primary/20"
         >
-          Save
+          {t('common.save')}
         </button>
         <button
           onClick={testConn}
           disabled={testing}
           className="rounded bg-surface-container-highest px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface transition-colors hover:bg-surface-bright disabled:opacity-50"
         >
-          {testing ? '...' : 'Test'}
+          {testing ? '...' : t('settings.test')}
         </button>
         {stored && (
           <button
             onClick={remove}
             className="rounded px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-error/60 transition-all hover:bg-error/10 hover:text-error"
           >
-            Remove
+            {t('settings.remove')}
           </button>
         )}
       </div>
@@ -170,8 +172,8 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
       {test && (
         <p className={`mt-2 text-[10px] ${test.ok ? 'text-primary' : 'text-error'}`}>
           {test.ok
-            ? `Connected · ${test.credits_available ?? '—'} credits available`
-            : `Failed: ${test.detail ?? 'unknown error'}`}
+            ? t('settings.connectedCredits', { n: test.credits_available ?? '—' })
+            : t('settings.testFailed', { detail: test.detail ?? t('settings.unknownError') })}
         </p>
       )}
     </div>
@@ -179,6 +181,7 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
 }
 
 export default function ComputeProvidersSection() {
+  const { t } = useLanguage();
   const providers = useProviders();
   if (!providers) return null;
   const remote = providers.filter((p) => p.id !== 'local');
@@ -188,12 +191,12 @@ export default function ComputeProvidersSection() {
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
         </svg>
-        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">Compute Providers</h2>
+        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">{t('settings.computeProviders')}</h2>
       </div>
 
       <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
         <p className="text-xs text-on-surface-variant">
-          Cloud SimC providers. Configure once; pick per sim with the Compute selector.
+          {t('settings.computeProvidersDesc')}
         </p>
         <div className="space-y-2">
           {remote.map((p) => (

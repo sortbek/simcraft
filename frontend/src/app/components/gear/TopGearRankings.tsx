@@ -43,18 +43,22 @@ function precisionDotTone(pct: number): string {
 }
 
 /** Short band name shown as the precision tooltip header (mirrors the dot tone). */
-function precisionBandLabel(pct: number): string {
-  if (pct <= 0.5) return 'Final-pass precision';
-  if (pct <= 1.0) return 'Refine band';
-  if (pct <= 2.0) return 'Coarse band';
-  if (pct <= 4.0) return 'Probe / rough';
-  return 'Early-stage prune';
+function precisionBandLabel(
+  pct: number,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string {
+  if (pct <= 0.5) return t('gear.precisionFinal');
+  if (pct <= 1.0) return t('gear.precisionRefine');
+  if (pct <= 2.0) return t('gear.precisionCoarse');
+  if (pct <= 4.0) return t('gear.precisionProbe');
+  return t('gear.precisionPrune');
 }
 
 /** A precision dot with a styled hover card. The card is portal-rendered at a
  * fixed position so it escapes the row's `overflow-hidden` (the DPS bar clip);
  * a plain CSS popover would be cropped at the row edge. */
 function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number }) {
+  const { t } = useLanguage();
   const ref = useRef<HTMLSpanElement>(null);
   const [tip, setTip] = useState<{ top: number; left: number } | null>(null);
 
@@ -72,7 +76,7 @@ function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number 
     >
       <span
         className={`h-2 w-2 shrink-0 rounded-full ${precisionDotTone(pct)}`}
-        aria-label={`accuracy ±${pct.toFixed(2)} percent`}
+        aria-label={t('gear.precisionAccuracy', { pct: pct.toFixed(2) })}
       />
       {tip &&
         createPortal(
@@ -84,7 +88,7 @@ function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number 
             <div className="flex items-center gap-1.5">
               <span className={`h-2 w-2 shrink-0 rounded-full ${precisionDotTone(pct)}`} />
               <span className="whitespace-nowrap text-[11px] font-semibold text-on-surface">
-                {precisionBandLabel(pct)}
+                {precisionBandLabel(pct, t)}
               </span>
             </div>
             <div className="mt-1 whitespace-nowrap font-mono text-[11px] leading-tight tabular-nums text-on-surface-variant">
@@ -498,7 +502,7 @@ const ResultRow = memo(function ResultRow({
                 }
               }}
               disabled={verifying}
-              title="Re-run this row as a high-precision Quick Sim"
+              title={t('gear.verifyRowTitle')}
               className="rounded border border-outline-variant/20 bg-surface-container-high/60 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-primary-container/30 hover:text-primary disabled:opacity-50"
             >
               {verifying ? '…' : 'Sim'}

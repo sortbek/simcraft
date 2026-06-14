@@ -12,6 +12,7 @@ import {
 import { isActiveStatus, useActiveSims } from '../lib/useActiveSims';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { loadLastCharacter, parseCharacterInfo } from '../lib/character';
+import { useLanguage } from '../lib/i18n';
 import { ActiveView } from './_components/ActiveView';
 import { AllView } from './_components/AllView';
 import { StatsOverview } from './_components/StatsOverview';
@@ -19,6 +20,7 @@ import { StatsOverview } from './_components/StatsOverview';
 type ViewMode = 'active' | 'all';
 
 export default function SimsPage() {
+  const { t } = useLanguage();
   const {
     jobs: activeSnapshot,
     error: pollError,
@@ -65,10 +67,10 @@ export default function SimsPage() {
       .then((data) => setAllJobs(Array.isArray(data) ? data : []))
       .catch((e) => {
         setAllJobs([]);
-        setAllError(e instanceof Error ? e.message : 'Failed to load history');
+        setAllError(e instanceof Error ? e.message : t('sims.errLoadHistory'));
       })
       .finally(() => setAllLoading(false));
-  }, [isDesktop, character]);
+  }, [isDesktop, character, t]);
 
   useEffect(() => {
     loadAllJobs();
@@ -123,40 +125,40 @@ export default function SimsPage() {
         refreshAll();
       } catch (e: unknown) {
         setPauseRequested(id, false);
-        setActionError(e instanceof Error ? e.message : 'Failed to pause sim');
+        setActionError(e instanceof Error ? e.message : t('sims.errPause'));
       } finally {
         setBusy(null);
       }
     },
-    [refreshAll, setPauseRequested]
+    [refreshAll, setPauseRequested, t]
   );
   const handleResume = useCallback(
-    (id: string) => wrapAction(id, () => resumeSim(id), 'Failed to resume sim'),
-    [wrapAction]
+    (id: string) => wrapAction(id, () => resumeSim(id), t('sims.errResume')),
+    [wrapAction, t]
   );
   const handleCancel = useCallback(
     (id: string) => {
-      if (!window.confirm('Cancel this sim? This cannot be undone.')) return;
+      if (!window.confirm(t('sims.confirmCancel'))) return;
       wrapAction(
         id,
         async () => {
           const res = await fetch(`${API_URL}/api/sim/${id}/cancel`, { method: 'POST' });
           if (!res.ok) {
             const detail = await res.json().catch(() => ({}));
-            throw new Error(detail.detail || `Cancel failed (${res.status})`);
+            throw new Error(detail.detail || t('sims.errCancelStatus', { status: res.status }));
           }
         },
-        'Failed to cancel sim'
+        t('sims.errCancel')
       );
     },
-    [wrapAction]
+    [wrapAction, t]
   );
   const handleDelete = useCallback(
     (id: string) => {
-      if (!window.confirm('Delete this sim from history? This cannot be undone.')) return;
-      wrapAction(id, () => deleteJob(id), 'Failed to delete sim');
+      if (!window.confirm(t('sims.confirmDelete'))) return;
+      wrapAction(id, () => deleteJob(id), t('sims.errDelete'));
     },
-    [wrapAction]
+    [wrapAction, t]
   );
 
   const error = actionError ?? pollError ?? allError;
@@ -166,10 +168,10 @@ export default function SimsPage() {
       <div className="flex items-end justify-between gap-6">
         <div>
           <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-            Sims
+            {t('sims.title')}
           </h1>
           <p className="max-w-2xl text-sm text-on-surface-variant">
-            Live status of in-flight sims and the full history of recent runs.
+            {t('sims.description')}
           </p>
         </div>
         <div className="flex gap-1 rounded-lg border border-outline-variant/10 bg-surface-container-low p-1">
@@ -181,7 +183,7 @@ export default function SimsPage() {
                 : 'text-on-surface-variant/60 hover:text-on-surface'
             }`}
           >
-            Active ({activeList.length})
+            {t('sims.tabActive', { count: activeList.length })}
           </button>
           <button
             onClick={() => setView('all')}
@@ -191,7 +193,7 @@ export default function SimsPage() {
                 : 'text-on-surface-variant/60 hover:text-on-surface'
             }`}
           >
-            All ({mergedJobs.length})
+            {t('sims.tabAll', { count: mergedJobs.length })}
           </button>
         </div>
       </div>

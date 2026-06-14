@@ -2,8 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { FightScenario } from '../../lib/types';
+import type { ActiveRoute } from '../../lib/active-route';
 import { API_URL } from '../../lib/api';
-import { readSessionString, readStoredJson, readStoredPositiveInt } from '../../lib/storage';
+import {
+  readSessionJson,
+  readSessionString,
+  readStoredJson,
+  readStoredPositiveInt,
+} from '../../lib/storage';
 import { TRIAGE_BATCH_DEFAULT } from '../../lib/triageBatch';
 
 export type RotationMode = 'default' | 'assisted_combat' | 'one_button';
@@ -15,6 +21,9 @@ interface SimContextType {
   hasInput: boolean;
   fightStyle: string;
   setFightStyle: (v: string) => void;
+  /** `fightStyle === 'DungeonRoute'` — the mode the route control and the controls
+   *  a route overrides are gated on. Derived; exposed so consumers don't re-derive. */
+  isDungeonRoute: boolean;
   threads: number;
   setThreads: (v: number) => void;
   selectedTalent: string;
@@ -29,6 +38,16 @@ interface SimContextType {
   setIterations: (v: number) => void;
   customApl: string;
   setCustomApl: (v: string) => void;
+  /** The active dungeon route, held as data and materialized to SimC at sim
+   *  time (see useSimSubmit). `null` when no route is loaded. */
+  activeRoute: ActiveRoute | null;
+  /** Load a route as the active route. Owns the coupled state: persists it,
+   *  clears any queued scenarios (which can't coexist with a forced route), and
+   *  sets the fight style (DungeonRoute, except a legacy `footer` snippet which
+   *  may not be one). Use this instead of poking the pieces individually. */
+  activateRoute: (route: ActiveRoute) => void;
+  /** Unload the active route and restore the default fight style. */
+  clearRoute: () => void;
   rotationMode: RotationMode;
   setRotationMode: (v: RotationMode) => void;
   // Expert Mode injection points
@@ -106,7 +125,7 @@ export const DEFAULT_EXPANSION_OPTIONS: Record<string, boolean> = {
 
 export function SimProvider({ children }: { children: ReactNode }) {
   const [simcInput, _setSimcInput] = useState('');
-  const [fightStyle, setFightStyle] = useState('Patchwerk');
+  const [fightStyle, _setFightStyle] = useState('Patchwerk');
   const [threads, _setThreads] = useState(0);
   const [selectedTalent, setSelectedTalent] = useState('');
   const [targetCount, setTargetCount] = useState(1);
@@ -114,6 +133,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [targetError, _setTargetError] = useState(0.1);
   const [iterations, _setIterations] = useState(100000);
   const [customApl, setCustomApl] = useState('');
+  const [activeRoute, _setActiveRoute] = useState<ActiveRoute | null>(null);
   const [rotationMode, _setRotationMode] = useState<RotationMode>('default');
   const [simcHeader, setSimcHeader] = useState('');
   const [simcBasePlayer, setSimcBasePlayer] = useState('');
@@ -142,6 +162,14 @@ export function SimProvider({ children }: { children: ReactNode }) {
       }
       _setIterations(readStoredPositiveInt('simhammer_iterations', 100000));
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
+      // Active route survives a reload (it's the live sim input, not just config).
+      // Read through the never-throw helper so a corrupt value yields null instead
+      // of aborting the restores that follow it in this shared try block. fightStyle
+      // isn't persisted, so re-assert the route ⇒ DungeonRoute invariant the UI
+      // gates on (footer snippets keep the default style — they aren't routes).
+      const restoredRoute = readSessionJson<ActiveRoute | null>('simhammer_active_route', null);
+      _setActiveRoute(restoredRoute);
+      if (restoredRoute && restoredRoute.kind !== 'footer') _setFightStyle('DungeonRoute');
       _setTriageMaxBatchProfilesets(
         readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
       );
@@ -189,6 +217,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasInput = simcInput.trim().length >= 50;
+
+  // Dungeon Route mode: gates the route control and the controls a route overrides.
+  const isDungeonRoute = fightStyle === 'DungeonRoute';
 
   const setRaidBuffs = useCallback((v: Record<string, boolean>) => {
     _setRaidBuffs(v);
@@ -247,6 +278,46 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  // Internal: set + persist the active route (the live sim input survives reload).
+  const persistActiveRoute = useCallback((v: ActiveRoute | null) => {
+    _setActiveRoute(v);
+    try {
+      if (v) sessionStorage.setItem('simhammer_active_route', JSON.stringify(v));
+      else sessionStorage.removeItem('simhammer_active_route');
+    } catch {}
+  }, []);
+
+  // Exposed fight-style setter. A loaded route only applies in Dungeon Route mode,
+  // so switching to any other style discards it — keeping "route ⇒ DungeonRoute" a
+  // single invariant (with activateRoute/clearRoute) instead of each drawer
+  // re-implementing the coupling.
+  const setFightStyle = useCallback(
+    (v: string) => {
+      _setFightStyle(v);
+      if (v !== 'DungeonRoute') persistActiveRoute(null);
+    },
+    [persistActiveRoute]
+  );
+
+  const activateRoute = useCallback(
+    (route: ActiveRoute) => {
+      persistActiveRoute(route);
+      // Scenarios sweep fight styles, but the route's own fight_style=DungeonRoute
+      // overrides them at sim time — so they'd silently all run the same route.
+      setScenarios([]);
+      // A footer snippet may be any SimC (not necessarily a DungeonRoute), so leave
+      // the fight style at the default for it; real route kinds force DungeonRoute.
+      // Raw setter: switching style here must not discard the route we just set.
+      _setFightStyle(route.kind === 'footer' ? 'Patchwerk' : 'DungeonRoute');
+    },
+    [persistActiveRoute]
+  );
+
+  const clearRoute = useCallback(() => {
+    persistActiveRoute(null);
+    _setFightStyle('Patchwerk');
+  }, [persistActiveRoute]);
+
   const setStatWeights = useCallback((v: boolean) => {
     _setStatWeights(v);
     try {
@@ -269,6 +340,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         hasInput,
         fightStyle,
         setFightStyle,
+        isDungeonRoute,
         threads,
         setThreads,
         selectedTalent,
@@ -283,6 +355,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setIterations,
         customApl,
         setCustomApl,
+        activeRoute,
+        activateRoute,
+        clearRoute,
         rotationMode,
         setRotationMode,
         simcHeader,

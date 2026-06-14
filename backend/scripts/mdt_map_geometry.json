@@ -1,0 +1,11 @@
+{
+  "_comment": "Per-UiMap travel geometry for the SimC DungeonRoute delay estimate, derived from Blizzard DBC and keyed by MDT mapId (MDT.mapInfo[idx].mapID). Per-axis world-yard scale: yardsPerUnitX = extentX / 840, yardsPerUnitY = extentY / 560, where the dungeon floor fills MDT's 840x560 base canvas and the UiMapAssignment world bounds give extentX/extentY. For a 1.5:1 floor the two axes are equal (the values below, migrated from the former single yardsPerUnit); non-1.5 floors keep distinct X/Y. 560 (Maisara Caverns) and 559 (Nexus Point Xenas) are calibrated from their floor UiMaps (2501, whose parent 2437 is the Zul'Aman zone; and 2556) — their MDT mapIDs resolve to parent/zone UiMaps, which is why these two were blank before. timerSeconds = MapChallengeMode.CriteriaCount_0 (the +1 par timer). Regenerate from DBC when the season/dungeon set changes.",
+  "161": { "yardsPerUnitX": 0.738, "yardsPerUnitY": 0.738, "timerSeconds": 1680 },
+  "239": { "yardsPerUnitX": 0.952, "yardsPerUnitY": 0.952, "timerSeconds": 2040 },
+  "402": { "yardsPerUnitX": 0.670, "yardsPerUnitY": 0.670, "timerSeconds": 1860 },
+  "556": { "yardsPerUnitX": 0.902, "yardsPerUnitY": 0.902, "timerSeconds": 1800 },
+  "557": { "yardsPerUnitX": 1.131, "yardsPerUnitY": 1.131, "timerSeconds": 1980 },
+  "558": { "yardsPerUnitX": 0.670, "yardsPerUnitY": 0.670, "timerSeconds": 2040 },
+  "559": { "yardsPerUnitX": 1.161, "yardsPerUnitY": 1.161, "timerSeconds": 1800 },
+  "560": { "yardsPerUnitX": 1.967, "yardsPerUnitY": 1.968, "timerSeconds": 1980 }
+}

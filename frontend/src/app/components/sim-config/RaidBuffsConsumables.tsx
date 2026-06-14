@@ -90,6 +90,7 @@ const EMPTY_OPTIONS = [DEFAULT_OPTIONS, NONE_OPTION];
 export default function RaidBuffsConsumables() {
   const { t } = useLanguage();
   const {
+    isDungeonRoute,
     raidBuffs,
     setRaidBuffs,
     consumables,
@@ -159,61 +160,64 @@ export default function RaidBuffsConsumables() {
 
   return (
     <div className="space-y-4 pt-1">
-      {/* Raid Buffs */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <label className="label-text">{t('config.raidBuffs')}</label>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setAllBuffs(true)}
-              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                allBuffsOn
-                  ? 'bg-gold/15 text-gold'
-                  : 'text-on-surface-variant/50 hover:text-on-surface-variant'
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllBuffs(false)}
-              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                allBuffsOff
-                  ? 'bg-red-500/15 text-red-400'
-                  : 'text-on-surface-variant/50 hover:text-on-surface-variant'
-              }`}
-            >
-              None
-            </button>
-            {!isDefault && (
+      {/* Raid Buffs are forced off in Dungeon Route mode, so hide them there
+          (consumables + expansion options still apply). */}
+      {!isDungeonRoute && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <label className="label-text">{t('config.raidBuffs')}</label>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={resetAll}
-                className="rounded-md px-2 py-0.5 text-[11px] font-medium text-on-surface-variant/50 hover:text-on-surface-variant"
+                onClick={() => setAllBuffs(true)}
+                className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  allBuffsOn
+                    ? 'bg-gold/15 text-gold'
+                    : 'text-on-surface-variant/50 hover:text-on-surface-variant'
+                }`}
               >
-                Reset
+                All
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => setAllBuffs(false)}
+                className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  allBuffsOff
+                    ? 'bg-red-500/15 text-red-400'
+                    : 'text-on-surface-variant/50 hover:text-on-surface-variant'
+                }`}
+              >
+                None
+              </button>
+              {!isDefault && (
+                <button
+                  type="button"
+                  onClick={resetAll}
+                  className="rounded-md px-2 py-0.5 text-[11px] font-medium text-on-surface-variant/50 hover:text-on-surface-variant"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {RAID_BUFF_LIST.map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleBuff(key)}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  raidBuffs[key]
+                    ? 'bg-gold/10 text-gold ring-1 ring-gold/30'
+                    : 'bg-surface-container-high/50 text-on-surface-variant/40 ring-1 ring-outline-variant/10 hover:text-on-surface-variant/60'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {RAID_BUFF_LIST.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => toggleBuff(key)}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                raidBuffs[key]
-                  ? 'bg-gold/10 text-gold ring-1 ring-gold/30'
-                  : 'bg-surface-container-high/50 text-on-surface-variant/40 ring-1 ring-outline-variant/10 hover:text-on-surface-variant/60'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Consumables */}
       <div className="space-y-2.5">

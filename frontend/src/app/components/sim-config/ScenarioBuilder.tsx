@@ -8,7 +8,8 @@ import { API_URL } from '../../lib/api';
 
 export default function ScenarioBuilder() {
   const { t } = useLanguage();
-  const { scenarios, addScenario, removeScenario, clearScenarios } = useSimContext();
+  const { scenarios, addScenario, removeScenario, clearScenarios, isDungeonRoute, activeRoute } =
+    useSimContext();
   const [maxScenarios, setMaxScenarios] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
@@ -21,6 +22,12 @@ export default function ScenarioBuilder() {
   }, []);
 
   if (!loaded || maxScenarios === 0) return null;
+
+  // Scenarios can't coexist with a route: Dungeon Route mode forces
+  // fight_style=DungeonRoute, and a loaded route (incl. a footer route under
+  // Patchwerk) is applied to every run — useSimSubmit ignores queued scenarios in
+  // both cases, so hide the builder to match.
+  if (isDungeonRoute || activeRoute) return null;
 
   return (
     <div className="space-y-3 border-t border-outline-variant/10 pt-2">

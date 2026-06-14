@@ -34,7 +34,7 @@ export default function ConfigFooter({
   subLabel,
 }: ConfigFooterProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'simulation' | 'buffs'>('simulation');
+  const [activeTab, setActiveTab] = useState<'simulation' | 'buffs' | 'expert'>('simulation');
   const [expertActiveTab, setExpertActiveTab] = useState<ExpertTabKey>('footer');
   const [availableBranches, setAvailableBranches] = useState<string[]>([]);
 

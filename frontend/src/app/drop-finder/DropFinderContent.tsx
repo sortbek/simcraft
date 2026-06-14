@@ -441,14 +441,14 @@ export default function DropFinderContent() {
   }, [filteredDrops, excludedSlots]);
 
   const slotFilterSummary = useMemo(() => {
-    if (availableSlots.length === 0 || excludedSlots.size === 0) return 'All slots';
+    if (availableSlots.length === 0 || excludedSlots.size === 0) return t('dropFinder.allSlots');
     const visibleCount = availableSlots.filter((slot) => !excludedSlots.has(slot)).length;
-    if (visibleCount <= 0) return 'No slots';
+    if (visibleCount <= 0) return t('dropFinder.noSlots');
     if (visibleCount === 1) {
-      return availableSlots.find((slot) => !excludedSlots.has(slot)) ?? '1 slot';
+      return availableSlots.find((slot) => !excludedSlots.has(slot)) ?? t('dropFinder.slotsOne');
     }
-    return `${visibleCount} slots`;
-  }, [availableSlots, excludedSlots]);
+    return t('dropFinder.slotsMany', { visibleCount });
+  }, [availableSlots, excludedSlots, t]);
 
   function selectItems(itemIds: number[]) {
     setSelected((prev) => {
@@ -491,9 +491,9 @@ export default function DropFinderContent() {
     if (checked === total) return t('loot.allDungeons');
     if (checked === 1) {
       const sel = dungeonInstances.find((i) => dungeonPool.has(String(i.id)));
-      return sel?.name ?? `${checked} dungeons`;
+      return sel?.name ?? t('dropFinder.dungeonsCount', { checked });
     }
-    return `${checked} dungeons`;
+    return t('dropFinder.dungeonsCount', { checked });
   }, [isRaid, dungeonInstances, dungeonPool, t]);
 
   useEffect(() => {
@@ -616,11 +616,10 @@ export default function DropFinderContent() {
       {/* Page header */}
       <div>
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          Drop Finder
+          {t('dropFinder.title')}
         </h1>
         <p className="max-w-2xl text-sm text-on-surface-variant">
-          Find and simulate the best gear drops from across Azeroth. Refine your search by activity
-          type and difficulty.
+          {t('dropFinder.description')}
         </p>
       </div>
 
@@ -754,13 +753,13 @@ export default function DropFinderContent() {
                     : 'border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
                 }`}
               >
-                <span className="font-semibold">Slots</span>
+                <span className="font-semibold">{t('dropFinder.slots')}</span>
                 <span className={slotFilterOpen || excludedSlots.size > 0 ? 'text-gold/90' : ''}>
                   {slotFilterSummary}
                 </span>
                 {excludedSlots.size > 0 && (
                   <span className="rounded-full border border-gold/20 bg-black/10 px-1.5 py-0.5 text-[10px] font-bold text-gold">
-                    {excludedSlots.size} hidden
+                    {t('dropFinder.hiddenCount', { count: excludedSlots.size })}
                   </span>
                 )}
                 <svg
@@ -779,10 +778,10 @@ export default function DropFinderContent() {
                 <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-2">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">
-                      Slot Filter
+                      {t('dropFinder.slotFilter')}
                     </p>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      Disable slots you want to leave out of the current sim.
+                      {t('dropFinder.slotFilterDesc')}
                     </p>
                   </div>
                   {excludedSlots.size > 0 && (
@@ -791,7 +790,7 @@ export default function DropFinderContent() {
                       onClick={resetExcludedSlots}
                       className="rounded-lg border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:border-outline-variant/35 hover:text-on-surface"
                     >
-                      Reset
+                      {t('common.reset')}
                     </button>
                   )}
                 </div>

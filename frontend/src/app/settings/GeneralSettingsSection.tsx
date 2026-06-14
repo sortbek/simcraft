@@ -50,7 +50,7 @@ export default function GeneralSettingsSection() {
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
           <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
         </svg>
-        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">General</h2>
+        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">{t('settings.general')}</h2>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
@@ -62,7 +62,7 @@ export default function GeneralSettingsSection() {
                   {t('settings.cpuThreads')}
                 </h3>
                 <p className="text-xs text-on-surface-variant">
-                  Allocated processing power for simulation threads.
+                  {t('settings.cpuThreadsDesc')}
                 </p>
               </div>
               <div className="text-right">
@@ -70,7 +70,7 @@ export default function GeneralSettingsSection() {
                   {threads}/{maxThreads}
                 </span>
                 <p className="text-[10px] font-bold uppercase text-on-surface-variant">
-                  Threads Active
+                  {t('settings.threadsActive')}
                 </p>
               </div>
             </div>

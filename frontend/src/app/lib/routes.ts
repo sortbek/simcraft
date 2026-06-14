@@ -7,6 +7,8 @@ export const ROUTES = {
   quickSim: '/quick-sim',
   topGear: '/top-gear',
   dropFinder: '/drop-finder',
+  dungeonRoute: '/route',
+  routesManager: '/routes',
   upgradeCompare: '/upgrade-compare',
   advanced: '/advanced',
   sims: '/sims',
@@ -14,6 +16,12 @@ export const ROUTES = {
   /** Legacy alias; redirects to `sims`. */
   history: '/history',
 } as const;
+
+/** sessionStorage key the routes manager uses to hand a route to the `/route`
+ *  map viewer: a serialized `ActiveRoute` (`mdt` or `pulls` variant). Lives here
+ *  because Next.js page files may not have extra exports (breaks the `next
+ *  build` page type check). */
+export const MDT_ROUTE_SESSION_KEY = 'simhammer_mdt_route';
 
 /** Result page for a single sim run. */
 export function simResultRoute(id: string): string {

@@ -112,6 +112,144 @@ export async function simRow(sourceJobId: string, comboId: number): Promise<stri
   return data.id;
 }
 
+/** A pull's identity for the map: its number + color. The mobs themselves come
+ *  from the full `MdtMap.enemies` layer (each clone tagged with its pull/color). */
+export interface MdtMapPull {
+  index: number;
+  /** 6-char hex color, no `#`. */
+  color: string;
+}
+
+export interface MdtMapSublevel {
+  index: number;
+  name: string;
+}
+
+export interface MdtMapPoint {
+  x: number;
+  y: number;
+}
+
+/** One clone in the full mob layer. `pull`/`color` are null when the mob is not
+ *  part of the route (drawn dimmed). `patrol` is empty for stationary mobs. */
+export interface MdtMapEnemy {
+  /** Stable MDT clone reference, sent back to /api/mdt/serialize to rebuild edits. */
+  enemy_idx: number;
+  clone_idx: number;
+  x: number;
+  y: number;
+  sublevel: number;
+  name: string;
+  is_boss: boolean;
+  scale: number;
+  count: number;
+  /** Full keystone-scaled health (mob max HP). The sim uses `hp_percent` of this. */
+  health: number;
+  /** Lowercased creature type (SimC enemy race), for re-serializing after edits. */
+  race: string;
+  patrol: MdtMapPoint[];
+  pull: number | null;
+  color: string | null;
+}
+
+export interface MdtMap {
+  dungeon_idx: number;
+  /** Total enemy-forces required for the dungeon (the 100% threshold). */
+  total_count: number;
+  sublevels: MdtMapSublevel[];
+  pulls: MdtMapPull[];
+  /** Every clone of every enemy in the dungeon (pulled + unpulled). */
+  enemies: MdtMapEnemy[];
+}
+
+/** Result of decoding an MDT export string into a SimC DungeonRoute. */
+export interface MdtConversion {
+  /** MDT addon version the enemy DB was extracted from (`''` if unknown).
+   *  Mob positions shift between MDT releases. */
+  mdt_version: string;
+  dungeon_name: string;
+  week: number;
+  keystone_level: number;
+  pull_count: number;
+  enemy_count: number;
+  total_health: number;
+  /** Enemy instances the route referenced but the DB couldn't resolve (version drift). */
+  unresolved: number;
+  /** The full `fight_style=DungeonRoute` + pulls block. */
+  simc: string;
+  /** Map-render data: colored mob markers per pull, positioned on the dungeon map. */
+  map: MdtMap;
+}
+
+/** Decode an MDT export string into a SimC DungeonRoute conversion.
+ *  `keystoneLevel` overrides the level encoded in the string; `hpPercent` is the
+ *  fraction of full enemy HP to sim (1–100, backend default 27). */
+export function decodeMdt(
+  importString: string,
+  opts?: { keystoneLevel?: number; hpPercent?: number },
+): Promise<MdtConversion> {
+  return postJson<MdtConversion>('/api/mdt/decode', {
+    import: importString,
+    ...(opts?.keystoneLevel != null ? { keystone_level: opts.keystoneLevel } : {}),
+    ...(opts?.hpPercent != null ? { hp_percent: opts.hpPercent } : {}),
+  });
+}
+
+/** A browsable dungeon in the current keystone season. */
+export interface DungeonSummary {
+  idx: number;
+  name: string;
+}
+
+/** List the current-season dungeons available to browse on the route map.
+ *  Cached per session — the set is static within a running backend, and several
+ *  screens fetch it independently. The failed promise is not cached, so a later
+ *  call retries. */
+let dungeonsCache: Promise<DungeonSummary[]> | undefined;
+export function listDungeons(): Promise<DungeonSummary[]> {
+  if (!dungeonsCache) {
+    dungeonsCache = fetchJson<DungeonSummary[]>(apiUrl('/api/mdt/dungeons')).catch((e) => {
+      dungeonsCache = undefined;
+      throw e;
+    });
+  }
+  return dungeonsCache;
+}
+
+/** Fetch a dungeon overview (full mob layer, no pulls) for browsing without an
+ *  imported route. Same shape as `decodeMdt`, so it drops into the route viewer. */
+export function getDungeonOverview(
+  idx: number,
+  opts?: { keystoneLevel?: number; hpPercent?: number }
+): Promise<MdtConversion> {
+  const params = new URLSearchParams();
+  if (opts?.keystoneLevel != null) params.set('keystone_level', String(opts.keystoneLevel));
+  if (opts?.hpPercent != null) params.set('hp_percent', String(opts.hpPercent));
+  const qs = params.toString();
+  return fetchJson<MdtConversion>(apiUrl(`/api/mdt/dungeon/${idx}${qs ? `?${qs}` : ''}`));
+}
+
+/** A clone reference into a dungeon's mob layer. */
+export interface CloneRef {
+  enemy_idx: number;
+  clone_idx: number;
+}
+
+/** Regenerate a SimC DungeonRoute (with delays) from an edited/built pull
+ *  assignment at a chosen keystone level. */
+export function serializeRoute(
+  dungeonIdx: number,
+  pulls: CloneRef[][],
+  opts?: { keystoneLevel?: number; hpPercent?: number }
+): Promise<MdtConversion> {
+  return postJson<MdtConversion>('/api/mdt/serialize', {
+    dungeon_idx: dungeonIdx,
+    pulls,
+    ...(opts?.keystoneLevel != null ? { keystone_level: opts.keystoneLevel } : {}),
+    ...(opts?.hpPercent != null ? { hp_percent: opts.hpPercent } : {}),
+  });
+}
+
 export type JobStatus = 'pending' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
 export interface JobOverviewSummary {

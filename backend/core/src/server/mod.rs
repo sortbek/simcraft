@@ -9,6 +9,7 @@ mod game_data_handlers;
 mod handler_prep;
 pub(crate) mod helpers;
 mod job_handlers;
+mod mdt_handlers;
 pub mod request_json;
 mod provider_handlers;
 mod route_handlers;
@@ -445,6 +446,12 @@ pub async fn start_server(
             if static_dir.exists() {
                 app = app.service(
                     actix_files::Files::new("/api/data/static", static_dir).prefer_utf8(true),
+                );
+            }
+            let mdt_maps_dir = dir.join("mdt-maps");
+            if mdt_maps_dir.exists() {
+                app = app.service(
+                    actix_files::Files::new("/api/data/mdt-maps", mdt_maps_dir).prefer_utf8(true),
                 );
             }
         }

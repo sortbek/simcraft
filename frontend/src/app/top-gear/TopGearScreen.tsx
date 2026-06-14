@@ -491,11 +491,10 @@ export default function TopGearScreen() {
     <div className="space-y-6 pb-20">
       <div>
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          Top Gear
+          {t('nav.topGear')}
         </h1>
         <p className="max-w-2xl text-sm text-on-surface-variant">
-          Find the optimal gear combination from your bags. Compare enchants, gems, and talent
-          builds.
+          {t('page.topGearSubtitle')}
         </p>
       </div>
 

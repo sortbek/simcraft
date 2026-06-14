@@ -105,7 +105,7 @@ export default function SimResultClient() {
           ? 2000
           : null;
       } catch (err) {
-        setFetchError(err instanceof Error ? err.message : 'Failed to fetch status');
+        setFetchError(err instanceof Error ? err.message : t('simResult.failedToFetchStatus'));
         return null;
       }
     },
@@ -184,12 +184,14 @@ export default function SimResultClient() {
         fetchSimInputPreview(id)
           .then((data) => setInputPreview(data))
           .catch((err) =>
-            setInputPreviewError(err instanceof Error ? err.message : 'Failed to load input')
+            setInputPreviewError(
+              err instanceof Error ? err.message : t('simResult.failedToLoadInput')
+            )
           );
       }
       return next;
     });
-  }, [id]);
+  }, [id, t]);
 
   if (fetchError) {
     return (
@@ -251,11 +253,11 @@ export default function SimResultClient() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-bold uppercase tracking-wider text-amber-400">
-                    Paused
+                    {t('simResult.paused')}
                   </p>
                   {job.progress_stage && (
                     <p className="mt-0.5 text-xs text-on-surface-variant">
-                      at {job.progress_stage}
+                      {t('simResult.atStage', { stage: job.progress_stage })}
                       {job.progress_detail ? ` · ${job.progress_detail}` : ''}
                     </p>
                   )}
@@ -274,7 +276,7 @@ export default function SimResultClient() {
                 }}
                 className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
               >
-                Resume
+                {t('simResult.resume')}
               </button>
               <button
                 onClick={async () => {
@@ -286,7 +288,7 @@ export default function SimResultClient() {
                 }}
                 className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-400 transition-colors hover:border-red-500/50 hover:bg-red-500/20"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -461,7 +463,7 @@ export default function SimResultClient() {
             {inputPreviewError ? (
               <p className="text-[13px] text-red-400/70">{inputPreviewError}</p>
             ) : !inputPreview ? (
-              <p className="text-[13px] text-on-surface-variant/40">Loading…</p>
+              <p className="text-[13px] text-on-surface-variant/40">{t('common.loading')}</p>
             ) : inputPreview.mode === 'inline' ? (
               <pre className="max-h-[400px] overflow-y-auto whitespace-pre-wrap break-all font-mono text-[13px] leading-[1.7] text-on-surface-variant/60">
                 {inputPreview.input}
@@ -470,7 +472,7 @@ export default function SimResultClient() {
               <div className="space-y-4">
                 <div>
                   <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant/40">
-                    Base Profile
+                    {t('simResult.baseProfile')}
                   </p>
                   <pre className="max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all font-mono text-[13px] leading-[1.7] text-on-surface-variant/60">
                     {inputPreview.base_profile}
@@ -478,8 +480,10 @@ export default function SimResultClient() {
                 </div>
                 <div>
                   <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant/40">
-                    Profilesets (preview of {inputPreview.preview_profilesets.length} of{' '}
-                    {inputPreview.survivor_count})
+                    {t('simResult.profilesetsPreview', {
+                      a: inputPreview.preview_profilesets.length,
+                      b: inputPreview.survivor_count,
+                    })}
                   </p>
                   <pre className="max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all font-mono text-[13px] leading-[1.7] text-on-surface-variant/60">
                     {inputPreview.preview_profilesets.join('\n')}
@@ -564,9 +568,12 @@ export default function SimResultClient() {
             const commit = sim?.build_commit;
             return (
               <>
-                Ran on {providerMeta?.display_name ?? job.provider_id}
-                {credits != null && ` · ${Number(credits).toLocaleString()} credits`}
-                {commit && ` · build ${String(commit).slice(0, 7)}`}
+                {t('simResult.ranOn', {
+                  provider: providerMeta?.display_name ?? job.provider_id,
+                })}
+                {credits != null &&
+                  ` · ${t('simResult.credits', { n: Number(credits).toLocaleString() })}`}
+                {commit && ` · ${t('simResult.build', { commit: String(commit).slice(0, 7) })}`}
               </>
             );
           })()}

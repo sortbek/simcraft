@@ -150,13 +150,13 @@ export default function ItemTable({
       <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="font-headline text-base font-black uppercase tracking-tight text-on-surface">
-            Available Drops
+            {t('loot.availableDrops')}
           </h3>
           <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">
             {headerLabel} &mdash; {t('gear.itemsCount', { count: filteredTotal })}
             {selected.size > 0 && (
               <span className="ml-1.5 normal-case tracking-normal text-gold">
-                ({selected.size} selected)
+                ({selected.size} {t('dropFinder.selected')})
               </span>
             )}
           </p>
@@ -178,7 +178,7 @@ export default function ItemTable({
               type="text"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              placeholder="Filter items..."
+              placeholder={t('loot.filterItems')}
               className="h-10 w-64 rounded-lg border border-transparent bg-surface-container-high py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/45 outline-none transition-all duration-150 hover:bg-surface-container-highest focus:border-gold/40 focus:bg-surface-container-highest focus:ring-2 focus:ring-gold/15"
             />
             {filterText && (
@@ -186,7 +186,7 @@ export default function ItemTable({
                 type="button"
                 onClick={() => setFilterText('')}
                 className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant/55 transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-                aria-label="Clear search"
+                aria-label={t('loot.clearSearch')}
               >
                 <svg
                   viewBox="0 0 12 12"
@@ -211,7 +211,7 @@ export default function ItemTable({
                     : 'text-on-surface-variant/60 hover:text-on-surface-variant'
                 }`}
               >
-                By Slot
+                {t('loot.bySlot')}
               </button>
               <button
                 onClick={() => setGroupBy('dungeon')}
@@ -221,7 +221,7 @@ export default function ItemTable({
                     : 'text-on-surface-variant/60 hover:text-on-surface-variant'
                 }`}
               >
-                By Dungeon
+                {t('loot.byDungeon')}
               </button>
             </div>
           )}
@@ -238,17 +238,17 @@ export default function ItemTable({
             onChange={() =>
               allSelected ? onClearItems(visibleItemIds) : onSelectItems(visibleItemIds)
             }
-            aria-label="Select all items"
+            aria-label={t('loot.selectAllItems')}
           />
           <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-            Item Name
+            {t('loot.itemName')}
           </span>
         </div>
         <div className="col-span-5 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-          Slot
+          {t('loot.slot')}
         </div>
         <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-          Level
+          {t('loot.level')}
         </div>
       </div>
 
@@ -372,7 +372,7 @@ export default function ItemTable({
 
       {filteredTotal === 0 && (
         <div className="p-8 text-center text-sm text-on-surface-variant/40">
-          {filterText ? 'No items match your filter.' : 'No drops found.'}
+          {filterText ? t('loot.noItemsMatch') : t('loot.noDropsFound')}
         </div>
       )}
     </div>
