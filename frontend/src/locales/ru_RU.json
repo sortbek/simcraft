@@ -412,7 +412,6 @@
   "route.pullN": "Пулл {n}",
   "route.map.notPulled": "Не в пулле",
   "route.map.hp": "{value} hp",
-  "route.map.forces": "{count} сил",
   "route.map.legendInPull": "В пулле",
   "route.map.legendBoss": "Босс",
   "route.map.zoomOut": "Уменьшить",
@@ -565,5 +564,7 @@
   "config.parallelProfilesetsHelpAfter": "на ранних этапах Top Gear (4+ комбинации при target_error > 0,2), выполняя profileset параллельно, а не последовательно. По измерениям немного быстрее на этих этапах; отключается при более высокой точности, где выигрывает параллелизм итераций. Снимите флажок, чтобы никогда не добавлять эту опцию.",
   "config.triageMaxBatch": "Максимальный размер пакета триажа",
   "config.triageMaxBatchHelp": "Только потоковый Top Gear. Большие пакеты снижают повторные затраты на baseline и retention, но Пауза ждёт завершения текущего пакета.",
-  "route.defaultName": "Маршрут"
+  "route.defaultName": "Маршрут",
+  "route.header.backToList": "Маршруты",
+  "route.header.switchRoute": "Сменить маршрут"
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   decodeMdt,
   getDungeonOverview,
@@ -13,19 +14,25 @@ import {
 import { useLanguage } from '../lib/i18n';
 import type { ActiveRoute } from '../lib/active-route';
 import { getRouteSimParams } from '../lib/route-sim-params';
-import { MDT_ROUTE_SESSION_KEY } from '../lib/routes';
+import { ROUTES, MDT_ROUTE_SESSION_KEY } from '../lib/routes';
+import { getSavedRoutes, type SavedRoute } from '../lib/saved-routes';
+import { classifyRoute, routeToActiveRoute } from '../lib/routes-model';
 import RouteViewer from '../components/route-map/RouteViewer';
 import { T } from '../components/route-map/routeTheme';
 import { IImport } from '../components/route-map/routeIcons';
 
 export default function RoutePage() {
   const { t } = useLanguage();
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [conv, setConv] = useState<MdtConversion | null>(null);
   const [loadId, setLoadId] = useState(0);
   const [dungeons, setDungeons] = useState<DungeonSummary[]>([]);
+  const [routes, setRoutes] = useState<SavedRoute[]>([]);
+  // Id of the saved route currently shown (null for a fresh import or overview).
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   // Shared load: drive a conversion request into view state (busy/error/conv).
   const run = async (req: Promise<MdtConversion>, clearInput: boolean) => {
@@ -54,8 +61,20 @@ export default function RoutePage() {
   const loadPulls = (dungeonIdx: number, pulls: CloneRef[][]) =>
     run(serializeRoute(dungeonIdx, pulls, getRouteSimParams()), true);
 
+  // Load an in-memory route (deep-link or the header switcher) onto the map.
+  const loadActiveRoute = (ar: ActiveRoute) => {
+    if (ar.kind === 'mdt') {
+      setInput(ar.mdtString);
+      load(ar.mdtString);
+    } else if (ar.kind === 'pulls') {
+      setInput('');
+      loadPulls(ar.dungeonIdx, ar.pulls);
+    }
+  };
+
   useEffect(() => {
     listDungeons().then(setDungeons).catch(() => {});
+    getSavedRoutes().then(setRoutes).catch(() => {});
   }, []);
 
   // Deep-link: the routes manager stashes a route (serialized ActiveRoute) here.
@@ -66,17 +85,25 @@ export default function RoutePage() {
       sessionStorage.removeItem(MDT_ROUTE_SESSION_KEY);
       const ar = JSON.parse(raw) as ActiveRoute | null;
       if (!ar) return;
-      if (ar.kind === 'mdt') {
-        setInput(ar.mdtString);
-        load(ar.mdtString);
-      } else if (ar.kind === 'pulls') {
-        loadPulls(ar.dungeonIdx, ar.pulls);
-      }
+      setActiveId(ar.id ?? null);
+      loadActiveRoute(ar);
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (conv) {
+    // Other saved routes in this dungeon that can be shown on the map.
+    const siblings = routes.filter(
+      (r) =>
+        r.dungeon_idx === conv.map.dungeon_idx &&
+        (classifyRoute(r) === 'mdt' || classifyRoute(r) === 'pulls')
+    );
+    const onSwitch = (r: SavedRoute) => {
+      const ar = routeToActiveRoute(r);
+      if (!ar) return;
+      setActiveId(r.id);
+      loadActiveRoute(ar);
+    };
     return (
       <div style={{ height: 'calc(100vh - 1rem)', padding: 8 }}>
         <RouteViewer
@@ -86,7 +113,12 @@ export default function RoutePage() {
           onImport={() => {
             setConv(null);
             setError('');
+            setActiveId(null);
           }}
+          siblings={siblings}
+          currentRouteId={activeId}
+          onSwitch={onSwitch}
+          onBack={() => router.push(ROUTES.routesManager)}
         />
       </div>
     );

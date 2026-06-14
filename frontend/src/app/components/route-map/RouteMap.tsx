@@ -339,10 +339,10 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
                 points={pathPoints}
                 fill="none"
                 stroke={T.gold}
-                strokeWidth="2"
-                strokeDasharray="2 6"
+                strokeWidth="2.5"
+                strokeDasharray="4 4"
                 strokeLinecap="round"
-                opacity={0.55}
+                opacity={0.95}
                 vectorEffect="non-scaling-stroke"
               />
             )}
@@ -474,8 +474,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
             </div>
             <div style={{ fontSize: 10.5, color: T.muted, marginTop: 3 }}>
               {hover.pull !== null ? t('route.pullN', { n: hover.pull }) : t('route.map.notPulled')} ·{' '}
-              {t('route.map.hp', { value: formatHp(hover.enemy.health) })} ·{' '}
-              {t('route.map.forces', { count: hover.enemy.count })}
+              {t('route.map.hp', { value: formatHp(hover.enemy.health) })}
             </div>
           </div>
         )}

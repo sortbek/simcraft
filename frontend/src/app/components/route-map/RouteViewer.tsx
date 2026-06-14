@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { MdtConversion } from '../../lib/api';
-import { saveRoute } from '../../lib/saved-routes';
+import { saveRoute, type SavedRoute } from '../../lib/saved-routes';
 import { useLanguage } from '../../lib/i18n';
 import { T } from './routeTheme';
 import RouteHeader from './RouteHeader';
@@ -15,10 +15,20 @@ export default function RouteViewer({
   conv,
   mdtString,
   onImport,
+  siblings,
+  currentRouteId,
+  onSwitch,
+  onBack,
 }: {
   conv: MdtConversion;
   mdtString: string;
   onImport: () => void;
+  /** Saved routes in this dungeon, for the header's in-place switcher. */
+  siblings?: SavedRoute[];
+  currentRouteId?: string | null;
+  onSwitch?: (route: SavedRoute) => void;
+  /** Return to the routes library. */
+  onBack?: () => void;
 }) {
   const { t } = useLanguage();
   const [toast, setToast] = useState<string | null>(null);
@@ -88,6 +98,10 @@ export default function RouteViewer({
         onToggleMode={editor.toggleMode}
         onImport={onImport}
         onSave={() => setModal(true)}
+        onBack={onBack}
+        routes={siblings}
+        currentRouteId={currentRouteId}
+        onSwitch={onSwitch}
       />
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>

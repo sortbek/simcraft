@@ -62,6 +62,11 @@ export const IPlay = (p: IconProps) => (
     <polygon points="3,2 11.5,7 3,12" fill="currentColor" />
   </Svg>
 );
+export const IBack = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8.5 3L4.5 7l4 4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
 export const IList = (p: IconProps) => (
   <Svg {...p}>
     <line x1="2.5" y1="3.5" x2="11.5" y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />

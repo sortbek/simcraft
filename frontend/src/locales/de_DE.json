@@ -412,7 +412,6 @@
   "route.pullN": "Pull {n}",
   "route.map.notPulled": "Nicht gepullt",
   "route.map.hp": "{value} HP",
-  "route.map.forces": "{count} Forces",
   "route.map.legendInPull": "Im Pull",
   "route.map.legendBoss": "Boss",
   "route.map.zoomOut": "Herauszoomen",
@@ -565,5 +564,7 @@
   "config.parallelProfilesetsHelpAfter": "zu frühen Top-Gear-Phasen hinzu (4+ Kombinationen bei target_error > 0,2) und führt Profilesets gleichzeitig statt nacheinander aus. Messbar etwas schneller in diesen Phasen; bei höherer Präzision deaktiviert, wo Iterations-Parallelität gewinnt. Deaktivieren, um die Option nie zu setzen.",
   "config.triageMaxBatch": "Maximale Triage-Batch-Größe",
   "config.triageMaxBatchHelp": "Nur gestreamtes Top Gear. Größere Batches reduzieren wiederholten Baseline- und Retention-Aufwand, aber Pause wartet, bis der aktuelle Batch abgeschlossen ist.",
-  "route.defaultName": "Route"
+  "route.defaultName": "Route",
+  "route.header.backToList": "Routen",
+  "route.header.switchRoute": "Route wechseln"
 }

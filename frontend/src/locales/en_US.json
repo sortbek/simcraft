@@ -438,7 +438,6 @@
   "route.pullN": "Pull {n}",
   "route.map.notPulled": "Not pulled",
   "route.map.hp": "{value} hp",
-  "route.map.forces": "{count} forces",
   "route.map.legendInPull": "In pull",
   "route.map.legendBoss": "Boss",
   "route.map.zoomOut": "Zoom out",
@@ -589,5 +588,7 @@
   "config.parallelProfilesetsHelpAfter": "to early Top Gear stages (4+ combos at target_error > 0.2), running profilesets concurrently instead of sequentially. Measured to be modestly faster on those stages; disabled at tighter precision where iteration parallelism wins. Uncheck to never emit the flag.",
   "config.triageMaxBatch": "Triage maximum batch size",
   "config.triageMaxBatchHelp": "Streamed Top Gear only. Larger batches reduce repeated baseline and retention overhead, but Pause waits until the current batch completes.",
-  "route.defaultName": "Route"
+  "route.defaultName": "Route",
+  "route.header.backToList": "Routes",
+  "route.header.switchRoute": "Switch route"
 }

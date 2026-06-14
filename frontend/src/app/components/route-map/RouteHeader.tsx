@@ -2,8 +2,9 @@
 
 import { useState, type ReactNode } from 'react';
 import { useLanguage } from '../../lib/i18n';
+import type { SavedRoute } from '../../lib/saved-routes';
 import { T } from './routeTheme';
-import { IPencil, IMerge, ITrash, ISave, IImport } from './routeIcons';
+import { IPencil, IMerge, ITrash, ISave, IImport, IBack } from './routeIcons';
 import type { EditMode } from './useRouteEditor';
 
 interface ToolBtnProps {
@@ -54,6 +55,13 @@ interface RouteHeaderProps {
   onToggleMode: (m: EditMode) => void;
   onImport: () => void;
   onSave: () => void;
+  /** Return to the routes library. */
+  onBack?: () => void;
+  /** Saved routes in this dungeon, for the in-place switcher. */
+  routes?: SavedRoute[];
+  /** Id of the currently-loaded saved route (null for a fresh import/overview). */
+  currentRouteId?: string | null;
+  onSwitch?: (route: SavedRoute) => void;
 }
 
 export default function RouteHeader({
@@ -66,6 +74,10 @@ export default function RouteHeader({
   onToggleMode,
   onImport,
   onSave,
+  onBack,
+  routes,
+  currentRouteId,
+  onSwitch,
 }: RouteHeaderProps) {
   const { t } = useLanguage();
   const [impHov, setImpHov] = useState(false);
@@ -82,6 +94,12 @@ export default function RouteHeader({
         background: T.bg,
       }}
     >
+      {onBack && (
+        <>
+          <ToolBtn icon={<IBack s={13} />} label={t('route.header.backToList')} onClick={onBack} />
+          <span style={{ width: 1, height: 22, background: T.border }} />
+        </>
+      )}
       {/* KeyChip */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: T.text, whiteSpace: 'nowrap' }}>
@@ -117,6 +135,36 @@ export default function RouteHeader({
           </>
         )}
       </div>
+
+      {routes && routes.length > 0 && onSwitch && (
+        <select
+          value={currentRouteId ?? ''}
+          onChange={(e) => {
+            const r = routes.find((x) => x.id === e.target.value);
+            if (r) onSwitch(r);
+          }}
+          aria-label={t('route.header.switchRoute')}
+          style={{
+            maxWidth: 200,
+            padding: '5px 8px',
+            borderRadius: 6,
+            background: T.surface,
+            border: `1px solid ${T.borderHi}`,
+            color: T.text2,
+            fontSize: 11.5,
+            fontFamily: 'inherit',
+            outline: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          {!currentRouteId && <option value="">{t('route.header.switchRoute')}</option>}
+          {routes.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      )}
 
       <div style={{ flex: 1 }} />
 
