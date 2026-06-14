@@ -26,8 +26,8 @@ function iterationSliderIndex(value: number): number {
 
 interface ConfigDrawerProps {
   children?: ReactNode;
-  activeTab: 'simulation' | 'buffs';
-  onActiveTabChange: (tab: 'simulation' | 'buffs') => void;
+  activeTab: 'simulation' | 'buffs' | 'expert';
+  onActiveTabChange: (tab: 'simulation' | 'buffs' | 'expert') => void;
   expertActiveTab: ExpertTabKey;
   onExpertActiveTabChange: (tab: ExpertTabKey) => void;
   availableBranches: string[];
@@ -46,6 +46,8 @@ export default function ConfigDrawer({
   const { t } = useLanguage();
   const isTopGear = usePathname() === ROUTES.topGear;
   const {
+    activeRoute,
+    clearRoute,
     fightStyle,
     setFightStyle,
     targetCount,
@@ -121,6 +123,15 @@ export default function ConfigDrawer({
   const hasExpertContent = Object.values(expertValues).some((value) => value.trim());
   const expertActiveTabInfo = EXPERT_TABS.find((tab) => tab.key === expertActiveTab)!;
 
+  const isDungeonRoute = fightStyle === 'DungeonRoute';
+  // The route control + the controls a route overrides are gated on this fight
+  // style. Leaving it discards any loaded route (it only applies here); clearRoute
+  // resets to Patchwerk, so re-apply the chosen style afterwards.
+  const onFightStyleChange = (value: string) => {
+    if (value !== 'DungeonRoute' && activeRoute) clearRoute();
+    setFightStyle(value);
+  };
+
   return (
     <div className="animate-fade-in border-t border-outline-variant/10 bg-[#0e0e0e]/95 backdrop-blur-xl">
       <div className="mx-auto max-w-screen-2xl px-8 py-5">
@@ -131,6 +142,7 @@ export default function ConfigDrawer({
               key: 'buffs' as const,
               label: `${t('config.raidBuffs')} & ${t('config.consumables')}`,
             },
+            { key: 'expert' as const, label: t('config.expertMode') },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -155,65 +167,74 @@ export default function ConfigDrawer({
                 <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
                   {t('config.fightStyle')}
                 </label>
-                <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
+                <FightStyleSelector value={fightStyle} onChange={onFightStyleChange} />
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.fightLength')}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={30}
-                    max={1800}
-                    step={30}
-                    value={Math.min(fightLength, 1800)}
-                    onChange={(event) => setFightLength(Number(event.target.value))}
-                    className="flex-1 accent-primary"
-                  />
-                  <div className="min-w-[4.5rem] rounded-lg border border-outline-variant/20 bg-surface-container-lowest text-center">
+              {/* Fight Length and Number of Bosses are overridden by a dungeon
+                  route, so hide them in Dungeon Route mode. */}
+              {!isDungeonRoute && (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    {t('config.fightLength')}
+                  </label>
+                  <div className="flex items-center gap-3">
                     <input
-                      type="number"
-                      min={10}
-                      max={3600}
-                      value={fightLength}
-                      onChange={(event) => {
-                        const value = Math.max(10, Math.min(3600, Number(event.target.value) || 0));
-                        setFightLength(value);
-                      }}
-                      className="w-16 bg-transparent px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"
+                      type="range"
+                      min={30}
+                      max={1800}
+                      step={30}
+                      value={Math.min(fightLength, 1800)}
+                      onChange={(event) => setFightLength(Number(event.target.value))}
+                      className="flex-1 accent-primary"
                     />
-                    <span className="pr-2 text-[9px] text-on-surface-variant/50">
-                      {t('config.sec')}
-                    </span>
+                    <div className="min-w-[4.5rem] rounded-lg border border-outline-variant/20 bg-surface-container-lowest text-center">
+                      <input
+                        type="number"
+                        min={10}
+                        max={3600}
+                        value={fightLength}
+                        onChange={(event) => {
+                          const value = Math.max(
+                            10,
+                            Math.min(3600, Number(event.target.value) || 0)
+                          );
+                          setFightLength(value);
+                        }}
+                        className="w-16 bg-transparent px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"
+                      />
+                      <span className="pr-2 text-[9px] text-on-surface-variant/50">
+                        {t('config.sec')}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.numberOfBosses')}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={10}
-                    value={targetCount}
-                    onChange={(event) => setTargetCount(Number(event.target.value))}
-                    className="flex-1 accent-primary"
-                  />
-                  <div className="min-w-[4.5rem] rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-1.5 text-center">
-                    <span className="font-mono text-sm font-bold tabular-nums text-primary">
-                      {targetCount}
-                    </span>
-                    <span className="ml-1 text-[9px] text-on-surface-variant/50">
-                      {targetCount === 1 ? t('config.boss') : t('config.bosses')}
-                    </span>
+              {!isDungeonRoute && (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    {t('config.numberOfBosses')}
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={1}
+                      max={10}
+                      value={targetCount}
+                      onChange={(event) => setTargetCount(Number(event.target.value))}
+                      className="flex-1 accent-primary"
+                    />
+                    <div className="min-w-[4.5rem] rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-1.5 text-center">
+                      <span className="font-mono text-sm font-bold tabular-nums text-primary">
+                        {targetCount}
+                      </span>
+                      <span className="ml-1 text-[9px] text-on-surface-variant/50">
+                        {targetCount === 1 ? t('config.boss') : t('config.bosses')}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {availableBranches.length > 1 && (
                 <div className="space-y-2">
@@ -311,8 +332,13 @@ export default function ConfigDrawer({
                 className="input-field h-20 resize-y font-mono text-xs"
               />
             </div>
+          </div>
+        )}
 
+        {activeTab === 'expert' && (
+          <div className="animate-fade-in">
             <ExpertToggle
+              embedded
               hasContent={hasExpertContent}
               activeTab={expertActiveTab}
               setActiveTab={onExpertActiveTabChange}

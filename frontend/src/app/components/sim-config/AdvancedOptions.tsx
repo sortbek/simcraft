@@ -25,6 +25,8 @@ export default function AdvancedOptions() {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ExpertTabKey>('footer');
   const {
+    activeRoute,
+    clearRoute,
     fightStyle,
     setFightStyle,
     targetCount,
@@ -82,6 +84,14 @@ export default function AdvancedOptions() {
     !hasExpertContent;
   const activeTabInfo = EXPERT_TABS.find((t) => t.key === activeTab)!;
 
+  const isDungeonRoute = fightStyle === 'DungeonRoute';
+  // Leaving Dungeon Route mode discards any loaded route (it only applies there);
+  // clearRoute resets to Patchwerk, so re-apply the chosen style afterwards.
+  const onFightStyleChange = (value: string) => {
+    if (value !== 'DungeonRoute' && activeRoute) clearRoute();
+    setFightStyle(value);
+  };
+
   return (
     <div className="card overflow-hidden">
       <button
@@ -128,49 +138,55 @@ export default function AdvancedOptions() {
           <div className="grid grid-cols-2 gap-4 pt-4">
             <div className="space-y-2">
               <label className="label-text">{t('config.fightStyle')}</label>
-              <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
+              <FightStyleSelector value={fightStyle} onChange={onFightStyleChange} />
             </div>
-            <div className="space-y-2">
-              <label className="label-text">{t('config.fightLength')}</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={30}
-                  max={1800}
-                  step={30}
-                  value={Math.min(fightLength, 1800)}
-                  onChange={(e) => setFightLength(Number(e.target.value))}
-                  className="flex-1 accent-gold"
-                />
-                <input
-                  type="number"
-                  min={10}
-                  max={3600}
-                  value={fightLength}
-                  onChange={(e) => {
-                    const v = Math.max(10, Math.min(3600, Number(e.target.value) || 0));
-                    setFightLength(v);
-                  }}
-                  className="w-16 rounded bg-transparent px-1 py-0.5 text-right font-mono text-sm tabular-nums text-on-surface focus:outline-none focus:ring-1 focus:ring-gold/30"
-                />
+            {/* Fight Length and Number of Bosses are overridden by a dungeon
+                route, so hide them in Dungeon Route mode. */}
+            {!isDungeonRoute && (
+              <div className="space-y-2">
+                <label className="label-text">{t('config.fightLength')}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={30}
+                    max={1800}
+                    step={30}
+                    value={Math.min(fightLength, 1800)}
+                    onChange={(e) => setFightLength(Number(e.target.value))}
+                    className="flex-1 accent-gold"
+                  />
+                  <input
+                    type="number"
+                    min={10}
+                    max={3600}
+                    value={fightLength}
+                    onChange={(e) => {
+                      const v = Math.max(10, Math.min(3600, Number(e.target.value) || 0));
+                      setFightLength(v);
+                    }}
+                    className="w-16 rounded bg-transparent px-1 py-0.5 text-right font-mono text-sm tabular-nums text-on-surface focus:outline-none focus:ring-1 focus:ring-gold/30"
+                  />
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <label className="label-text">{t('config.numberOfBosses')}</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={targetCount}
-                  onChange={(e) => setTargetCount(Number(e.target.value))}
-                  className="flex-1 accent-gold"
-                />
-                <span className="w-6 text-right font-mono text-sm tabular-nums text-on-surface">
-                  {targetCount}
-                </span>
+            )}
+            {!isDungeonRoute && (
+              <div className="space-y-2">
+                <label className="label-text">{t('config.numberOfBosses')}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={10}
+                    value={targetCount}
+                    onChange={(e) => setTargetCount(Number(e.target.value))}
+                    className="flex-1 accent-gold"
+                  />
+                  <span className="w-6 text-right font-mono text-sm tabular-nums text-on-surface">
+                    {targetCount}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
             <div className="space-y-2">
               <label className="label-text">{t('config.targetError')}</label>
               <div className="flex items-center gap-3">

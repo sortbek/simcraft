@@ -161,8 +161,12 @@ export function SimProvider({ children }: { children: ReactNode }) {
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
       // Active route survives a reload (it's the live sim input, not just config).
       // Read through the never-throw helper so a corrupt value yields null instead
-      // of aborting the restores that follow it in this shared try block.
-      _setActiveRoute(readSessionJson<ActiveRoute | null>('simhammer_active_route', null));
+      // of aborting the restores that follow it in this shared try block. fightStyle
+      // isn't persisted, so re-assert the route ⇒ DungeonRoute invariant the UI
+      // gates on (footer snippets keep the default style — they aren't routes).
+      const restoredRoute = readSessionJson<ActiveRoute | null>('simhammer_active_route', null);
+      _setActiveRoute(restoredRoute);
+      if (restoredRoute && restoredRoute.kind !== 'footer') setFightStyle('DungeonRoute');
       _setTriageMaxBatchProfilesets(
         readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
       );
