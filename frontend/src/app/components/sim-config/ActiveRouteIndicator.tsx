@@ -1,11 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
-import { getRouteSimParams } from '../../lib/route-sim-params';
+import {
+  getRouteSimParams,
+  setRouteSimParams,
+  type RouteSimParams,
+} from '../../lib/route-sim-params';
 import { getSavedRoutes, type SavedRoute } from '../../lib/saved-routes';
+import { listDungeons, type DungeonSummary } from '../../lib/api';
 import { routeToActiveRoute } from '../../lib/routes-model';
+import { IPlus, IMinus } from '../route-map/routeIcons';
 
 const IRoute = () => (
   <svg
@@ -23,25 +29,97 @@ const IRoute = () => (
   </svg>
 );
 
+/** Compact ± stepper for the route's keystone level / HP share. */
+const Stepper = ({
+  label,
+  value,
+  min,
+  max,
+  prefix,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  prefix?: string;
+  onChange: (v: number) => void;
+}) => (
+  <div className="flex items-center gap-1.5">
+    <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/55">
+      {label}
+    </span>
+    <div className="flex items-center overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-container-lowest">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        className="flex h-7 w-6 items-center justify-center text-on-surface-variant/70 transition-colors hover:bg-surface-container-high hover:text-gold"
+      >
+        <IMinus s={11} />
+      </button>
+      <span className="min-w-[2.1rem] text-center text-[13px] font-bold tabular-nums text-on-surface">
+        {prefix}
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        className="flex h-7 w-6 items-center justify-center text-on-surface-variant/70 transition-colors hover:bg-surface-container-high hover:text-gold"
+      >
+        <IPlus s={11} />
+      </button>
+    </div>
+  </div>
+);
+
 /** Route control for the sim config, shown only in Dungeon Route fight style.
  *  A custom dropdown (styled to match FightStyleSelector) picks/switches the
- *  active saved route; the chosen route's key/HP and a clear button sit beside
- *  it. Routes can also be loaded from the /routes manager. */
+ *  active saved route; the keystone level + HP share steppers (which drive the
+ *  route's SimC at sim time) and a clear button sit beside it. Routes can also
+ *  be loaded from the /routes manager. */
 export default function ActiveRouteIndicator() {
   const { t } = useLanguage();
   const { fightStyle, activeRoute, activateRoute, clearRoute } = useSimContext();
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
+  const [dungeons, setDungeons] = useState<DungeonSummary[]>([]);
   const [open, setOpen] = useState(false);
+  const [params, setParams] = useState<RouteSimParams>(getRouteSimParams);
 
   useEffect(() => {
     let alive = true;
     getSavedRoutes().then((r) => {
       if (alive) setRoutes(r);
     });
+    listDungeons()
+      .then((d) => {
+        if (alive) setDungeons(d);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
+
+  // Group saved routes by dungeon (same logic as the routes manager): dungeon
+  // groups in dungeon-list order, unknown-dungeon routes under "Other" last.
+  const groups = useMemo(() => {
+    const byKey = new Map<number | null, SavedRoute[]>();
+    for (const r of routes) {
+      const known = r.dungeon_idx != null && dungeons.some((d) => d.idx === r.dungeon_idx);
+      const key = known ? r.dungeon_idx! : null;
+      const arr = byKey.get(key) ?? [];
+      arr.push(r);
+      byKey.set(key, arr);
+    }
+    const out: { key: number | null; name: string; routes: SavedRoute[] }[] = [];
+    for (const d of dungeons) {
+      const rs = byKey.get(d.idx);
+      if (rs?.length) out.push({ key: d.idx, name: d.name, routes: rs });
+    }
+    const other = byKey.get(null);
+    if (other?.length) out.push({ key: null, name: t('route.group.other'), routes: other });
+    return out;
+  }, [routes, dungeons, t]);
 
   // The route control belongs to Dungeon Route mode only.
   if (fightStyle !== 'DungeonRoute') return null;
@@ -54,7 +132,11 @@ export default function ActiveRouteIndicator() {
     if (ar) activateRoute(ar);
   };
 
-  const { keystoneLevel, hpPercent } = getRouteSimParams();
+  const updateParams = (p: Partial<RouteSimParams>) => {
+    setParams((prev) => ({ ...prev, ...p }));
+    setRouteSimParams(p);
+  };
+
   // Baked routes (pre-rendered SimC) carry no level/HP knobs; mdt/pulls do.
   const baked = activeRoute?.kind === 'simc' || activeRoute?.kind === 'footer';
   const currentName = activeRoute?.name ?? null;
@@ -69,7 +151,7 @@ export default function ActiveRouteIndicator() {
         <div className="text-[10px] font-bold uppercase tracking-widest text-gold/70">
           {t('route.active.label')}
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {/* Custom route dropdown — mirrors FightStyleSelector for consistency. */}
           <div className="relative" onBlur={() => setOpen(false)}>
             <button
@@ -103,24 +185,31 @@ export default function ActiveRouteIndicator() {
                 className="absolute z-50 mt-1 min-w-full overflow-y-auto overscroll-contain rounded-lg bg-surface-container-high py-1 shadow-lg shadow-black/40"
                 style={{ maxHeight: '14rem' }}
               >
-                {routes.length === 0 ? (
+                {groups.length === 0 ? (
                   <div className="px-3.5 py-2 text-sm text-on-surface-variant/50">
                     {t('route.active.noneSaved')}
                   </div>
                 ) : (
-                  routes.map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onMouseDown={() => onPick(r.id)}
-                      className={`flex w-full whitespace-nowrap px-3.5 py-2 text-left text-sm transition-colors ${
-                        r.id === activeRoute?.id
-                          ? 'bg-gold/[0.08] text-gold'
-                          : 'text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
-                      }`}
-                    >
-                      {r.name}
-                    </button>
+                  groups.map((g) => (
+                    <div key={g.key ?? 'other'}>
+                      <div className="px-3.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40">
+                        {g.name}
+                      </div>
+                      {g.routes.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onMouseDown={() => onPick(r.id)}
+                          className={`flex w-full whitespace-nowrap px-3.5 py-1.5 text-left text-sm transition-colors ${
+                            r.id === activeRoute?.id
+                              ? 'bg-gold/[0.08] text-gold'
+                              : 'text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
+                          }`}
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                    </div>
                   ))
                 )}
               </div>
@@ -128,9 +217,23 @@ export default function ActiveRouteIndicator() {
           </div>
 
           {activeRoute && !baked && (
-            <span className="shrink-0 text-[12px] text-on-surface-variant">
-              {t('route.active.detail', { level: keystoneLevel, hp: hpPercent })}
-            </span>
+            <>
+              <Stepper
+                label={t('route.row.keyLevel')}
+                value={params.keystoneLevel}
+                min={2}
+                max={40}
+                prefix="+"
+                onChange={(v) => updateParams({ keystoneLevel: v })}
+              />
+              <Stepper
+                label={t('route.row.hpPercent')}
+                value={params.hpPercent}
+                min={1}
+                max={100}
+                onChange={(v) => updateParams({ hpPercent: v })}
+              />
+            </>
           )}
         </div>
       </div>

@@ -432,7 +432,6 @@
   "route.editor.pullAdded": "Пулл {n} добавлен ({count} мобов)",
   "route.active.label": "Активный маршрут",
   "route.active.noneSaved": "Нет сохранённых маршрутов",
-  "route.active.detail": "+{level} · {hp}%",
   "route.active.selectPlaceholder": "Выберите сохранённый маршрут…",
   "common.reset": "Сбросить",
   "sims.title": "Симуляции",

@@ -115,7 +115,6 @@
   "route.row.deleteFailed": "Couldn't delete this route.",
   "route.active.label": "Active Route",
   "route.active.noneSaved": "No saved routes",
-  "route.active.detail": "+{level} · {hp}%",
   "route.active.selectPlaceholder": "Select a saved route…",
   "route.placeholder": "!DAvYoo...  (MDT export string)",
   "route.load": "Load",

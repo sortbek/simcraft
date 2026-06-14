@@ -432,7 +432,6 @@
   "route.editor.pullAdded": "Pull {n} ajouté ({count} mobs)",
   "route.active.label": "Parcours actif",
   "route.active.noneSaved": "Aucun parcours enregistré",
-  "route.active.detail": "+{level} · {hp}%",
   "route.active.selectPlaceholder": "Choisir un parcours enregistré…",
   "common.reset": "Réinitialiser",
   "sims.title": "Sims",

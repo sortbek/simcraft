@@ -432,7 +432,6 @@
   "route.editor.pullAdded": "Pull {n} adicionado ({count} mobs)",
   "route.active.label": "Rota ativa",
   "route.active.noneSaved": "Nenhuma rota salva",
-  "route.active.detail": "+{level} · {hp}%",
   "route.active.selectPlaceholder": "Selecione uma rota salva…",
   "common.reset": "Redefinir",
   "sims.title": "Sims",

@@ -432,7 +432,6 @@
   "route.editor.pullAdded": "Pull {n} hinzugefügt ({count} Mobs)",
   "route.active.label": "Aktive Route",
   "route.active.noneSaved": "Keine gespeicherten Routen",
-  "route.active.detail": "+{level} · {hp}%",
   "route.active.selectPlaceholder": "Gespeicherte Route auswählen…",
   "common.reset": "Zurücksetzen",
   "sims.title": "Sims",

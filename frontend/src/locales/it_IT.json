@@ -432,7 +432,6 @@
   "route.editor.pullAdded": "Pull {n} aggiunto ({count} mob)",
   "route.active.label": "Percorso attivo",
   "route.active.noneSaved": "Nessun percorso salvato",
-  "route.active.detail": "+{level} · {hp}%",
   "route.active.selectPlaceholder": "Seleziona un percorso salvato…",
   "common.reset": "Reimposta",
   "sims.title": "Sim",
