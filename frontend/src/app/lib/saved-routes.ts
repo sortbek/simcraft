@@ -10,6 +10,9 @@ export interface SavedRoute {
   dungeon_idx?: number | null;
   /** Pull assignment as JSON `[[{enemy_idx, clone_idx}, ...], ...]`. */
   pulls?: string | null;
+  /** Thumbnail geometry: JSON `[{x,y,boss}, ...]` of normalized pull centroids
+   *  (route order). Null for routes whose geometry isn't derivable. */
+  shape?: string | null;
   created_at: string;
 }
 

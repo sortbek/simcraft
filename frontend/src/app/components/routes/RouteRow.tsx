@@ -17,7 +17,7 @@ import { useLanguage } from '../../lib/i18n';
 import { timeAgo } from '../../sims/_components/shared';
 import { T, SOURCE_COLORS } from '../route-map/routeTheme';
 import { IPlay, IList, ITrash, IPlus, IMinus } from '../route-map/routeIcons';
-import RouteMiniMap from './RouteMiniMap';
+import RouteMiniMap, { type ShapePoint } from './RouteMiniMap';
 
 /** Localized source label per route kind (the badge next to the source dot). */
 const KIND_LABEL_KEY: Record<RouteKind, string> = {
@@ -196,6 +196,17 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
   const isDungeonRoute = kind === 'mdt' || kind === 'pulls';
   const stats = useMemo(() => routeStats(route), [route]);
   const seed = useMemo(() => seedFromId(route.id), [route.id]);
+  // Real route shape (pull centroids) when the backend has it; else the card
+  // falls back to a seeded decorative scatter.
+  const shape = useMemo<ShapePoint[] | undefined>(() => {
+    if (!route.shape) return undefined;
+    try {
+      const parsed = JSON.parse(route.shape);
+      return Array.isArray(parsed) && parsed.length ? (parsed as ShapePoint[]) : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [route.shape]);
   const [h, setH] = useState(false);
   const [err, setErr] = useState('');
   const [key, setKey] = useState(() => getRouteSimParams().keystoneLevel);
@@ -250,7 +261,7 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
         transition: 'all .12s',
       }}
     >
-      <RouteMiniMap seed={seed} count={stats.pulls ?? 8} />
+      <RouteMiniMap seed={seed} count={stats.pulls ?? 8} shape={shape} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>

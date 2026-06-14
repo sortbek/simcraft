@@ -3,9 +3,10 @@
 import { memo } from 'react';
 import { T } from '../route-map/routeTheme';
 
-/** Deterministic decorative thumbnail for a route card — a seeded scatter of
- *  pull dots + a dashed path. It is NOT the real route geometry (positions live
- *  only in the decoded map); it's a stable visual flourish keyed off the route. */
+/** Route-card thumbnail. When the route's real `shape` (pull centroids) is known
+ *  it draws the actual route — dots in pull order joined by a path, fitted to the
+ *  card. Otherwise (SimC/footer routes, or a shape not computed yet) it falls back
+ *  to a deterministic decorative scatter keyed off the route id. */
 const DOT_COLORS = [
   '#3f8fd0', '#5fbf6a', '#6ea7cc', '#9aa83f', '#4fc5a8',
   '#8284d8', '#9a8ce6', '#d65fb8', '#7fd6c0', '#e08a3f',
@@ -16,6 +17,36 @@ interface Dot {
   y: number;
   color: string;
   boss: boolean;
+}
+
+/** A real pull centroid from the backend, normalized to [0,1] in the map frame. */
+export interface ShapePoint {
+  x: number;
+  y: number;
+  boss: boolean;
+}
+
+/** Fit real centroids to the card: scale each axis so the route's bounding box
+ *  fills the thumbnail with a small margin (degenerate axes center at 0.5). */
+function fitShape(shape: ShapePoint[]): Dot[] {
+  const xs = shape.map((p) => p.x);
+  const ys = shape.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const pad = 0.14;
+  const fit = (v: number, min: number, max: number) => {
+    const span = max - min;
+    if (span < 0.01) return 0.5;
+    return pad + ((v - min) / span) * (1 - 2 * pad);
+  };
+  return shape.map((p, i) => ({
+    x: fit(p.x, minX, maxX),
+    y: fit(p.y, minY, maxY),
+    color: DOT_COLORS[i % DOT_COLORS.length],
+    boss: p.boss,
+  }));
 }
 
 function makeDots(seed: number, count: number): Dot[] {
@@ -43,15 +74,21 @@ function makeDots(seed: number, count: number): Dot[] {
 function RouteMiniMap({
   seed,
   count,
+  shape,
   w = 124,
   h = 80,
 }: {
   seed: number;
   count: number;
+  /** Real pull centroids (route order). When present, the actual route is drawn. */
+  shape?: ShapePoint[];
   w?: number;
   h?: number;
 }) {
-  const dots = makeDots(seed, Math.max(1, Math.min(count, 11)));
+  const dots =
+    shape && shape.length
+      ? fitShape(shape)
+      : makeDots(seed, Math.max(1, Math.min(count, 11)));
   return (
     <div
       style={{

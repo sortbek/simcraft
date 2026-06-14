@@ -16,6 +16,10 @@ pub struct SavedRoute {
     /// Pull assignment as JSON `[[{enemy_idx, clone_idx}, ...], ...]`, fed back
     /// to `/api/mdt/serialize` to regenerate the SimC at a chosen level.
     pub pulls: Option<String>,
+    /// Decorative thumbnail geometry: normalized pull centroids in route order
+    /// as JSON `[{x,y,boss}, ...]`. `None` for routes whose geometry isn't
+    /// derivable (keystone.guru SimC / legacy footer pastes); backfilled lazily.
+    pub shape: Option<String>,
     pub created_at: String,
 }
 
@@ -60,7 +64,7 @@ impl RouteRepo {
         match &self.backend {
             RouteBackend::Database(pool) => {
                 let rows = sqlx::query(
-                    "SELECT id, name, mdt_string, simc, dungeon_idx, pulls, created_at FROM saved_routes ORDER BY created_at DESC",
+                    "SELECT id, name, mdt_string, simc, dungeon_idx, pulls, shape, created_at FROM saved_routes ORDER BY created_at DESC",
                 )
                 .fetch_all(pool)
                 .await?;
@@ -74,6 +78,7 @@ impl RouteRepo {
                         simc: r.get("simc"),
                         dungeon_idx: r.get("dungeon_idx"),
                         pulls: r.get("pulls"),
+                        shape: r.get("shape"),
                         created_at: r.get("created_at"),
                     })
                     .collect())
@@ -93,6 +98,7 @@ impl RouteRepo {
         simc: Option<&str>,
         dungeon_idx: Option<i64>,
         pulls: Option<&str>,
+        shape: Option<&str>,
     ) -> Result<SavedRoute, sqlx::Error> {
         let id = uuid::Uuid::new_v4().to_string();
         let created_at = chrono::Utc::now().to_rfc3339();
@@ -103,13 +109,14 @@ impl RouteRepo {
             simc: simc.map(str::to_string),
             dungeon_idx,
             pulls: pulls.map(str::to_string),
+            shape: shape.map(str::to_string),
             created_at,
         };
 
         match &self.backend {
             RouteBackend::Database(pool) => {
                 sqlx::query(
-                    "INSERT INTO saved_routes (id, name, mdt_string, simc, dungeon_idx, pulls, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    "INSERT INTO saved_routes (id, name, mdt_string, simc, dungeon_idx, pulls, shape, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                 )
                 .bind(&route.id)
                 .bind(&route.name)
@@ -117,6 +124,7 @@ impl RouteRepo {
                 .bind(&route.simc)
                 .bind(route.dungeon_idx)
                 .bind(&route.pulls)
+                .bind(&route.shape)
                 .bind(&route.created_at)
                 .execute(pool)
                 .await?;
@@ -127,6 +135,26 @@ impl RouteRepo {
         }
 
         Ok(route)
+    }
+
+    /// Persist a computed shape for an existing route (lazy backfill of rows
+    /// saved before shapes were computed). No-op if the route is gone.
+    pub async fn update_shape(&self, id: &str, shape: &str) -> Result<(), sqlx::Error> {
+        match &self.backend {
+            RouteBackend::Database(pool) => {
+                sqlx::query("UPDATE saved_routes SET shape = $1 WHERE id = $2")
+                    .bind(shape)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
+            RouteBackend::Memory(routes) => {
+                if let Some(r) = routes.lock().unwrap().iter_mut().find(|r| r.id == id) {
+                    r.shape = Some(shape.to_string());
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn delete(&self, id: &str) -> Result<bool, sqlx::Error> {

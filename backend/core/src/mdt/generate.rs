@@ -116,6 +116,48 @@ pub struct MapPoint {
     pub y: f64,
 }
 
+/// One pull's centroid for the route-card thumbnail: the average position of its
+/// clones, normalized to `[0,1]` in the map frame (x = x/840, y = -y/560 — the
+/// same y-flip the map uses). `boss` is true if the pull contains a boss. Pure
+/// geometry, independent of keystone level — safe to compute once and store.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ShapePull {
+    pub x: f64,
+    pub y: f64,
+    pub boss: bool,
+}
+
+/// MDT map base dimensions (mob coords live in 0..MAP_W_UNITS / -MAP_H_UNITS..0).
+const MAP_W_UNITS: f64 = 840.0;
+const MAP_H_UNITS: f64 = 560.0;
+
+/// Pull centroids in route order for the thumbnail. Averages each pull's clones
+/// from the full mob layer and normalizes; pulls with no mapped clones are
+/// skipped (same set the map draws). Empty when nothing is pulled.
+pub fn pull_shape(map: &MdtMap) -> Vec<ShapePull> {
+    // Accumulate sum + count + boss per pull number.
+    let mut acc: std::collections::BTreeMap<usize, (f64, f64, usize, bool)> =
+        std::collections::BTreeMap::new();
+    for e in &map.enemies {
+        let Some(pull) = e.pull else { continue };
+        let entry = acc.entry(pull).or_insert((0.0, 0.0, 0, false));
+        entry.0 += e.x;
+        entry.1 += e.y;
+        entry.2 += 1;
+        entry.3 = entry.3 || e.is_boss;
+    }
+    acc.into_values()
+        .map(|(sx, sy, n, boss)| {
+            let n = n.max(1) as f64;
+            ShapePull {
+                x: (sx / n / MAP_W_UNITS).clamp(0.0, 1.0),
+                y: (-sy / n / MAP_H_UNITS).clamp(0.0, 1.0),
+                boss,
+            }
+        })
+        .collect()
+}
+
 pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) -> Result<MdtSimc, String> {
     let dungeon = db
         .dungeon(route.dungeon_idx)

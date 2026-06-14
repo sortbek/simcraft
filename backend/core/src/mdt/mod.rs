@@ -16,7 +16,7 @@ mod print_decode;
 mod travel;
 
 pub use enemy_db::DungeonDb;
-pub use generate::MdtSimc;
+pub use generate::{pull_shape, MdtSimc, ShapePull};
 pub use model::{MdtPull, MdtPullEnemy, MdtRoute};
 
 use std::io::Read;
@@ -292,6 +292,26 @@ mod tests {
             enemies.iter().any(|e| !e.patrol.is_empty()),
             "at least one patrol path"
         );
+    }
+
+    #[test]
+    fn pull_shape_gives_one_normalized_centroid_per_pull() {
+        let out = convert(EXAMPLE, &load_db(), &ConvertOptions::default()).unwrap();
+        let shape = pull_shape(&out.map);
+        // One centroid per pull that has mapped clones (Seat: all 16 resolve).
+        assert_eq!(shape.len(), out.map.pulls.len());
+        assert_eq!(shape.len(), 16);
+        // Every centroid sits inside the normalized map frame.
+        for s in &shape {
+            assert!((0.0..=1.0).contains(&s.x), "x {} out of range", s.x);
+            assert!((0.0..=1.0).contains(&s.y), "y {} out of range", s.y);
+        }
+        // Pull 1's centroid matches the average of its clones, normalized.
+        let p1: Vec<_> = out.map.enemies.iter().filter(|e| e.pull == Some(1)).collect();
+        let ax = p1.iter().map(|e| e.x).sum::<f64>() / p1.len() as f64;
+        let ay = p1.iter().map(|e| e.y).sum::<f64>() / p1.len() as f64;
+        assert!((shape[0].x - ax / 840.0).abs() < 1e-9);
+        assert!((shape[0].y - (-ay / 560.0)).abs() < 1e-9);
     }
 
     #[test]
