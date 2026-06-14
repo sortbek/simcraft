@@ -7,7 +7,8 @@ use crate::mdt;
 /// The loaded MDT database, or a 503 response when it isn't ready yet.
 fn require_db() -> Result<&'static mdt::enemy_db::DungeonDb, HttpResponse> {
     mdt::enemy_db::global().ok_or_else(|| {
-        HttpResponse::ServiceUnavailable().json(json!({ "detail": "MDT dungeon database not loaded" }))
+        HttpResponse::ServiceUnavailable()
+            .json(json!({ "detail": "MDT dungeon database not loaded" }))
     })
 }
 
@@ -16,8 +17,9 @@ fn require_db() -> Result<&'static mdt::enemy_db::DungeonDb, HttpResponse> {
 fn convert_opts(keystone_level: Option<i64>, hp_percent: Option<i64>) -> mdt::ConvertOptions {
     mdt::ConvertOptions {
         keystone_level,
-        hp_percent: hp_percent
-            .map_or(mdt::ConvertOptions::default().hp_percent, |h| h.clamp(1, 100)),
+        hp_percent: hp_percent.map_or(mdt::ConvertOptions::default().hp_percent, |h| {
+            h.clamp(1, 100)
+        }),
     }
 }
 

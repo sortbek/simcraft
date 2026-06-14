@@ -65,9 +65,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
   const enemies = conv.map.enemies;
   const totalCount = conv.map.total_count || enemies.reduce((s, e) => s + e.count, 0) || 1;
 
-  const [assignment, setAssignment] = useState<(number | null)[]>(() =>
-    enemies.map((e) => e.pull)
-  );
+  const [assignment, setAssignment] = useState<(number | null)[]>(() => enemies.map((e) => e.pull));
   const [colors, setColors] = useState<Record<number, string>>(() => {
     const c: Record<number, string> = {};
     for (const p of conv.map.pulls) c[p.index] = p.color;
@@ -93,9 +91,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
 
   // Renumber pull ids to a gapless 1..K (ascending) and remap colors to match.
   const renumber = (asg: (number | null)[], cols: Record<number, string>) => {
-    const present = [...new Set(asg.filter((p): p is number => p !== null))].sort(
-      (a, b) => a - b
-    );
+    const present = [...new Set(asg.filter((p): p is number => p !== null))].sort((a, b) => a - b);
     const remap = new Map(present.map((old, i) => [old, i + 1]));
     const nextAsg = asg.map((p) => (p === null ? null : remap.get(p)!));
     const nextCols: Record<number, string> = {};
@@ -147,9 +143,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
   const onCloneClick = (idx: number) => {
     if (mode !== 'draw') return;
     if (assignment[idx] !== null) return; // only unpulled mobs join a new pull
-    setDraft((cur) =>
-      cur.includes(idx) ? cur.filter((x) => x !== idx) : [...cur, idx]
-    );
+    setDraft((cur) => (cur.includes(idx) ? cur.filter((x) => x !== idx) : [...cur, idx]));
   };
 
   // Add a lasso selection of unpulled clones to the draft pull (union).
@@ -218,10 +212,7 @@ export function useRouteEditor(conv: MdtConversion, flash: (msg: string) => void
     });
   }, [assignment, colors, enemies, totalCount]);
 
-  const enemyCount = useMemo(
-    () => assignment.filter((p) => p !== null).length,
-    [assignment]
-  );
+  const enemyCount = useMemo(() => assignment.filter((p) => p !== null).length, [assignment]);
   const coveragePct = pulls.length ? pulls[pulls.length - 1].forces : 0;
 
   return {

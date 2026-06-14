@@ -3,7 +3,9 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::handler_prep::{capped_max_combinations, preprocess_simc_input, serialize_combo_metadata_vec, socketed_item_ids};
+use super::handler_prep::{
+    capped_max_combinations, preprocess_simc_input, serialize_combo_metadata_vec, socketed_item_ids,
+};
 use super::helpers::*;
 use super::types::*;
 use super::SimcBinaries;
@@ -69,7 +71,8 @@ pub(super) async fn create_top_gear_sim(
     } else {
         req.simc_input.clone()
     };
-    let simc_input = preprocess_simc_input(&raw_input, &req.options.talents, &req.options.spec_override);
+    let simc_input =
+        preprocess_simc_input(&raw_input, &req.options.talents, &req.options.spec_override);
 
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let currency_id_sim = crate::item_db::catalyst_currency_id();
@@ -145,7 +148,11 @@ pub(super) async fn create_top_gear_sim(
     // For the WorkloadEstimate combo_count heuristic: use the exact count when
     // available (non-zero), fall back to `estimate` for the TooMany case
     // (exact_combos == 0 means Err was returned and the eager path handles it).
-    let workload_combo_count = if exact_combos > 0 { exact_combos as usize } else { estimate as usize };
+    let workload_combo_count = if exact_combos > 0 {
+        exact_combos as usize
+    } else {
+        estimate as usize
+    };
     let (provider, avail) = match resolve_provider_for_request(
         "top_gear",
         req.options.compute_provider.as_deref(),
@@ -156,7 +163,9 @@ pub(super) async fn create_top_gear_sim(
         http_req.headers(),
         settings_repo.get_ref(),
         registry.get_ref(),
-    ).await {
+    )
+    .await
+    {
         Ok(t) => t,
         Err(resp) => return resp,
     };
@@ -268,7 +277,8 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
     } else {
         req.simc_input.clone()
     };
-    let simc_input = preprocess_simc_input(&raw_input, &req.options.talents, &req.options.spec_override);
+    let simc_input =
+        preprocess_simc_input(&raw_input, &req.options.talents, &req.options.spec_override);
 
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let currency_id = crate::item_db::catalyst_currency_id();

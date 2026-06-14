@@ -123,6 +123,14 @@ export function buildBestGearSet(
     gearSet[slot] = { ...gearSet[slot], gem_id: gemIds[0], gem_ids: gemIds };
   }
 
+  // Enchant overrides: combos emit a `type:enchant` delta per changed slot.
+  // Apply them like gems so the overview reflects the selected row's enchant.
+  for (const item of selectedResult.items) {
+    if (item.type === 'enchant' && item.enchant_id && item.slot && gearSet[item.slot]) {
+      gearSet[item.slot] = { ...gearSet[item.slot], enchant_id: item.enchant_id };
+    }
+  }
+
   return gearSet;
 }
 
@@ -139,7 +147,7 @@ function collectChangedSlots(
     if (!item.is_kept && item.item_id > 0) {
       slots.add(item.slot);
     }
-    if (item.type === 'gem' && item.slot) {
+    if ((item.type === 'gem' || item.type === 'enchant') && item.slot) {
       slots.add(item.slot);
     }
   }

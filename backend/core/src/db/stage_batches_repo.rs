@@ -86,10 +86,7 @@ impl StageBatchesRepo {
         Ok(())
     }
 
-    pub async fn committed_pending(
-        &self,
-        job_id: &str,
-    ) -> Result<Vec<StageBatchRow>, sqlx::Error> {
+    pub async fn committed_pending(&self, job_id: &str) -> Result<Vec<StageBatchRow>, sqlx::Error> {
         let rows = sqlx::query(
             "SELECT stage_idx, batch_idx, source_kind, start_cursor_json,
                     end_cursor_json, candidate_count, accepted_count,
@@ -191,28 +188,71 @@ mod tests {
 
         // completed batch 0 (keys K0) + committed-pending batch 1 (keys K1)
         let mut tx = pool.begin().await.unwrap();
-        dedup.insert_chunked(&mut tx, "job", 0, &["K0a".into(), "K0b".into()]).await.unwrap();
-        batches.insert_committed(&mut tx, "job", 0, 0, "generated", Some("[0]"), Some("[1]"), 2, 2).await.unwrap();
-        dedup.insert_chunked(&mut tx, "job", 1, &["K1a".into()]).await.unwrap();
-        batches.insert_committed(&mut tx, "job", 0, 1, "generated", Some("[1]"), Some("[2]"), 1, 1).await.unwrap();
+        dedup
+            .insert_chunked(&mut tx, "job", 0, &["K0a".into(), "K0b".into()])
+            .await
+            .unwrap();
+        batches
+            .insert_committed(
+                &mut tx,
+                "job",
+                0,
+                0,
+                "generated",
+                Some("[0]"),
+                Some("[1]"),
+                2,
+                2,
+            )
+            .await
+            .unwrap();
+        dedup
+            .insert_chunked(&mut tx, "job", 1, &["K1a".into()])
+            .await
+            .unwrap();
+        batches
+            .insert_committed(
+                &mut tx,
+                "job",
+                0,
+                1,
+                "generated",
+                Some("[1]"),
+                Some("[2]"),
+                1,
+                1,
+            )
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
         let mut tx = pool.begin().await.unwrap();
-        batches.mark_completed(&mut tx, "job", 0, 0, 2).await.unwrap();
+        batches
+            .mark_completed(&mut tx, "job", 0, 0, 2)
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
 
         // simulate resume cleanup of batch 1
         dedup.delete_for_batch("job", 1).await.unwrap();
         sqlx::query("DELETE FROM stage_batches WHERE job_id='job' AND stage_idx=0 AND batch_idx=1")
-            .execute(&pool).await.unwrap();
+            .execute(&pool)
+            .await
+            .unwrap();
 
         // batch 0's keys survive; pending row gone
         let mut tx = pool.begin().await.unwrap();
-        let survived = dedup.snapshot_existing(&mut tx, "job", &["K0a".into(), "K1a".into()]).await.unwrap();
+        let survived = dedup
+            .snapshot_existing(&mut tx, "job", &["K0a".into(), "K1a".into()])
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
         assert!(survived.contains("K0a"));
         assert!(!survived.contains("K1a"));
         assert_eq!(batches.committed_pending("job").await.unwrap().len(), 0);
-        assert_eq!(batches.max_completed_batch_idx("job", 0).await.unwrap(), Some(0));
+        assert_eq!(
+            batches.max_completed_batch_idx("job", 0).await.unwrap(),
+            Some(0)
+        );
     }
 
     #[tokio::test]
@@ -221,17 +261,44 @@ mod tests {
         let repo = StageBatchesRepo::new(pool.clone());
         let mut tx = pool.begin().await.unwrap();
         // completed batch 0: 100 candidates, 80 accepted, 30 survivors
-        repo.insert_committed(&mut tx, "job", 0, 0, "generated", Some("[0]"), Some("[1]"), 100, 80).await.unwrap();
+        repo.insert_committed(
+            &mut tx,
+            "job",
+            0,
+            0,
+            "generated",
+            Some("[0]"),
+            Some("[1]"),
+            100,
+            80,
+        )
+        .await
+        .unwrap();
         // committed-pending batch 1: 50 candidates, 40 accepted
-        repo.insert_committed(&mut tx, "job", 0, 1, "generated", Some("[1]"), Some("[2]"), 50, 40).await.unwrap();
+        repo.insert_committed(
+            &mut tx,
+            "job",
+            0,
+            1,
+            "generated",
+            Some("[1]"),
+            Some("[2]"),
+            50,
+            40,
+        )
+        .await
+        .unwrap();
         tx.commit().await.unwrap();
         let mut tx = pool.begin().await.unwrap();
         repo.mark_completed(&mut tx, "job", 0, 0, 30).await.unwrap();
         tx.commit().await.unwrap();
 
-        assert_eq!(repo.max_completed_batch_idx("job", 0).await.unwrap(), Some(0));
+        assert_eq!(
+            repo.max_completed_batch_idx("job", 0).await.unwrap(),
+            Some(0)
+        );
         let totals = repo.stage_totals("job", 0).await.unwrap();
-        assert_eq!(totals.batch_count, 1);          // only completed
+        assert_eq!(totals.batch_count, 1); // only completed
         assert_eq!(totals.accepted_total, 80);
         assert_eq!(totals.local_survivor_total, 30);
     }

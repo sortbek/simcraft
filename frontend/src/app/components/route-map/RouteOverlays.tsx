@@ -22,7 +22,8 @@ export function ModeBanner({ mode, pickCount, draftCount, onDone }: ModeBannerPr
           ? t('route.banner.mergeEmpty')
           : t('route.banner.mergePick', { count: pickCount, remaining: 2 - pickCount })
         : t('route.banner.delete');
-  const icon = mode === 'draw' ? <IPencil s={14} /> : mode === 'merge' ? <IMerge s={14} /> : <ITrash s={14} />;
+  const icon =
+    mode === 'draw' ? <IPencil s={14} /> : mode === 'merge' ? <IMerge s={14} /> : <ITrash s={14} />;
   return (
     <div
       style={{
@@ -118,7 +119,14 @@ interface SaveModalProps {
   onClose: () => void;
   onSave: (name: string) => void;
 }
-export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, onClose, onSave }: SaveModalProps) {
+export function SaveModal({
+  dungeonName,
+  keystoneLevel,
+  pullCount,
+  enemyCount,
+  onClose,
+  onSave,
+}: SaveModalProps) {
   const { t } = useLanguage();
   const [name, setName] = useState(`${dungeonName} +${keystoneLevel}`);
   return (
@@ -150,11 +158,21 @@ export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, o
             <span style={{ color: T.gold, display: 'flex' }}>
               <ISave s={15} />
             </span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{t('route.save.title')}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
+              {t('route.save.title')}
+            </span>
           </div>
         </div>
         <div style={{ padding: '18px 20px' }}>
-          <label style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>
+          <label
+            style={{
+              fontSize: 9.5,
+              fontWeight: 700,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: T.muted,
+            }}
+          >
             {t('route.save.nameLabel')}
           </label>
           <input
@@ -187,7 +205,9 @@ export function SaveModal({ dungeonName, keystoneLevel, pullCount, enemyCount, o
             <span>{t('route.row.enemies', { count: enemyCount })}</span>
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9, padding: '0 20px 18px' }}>
+        <div
+          style={{ display: 'flex', justifyContent: 'flex-end', gap: 9, padding: '0 20px 18px' }}
+        >
           <button
             type="button"
             onClick={onClose}

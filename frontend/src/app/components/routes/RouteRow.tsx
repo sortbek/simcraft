@@ -187,7 +187,13 @@ const ActBtn = ({
 
 /** One saved route, rendered as a library card. [Sim] sets the chosen key/HP +
  *  activates the route, then navigates to Quick Sim (activate-only flow). */
-export default function RouteRow({ route, onChanged }: { route: SavedRoute; onChanged: () => void }) {
+export default function RouteRow({
+  route,
+  onChanged,
+}: {
+  route: SavedRoute;
+  onChanged: () => void;
+}) {
   const { t } = useLanguage();
   const router = useRouter();
   const { activateRoute } = useSimContext();
@@ -280,7 +286,14 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
           </span>
         </div>
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 11, color: T.muted, flexWrap: 'wrap' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 9,
+            fontSize: 11,
+            color: T.muted,
+            flexWrap: 'wrap',
+          }}
         >
           {stats.pulls != null && (
             <>
@@ -306,7 +319,14 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
 
       {isDungeonRoute && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Stepper label={t('route.row.keyLevel')} value={key} min={2} max={40} prefix="+" onChange={setKey} />
+          <Stepper
+            label={t('route.row.keyLevel')}
+            value={key}
+            min={2}
+            max={40}
+            prefix="+"
+            onChange={setKey}
+          />
           <Stepper label={t('route.row.hpPercent')} value={hp} min={1} max={100} onChange={setHp} />
         </div>
       )}
@@ -315,7 +335,9 @@ export default function RouteRow({ route, onChanged }: { route: SavedRoute; onCh
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <ActBtn icon={<IPlay s={12} />} label={t('route.row.sim')} primary onClick={onSim} />
-        {isDungeonRoute && <ActBtn icon={<IList s={13} />} label={t('route.row.map')} onClick={onMap} />}
+        {isDungeonRoute && (
+          <ActBtn icon={<IList s={13} />} label={t('route.row.map')} onClick={onMap} />
+        )}
         <ActBtn icon={<ITrash s={13} />} danger onClick={onDelete} />
       </div>
     </div>

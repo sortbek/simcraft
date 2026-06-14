@@ -91,12 +91,7 @@ export default function RunButton({
   // No usable remote → no real choice → plain Run button (collapse rule).
   if (readyRemotes.length === 0) {
     return (
-      <button
-        type="button"
-        onClick={onRun}
-        disabled={runDisabled}
-        className={`${GOLD} rounded-lg`}
-      >
+      <button type="button" onClick={onRun} disabled={runDisabled} className={`${GOLD} rounded-lg`}>
         {submitting ? (
           spinner
         ) : (

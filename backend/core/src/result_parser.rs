@@ -432,7 +432,7 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
 
 /// Extract profileset results from simc JSON output for Top Gear.
 /// Parse a profileset/gear-comparison SimC result (Top Gear, Drop Finder,
-/// Upgrade Compare, Enchant/Gem). The `sim_type` parameter is the exact
+/// Upgrade Compare). The `sim_type` parameter is the exact
 /// wire string of the mode that produced the result; it lands in the
 /// returned payload as `"type"`.
 ///
@@ -453,7 +453,9 @@ pub fn parse_gear_comparison_result(
 
     let players = match players {
         Some(p) if !p.is_empty() => p,
-        _ => return json!({"type": sim_type, "result_kind": "gear_comparison", "error": "No player data found"}),
+        _ => {
+            return json!({"type": sim_type, "result_kind": "gear_comparison", "error": "No player data found"})
+        }
     };
 
     let player = &players[0];
@@ -717,7 +719,10 @@ mod tests {
         });
         let parsed = parse_gear_comparison_result(&raw, None, "top_gear");
         // 1.96 * 1.43339 / 399.457 * 100 = 0.70%
-        assert_eq!(find_row(&parsed, "Combo 1")["precision_pct"].as_f64(), Some(0.70));
+        assert_eq!(
+            find_row(&parsed, "Combo 1")["precision_pct"].as_f64(),
+            Some(0.70)
+        );
     }
 
     /// Rows that carry only `mean_error` (the 95% half-width, absolute) still
@@ -737,7 +742,10 @@ mod tests {
         });
         let parsed = parse_gear_comparison_result(&raw, None, "top_gear");
         // 2.8 / 400 * 100 = 0.70%
-        assert_eq!(find_row(&parsed, "Combo 1")["precision_pct"].as_f64(), Some(0.70));
+        assert_eq!(
+            find_row(&parsed, "Combo 1")["precision_pct"].as_f64(),
+            Some(0.70)
+        );
     }
 
     /// Cloud-merged results carry `sim.options` but no `sim.statistics`; the

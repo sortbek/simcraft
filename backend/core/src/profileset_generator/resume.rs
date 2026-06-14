@@ -548,10 +548,8 @@ async fn resume_triage(
                     "waiting for active local sim to finish",
                 )
                 .await;
-            let cancel_tok = crate::cancel::CancelToken::new(
-                repo_for_task.clone(),
-                job_id_owned.clone(),
-            );
+            let cancel_tok =
+                crate::cancel::CancelToken::new(repo_for_task.clone(), job_id_owned.clone());
             match crate::compute::local::await_local_queue_permit(
                 &queue_for_task,
                 Some(&cancel_tok),
@@ -760,12 +758,18 @@ mod tests {
     fn rewind_uses_pending_cursor_and_reclaims_generated_ids() {
         // checkpoint advanced to next_combo_id=43 after a generated batch that accepted 7.
         let cp = LocalStageCheckpoint {
-            stage_idx: 0, stage_name: "Broad".into(), next_batch_idx: 6,
+            stage_idx: 0,
+            stage_name: "Broad".into(),
+            next_batch_idx: 6,
             source: CheckpointSource::GeneratedCombinations,
-            survivor_combo_ids: vec![], generated_cursor: Some(vec![9, 9]), next_combo_id: 43,
+            survivor_combo_ids: vec![],
+            generated_cursor: Some(vec![9, 9]),
+            next_combo_id: 43,
         };
         let pending = vec![gen_row(5, "[3,4]", 7, "committed")];
-        let r = rewind_for_pending_stage_batches(&cp, &pending).unwrap().unwrap();
+        let r = rewind_for_pending_stage_batches(&cp, &pending)
+            .unwrap()
+            .unwrap();
         assert_eq!(r.start_batch_idx, 5);
         assert_eq!(r.iterator_cursor, Some(vec![3, 4]));
         assert_eq!(r.next_combo_id, 36); // 43 - 7
@@ -774,19 +778,29 @@ mod tests {
     #[test]
     fn rewind_is_none_without_pending() {
         let cp = LocalStageCheckpoint {
-            stage_idx: 0, stage_name: "Broad".into(), next_batch_idx: 6,
+            stage_idx: 0,
+            stage_name: "Broad".into(),
+            next_batch_idx: 6,
             source: CheckpointSource::GeneratedCombinations,
-            survivor_combo_ids: vec![], generated_cursor: Some(vec![9, 9]), next_combo_id: 43,
+            survivor_combo_ids: vec![],
+            generated_cursor: Some(vec![9, 9]),
+            next_combo_id: 43,
         };
-        assert!(rewind_for_pending_stage_batches(&cp, &[]).unwrap().is_none());
+        assert!(rewind_for_pending_stage_batches(&cp, &[])
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn rewind_errors_on_missing_accepted_count() {
         let cp = LocalStageCheckpoint {
-            stage_idx: 0, stage_name: "Broad".into(), next_batch_idx: 6,
+            stage_idx: 0,
+            stage_name: "Broad".into(),
+            next_batch_idx: 6,
             source: CheckpointSource::GeneratedCombinations,
-            survivor_combo_ids: vec![], generated_cursor: None, next_combo_id: 43,
+            survivor_combo_ids: vec![],
+            generated_cursor: None,
+            next_combo_id: 43,
         };
         let mut row = gen_row(5, "[3,4]", 0, "committed");
         row.accepted_count = None;
@@ -818,14 +832,20 @@ mod tests {
     #[test]
     fn rewind_survivor_pending_does_not_touch_combo_ids() {
         let cp = LocalStageCheckpoint {
-            stage_idx: 1, stage_name: "Refine".into(), next_batch_idx: 3,
+            stage_idx: 1,
+            stage_name: "Refine".into(),
+            next_batch_idx: 3,
             source: CheckpointSource::PreviousStageSurvivors,
-            survivor_combo_ids: vec![1, 2, 3], generated_cursor: None, next_combo_id: 50,
+            survivor_combo_ids: vec![1, 2, 3],
+            generated_cursor: None,
+            next_combo_id: 50,
         };
         let mut row = gen_row(2, "[]", 9, "committed");
         row.source_kind = "previous_survivors".into();
         row.start_cursor_json = None;
-        let r = rewind_for_pending_stage_batches(&cp, &[row]).unwrap().unwrap();
+        let r = rewind_for_pending_stage_batches(&cp, &[row])
+            .unwrap()
+            .unwrap();
         assert_eq!(r.start_batch_idx, 2);
         assert_eq!(r.iterator_cursor, None);
         assert_eq!(r.next_combo_id, 50); // unchanged: survivor batches don't allocate ids

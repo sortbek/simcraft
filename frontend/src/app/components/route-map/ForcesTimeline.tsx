@@ -23,9 +23,23 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
       onClick={() => onClick(p.n)}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
-      style={{ position: 'relative', display: 'flex', gap: 13, padding: '0 16px 0 0', cursor: 'pointer' }}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        gap: 13,
+        padding: '0 16px 0 0',
+        cursor: 'pointer',
+      }}
     >
-      <div style={{ position: 'relative', width: 34, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+      <div
+        style={{
+          position: 'relative',
+          width: 34,
+          flexShrink: 0,
+          display: 'flex',
+          justifyContent: 'center',
+        }}
+      >
         {!last && (
           <div
             style={{
@@ -49,7 +63,8 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
             borderRadius: '50%',
             background: `#${p.color}`,
             marginTop: 1,
-            border: selected || picked ? `2.5px solid ${accent}` : '2px solid rgba(255,255,255,0.8)',
+            border:
+              selected || picked ? `2.5px solid ${accent}` : '2px solid rgba(255,255,255,0.8)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -80,7 +95,16 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: T.text, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: T.text,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
               {t('route.pullN', { n: p.n })}
               {p.boss && (
                 <span style={{ display: 'flex', color: T.boss }}>
@@ -88,7 +112,14 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
                 </span>
               )}
             </span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: T.gold, fontVariantNumeric: 'tabular-nums' }}>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: T.gold,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
               {p.forces}%
             </span>
           </div>
@@ -96,8 +127,23 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
             <span style={{ fontSize: 10, color: T.muted, whiteSpace: 'nowrap' }}>
               {t('route.timeline.mobs', { count: p.mobs })}
             </span>
-            <div style={{ flex: 1, height: 3, background: T.faint, borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, p.forces)}%`, height: '100%', background: `#${p.color}`, opacity: 0.85 }} />
+            <div
+              style={{
+                flex: 1,
+                height: 3,
+                background: T.faint,
+                borderRadius: 2,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(100, p.forces)}%`,
+                  height: '100%',
+                  background: `#${p.color}`,
+                  opacity: 0.85,
+                }}
+              />
             </div>
           </div>
         </div>
@@ -173,7 +219,9 @@ export default function ForcesTimeline({
           />
         ))}
         {pulls.length === 0 && (
-          <div style={{ padding: '8px 18px', fontSize: 11, color: T.muted }}>{t('route.timeline.noPulls')}</div>
+          <div style={{ padding: '8px 18px', fontSize: 11, color: T.muted }}>
+            {t('route.timeline.noPulls')}
+          </div>
         )}
       </div>
     </div>

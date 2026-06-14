@@ -108,8 +108,8 @@ pub struct SublevelLink {
 
 impl DungeonDb {
     pub fn from_json(json: &str) -> Result<Self, String> {
-        let file: DbFile = serde_json::from_str(json)
-            .map_err(|e| format!("invalid MDT dungeon database: {e}"))?;
+        let file: DbFile =
+            serde_json::from_str(json).map_err(|e| format!("invalid MDT dungeon database: {e}"))?;
         Ok(Self {
             mdt_version: file.mdt_version,
             dungeons: file.dungeons,

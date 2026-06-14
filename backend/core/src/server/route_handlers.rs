@@ -48,7 +48,9 @@ fn shape_to_store(
 pub(super) async fn list_routes(repo: web::Data<RouteRepo>) -> HttpResponse {
     let mut routes = match repo.list().await {
         Ok(routes) => routes,
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
     };
     // Backfill thumbnails for rows saved before shapes existed. Computed once and
     // persisted per row — including an empty-array sentinel for rows with no
@@ -81,7 +83,11 @@ pub(super) async fn create_route(
             .json(json!({"detail": "name and one of mdt_string, dungeon_idx+pulls, or simc are required"}));
     }
     let simc = req.simc.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let pulls = req.pulls.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let pulls = req
+        .pulls
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     // A map-built route's pulls must be a JSON array with at least one populated
     // pull — otherwise the saved route would later sim only the placeholder.
     if let Some(p) = pulls {
@@ -89,8 +95,9 @@ pub(super) async fn create_route(
             .map(|parsed| parsed.iter().any(|pull| !pull.is_empty()))
             .unwrap_or(false);
         if !ok {
-            return HttpResponse::BadRequest()
-                .json(json!({"detail": "pulls must be a JSON array with at least one non-empty pull"}));
+            return HttpResponse::BadRequest().json(
+                json!({"detail": "pulls must be a JSON array with at least one non-empty pull"}),
+            );
         }
     }
     // Persist the shape once at create (sentinel when no geometry is derivable);

@@ -77,7 +77,11 @@ impl ChunkAccumulator {
         } else {
             None
         };
-        ChunkResultEnvelope { profilesets, base_player, credits: 0 }
+        ChunkResultEnvelope {
+            profilesets,
+            base_player,
+            credits: 0,
+        }
     }
 
     /// Pull a chunk's credits from its adapted Simmit JSON
@@ -146,8 +150,9 @@ pub type ChunkRunner = Arc<
 /// `Ok(Some(n))` to gate against `est_credits_needed`, `Ok(None)` when the
 /// provider reports no credit concept / unknown limit (treated as affordable),
 /// `Err` on a fetch failure (treated as fatal — we cannot confirm affordability).
-pub type AffordabilityCheck =
-    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Result<Option<u64>, String>> + Send>> + Send + Sync>;
+pub type AffordabilityCheck = Arc<
+    dyn Fn() -> Pin<Box<dyn Future<Output = Result<Option<u64>, String>> + Send>> + Send + Sync,
+>;
 
 // ── Chunk generation ─────────────────────────────────────────────────────────
 
@@ -372,7 +377,9 @@ async fn run_chunk_with_retry(
                     ));
                 }
                 let now = chrono::Utc::now().to_rfc3339();
-                let _ = cloud_repo.mark_submitted(job_id, sub_idx as i64, "", &now).await;
+                let _ = cloud_repo
+                    .mark_submitted(job_id, sub_idx as i64, "", &now)
+                    .await;
 
                 let sub_req = ChunkRequest {
                     chunk_idx: sub_idx,
@@ -489,8 +496,7 @@ impl CloudStreamingRun {
 
         // ── Generate the FIRST chunk (blocking CPU work off the async thread). ─
         let ceiling = self.ceiling;
-        let (it, first) =
-            run_build_chunk_blocking(it, self.base_profile.clone(), ceiling).await;
+        let (it, first) = run_build_chunk_blocking(it, self.base_profile.clone(), ceiling).await;
 
         if first.profileset_count == 0 {
             let _ = self
@@ -510,8 +516,7 @@ impl CloudStreamingRun {
         }
 
         // ── Multi-chunk path: bounded-concurrency generate/submit loop. ──────
-        self.run_multi_chunk(&cloud_repo, it, first, runner)
-            .await;
+        self.run_multi_chunk(&cloud_repo, it, first, runner).await;
     }
 
     /// The "whole set fits in one chunk" path: one submission, accumulate,
@@ -590,8 +595,7 @@ impl CloudStreamingRun {
             // Take the base actor from the FIRST result only (chunk 0 or, if it
             // split, its first sub-chunk — both carry the same base actor).
             let include_base = i == 0;
-            let mut envelope =
-                ChunkAccumulator::envelope_from_simc_json(chunk_json, include_base);
+            let mut envelope = ChunkAccumulator::envelope_from_simc_json(chunk_json, include_base);
             let credits = ChunkAccumulator::credits_from_simc_json(chunk_json);
             envelope.credits = credits;
             let completed_at = chrono::Utc::now().to_rfc3339();
@@ -785,7 +789,8 @@ impl CloudStreamingRun {
                 // retry-split already claimed — keeping it consistent with the
                 // pause-path checkpoint, which also loads the atomic.
                 let next_idx_cp = next_chunk_idx.load(Ordering::SeqCst);
-                self.write_checkpoint(&it, next_idx_cp, chunk.exhausted).await;
+                self.write_checkpoint(&it, next_idx_cp, chunk.exhausted)
+                    .await;
 
                 let now = chrono::Utc::now().to_rfc3339();
                 let _ = cloud_repo
@@ -1082,7 +1087,10 @@ pub async fn finalize_cloud_result(
 
     let result_str = serde_json::to_string(&parsed).unwrap_or_default();
     let raw_str = serde_json::to_string(merged_json).ok();
-    if let Err(e) = repo.set_result(job_id, &result_str, raw_str.as_deref()).await {
+    if let Err(e) = repo
+        .set_result(job_id, &result_str, raw_str.as_deref())
+        .await
+    {
         eprintln!("[{job_id}] Failed to set result: {e}");
     }
     if multi_chunk {
@@ -1151,7 +1159,8 @@ pub(super) async fn start_cloud_streaming(
         catalyst_charges,
     );
 
-    if let Some(resp) = super::helpers::validate_batch(&req.options.batch_id, repo.get_ref()).await {
+    if let Some(resp) = super::helpers::validate_batch(&req.options.batch_id, repo.get_ref()).await
+    {
         return resp;
     }
 
@@ -1262,8 +1271,11 @@ pub(super) async fn start_cloud_streaming(
     // relative to what the iterator emits, which would peg the bar near 0% for
     // the whole run. The exact count equals the iterator's emitted total, so the
     // bar reaches 100%. No extra Simmit calls.
-    let progress =
-        CloudProgress::new(repo.get_ref().clone(), job_id.clone(), exact_combos as usize);
+    let progress = CloudProgress::new(
+        repo.get_ref().clone(),
+        job_id.clone(),
+        exact_combos as usize,
+    );
     let runner = build_production_chunk_runner(
         provider.clone(),
         cloud_repo,
@@ -1349,7 +1361,8 @@ impl CloudProgress {
     /// A chunk reported live progress (`0..=100`). Stash its fraction + push.
     fn report(&self, chunk_idx: usize, count: usize, pct: u8) {
         let mut g = self.inner.lock().unwrap();
-        g.inflight.insert(chunk_idx, (pct.min(100) as f32 / 100.0, count));
+        g.inflight
+            .insert(chunk_idx, (pct.min(100) as f32 / 100.0, count));
         self.maybe_push(&mut g);
     }
 
@@ -1736,7 +1749,10 @@ pub async fn resume_cloud_streaming(
         .await
         {
             let _ = repo
-                .set_error(&job_id_owned, &format!("Cloud-streaming resume failed: {e}"))
+                .set_error(
+                    &job_id_owned,
+                    &format!("Cloud-streaming resume failed: {e}"),
+                )
                 .await;
         }
     });
@@ -1816,7 +1832,10 @@ async fn resume_cloud_streaming_inner(
     // The request envelope persists the sim options (start_cloud_streaming writes
     // `"options"`); resumed chunks must carry them through build_simc_input_from_options
     // exactly like the fresh path, or the resumed chunk submits a malformed input.
-    let options = payload.get("options").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let options = payload
+        .get("options")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
     let ceiling = cloud_cp.chunk_size.max(1);
 
     let mut it = ProfilesetIterator::new(iter_cfg.clone());
@@ -1850,8 +1869,10 @@ async fn resume_cloud_streaming_inner(
     // `first_combo_name_idx` (their chunk_idx may be non-contiguous when retry
     // splits claimed interleaved tail indices), so each `build_chunk` lines up with
     // the row whose range it reproduces.
-    let mut generated_rows: Vec<&CloudChunkRow> =
-        rows.iter().filter(|r| r.parent_chunk_idx.is_none()).collect();
+    let mut generated_rows: Vec<&CloudChunkRow> = rows
+        .iter()
+        .filter(|r| r.parent_chunk_idx.is_none())
+        .collect();
     generated_rows.sort_by_key(|r| (r.first_combo_name_idx.unwrap_or(i64::MAX), r.chunk_idx));
 
     // ── 4. From-start walk over generated chunks. ────────────────────────────
@@ -1860,8 +1881,7 @@ async fn resume_cloud_streaming_inner(
         // Regenerate this chunk from the iterator (advances the cursor + names).
         // Run on a blocking thread so the CPU-bound iterator walk does not stall
         // the async executor while awaiting chunk results.
-        let (it_back, chunk) =
-            run_build_chunk_blocking(it, base_profile.clone(), ceiling).await;
+        let (it_back, chunk) = run_build_chunk_blocking(it, base_profile.clone(), ceiling).await;
         it = it_back;
         if chunk.profileset_count == 0 {
             // The iterator ran dry before reproducing all recorded generated chunks
@@ -1885,10 +1905,7 @@ async fn resume_cloud_streaming_inner(
         }
         let chunk_idx = row.chunk_idx;
         let status = row.status.as_str();
-        let live_remote = row
-            .remote_job_id
-            .as_deref()
-            .filter(|s| !s.is_empty());
+        let live_remote = row.remote_job_id.as_deref().filter(|s| !s.is_empty());
 
         match status {
             "completed" => {
@@ -1906,16 +1923,22 @@ async fn resume_cloud_streaming_inner(
             "submitted" => match live_remote {
                 Some(remote_id) => {
                     match repoll(remote_id.to_string()).await {
-                        Ok(json) => fold_repolled(
-                            &cloud_repo, job_id, chunk_idx, &json, &mut acc,
-                        )
-                        .await,
+                        Ok(json) => {
+                            fold_repolled(&cloud_repo, job_id, chunk_idx, &json, &mut acc).await
+                        }
                         Err(RunError::Paused) | Err(RunError::Cancelled) => return Ok(()),
                         // Lost/expired remote → re-submit the regenerated lines.
                         Err(RunError::Other(_)) => {
                             if let Some(t) = resume_resubmit_chunk(
-                                &runner, &cloud_repo, job_id, &base_profile, &options,
-                                chunk_idx, &chunk, &tail_alloc, &mut acc,
+                                &runner,
+                                &cloud_repo,
+                                job_id,
+                                &base_profile,
+                                &options,
+                                chunk_idx,
+                                &chunk,
+                                &tail_alloc,
+                                &mut acc,
                             )
                             .await
                             {
@@ -1927,8 +1950,15 @@ async fn resume_cloud_streaming_inner(
                 // No usable remote id → re-submit.
                 None => {
                     if let Some(t) = resume_resubmit_chunk(
-                        &runner, &cloud_repo, job_id, &base_profile, &options,
-                        chunk_idx, &chunk, &tail_alloc, &mut acc,
+                        &runner,
+                        &cloud_repo,
+                        job_id,
+                        &base_profile,
+                        &options,
+                        chunk_idx,
+                        &chunk,
+                        &tail_alloc,
+                        &mut acc,
                     )
                     .await
                     {
@@ -1945,15 +1975,21 @@ async fn resume_cloud_streaming_inner(
                     // (Bug B — the old resume only re-polled `submitted`). Recover
                     // it if terminal; re-submit if the remote is truly gone.
                     match repoll(remote_id.to_string()).await {
-                        Ok(json) => fold_repolled(
-                            &cloud_repo, job_id, chunk_idx, &json, &mut acc,
-                        )
-                        .await,
+                        Ok(json) => {
+                            fold_repolled(&cloud_repo, job_id, chunk_idx, &json, &mut acc).await
+                        }
                         Err(RunError::Paused) | Err(RunError::Cancelled) => return Ok(()),
                         Err(RunError::Other(_)) => {
                             if let Some(t) = resume_resubmit_chunk(
-                                &runner, &cloud_repo, job_id, &base_profile, &options,
-                                chunk_idx, &chunk, &tail_alloc, &mut acc,
+                                &runner,
+                                &cloud_repo,
+                                job_id,
+                                &base_profile,
+                                &options,
+                                chunk_idx,
+                                &chunk,
+                                &tail_alloc,
+                                &mut acc,
                             )
                             .await
                             {
@@ -1964,8 +2000,15 @@ async fn resume_cloud_streaming_inner(
                 } else {
                     // Failed, not superseded, no live remote (Bug A) → re-submit.
                     if let Some(t) = resume_resubmit_chunk(
-                        &runner, &cloud_repo, job_id, &base_profile, &options,
-                        chunk_idx, &chunk, &tail_alloc, &mut acc,
+                        &runner,
+                        &cloud_repo,
+                        job_id,
+                        &base_profile,
+                        &options,
+                        chunk_idx,
+                        &chunk,
+                        &tail_alloc,
+                        &mut acc,
                     )
                     .await
                     {
@@ -1976,8 +2019,15 @@ async fn resume_cloud_streaming_inner(
             // `pending` (recorded but never submitted) → re-submit.
             _ => {
                 if let Some(t) = resume_resubmit_chunk(
-                    &runner, &cloud_repo, job_id, &base_profile, &options,
-                    chunk_idx, &chunk, &tail_alloc, &mut acc,
+                    &runner,
+                    &cloud_repo,
+                    job_id,
+                    &base_profile,
+                    &options,
+                    chunk_idx,
+                    &chunk,
+                    &tail_alloc,
+                    &mut acc,
                 )
                 .await
                 {
@@ -2179,9 +2229,18 @@ mod tests {
             &opts,
         );
         assert!(input.contains("# Base Actor"), "keeps base actor:\n{input}");
-        assert!(input.contains("target_error=0.05"), "injects target_error:\n{input}");
-        assert!(input.contains("iterations=20000"), "injects iterations:\n{input}");
-        assert!(input.contains("profileset.\"Combo 1\""), "keeps profileset line:\n{input}");
+        assert!(
+            input.contains("target_error=0.05"),
+            "injects target_error:\n{input}"
+        );
+        assert!(
+            input.contains("iterations=20000"),
+            "injects iterations:\n{input}"
+        );
+        assert!(
+            input.contains("profileset.\"Combo 1\""),
+            "keeps profileset line:\n{input}"
+        );
     }
 
     #[test]
@@ -2202,12 +2261,19 @@ mod tests {
 
         // base_player from chunk 0; 4 profilesets total; credits summed.
         assert_eq!(merged["sim"]["players"][0]["name"], "Hero");
-        assert_eq!(merged["sim"]["profilesets"]["results"].as_array().unwrap().len(), 4);
+        assert_eq!(
+            merged["sim"]["profilesets"]["results"]
+                .as_array()
+                .unwrap()
+                .len(),
+            4
+        );
         assert_eq!(merged["simmit"]["credits_consumed"], 200);
 
         // The merged doc parses, and the top row is the global best (Combo 3).
         let meta: HashMap<String, Vec<Value>> = HashMap::new();
-        let parsed = crate::result_parser::parse_gear_comparison_result(&merged, Some(&meta), "top_gear");
+        let parsed =
+            crate::result_parser::parse_gear_comparison_result(&merged, Some(&meta), "top_gear");
         assert_eq!(parsed["base_dps"], 1000.0);
         let results = parsed["results"].as_array().unwrap();
         // results includes the baseline ("Currently Equipped") row + 4 combos,
@@ -2221,8 +2287,14 @@ mod tests {
     fn merged_topn_equals_single_job_equivalent() {
         // A single job that simmed all 4 combos would produce this doc:
         let single = chunk_json(
-            "Hero", 1000.0,
-            &[("Combo 1", 1100.0), ("Combo 2", 1050.0), ("Combo 3", 1200.0), ("Combo 4", 900.0)],
+            "Hero",
+            1000.0,
+            &[
+                ("Combo 1", 1100.0),
+                ("Combo 2", 1050.0),
+                ("Combo 3", 1200.0),
+                ("Combo 4", 900.0),
+            ],
         );
         let meta: HashMap<String, Vec<Value>> = HashMap::new();
         let single_parsed =
@@ -2235,13 +2307,19 @@ mod tests {
         acc.add_envelope(ChunkAccumulator::envelope_from_simc_json(&c0, true), 0);
         acc.add_envelope(ChunkAccumulator::envelope_from_simc_json(&c1, false), 0);
         let merged_parsed = crate::result_parser::parse_gear_comparison_result(
-            &acc.into_merged_simc_json(), Some(&meta), "top_gear",
+            &acc.into_merged_simc_json(),
+            Some(&meta),
+            "top_gear",
         );
 
         // Top-N (name + dps order) must be identical.
         let names = |v: &Value| -> Vec<String> {
-            v["results"].as_array().unwrap().iter()
-                .map(|r| r["name"].as_str().unwrap().to_string()).collect()
+            v["results"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| r["name"].as_str().unwrap().to_string())
+                .collect()
         };
         assert_eq!(names(&single_parsed), names(&merged_parsed));
         assert_eq!(single_parsed["base_dps"], merged_parsed["base_dps"]);
@@ -2405,9 +2483,7 @@ mod tests {
 #[cfg(test)]
 mod orchestrator_tests {
     use super::*;
-    use crate::profileset_generator::iterator::{
-        GemCombosResolver, ProfilesetIteratorConfig,
-    };
+    use crate::profileset_generator::iterator::{GemCombosResolver, ProfilesetIteratorConfig};
     use std::collections::{HashMap, HashSet};
     use std::sync::Mutex;
 
@@ -2512,7 +2588,10 @@ mod orchestrator_tests {
 
         let job = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(job.progress_stage.as_deref(), Some("Cloud"));
-        assert_eq!(job.progress_detail.as_deref(), Some("100 / 100 combinations"));
+        assert_eq!(
+            job.progress_detail.as_deref(),
+            Some("100 / 100 combinations")
+        );
     }
 
     #[tokio::test]
@@ -2671,8 +2750,7 @@ mod orchestrator_tests {
         // expected combos from the fake runner.
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let result: Value =
-            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let result: Value = serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
         assert_eq!(result["base_dps"], 1000.0);
         // Realm came from the base_profile (no single simc_input on cloud path).
         assert_eq!(result["realm"], "tichondrius");
@@ -2752,7 +2830,11 @@ mod orchestrator_tests {
         };
         run.execute(runner).await;
 
-        assert_eq!(calls.lock().unwrap().len(), 0, "no chunk should be submitted");
+        assert_eq!(
+            calls.lock().unwrap().len(),
+            0,
+            "no chunk should be submitted"
+        );
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Failed);
     }
@@ -2884,8 +2966,7 @@ mod orchestrator_tests {
         // multi-chunk stamps reports_merged:false on the parsed result.
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let result: Value =
-            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let result: Value = serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
         assert_eq!(result["reports_merged"], false);
         let names: Vec<String> = result["results"]
             .as_array()
@@ -3074,8 +3155,7 @@ mod orchestrator_tests {
                 } else {
                     Ok(result_for(&names))
                 }
-            })
-                as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+            }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
         })
     }
 
@@ -3113,8 +3193,7 @@ mod orchestrator_tests {
         // Combo N names — no metadata rewrite).
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let result: Value =
-            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let result: Value = serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
         let names: Vec<String> = result["results"]
             .as_array()
             .unwrap()
@@ -3133,7 +3212,9 @@ mod orchestrator_tests {
         // The original chunk-1 row is failed; its two sub-chunk rows are completed.
         let cloud_repo = CloudChunksRepo::new(pool.clone());
         let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
-        assert!(rows.iter().any(|r| r.chunk_idx == 1 && r.status == "failed"));
+        assert!(rows
+            .iter()
+            .any(|r| r.chunk_idx == 1 && r.status == "failed"));
         let completed = rows.iter().filter(|r| r.status == "completed").count();
         // chunk 0, chunk 2, + 2 retry sub-chunks = 4 completed.
         assert_eq!(completed, 4, "rows: {rows:?}");
@@ -3152,8 +3233,7 @@ mod orchestrator_tests {
                 } else {
                     Ok(result_for(&names))
                 }
-            })
-                as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+            }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
         })
     }
 
@@ -3218,8 +3298,7 @@ mod orchestrator_tests {
                         .await
                         .unwrap();
                     Err(RunError::Cancelled)
-                })
-                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+                }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
             })
         };
 
@@ -3405,8 +3484,10 @@ mod orchestrator_tests {
         // Derive the cursor + name index AFTER the first 4 combos (chunks 0 and 1,
         // ceiling 2) by replaying the rebuilt iterator — exactly what the original
         // run would have checkpointed at the chunk-1 boundary.
-        let cfg = crate::profileset_generator::iterator_from_request::
-            build_iterator_from_request_json(&request_json)
+        let cfg =
+            crate::profileset_generator::iterator_from_request::build_iterator_from_request_json(
+                &request_json,
+            )
             .expect("rebuild iterator");
         let mut probe = ProfilesetIterator::new(cfg);
         let mut emitted = Vec::new();
@@ -3515,10 +3596,9 @@ mod orchestrator_tests {
             std::sync::Arc::new(move |remote_id: String| {
                 repoll_calls.lock().unwrap().push(remote_id.clone());
                 // The in-flight chunk 1 carried Combo 3 + Combo 4.
-                Box::pin(async move {
-                    Ok(result_for(&["Combo 3".to_string(), "Combo 4".to_string()]))
-                })
-                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+                Box::pin(
+                    async move { Ok(result_for(&["Combo 3".to_string(), "Combo 4".to_string()])) },
+                ) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
             })
         };
 
@@ -3568,8 +3648,7 @@ mod orchestrator_tests {
         // (d) The job finalized Done and the merged result carries ALL 5 combos.
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let result: Value =
-            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let result: Value = serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
         let names: Vec<String> = result["results"]
             .as_array()
             .unwrap()
@@ -3594,8 +3673,7 @@ mod orchestrator_tests {
         // completed chunk folded credits=0, under-reporting the total as 200.
         // The merged credits live in the raw merged SimC doc (raw_json), which is
         // what the result-page footer reads.
-        let raw: Value =
-            serde_json::from_str(finished.raw_json.as_deref().unwrap()).unwrap();
+        let raw: Value = serde_json::from_str(finished.raw_json.as_deref().unwrap()).unwrap();
         assert_eq!(
             raw["simmit"]["credits_consumed"], 300,
             "resume must fold the completed chunk's persisted credits, not 0"
@@ -3623,8 +3701,10 @@ mod orchestrator_tests {
         let request_json = five_combo_request_json();
 
         // Cursor + name index AFTER the first 4 combos (chunks 0 and 1, ceiling 2).
-        let cfg = crate::profileset_generator::iterator_from_request::
-            build_iterator_from_request_json(&request_json)
+        let cfg =
+            crate::profileset_generator::iterator_from_request::build_iterator_from_request_json(
+                &request_json,
+            )
             .expect("rebuild iterator");
         let mut probe = ProfilesetIterator::new(cfg);
         for _ in 0..4 {
@@ -3704,7 +3784,12 @@ mod orchestrator_tests {
                 .await
                 .unwrap();
             cloud_repo
-                .mark_submitted(&job_id, idx, &format!("remote-{idx}"), "2026-05-30T00:00:10Z")
+                .mark_submitted(
+                    &job_id,
+                    idx,
+                    &format!("remote-{idx}"),
+                    "2026-05-30T00:00:10Z",
+                )
                 .await
                 .unwrap();
             cloud_repo
@@ -3750,7 +3835,9 @@ mod orchestrator_tests {
         // No `submitted` rows here, so re-poll is never exercised.
         let repoll: RepollFn = std::sync::Arc::new(move |remote_id: String| {
             Box::pin(async move {
-                Err(RunError::Other(format!("unexpected re-poll of {remote_id}")))
+                Err(RunError::Other(format!(
+                    "unexpected re-poll of {remote_id}"
+                )))
             }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
         });
 
@@ -3771,8 +3858,15 @@ mod orchestrator_tests {
         // The tail chunk (Combo 5) was generated and submitted at a FRESH index
         // past the existing max (3), i.e. >= 4 — no PK collision.
         let recorded = calls.lock().unwrap();
-        assert_eq!(recorded.len(), 1, "only the tail chunk should submit: {recorded:?}");
-        assert_eq!(combo_names(&recorded[0].simc_input), vec!["Combo 5".to_string()]);
+        assert_eq!(
+            recorded.len(),
+            1,
+            "only the tail chunk should submit: {recorded:?}"
+        );
+        assert_eq!(
+            combo_names(&recorded[0].simc_input),
+            vec!["Combo 5".to_string()]
+        );
         assert!(
             recorded[0].chunk_idx >= 4,
             "tail chunk_idx must be past the retry-tail rows (>=4), got {}",
@@ -3786,15 +3880,15 @@ mod orchestrator_tests {
         // chunk 0 + two retry sub-chunks (2,3) + the new tail = 4 completed.
         assert_eq!(completed, 4, "rows: {rows:?}");
         assert!(
-            rows.iter().any(|r| r.chunk_idx >= 4 && r.status == "completed"),
+            rows.iter()
+                .any(|r| r.chunk_idx >= 4 && r.status == "completed"),
             "the tail chunk row must land past index 3: {rows:?}"
         );
 
         // The job finalized Done with all 5 combos, each exactly once.
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let result: Value =
-            serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
+        let result: Value = serde_json::from_str(finished.result_json.as_deref().unwrap()).unwrap();
         let names: Vec<String> = result["results"]
             .as_array()
             .unwrap()
@@ -3887,7 +3981,9 @@ mod orchestrator_tests {
     fn never_repoll() -> RepollFn {
         std::sync::Arc::new(move |remote_id: String| {
             Box::pin(async move {
-                Err(RunError::Other(format!("unexpected re-poll of {remote_id}")))
+                Err(RunError::Other(format!(
+                    "unexpected re-poll of {remote_id}"
+                )))
             }) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
         })
     }
@@ -3987,7 +4083,11 @@ mod orchestrator_tests {
         // The pre-cursor failed chunk 1 (Combo 3,4) was re-submitted (and nothing
         // else — completed chunks are never re-submitted).
         let recorded = calls.lock().unwrap();
-        assert_eq!(recorded.len(), 1, "only the failed chunk re-submits: {recorded:?}");
+        assert_eq!(
+            recorded.len(),
+            1,
+            "only the failed chunk re-submits: {recorded:?}"
+        );
         assert_eq!(
             combo_names(&recorded[0].simc_input),
             vec!["Combo 3".to_string(), "Combo 4".to_string()],
@@ -3999,10 +4099,9 @@ mod orchestrator_tests {
         // Done with ALL 5 combos, each exactly once (chunk 1's combos recovered).
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let names = names_of(&serde_json::from_str::<Value>(
-            finished.result_json.as_deref().unwrap(),
-        )
-        .unwrap());
+        let names = names_of(
+            &serde_json::from_str::<Value>(finished.result_json.as_deref().unwrap()).unwrap(),
+        );
         for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
             assert_eq!(
                 names.iter().filter(|x| *x == n).count(),
@@ -4068,10 +4167,9 @@ mod orchestrator_tests {
             let repoll_calls = repoll_calls.clone();
             std::sync::Arc::new(move |remote_id: String| {
                 repoll_calls.lock().unwrap().push(remote_id.clone());
-                Box::pin(async move {
-                    Ok(result_for(&["Combo 3".to_string(), "Combo 4".to_string()]))
-                })
-                    as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
+                Box::pin(
+                    async move { Ok(result_for(&["Combo 3".to_string(), "Combo 4".to_string()])) },
+                ) as Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
             })
         };
 
@@ -4094,7 +4192,10 @@ mod orchestrator_tests {
         // Only the tail (Combo 5) was submitted via the runner — chunk 1 was folded.
         let recorded = calls.lock().unwrap();
         assert_eq!(recorded.len(), 1, "only the tail submits: {recorded:?}");
-        assert_eq!(combo_names(&recorded[0].simc_input), vec!["Combo 5".to_string()]);
+        assert_eq!(
+            combo_names(&recorded[0].simc_input),
+            vec!["Combo 5".to_string()]
+        );
         drop(recorded);
 
         // chunk 1 flipped failed→completed via the re-poll.
@@ -4106,10 +4207,9 @@ mod orchestrator_tests {
 
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let names = names_of(&serde_json::from_str::<Value>(
-            finished.result_json.as_deref().unwrap(),
-        )
-        .unwrap());
+        let names = names_of(
+            &serde_json::from_str::<Value>(finished.result_json.as_deref().unwrap()).unwrap(),
+        );
         for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
             assert_eq!(names.iter().filter(|x| *x == n).count(), 1, "{names:?}");
         }
@@ -4199,7 +4299,10 @@ mod orchestrator_tests {
         // (Combo 5) reaches the runner.
         let recorded = calls.lock().unwrap();
         assert_eq!(recorded.len(), 1, "only the tail submits: {recorded:?}");
-        assert_eq!(combo_names(&recorded[0].simc_input), vec!["Combo 5".to_string()]);
+        assert_eq!(
+            combo_names(&recorded[0].simc_input),
+            vec!["Combo 5".to_string()]
+        );
         // The parent stays `failed` (it was legitimately superseded; never resurrected).
         drop(recorded);
         let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
@@ -4211,10 +4314,9 @@ mod orchestrator_tests {
 
         let finished = repo.get(&job_id).await.unwrap().unwrap();
         assert_eq!(finished.status, crate::models::JobStatus::Done);
-        let names = names_of(&serde_json::from_str::<Value>(
-            finished.result_json.as_deref().unwrap(),
-        )
-        .unwrap());
+        let names = names_of(
+            &serde_json::from_str::<Value>(finished.result_json.as_deref().unwrap()).unwrap(),
+        );
         for n in ["Combo 1", "Combo 2", "Combo 3", "Combo 4", "Combo 5"] {
             assert_eq!(
                 names.iter().filter(|x| *x == n).count(),
@@ -4327,7 +4429,10 @@ mod orchestrator_tests {
         .await;
 
         // No tail submitted (iterator exhausted).
-        assert!(calls.lock().unwrap().is_empty(), "no tail chunk should submit");
+        assert!(
+            calls.lock().unwrap().is_empty(),
+            "no tail chunk should submit"
+        );
 
         // Guard fired: NOT Done (no silent drop of Combo 3,4); left PAUSED so the
         // user can resume again; the CloudStreaming checkpoint is preserved.
@@ -4341,7 +4446,9 @@ mod orchestrator_tests {
             finished.result_json.is_none(),
             "guard must not write a Done result"
         );
-        let cp_json = finished.checkpoint.expect("checkpoint preserved for re-resume");
+        let cp_json = finished
+            .checkpoint
+            .expect("checkpoint preserved for re-resume");
         assert!(matches!(
             crate::profileset_generator::checkpoint::Checkpoint::from_json_str(&cp_json)
                 .unwrap()

@@ -3,8 +3,8 @@ use actix_web::web;
 #[cfg(not(feature = "desktop"))]
 use super::admin_handlers;
 use super::character_handlers;
+use super::cloud_estimate;
 use super::droptimizer_handlers;
-use super::enchant_gem_handlers;
 use super::game_data_handlers;
 use super::job_handlers;
 use super::mdt_handlers;
@@ -12,7 +12,6 @@ use super::provider_handlers;
 use super::route_handlers;
 use super::sim_handlers;
 use super::system_handlers;
-use super::cloud_estimate;
 use super::top_gear_handlers;
 use super::upgrade_compare;
 
@@ -39,7 +38,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::post().to(droptimizer_handlers::create_droptimizer_sim),
         )
         .route("/api/mdt/decode", web::post().to(mdt_handlers::decode_mdt))
-        .route("/api/mdt/dungeons", web::get().to(mdt_handlers::list_dungeons))
+        .route(
+            "/api/mdt/dungeons",
+            web::get().to(mdt_handlers::list_dungeons),
+        )
         .route(
             "/api/mdt/dungeon/{idx}",
             web::get().to(mdt_handlers::dungeon_overview),
@@ -47,14 +49,6 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/mdt/serialize",
             web::post().to(mdt_handlers::serialize_route),
-        )
-        .route(
-            "/api/enchant-gem/sim",
-            web::post().to(enchant_gem_handlers::create_enchant_gem_sim),
-        )
-        .route(
-            "/api/enchant-gem/combo-count",
-            web::post().to(enchant_gem_handlers::get_enchant_gem_combo_count),
         )
         .route(
             "/api/enchants",
@@ -205,8 +199,14 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             "/api/simc/updates",
             web::get().to(system_handlers::check_simc_updates),
         )
-        .route("/api/providers", web::get().to(provider_handlers::list_providers))
-        .route("/api/providers/{id}/test", web::post().to(provider_handlers::test_provider))
+        .route(
+            "/api/providers",
+            web::get().to(provider_handlers::list_providers),
+        )
+        .route(
+            "/api/providers/{id}/test",
+            web::post().to(provider_handlers::test_provider),
+        )
         .route("/health", web::get().to(system_handlers::health_check))
         .route("/api/routes", web::get().to(route_handlers::list_routes))
         .route("/api/routes", web::post().to(route_handlers::create_route))

@@ -383,7 +383,9 @@ export default function ConfigDrawer({
                     max={ITERATION_PRESETS.length - 1}
                     step={1}
                     value={iterationSliderIndex(iterations)}
-                    onChange={(event) => setIterations(ITERATION_PRESETS[Number(event.target.value)])}
+                    onChange={(event) =>
+                      setIterations(ITERATION_PRESETS[Number(event.target.value)])
+                    }
                     className="flex-1 accent-primary"
                   />
                   <input
@@ -393,7 +395,10 @@ export default function ConfigDrawer({
                     step={1000}
                     value={iterations}
                     onChange={(event) => {
-                      const value = Math.max(100, Math.min(1000000, Number(event.target.value) || 0));
+                      const value = Math.max(
+                        100,
+                        Math.min(1000000, Number(event.target.value) || 0)
+                      );
                       setIterations(value);
                     }}
                     className="w-20 rounded border border-outline-variant/20 bg-surface-container-lowest px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"

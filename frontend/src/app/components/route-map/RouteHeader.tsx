@@ -129,7 +129,14 @@ export default function RouteHeader({
         {mdtVersion && (
           <>
             <span style={{ width: 1, height: 14, background: T.border }} />
-            <span style={{ fontSize: 10.5, color: T.muted, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+            <span
+              style={{
+                fontSize: 10.5,
+                color: T.muted,
+                letterSpacing: '0.04em',
+                whiteSpace: 'nowrap',
+              }}
+            >
               MDT {mdtVersion}
             </span>
           </>
@@ -174,9 +181,25 @@ export default function RouteHeader({
       <div style={{ flex: 1 }} />
 
       <div style={{ display: 'flex', gap: 4 }}>
-        <ToolBtn icon={<IPencil s={13} />} label={t('route.header.draw')} active={mode === 'draw'} onClick={() => onToggleMode('draw')} />
-        <ToolBtn icon={<IMerge s={13} />} label={t('route.header.merge')} active={mode === 'merge'} onClick={() => onToggleMode('merge')} />
-        <ToolBtn icon={<ITrash s={13} />} label={t('route.header.delete')} danger active={mode === 'delete'} onClick={() => onToggleMode('delete')} />
+        <ToolBtn
+          icon={<IPencil s={13} />}
+          label={t('route.header.draw')}
+          active={mode === 'draw'}
+          onClick={() => onToggleMode('draw')}
+        />
+        <ToolBtn
+          icon={<IMerge s={13} />}
+          label={t('route.header.merge')}
+          active={mode === 'merge'}
+          onClick={() => onToggleMode('merge')}
+        />
+        <ToolBtn
+          icon={<ITrash s={13} />}
+          label={t('route.header.delete')}
+          danger
+          active={mode === 'delete'}
+          onClick={() => onToggleMode('delete')}
+        />
       </div>
       <span style={{ width: 1, height: 22, background: T.border }} />
       <button

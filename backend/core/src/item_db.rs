@@ -1215,24 +1215,25 @@ pub fn upgrade_bonus_ids_to_max(bonus_ids: &[u64]) -> Vec<u64> {
 }
 
 pub fn upgrade_simc_input(simc_input: &str) -> String {
-    RE_BONUS_ID.replace_all(simc_input, |caps: &regex::Captures| {
-        let raw = &caps[1];
-        let sep = if raw.contains('/') { "/" } else { ":" };
-        let ids: Vec<u64> = raw
-            .split(&['/', ':'][..])
-            .filter_map(|s| s.parse().ok())
-            .collect();
-        let upgraded = upgrade_bonus_ids_to_max(&ids);
-        format!(
-            "bonus_id={}",
-            upgraded
-                .iter()
-                .map(|id| id.to_string())
-                .collect::<Vec<_>>()
-                .join(sep)
-        )
-    })
-    .to_string()
+    RE_BONUS_ID
+        .replace_all(simc_input, |caps: &regex::Captures| {
+            let raw = &caps[1];
+            let sep = if raw.contains('/') { "/" } else { ":" };
+            let ids: Vec<u64> = raw
+                .split(&['/', ':'][..])
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            let upgraded = upgrade_bonus_ids_to_max(&ids);
+            format!(
+                "bonus_id={}",
+                upgraded
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(sep)
+            )
+        })
+        .to_string()
 }
 
 pub fn upgrade_items_by_slot(
@@ -1709,7 +1710,10 @@ mod tests {
         // itemLimit.category is 512, NOT conferred by a bonus. The bonus-only
         // path misses it; item_limit_categories_for must include it.
         let bonus_only = get_item_limit_categories(&[]);
-        assert!(!bonus_only.contains_key(&512), "sanity: no bonuses => no cat");
+        assert!(
+            !bonus_only.contains_key(&512),
+            "sanity: no bonuses => no cat"
+        );
         let merged = item_limit_categories_for(251513, &[]);
         assert!(
             merged.contains_key(&512),

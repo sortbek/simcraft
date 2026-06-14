@@ -73,8 +73,12 @@ export default function RoutePage() {
   };
 
   useEffect(() => {
-    listDungeons().then(setDungeons).catch(() => {});
-    getSavedRoutes().then(setRoutes).catch(() => {});
+    listDungeons()
+      .then(setDungeons)
+      .catch(() => {});
+    getSavedRoutes()
+      .then(setRoutes)
+      .catch(() => {});
   }, []);
 
   // Deep-link: the routes manager stashes a route (serialized ActiveRoute) here.

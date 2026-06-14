@@ -180,7 +180,10 @@ fn read_value(tokens: &[(u8, &str)], pos: &mut usize) -> Result<AceValue, String
         b'B' => Ok(AceValue::Bool(true)),
         b'b' => Ok(AceValue::Bool(false)),
         b'Z' => Ok(AceValue::Nil),
-        other => Err(format!("unsupported AceSerializer control '^{}'", other as char)),
+        other => Err(format!(
+            "unsupported AceSerializer control '^{}'",
+            other as char
+        )),
     }
 }
 
@@ -239,8 +242,18 @@ mod tests {
     fn parses_nested_and_sequence() {
         // { ["value"] = { [1] = 10, [2] = 20 } }
         let v = deserialize("^1^T^Svalue^T^N1^N10^N2^N20^t^t^^").unwrap();
-        let inner = v.as_table().unwrap().get_str("value").unwrap().as_table().unwrap();
-        let seq: Vec<i64> = inner.int_entries().iter().map(|(_, val)| val.as_int().unwrap()).collect();
+        let inner = v
+            .as_table()
+            .unwrap()
+            .get_str("value")
+            .unwrap()
+            .as_table()
+            .unwrap();
+        let seq: Vec<i64> = inner
+            .int_entries()
+            .iter()
+            .map(|(_, val)| val.as_int().unwrap())
+            .collect();
         assert_eq!(seq, vec![10, 20]);
     }
 

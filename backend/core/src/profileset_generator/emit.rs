@@ -118,7 +118,10 @@ pub(super) fn emit_profileset(
         }
     }
     if !talent_string.is_empty() {
-        lines.push(format!("profileset.\"{}\"+=talents={}", name, talent_string));
+        lines.push(format!(
+            "profileset.\"{}\"+=talents={}",
+            name, talent_string
+        ));
         if let Some(spec_name) = talent_spec_name {
             if spec_name != base_actor_spec {
                 lines.push(format!("profileset.\"{}\"+=spec={}", name, spec_name));

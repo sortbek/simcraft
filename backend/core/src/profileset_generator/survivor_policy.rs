@@ -64,7 +64,11 @@ pub fn mean_error_from_result(row: &Value) -> Option<f64> {
     })
 }
 
-pub fn confidence_window_keeps(best: &CandidateResult, candidate: &CandidateResult, z: f64) -> bool {
+pub fn confidence_window_keeps(
+    best: &CandidateResult,
+    candidate: &CandidateResult,
+    z: f64,
+) -> bool {
     if candidate.mean >= best.mean {
         return true;
     }
@@ -239,7 +243,11 @@ mod tests {
             global_target: 10,
             ..SurvivorPolicy::default()
         };
-        let candidates = vec![row(1, 1000.0, 2.0), row(2, 998.0, 2.0), row(3, 900.0, 200.0)];
+        let candidates = vec![
+            row(1, 1000.0, 2.0),
+            row(2, 998.0, 2.0),
+            row(3, 900.0, 200.0),
+        ];
         let out = prune_global(&candidates, &policy);
         assert!(out.survivors.iter().any(|r| r.combo_id == 3));
         assert_eq!(out.stats.window_survivor_count, 3);

@@ -12,7 +12,7 @@ interface SwitchProps {
 
 /**
  * Accessible toggle switch. Replaces three hand-rolled clickable-div switches in
- * EnchantGemSelector (and is the shared primitive for TopGearScreen's Toggle).
+ * GemSelector (and is the shared primitive for TopGearScreen's Toggle).
  * Geometry matches the existing 18×32 track + 12px knob exactly.
  */
 export default function Switch({

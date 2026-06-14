@@ -170,9 +170,7 @@ export default function SimsPage() {
           <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
             {t('sims.title')}
           </h1>
-          <p className="max-w-2xl text-sm text-on-surface-variant">
-            {t('sims.description')}
-          </p>
+          <p className="max-w-2xl text-sm text-on-surface-variant">{t('sims.description')}</p>
         </div>
         <div className="flex gap-1 rounded-lg border border-outline-variant/10 bg-surface-container-low p-1">
           <button

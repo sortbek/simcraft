@@ -110,7 +110,6 @@ pub(super) fn validate_weapon_constraint<V: Borrow<Value>>(
     }
 }
 
-
 pub(super) fn main_hand_is_two_hand<V: Borrow<Value>>(
     gear_set: &HashMap<String, V>,
     spec: &str,
@@ -162,7 +161,11 @@ pub(super) fn validate_item_limits<V: Borrow<Value>>(gear_set: &HashMap<String, 
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
-        let item_id = item.borrow().get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+        let item_id = item
+            .borrow()
+            .get("item_id")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         for (cat_id, max_qty) in game_data::item_limit_categories_for(item_id, &bonus_ids) {
             *category_counts.entry(cat_id).or_insert(0) += 1;
             category_limits.insert(cat_id, max_qty);
@@ -354,7 +357,7 @@ mod tests {
         assert!(validate_unique_equipped(&gs));
     }
 
-#[test]
+    #[test]
     fn main_hand_is_two_hand_fury_always_false() {
         ensure_game_data_loaded();
         let mut gs = HashMap::new();

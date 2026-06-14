@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
-import EnchantGemSelector from '../components/gear/EnchantGemSelector';
+import EnchantSelector from '../components/gear/EnchantSelector';
+import GemSelector from '../components/gear/GemSelector';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import TalentPicker from '../components/talents/TalentPicker';
 import ErrorAlert from '../components/ui/ErrorAlert';
@@ -299,8 +300,7 @@ export default function TopGearScreen() {
     const hasGearSelection = Object.values(selectedUids).some((v) => v.size > 0);
     const hasTalentCompare = talentBuilds.length > 1;
     const hasEnchantGem =
-      Object.values(enchantSelectionsArray).some((v) => v.length > 0) ||
-      gemOptionsArray.length > 0;
+      Object.values(enchantSelectionsArray).some((v) => v.length > 0) || gemOptionsArray.length > 0;
     if (!resolved || (!hasGearSelection && !hasTalentCompare && !hasEnchantGem)) return null;
     return {
       simc_input: submitInput,
@@ -493,9 +493,7 @@ export default function TopGearScreen() {
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
           {t('nav.topGear')}
         </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">
-          {t('page.topGearSubtitle')}
-        </p>
+        <p className="max-w-2xl text-sm text-on-surface-variant">{t('page.topGearSubtitle')}</p>
       </div>
 
       <TalentPicker />
@@ -566,14 +564,17 @@ export default function TopGearScreen() {
             comboCount={comboCount}
             comboError={comboError}
           />
-          <EnchantGemSelector
+          <EnchantSelector
             equippedSlots={equippedSlots}
             enchantSelections={enchantSelections}
-            gemSelections={gemSelections}
             onEnchantToggle={onEnchantToggle}
-            onGemToggle={onGemToggle}
             onSelectAllEnchants={onSelectAllEnchants}
             onDeselectAllEnchants={onDeselectAllEnchants}
+          />
+          <GemSelector
+            equippedSlots={equippedSlots}
+            gemSelections={gemSelections}
+            onGemToggle={onGemToggle}
             onSelectAllGems={onSelectAllGems}
             onDeselectAllGems={onDeselectAllGems}
             replaceGems={replaceGems}
@@ -582,6 +583,7 @@ export default function TopGearScreen() {
             onDiamondAlwaysUseChange={setDiamondAlwaysUse}
             maxColors={maxColors}
             onMaxColorsChange={setMaxColors}
+            storageKey="simhammer_topgear_gems_open"
           />
         </>
       )}

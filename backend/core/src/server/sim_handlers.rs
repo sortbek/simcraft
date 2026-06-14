@@ -9,7 +9,9 @@ use super::helpers::*;
 use super::request_json::NormalizedRequest;
 use super::types::*;
 use super::SimcBinaries;
-use crate::compute::{ProviderAvailability, ProviderRegistry, ProviderSettings, RunCtx, WorkloadEstimate};
+use crate::compute::{
+    ProviderAvailability, ProviderRegistry, ProviderSettings, RunCtx, WorkloadEstimate,
+};
 use crate::db::{ComboMetadataRepo, JobRepo, SettingsRepo};
 use crate::game_data;
 use crate::log_buffer::LogBuffer;
@@ -67,12 +69,18 @@ pub(super) async fn create_sim(
     );
 
     // Resolve compute provider.
-    let settings = match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
-        Ok(s) => s,
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
-    };
+    let settings =
+        match ProviderSettings::load(settings_repo.get_ref(), &registry.remote_ids()).await {
+            Ok(s) => s,
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+            }
+        };
     let avail = ProviderAvailability::build(&settings, registry.get_ref(), http_req.headers());
-    let est = WorkloadEstimate { combo_count: 0, would_use_streaming_path: false }; // Quick Sim has no profilesets
+    let est = WorkloadEstimate {
+        combo_count: 0,
+        would_use_streaming_path: false,
+    }; // Quick Sim has no profilesets
     let provider = match registry.for_request(
         req.sim_type.as_str(),
         req.options.compute_provider.as_deref(),
@@ -84,7 +92,9 @@ pub(super) async fn create_sim(
     };
     // Reject an invalid simc_branch BEFORE inserting the Job — otherwise a bad
     // local branch leaves an orphan Pending row that only fails asynchronously.
-    if let Some(resp) = validate_eager_branch(&provider, simc_bins.get_ref(), &req.options.simc_branch) {
+    if let Some(resp) =
+        validate_eager_branch(&provider, simc_bins.get_ref(), &req.options.simc_branch)
+    {
         return resp;
     }
 

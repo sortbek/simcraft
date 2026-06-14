@@ -83,7 +83,9 @@ fn pull_centroid(pull: &MdtPull, dungeon: &Dungeon) -> Option<(f64, f64)> {
     let mut sy = 0.0;
     let mut n = 0.0;
     for entry in &pull.enemies {
-        let Some(enemy) = dungeon.enemies.get(&entry.enemy_idx) else { continue };
+        let Some(enemy) = dungeon.enemies.get(&entry.enemy_idx) else {
+            continue;
+        };
         for clone_idx in &entry.clone_indices {
             if let Some(pos) = enemy.clones.get(clone_idx) {
                 sx += pos.x;
@@ -92,7 +94,11 @@ fn pull_centroid(pull: &MdtPull, dungeon: &Dungeon) -> Option<(f64, f64)> {
             }
         }
     }
-    if n == 0.0 { None } else { Some((sx / n, sy / n)) }
+    if n == 0.0 {
+        None
+    } else {
+        Some((sx / n, sy / n))
+    }
 }
 
 fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
@@ -202,40 +208,68 @@ mod tests {
     use std::collections::HashMap;
 
     fn clone_at(x: f64, y: f64) -> ClonePos {
-        ClonePos { x, y, sublevel: 1, patrol: vec![] }
+        ClonePos {
+            x,
+            y,
+            sublevel: 1,
+            patrol: vec![],
+        }
     }
 
     fn enemy_at(x: f64, y: f64) -> Enemy {
         let mut clones = HashMap::new();
         clones.insert(1, clone_at(x, y));
         Enemy {
-            id: 0, name: "E".into(), count: 1, health: 100,
-            creature_type: "Humanoid".into(), is_boss: false, ignore_fortified: false,
-            scale: 1.0, clones,
+            id: 0,
+            name: "E".into(),
+            count: 1,
+            health: 100,
+            creature_type: "Humanoid".into(),
+            is_boss: false,
+            ignore_fortified: false,
+            scale: 1.0,
+            clones,
         }
     }
 
     fn dungeon(enemies: HashMap<i64, Enemy>, sx: Option<f64>, sy: Option<f64>) -> Dungeon {
         Dungeon {
-            name: "T".into(), total_count: 0, sublevels: vec![], enemies,
-            map_id: None, timer_max_seconds: None,
-            entrance: Some(MapPoint { x: 0.0, y: 0.0, sublevel: 1 }),
-            yards_per_unit: None, yards_per_unit_x: sx, yards_per_unit_y: sy,
+            name: "T".into(),
+            total_count: 0,
+            sublevels: vec![],
+            enemies,
+            map_id: None,
+            timer_max_seconds: None,
+            entrance: Some(MapPoint {
+                x: 0.0,
+                y: 0.0,
+                sublevel: 1,
+            }),
+            yards_per_unit: None,
+            yards_per_unit_x: sx,
+            yards_per_unit_y: sy,
             sublevel_links: vec![],
         }
     }
 
     fn pull(enemy_idx: i64) -> MdtPull {
         MdtPull {
-            enemies: vec![MdtPullEnemy { enemy_idx, clone_indices: vec![1] }],
+            enemies: vec![MdtPullEnemy {
+                enemy_idx,
+                clone_indices: vec![1],
+            }],
             color: None,
         }
     }
 
     fn route(lines: Vec<MdtLine>) -> MdtRoute {
         MdtRoute {
-            dungeon_idx: 1, week: 1, keystone_level: 2, text: String::new(),
-            lines, pulls: vec![pull(1), pull(2)],
+            dungeon_idx: 1,
+            week: 1,
+            keystone_level: 2,
+            text: String::new(),
+            lines,
+            pulls: vec![pull(1), pull(2)],
         }
     }
 
@@ -259,7 +293,10 @@ mod tests {
         enemies.insert(1, enemy_at(5.0, 10.0));
         enemies.insert(2, enemy_at(5.0, 40.0));
         let d = dungeon(enemies, Some(7.0), Some(7.0));
-        let line = MdtLine { sublevel: 1, points: vec![(0.0, 0.0), (0.0, 100.0)] };
+        let line = MdtLine {
+            sublevel: 1,
+            points: vec![(0.0, 0.0), (0.0, 100.0)],
+        };
         let r = route(vec![line]);
         assert_eq!(calculate_delays(&r, &d), vec![10, 30]);
     }
@@ -274,7 +311,10 @@ mod tests {
         enemies.insert(1, enemy_at(0.0, 10.0));
         enemies.insert(2, enemy_at(0.0, 40.0));
         let d = dungeon(enemies, Some(7.0), Some(7.0));
-        let line = MdtLine { sublevel: 1, points: vec![(0.0, 0.0), (1.0, 0.0)] };
+        let line = MdtLine {
+            sublevel: 1,
+            points: vec![(0.0, 0.0), (1.0, 0.0)],
+        };
         let r = route(vec![line]);
         assert_eq!(calculate_delays(&r, &d), vec![10, 30]);
     }
@@ -317,10 +357,13 @@ mod tests {
         let mut enemies = HashMap::new();
         enemies.insert(1, enemy_at(0.0, 10.0)); // pull 1 centroid, dist 10 from entrance (0,0)
         enemies.insert(3, enemy_at(0.0, 40.0)); // pull 3 centroid
-        // note: enemy_idx 2 is intentionally NOT inserted -> pull 2 is unresolvable
+                                                // note: enemy_idx 2 is intentionally NOT inserted -> pull 2 is unresolvable
         let d = dungeon(enemies, Some(7.0), Some(7.0));
         let r = MdtRoute {
-            dungeon_idx: 1, week: 1, keystone_level: 2, text: String::new(),
+            dungeon_idx: 1,
+            week: 1,
+            keystone_level: 2,
+            text: String::new(),
             lines: vec![],
             pulls: vec![pull(1), pull(2), pull(3)],
         };
@@ -328,6 +371,9 @@ mod tests {
         assert_eq!(delays.len(), 3, "one delay per pull");
         assert_eq!(delays[0], 10, "pull 1 from entrance (0,0) to (0,10)");
         assert_eq!(delays[1], 0, "unresolvable middle pull");
-        assert_eq!(delays[2], 30, "pull 3 from pull 1 (0,10) to (0,40), not from the gap");
+        assert_eq!(
+            delays[2], 30,
+            "pull 3 from pull 1 (0,10) to (0,40), not from the gap"
+        );
     }
 }

@@ -618,9 +618,7 @@ export default function DropFinderContent() {
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
           {t('dropFinder.title')}
         </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">
-          {t('dropFinder.description')}
-        </p>
+        <p className="max-w-2xl text-sm text-on-surface-variant">{t('dropFinder.description')}</p>
       </div>
 
       <TalentPicker />

@@ -129,7 +129,9 @@ export default function SimcEngineSection() {
                   <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
                   </svg>
-                  <p className="text-sm font-semibold text-primary">{t('settings.builtFromSource')}</p>
+                  <p className="text-sm font-semibold text-primary">
+                    {t('settings.builtFromSource')}
+                  </p>
                 </div>
                 <p className="mt-0.5 text-[10px] text-on-surface-variant/70">
                   {formatVersionTag(sourceVersion.tag)}
@@ -228,9 +230,7 @@ export default function SimcEngineSection() {
         </div>
 
         {sourceVersion && (
-          <p className="text-[10px] text-on-surface-variant/50">
-            {t('settings.sourceBuildNote')}
-          </p>
+          <p className="text-[10px] text-on-surface-variant/50">{t('settings.sourceBuildNote')}</p>
         )}
 
         {error && <p className="pt-1 text-xs text-error">{error}</p>}

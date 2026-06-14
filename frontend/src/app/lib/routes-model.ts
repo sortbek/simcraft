@@ -97,10 +97,7 @@ export function slugify(s: string): string {
 /** Read the `enemy="…"` title from a KSG SimC block and match its slug to a
  *  known dungeon. Returns the dungeon idx, or null (→ "Other") when the title is
  *  absent or user-renamed. */
-export function detectDungeonFromSimc(
-  simc: string,
-  dungeons: DungeonSummary[]
-): number | null {
+export function detectDungeonFromSimc(simc: string, dungeons: DungeonSummary[]): number | null {
   const m = simc.match(/^enemy="([^"]*)"/m);
   if (!m) return null;
   const titleSlug = slugify(m[1]);

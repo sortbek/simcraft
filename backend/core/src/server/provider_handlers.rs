@@ -1,8 +1,8 @@
+use crate::compute::{ProviderRegistry, ProviderSettings};
+use crate::db::SettingsRepo;
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use crate::compute::{ProviderRegistry, ProviderSettings};
-use crate::db::SettingsRepo;
 
 #[derive(Serialize)]
 struct ProviderMeta {
@@ -19,11 +19,16 @@ pub async fn list_providers(
     let remote_ids = registry.remote_ids();
     let settings = match ProviderSettings::load(settings_repo.get_ref(), &remote_ids).await {
         Ok(s) => s,
-        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"detail": e.to_string()}))
+        }
     };
     let mut out: Vec<ProviderMeta> = Vec::new();
     for id in registry.ids() {
-        let Some(p) = registry.get(id) else { continue; };
+        let Some(p) = registry.get(id) else {
+            continue;
+        };
         let server_configured = id == "local" || settings.get_api_key(id).is_some();
         out.push(ProviderMeta {
             id: p.id(),
@@ -48,7 +53,10 @@ pub async fn test_provider(
     let id = path.into_inner();
     let provider = match registry.get(&id) {
         Some(p) => p,
-        None => return HttpResponse::BadRequest().json(serde_json::json!({"detail": "unknown provider"})),
+        None => {
+            return HttpResponse::BadRequest()
+                .json(serde_json::json!({"detail": "unknown provider"}))
+        }
     };
     if body.api_key.trim().is_empty() {
         return HttpResponse::BadRequest().json(serde_json::json!({"detail": "missing api_key"}));
@@ -77,19 +85,28 @@ pub async fn test_stored_provider_key(
     let id = path.into_inner();
     let provider = match registry.get(&id) {
         Some(p) => p,
-        None => return HttpResponse::BadRequest().json(serde_json::json!({"detail": "unknown provider"})),
+        None => {
+            return HttpResponse::BadRequest()
+                .json(serde_json::json!({"detail": "unknown provider"}))
+        }
     };
     let remote_ids = registry.remote_ids();
-    let settings = match crate::compute::ProviderSettings::load(settings_repo.get_ref(), &remote_ids).await {
-        Ok(s) => s,
-        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"detail": e.to_string()})),
-    };
+    let settings =
+        match crate::compute::ProviderSettings::load(settings_repo.get_ref(), &remote_ids).await {
+            Ok(s) => s,
+            Err(e) => {
+                return HttpResponse::InternalServerError()
+                    .json(serde_json::json!({"detail": e.to_string()}))
+            }
+        };
     let key = match settings.get_api_key(&id) {
         Some(k) if !k.is_empty() => k.to_string(),
-        _ => return HttpResponse::Ok().json(serde_json::json!({
-            "ok": false,
-            "detail": "no stored key for this provider",
-        })),
+        _ => {
+            return HttpResponse::Ok().json(serde_json::json!({
+                "ok": false,
+                "detail": "no stored key for this provider",
+            }))
+        }
     };
     match provider.test_credential(&key).await {
         Ok(test) => HttpResponse::Ok().json(serde_json::json!({
@@ -117,10 +134,16 @@ pub async fn save_provider_key(
     if !registry.remote_ids().contains(&id.as_str()) {
         return HttpResponse::BadRequest().json(serde_json::json!({"detail": "unknown provider"}));
     }
-    if let Err(e) = settings_repo.set(&format!("provider.{}.api_key", id), &body.api_key).await {
-        return HttpResponse::InternalServerError().json(serde_json::json!({"detail": e.to_string()}));
+    if let Err(e) = settings_repo
+        .set(&format!("provider.{}.api_key", id), &body.api_key)
+        .await
+    {
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"detail": e.to_string()}));
     }
-    let _ = settings_repo.set(&format!("provider.{}.enabled", id), "true").await;
+    let _ = settings_repo
+        .set(&format!("provider.{}.enabled", id), "true")
+        .await;
     HttpResponse::Ok().json(serde_json::json!({"ok": true}))
 }
 
@@ -134,6 +157,8 @@ pub async fn delete_provider_key(
     if !registry.remote_ids().contains(&id.as_str()) {
         return HttpResponse::BadRequest().finish();
     }
-    let _ = settings_repo.set(&format!("provider.{}.api_key", id), "").await;
+    let _ = settings_repo
+        .set(&format!("provider.{}.api_key", id), "")
+        .await;
     HttpResponse::Ok().finish()
 }

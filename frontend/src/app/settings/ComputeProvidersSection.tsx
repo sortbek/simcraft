@@ -138,9 +138,7 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
         <input
           type="password"
           placeholder={
-            stored
-              ? t('settings.keyOnFile')
-              : t('settings.pasteApiKey', { displayName })
+            stored ? t('settings.keyOnFile') : t('settings.pasteApiKey', { displayName })
           }
           value={key}
           onChange={(e) => setKey(e.target.value)}
@@ -191,13 +189,13 @@ export default function ComputeProvidersSection() {
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
         </svg>
-        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">{t('settings.computeProviders')}</h2>
+        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">
+          {t('settings.computeProviders')}
+        </h2>
       </div>
 
       <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
-        <p className="text-xs text-on-surface-variant">
-          {t('settings.computeProvidersDesc')}
-        </p>
+        <p className="text-xs text-on-surface-variant">{t('settings.computeProvidersDesc')}</p>
         <div className="space-y-2">
           {remote.map((p) => (
             <ProviderRow key={p.id} providerId={p.id} displayName={p.display_name} />

@@ -1010,20 +1010,18 @@ pub async fn run_triage_with_constants(
         .await
         {
             Ok(parsed) => parsed,
-            Err(e) => {
-                match pause_check_repo.get_pause_requested(inputs.job_id).await {
-                    Ok(true) => {
-                        let _ = pause_check_repo
-                            .set_pause_requested(inputs.job_id, false)
-                            .await;
-                        let _ = pause_check_repo
-                            .update_status(inputs.job_id, crate::models::JobStatus::Paused)
-                            .await;
-                        return Ok(TriageRunOutcome::Paused);
-                    }
-                    Ok(false) | Err(_) => return Err(e),
+            Err(e) => match pause_check_repo.get_pause_requested(inputs.job_id).await {
+                Ok(true) => {
+                    let _ = pause_check_repo
+                        .set_pause_requested(inputs.job_id, false)
+                        .await;
+                    let _ = pause_check_repo
+                        .update_status(inputs.job_id, crate::models::JobStatus::Paused)
+                        .await;
+                    return Ok(TriageRunOutcome::Paused);
                 }
-            }
+                Ok(false) | Err(_) => return Err(e),
+            },
         };
         let batch_secs = batch_start.elapsed().as_secs_f64();
         let batch_per_ps_ms = if pre.accepted.is_empty() {

@@ -186,7 +186,7 @@ export interface MdtConversion {
  *  fraction of full enemy HP to sim (1–100, backend default 27). */
 export function decodeMdt(
   importString: string,
-  opts?: { keystoneLevel?: number; hpPercent?: number },
+  opts?: { keystoneLevel?: number; hpPercent?: number }
 ): Promise<MdtConversion> {
   return postJson<MdtConversion>('/api/mdt/decode', {
     import: importString,

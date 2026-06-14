@@ -14,7 +14,6 @@ const LABEL_KEYS: Record<string, string> = {
   top_gear: 'simType.topGear',
   droptimizer: 'simType.dropFinder',
   upgrade_compare: 'simType.crestUpgrades',
-  enchant_gem: 'simType.enchantGem',
   stat_weights: 'simType.statWeights',
 };
 
@@ -24,7 +23,6 @@ const COLOR_CLASSES: Record<string, string> = {
   top_gear: 'bg-tertiary/10 text-tertiary border-tertiary/20',
   upgrade_compare: 'bg-tertiary/10 text-tertiary border-tertiary/20',
   droptimizer: 'bg-secondary/10 text-secondary border-secondary/20',
-  enchant_gem: 'bg-secondary/10 text-secondary border-secondary/20',
 };
 
 const DEFAULT_COLOR =
@@ -43,9 +41,4 @@ export function getSimTypeColorClass(simType: string): string {
  *  combos ranked vs a base). Mirrors `SimMode::result_kind() == GearComparison`
  *  in `backend/core/src/models.rs`. Used as a legacy fallback for results
  *  persisted before `result_kind` started shipping in the payload. */
-export const GEAR_COMPARISON_SIM_TYPES = [
-  'top_gear',
-  'enchant_gem',
-  'droptimizer',
-  'upgrade_compare',
-] as const;
+export const GEAR_COMPARISON_SIM_TYPES = ['top_gear', 'droptimizer', 'upgrade_compare'] as const;

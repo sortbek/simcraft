@@ -7,32 +7,25 @@ use crate::types::{CharacterInfo, ItemOrigin, ParseResult, RawParsedItem, Talent
 
 // parse_item_props regexes — compiled once, reused for every item in the request.
 static RE_ITEM_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"id=(\d+)").unwrap());
-static RE_ILVL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?:ilevel|ilvl)=(\d+)").unwrap());
-static RE_BONUS_ID: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"bonus_id=([0-9/:]+)").unwrap());
-static RE_ENCHANT_ID: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"enchant_id=(\d+)").unwrap());
+static RE_ILVL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?:ilevel|ilvl)=(\d+)").unwrap());
+static RE_BONUS_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"bonus_id=([0-9/:]+)").unwrap());
+static RE_ENCHANT_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"enchant_id=(\d+)").unwrap());
 static RE_GEM_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"gem_id=(\d+)").unwrap());
 static RE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"name=([^,]+)").unwrap());
-static RE_SLOT_NAME: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^([a-z_]+),").unwrap());
+static RE_SLOT_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([a-z_]+),").unwrap());
 
 // parse_simc_input regexes — compiled once per process.
 static RE_SLOT: Lazy<Regex> = Lazy::new(|| {
     let pattern = format!(r"^({})=(.*)", GEAR_SLOTS.join("|"));
     Regex::new(&pattern).unwrap()
 });
-static RE_HEADER: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^#+\s*(.+?)\s*\(?(\d+)\)?\s*$").unwrap());
-static RE_TALENTS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^talents=(.+)").unwrap());
+static RE_HEADER: Lazy<Regex> = Lazy::new(|| Regex::new(r"^#+\s*(.+?)\s*\(?(\d+)\)?\s*$").unwrap());
+static RE_TALENTS: Lazy<Regex> = Lazy::new(|| Regex::new(r"^talents=(.+)").unwrap());
 
 // parse_upgrade_currencies / parse_catalyst_charges regexes.
 static RE_UPGRADE_CURRENCIES_LINE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^#?\s*upgrade_currencies\s*=\s*(.+)$").unwrap());
-static RE_CURRENCY_PAIR: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"c:(\d+):(\d+)").unwrap());
+static RE_CURRENCY_PAIR: Lazy<Regex> = Lazy::new(|| Regex::new(r"c:(\d+):(\d+)").unwrap());
 static RE_CATALYST_LINE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^#?\s*catalyst_currencies\s*=\s*(.+)$").unwrap());
 

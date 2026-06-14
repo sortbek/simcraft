@@ -18,8 +18,12 @@ impl SimmitProvider {
 
 #[async_trait]
 impl SimcProvider for SimmitProvider {
-    fn id(&self) -> &'static str { "simmit" }
-    fn display_name(&self) -> &'static str { "Simmit Cloud" }
+    fn id(&self) -> &'static str {
+        "simmit"
+    }
+    fn display_name(&self) -> &'static str {
+        "Simmit Cloud"
+    }
     fn capabilities(&self) -> ProviderCaps {
         ProviderCaps {
             cancel: true,
@@ -41,7 +45,9 @@ impl SimcProvider for SimmitProvider {
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
         // One submission per job → idempotency key = job_id (dedups a network retry).
-        let remote_id = self.submit(&bearer, ctx.job_id, ctx.job_id, &stripped, false).await?;
+        let remote_id = self
+            .submit(&bearer, ctx.job_id, ctx.job_id, &stripped, false)
+            .await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
     }
@@ -59,13 +65,19 @@ impl SimcProvider for SimmitProvider {
         // Input is pre-built by the handler.
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
-        let remote_id = self.submit(&bearer, ctx.job_id, ctx.job_id, &stripped, true).await?;
+        let remote_id = self
+            .submit(&bearer, ctx.job_id, ctx.job_id, &stripped, true)
+            .await?;
         let _final_status = self.poll_to_terminal(&bearer, &remote_id, &ctx).await?;
         self.fetch_result(&bearer, &remote_id).await
     }
 
-    async fn test_credential(&self, api_key: &str) -> Result<crate::compute::CredentialTest, String> {
-        let resp = self.http
+    async fn test_credential(
+        &self,
+        api_key: &str,
+    ) -> Result<crate::compute::CredentialTest, String> {
+        let resp = self
+            .http
             .get(format!("{}/v1/simc/credits", SIMMIT_BASE_URL))
             .bearer_auth(api_key)
             .send()
@@ -90,7 +102,9 @@ impl SimcProvider for SimmitProvider {
             })
             .unwrap_or(0);
         let available = purchased.saturating_add(granted).saturating_sub(reserved);
-        Ok(crate::compute::CredentialTest { credits_available: Some(available) })
+        Ok(crate::compute::CredentialTest {
+            credits_available: Some(available),
+        })
     }
 
     async fn get_usage(
@@ -134,14 +148,17 @@ impl SimcProvider for SimmitProvider {
                 s.expose_secret().to_string()
             }
             crate::compute::ProviderAuth::None => {
-                return Err(RunError::Other("Simmit requires a configured API key".into()))
+                return Err(RunError::Other(
+                    "Simmit requires a configured API key".into(),
+                ))
             }
         };
         let stripped = strip_simmit_blocked_directives(input);
         // Each chunk is a DISTINCT Simmit job, so it needs its own idempotency key
         // (Simmit rejects key reuse with 409). `simhammer_job_id` metadata still
         // carries the real job id for mapping.
-        self.submit(&bearer, job_id, idempotency_key, &stripped, true).await
+        self.submit(&bearer, job_id, idempotency_key, &stripped, true)
+            .await
     }
 
     /// Poll an already-submitted remote chunk to terminal and fetch its result.
@@ -160,13 +177,33 @@ impl SimcProvider for SimmitProvider {
 /// Lines whose first `=`-prefix matches any of these are stripped before
 /// submitting to Simmit. Source: docs.simmit.com /docs/api/input-constraints.
 const BLOCKED_PREFIXES: &[&str] = &[
-    "threads", "profileset_work_threads", "profileset_init_threads", "process_priority",
-    "output", "html", "json", "json2", "log",
-    "save", "save_actor_lists", "save_gear", "save_profiles", "save_talent_str",
-    "debug_seed", "debug_each", "debug",
-    "full_states", "local_json", "proxy", "http_clear_cache", "guild",
-    "apiKey", "apikey", "api_key",
-    "spell_query_xml_output_file", "reforge_plot_output_file",
+    "threads",
+    "profileset_work_threads",
+    "profileset_init_threads",
+    "process_priority",
+    "output",
+    "html",
+    "json",
+    "json2",
+    "log",
+    "save",
+    "save_actor_lists",
+    "save_gear",
+    "save_profiles",
+    "save_talent_str",
+    "debug_seed",
+    "debug_each",
+    "debug",
+    "full_states",
+    "local_json",
+    "proxy",
+    "http_clear_cache",
+    "guild",
+    "apiKey",
+    "apikey",
+    "api_key",
+    "spell_query_xml_output_file",
+    "reforge_plot_output_file",
     "progressbar_type",
 ];
 
@@ -181,8 +218,12 @@ pub fn strip_simmit_blocked_directives(input: &str) -> String {
                 Some((k, _)) => k.trim(),
                 None => return true, // not a directive
             };
-            if BLOCKED_PREFIXES.iter().any(|b| *b == key) { return false; }
-            if BLOCKED_PREFIX_GLOBS.iter().any(|g| key.starts_with(g)) { return false; }
+            if BLOCKED_PREFIXES.contains(&key) {
+                return false;
+            }
+            if BLOCKED_PREFIX_GLOBS.iter().any(|g| key.starts_with(g)) {
+                return false;
+            }
             true
         })
         .collect::<Vec<_>>()
@@ -199,9 +240,13 @@ fn submit_runtime_seconds(account_max: Option<u32>) -> u32 {
 }
 
 #[derive(Serialize)]
-struct SubmitBuild { channel: &'static str }
+struct SubmitBuild {
+    channel: &'static str,
+}
 #[derive(Serialize)]
-struct SubmitProfile<'a> { text: &'a str }
+struct SubmitProfile<'a> {
+    text: &'a str,
+}
 #[derive(Serialize)]
 struct SubmitRuntime {
     #[serde(skip_serializing_if = "Option::is_none", rename = "multiStage")]
@@ -210,9 +255,13 @@ struct SubmitRuntime {
     max_runtime_seconds: u32,
 }
 #[derive(Serialize)]
-struct SubmitArtifactsJson { version: &'static str }
+struct SubmitArtifactsJson {
+    version: &'static str,
+}
 #[derive(Serialize)]
-struct SubmitArtifacts { json: SubmitArtifactsJson }
+struct SubmitArtifacts {
+    json: SubmitArtifactsJson,
+}
 #[derive(Serialize)]
 struct SubmitBody<'a> {
     build: SubmitBuild,
@@ -271,11 +320,14 @@ impl SimmitProvider {
                 // threaded in, pass it here and the helper clamps it correctly.
                 max_runtime_seconds: submit_runtime_seconds(None),
             },
-            artifacts: SubmitArtifacts { json: SubmitArtifactsJson { version: "2" } },
+            artifacts: SubmitArtifacts {
+                json: SubmitArtifactsJson { version: "2" },
+            },
             metadata,
         };
 
-        let resp = self.http
+        let resp = self
+            .http
             .post(format!("{}/v1/simc/jobs", SIMMIT_BASE_URL))
             .bearer_auth(bearer)
             .header("idempotency-key", idempotency_key)
@@ -286,15 +338,22 @@ impl SimmitProvider {
 
         let status = resp.status();
         if status.is_success() {
-            let parsed: SubmitResponse = resp.json().await
+            let parsed: SubmitResponse = resp
+                .json()
+                .await
                 .map_err(|e| RunError::Other(format!("Simmit submit decode: {}", e)))?;
             if !parsed.success {
                 return Err(RunError::Other("Simmit returned success=false".into()));
             }
-            let _ = parsed.warnings;  // We don't surface warnings in v1.
-            parsed.id.ok_or_else(|| RunError::Other("Simmit submit returned no id".into()))
+            let _ = parsed.warnings; // We don't surface warnings in v1.
+            parsed
+                .id
+                .ok_or_else(|| RunError::Other("Simmit submit returned no id".into()))
         } else {
-            let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
+            let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody {
+                error: None,
+                code: None,
+            });
             Err(map_simmit_error(status, err))
         }
     }
@@ -304,9 +363,15 @@ fn map_simmit_error(status: reqwest::StatusCode, err: ErrorBody) -> RunError {
     let code = err.code.as_deref().unwrap_or("");
     let msg = err.error.unwrap_or_else(|| status.to_string());
     match (status.as_u16(), code) {
-        (401, _) => RunError::Other(format!("Invalid Simmit API key — re-enter in Settings ({})", msg)),
+        (401, _) => RunError::Other(format!(
+            "Invalid Simmit API key — re-enter in Settings ({})",
+            msg
+        )),
         (402, _) | (_, "insufficient_credits") | (_, "inactive_entitlement") => {
-            RunError::Other(format!("Simmit: out of credits — add credits at dashboard.simmit.com ({})", msg))
+            RunError::Other(format!(
+                "Simmit: out of credits — add credits at dashboard.simmit.com ({})",
+                msg
+            ))
         }
         (_, "input_sanitized_rejected") => {
             RunError::Other(format!("Simmit rejected the profile: {}", msg))
@@ -366,7 +431,9 @@ struct StatusLog {
 /// Accept either an integer or a float for `ts` (epoch ms). Treat absent or
 /// non-numeric as 0 so log dedup still progresses.
 fn deserialize_ts<'de, D>(d: D) -> Result<u64, D::Error>
-where D: serde::Deserializer<'de> {
+where
+    D: serde::Deserializer<'de>,
+{
     let v = serde_json::Value::deserialize(d)?;
     match v {
         serde_json::Value::Number(n) => {
@@ -414,9 +481,9 @@ fn terminal_status_to_result(s: &StatusResponse) -> Result<(), RunError> {
     let code = s.error_code.clone().unwrap_or_default();
     let msg = match (code.is_empty(), reason.is_empty()) {
         (false, false) => format!("Simmit job {}: {} ({})", s.status, reason, code),
-        (false, true)  => format!("Simmit job {}: {}", s.status, code),
-        (true, false)  => format!("Simmit job {}: {}", s.status, reason),
-        (true, true)   => format!("Simmit job ended with status {}", s.status),
+        (false, true) => format!("Simmit job {}: {}", s.status, code),
+        (true, false) => format!("Simmit job {}: {}", s.status, reason),
+        (true, true) => format!("Simmit job ended with status {}", s.status),
     };
     Err(RunError::Other(msg))
 }
@@ -464,7 +531,10 @@ impl SimmitProvider {
                     return Err(RunError::Cancelled);
                 }
             }
-            let url = format!("{}/v1/simc/jobs/{}/status?include=logEntries", SIMMIT_BASE_URL, remote_job_id);
+            let url = format!(
+                "{}/v1/simc/jobs/{}/status?include=logEntries",
+                SIMMIT_BASE_URL, remote_job_id
+            );
 
             // ── One poll attempt. Transient transport errors, 5xx and 429 are
             // retried with backoff instead of aborting the chunk. ────────────
@@ -474,16 +544,18 @@ impl SimmitProvider {
                     transient_failures += 1;
                     if transient_failures >= MAX_POLL_TRANSIENT_FAILURES {
                         return Err(RunError::Other(format!(
-                            "Simmit poll: {} (after {} retries)", e, transient_failures
+                            "Simmit poll: {} (after {} retries)",
+                            e, transient_failures
                         )));
                     }
                     (ctx.on_log)(&format!(
                         "[simmit] poll network error ({}/{}), retrying: {}",
                         transient_failures, MAX_POLL_TRANSIENT_FAILURES, e
                     ));
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        poll_retry_backoff_ms(transient_failures),
-                    )).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(poll_retry_backoff_ms(
+                        transient_failures,
+                    )))
+                    .await;
                     continue;
                 }
             };
@@ -501,11 +573,15 @@ impl SimmitProvider {
                         ));
                         tokio::time::sleep(std::time::Duration::from_millis(
                             poll_retry_backoff_ms(transient_failures),
-                        )).await;
+                        ))
+                        .await;
                         continue;
                     }
                 }
-                let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
+                let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody {
+                    error: None,
+                    code: None,
+                });
                 return Err(map_simmit_error(status_code, err));
             }
             let body_text = match resp.text().await {
@@ -514,31 +590,33 @@ impl SimmitProvider {
                     transient_failures += 1;
                     if transient_failures >= MAX_POLL_TRANSIENT_FAILURES {
                         return Err(RunError::Other(format!(
-                            "Simmit poll body read: {} (after {} retries)", e, transient_failures
+                            "Simmit poll body read: {} (after {} retries)",
+                            e, transient_failures
                         )));
                     }
                     (ctx.on_log)(&format!(
                         "[simmit] poll body read error ({}/{}), retrying: {}",
                         transient_failures, MAX_POLL_TRANSIENT_FAILURES, e
                     ));
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        poll_retry_backoff_ms(transient_failures),
-                    )).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(poll_retry_backoff_ms(
+                        transient_failures,
+                    )))
+                    .await;
                     continue;
                 }
             };
-            let s: StatusResponse = serde_json::from_str(&body_text)
-                .map_err(|e| {
-                    let preview: String = body_text.chars().take(400).collect();
-                    eprintln!("[simmit] status decode failed: {} | body: {}", e, preview);
-                    RunError::Other(format!("Simmit poll decode: {}", e))
-                })?;
+            let s: StatusResponse = serde_json::from_str(&body_text).map_err(|e| {
+                let preview: String = body_text.chars().take(400).collect();
+                eprintln!("[simmit] status decode failed: {} | body: {}", e, preview);
+                RunError::Other(format!("Simmit poll decode: {}", e))
+            })?;
             // A clean poll → connectivity is back; reset the transient counter.
             transient_failures = 0;
 
             // Stream new log lines, dedup by ts.
             let logs_slice = s.log_entries.as_deref().unwrap_or(&[]);
-            let new_logs: Vec<&StatusLog> = logs_slice.iter().filter(|l| l.ts > last_log_ts).collect();
+            let new_logs: Vec<&StatusLog> =
+                logs_slice.iter().filter(|l| l.ts > last_log_ts).collect();
             for log in new_logs {
                 let src = log.source.as_deref().unwrap_or("?");
                 let msg = log.message.as_deref().unwrap_or("");
@@ -549,7 +627,9 @@ impl SimmitProvider {
             // Map progress. Single-stage Simmit jobs report stage = {1,1,"initial"};
             // suppress that as noise and just show the percent. Multistage shows
             // the live stage label + N/M.
-            let pct = s.progress.as_ref()
+            let pct = s
+                .progress
+                .as_ref()
                 .and_then(|p| p.percent)
                 .unwrap_or(0.0)
                 .clamp(0.0, 100.0) as u8;
@@ -557,19 +637,24 @@ impl SimmitProvider {
             let (label, sub) = match s.status.as_str() {
                 "queued" | "pending" => (
                     "Queued on Simmit".to_string(),
-                    queue_eta.map(|n| format!("starts in ~{}s", n)).unwrap_or_else(|| "in queue".to_string()),
+                    queue_eta
+                        .map(|n| format!("starts in ~{}s", n))
+                        .unwrap_or_else(|| "in queue".to_string()),
                 ),
                 "starting" => (
                     "Starting on Simmit".to_string(),
                     "spinning up worker".to_string(),
                 ),
                 "running" => {
-                    let multistage = s.progress.as_ref()
+                    let multistage = s
+                        .progress
+                        .as_ref()
                         .and_then(|p| p.stage.as_ref())
                         .filter(|st| st.total.unwrap_or(1) > 1);
                     match multistage {
                         Some(st) => (
-                            format!("Stage {}/{} on Simmit",
+                            format!(
+                                "Stage {}/{} on Simmit",
                                 st.current.unwrap_or(0),
                                 st.total.unwrap_or(0),
                             ),
@@ -592,39 +677,52 @@ impl SimmitProvider {
                 terminal_status_to_result(&s)?;
                 return Ok(s);
             }
-            tokio::time::sleep(std::time::Duration::from_millis(poll_interval_ms(&s.status))).await;
+            tokio::time::sleep(std::time::Duration::from_millis(poll_interval_ms(
+                &s.status,
+            )))
+            .await;
         }
     }
 
-    async fn fetch_result(&self, bearer: &str, remote_job_id: &str) -> Result<SimcOutput, RunError> {
+    async fn fetch_result(
+        &self,
+        bearer: &str,
+        remote_job_id: &str,
+    ) -> Result<SimcOutput, RunError> {
         let url = format!("{}/v1/simc/jobs/{}/result", SIMMIT_BASE_URL, remote_job_id);
-        let resp = self.http.get(&url).bearer_auth(bearer).send().await
+        let resp = self
+            .http
+            .get(&url)
+            .bearer_auth(bearer)
+            .send()
+            .await
             .map_err(|e| RunError::Other(format!("Simmit result fetch: {}", e)))?;
         if !resp.status().is_success() {
             let status_code = resp.status();
-            let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody { error: None, code: None });
+            let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody {
+                error: None,
+                code: None,
+            });
             return Err(map_simmit_error(status_code, err));
         }
-        let body_text = resp.text().await
+        let body_text = resp
+            .text()
+            .await
             .map_err(|e| RunError::Other(format!("Simmit result body read: {}", e)))?;
-        let body: ResultBody = serde_json::from_str(&body_text)
-            .map_err(|e| {
-                let preview: String = body_text.chars().take(400).collect();
-                eprintln!("[simmit] result decode failed: {} | body: {}", e, preview);
-                RunError::Other(format!("Simmit result decode: {}", e))
-            })?;
+        let body: ResultBody = serde_json::from_str(&body_text).map_err(|e| {
+            let preview: String = body_text.chars().take(400).collect();
+            eprintln!("[simmit] result decode failed: {} | body: {}", e, preview);
+            RunError::Other(format!("Simmit result decode: {}", e))
+        })?;
 
         // Prefer the full SimC JSON artifact (has per-ability damage breakdown).
         // Fall back to the synthesized summary if the artifact isn't downloadable.
-        let artifact_url = body
-            .result
-            .as_ref()
-            .and_then(|r| {
-                r.artifacts
-                    .iter()
-                    .find(|a| a.kind.as_deref() == Some("json_report"))
-                    .and_then(|a| a.url.clone())
-            });
+        let artifact_url = body.result.as_ref().and_then(|r| {
+            r.artifacts
+                .iter()
+                .find(|a| a.kind.as_deref() == Some("json_report"))
+                .and_then(|a| a.url.clone())
+        });
 
         if let Some(url) = artifact_url {
             match self.http.get(&url).send().await {
@@ -636,7 +734,11 @@ impl SimmitProvider {
                             if let Some(obj) = full_json.as_object_mut() {
                                 obj.insert("simmit".to_string(), simmit_metadata(&body));
                             }
-                            return Ok(SimcOutput { json: full_json, html_report: None, text_output: None });
+                            return Ok(SimcOutput {
+                                json: full_json,
+                                html_report: None,
+                                text_output: None,
+                            });
                         }
                         Err(e) => eprintln!("[simmit] artifact JSON decode failed: {}", e),
                     }
@@ -791,7 +893,11 @@ fn simmit_result_to_simc_output(body: &ResultBody) -> SimcOutput {
         }
     });
 
-    SimcOutput { json, html_report: None, text_output: None }
+    SimcOutput {
+        json,
+        html_report: None,
+        text_output: None,
+    }
 }
 
 #[cfg(test)]
@@ -833,16 +939,19 @@ mod tests {
     fn drops_save_variants() {
         let input = "save=foo\nsave_gear=bar\nsave_profiles=x";
         let out = strip_simmit_blocked_directives(input);
-        assert!(out.is_empty() || out == "");
+        assert!(out.is_empty() || out.is_empty());
     }
     #[test]
     fn drops_dps_plot_anything() {
-        let out = strip_simmit_blocked_directives("dps_plot_stats=strength\ndps_plot_iterations=100\niterations=10");
+        let out = strip_simmit_blocked_directives(
+            "dps_plot_stats=strength\ndps_plot_iterations=100\niterations=10",
+        );
         assert_eq!(out, "iterations=10");
     }
     #[test]
     fn keeps_normal_directives() {
-        let input = "iterations=1000\nfight_style=Patchwerk\ntarget_error=0.1\noverride.bloodlust=1";
+        let input =
+            "iterations=1000\nfight_style=Patchwerk\ntarget_error=0.1\noverride.bloodlust=1";
         assert_eq!(strip_simmit_blocked_directives(input), input);
     }
     #[test]
@@ -890,7 +999,10 @@ mod tests {
     #[test]
     fn deserialize_ts_tolerates_non_numeric() {
         #[derive(serde::Deserialize)]
-        struct W { #[serde(default, deserialize_with = "deserialize_ts")] ts: u64 }
+        struct W {
+            #[serde(default, deserialize_with = "deserialize_ts")]
+            ts: u64,
+        }
         // bool / object / unparseable string must NOT error — they become 0.
         assert_eq!(serde_json::from_str::<W>(r#"{"ts": true}"#).unwrap().ts, 0);
         assert_eq!(serde_json::from_str::<W>(r#"{"ts": {}}"#).unwrap().ts, 0);
@@ -921,7 +1033,8 @@ mod tests {
             },
             "runtime": { "creditsConsumed": 9600 },
             "build": { "id": "b-1", "commit": "abc123" }
-        })).unwrap();
+        }))
+        .unwrap();
         let out = simmit_result_to_simc_output(&body);
         assert_eq!(out.json["sim"]["players"][0]["name"], "Testchar");
         let dps = &out.json["sim"]["players"][0]["collected_data"]["dps"]["mean"];
@@ -934,7 +1047,10 @@ mod tests {
     fn adapter_handles_empty_result_gracefully() {
         let body: ResultBody = serde_json::from_value(serde_json::json!({})).unwrap();
         let out = simmit_result_to_simc_output(&body);
-        assert_eq!(out.json["sim"]["players"][0]["collected_data"]["dps"]["mean"], 0.0);
+        assert_eq!(
+            out.json["sim"]["players"][0]["collected_data"]["dps"]["mean"],
+            0.0
+        );
     }
 
     #[test]
@@ -947,9 +1063,16 @@ mod tests {
                     {"name": "Combo 2", "mean": 200.0}
                 ]}
             }}}
-        })).unwrap();
+        }))
+        .unwrap();
         let out = simmit_result_to_simc_output(&body);
-        assert_eq!(out.json["sim"]["profilesets"]["results"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            out.json["sim"]["profilesets"]["results"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     fn status_with(status: &str) -> StatusResponse {
@@ -966,8 +1089,14 @@ mod tests {
     #[test]
     fn cancelled_terminal_status_maps_to_cancelled() {
         let s = status_with("cancelled");
-        assert!(matches!(terminal_status_to_result(&s), Err(RunError::Cancelled)));
+        assert!(matches!(
+            terminal_status_to_result(&s),
+            Err(RunError::Cancelled)
+        ));
         let s2 = status_with("failed");
-        assert!(matches!(terminal_status_to_result(&s2), Err(RunError::Other(_))));
+        assert!(matches!(
+            terminal_status_to_result(&s2),
+            Err(RunError::Other(_))
+        ));
     }
 }

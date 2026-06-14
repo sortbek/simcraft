@@ -151,7 +151,9 @@ fn row_to_overview_summary(
         region: summary.region,
         dps: summary.dps,
         batch_id: r.try_get("batch_id").ok().flatten(),
-        provider_id: r.try_get("provider_id").unwrap_or_else(|_| "local".to_string()),
+        provider_id: r
+            .try_get("provider_id")
+            .unwrap_or_else(|_| "local".to_string()),
     }
 }
 
@@ -293,7 +295,9 @@ impl JobRepo {
                         ),
                         checkpoint: r.get("checkpoint"),
                         pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
-                        provider_id: r.try_get("provider_id").unwrap_or_else(|_| "local".to_string()),
+                        provider_id: r
+                            .try_get("provider_id")
+                            .unwrap_or_else(|_| "local".to_string()),
                     }
                 }))
             }
@@ -851,7 +855,9 @@ impl JobRepo {
                                 .unwrap_or_else(|_| "inline".to_string()),
                         ),
                         pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
-                        provider_id: r.try_get("provider_id").unwrap_or_else(|_| "local".to_string()),
+                        provider_id: r
+                            .try_get("provider_id")
+                            .unwrap_or_else(|_| "local".to_string()),
                     }
                 }))
             }

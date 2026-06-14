@@ -5,7 +5,6 @@ export const SIM_TYPE_LABELS: Record<string, string> = {
   stat_weights: 'Quick Sim',
   top_gear: 'Top Gear',
   droptimizer: 'Drop Finder',
-  enchant_gem: 'Enchant/Gem',
   upgrade_compare: 'Crest Upgrades',
 };
 

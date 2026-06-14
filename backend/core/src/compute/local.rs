@@ -68,7 +68,10 @@ impl LocalSimcProvider {
     }
 
     fn resolve_path(&self, opts: &Value) -> Result<std::path::PathBuf, RunError> {
-        let branch = opts.get("simc_branch").and_then(|v| v.as_str()).unwrap_or("");
+        let branch = opts
+            .get("simc_branch")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         self.simc_bins.resolve(branch).map_err(RunError::Other)
     }
 
@@ -86,8 +89,12 @@ impl LocalSimcProvider {
 
 #[async_trait]
 impl SimcProvider for LocalSimcProvider {
-    fn id(&self) -> &'static str { "local" }
-    fn display_name(&self) -> &'static str { "Local SimC" }
+    fn id(&self) -> &'static str {
+        "local"
+    }
+    fn display_name(&self) -> &'static str {
+        "Local SimC"
+    }
     fn capabilities(&self) -> ProviderCaps {
         ProviderCaps {
             cancel: true,
@@ -108,9 +115,16 @@ impl SimcProvider for LocalSimcProvider {
         let path = self.resolve_path(opts)?;
         let _permit = self.acquire_queue_permit(&ctx).await?;
         let on_log = ctx.on_log;
-        simc_runner::run_simc(&path, ctx.job_id, input, opts, move |line| on_log(line), ctx.cancel)
-            .await
-            .map_err(RunError::from)
+        simc_runner::run_simc(
+            &path,
+            ctx.job_id,
+            input,
+            opts,
+            move |line| on_log(line),
+            ctx.cancel,
+        )
+        .await
+        .map_err(RunError::from)
     }
 
     async fn run_with_profilesets(
@@ -181,7 +195,10 @@ mod tests {
     #[tokio::test]
     async fn queue_serializes_acquisitions() {
         let q = new_local_sim_queue();
-        let p1 = q.clone().try_acquire_owned().expect("first permit available");
+        let p1 = q
+            .clone()
+            .try_acquire_owned()
+            .expect("first permit available");
         // Second try-acquire fails while first is held.
         assert!(q.clone().try_acquire_owned().is_err());
         drop(p1);
@@ -219,15 +236,24 @@ mod tests {
         // after drop, it proceeds. (run_with_profilesets acquires/holds/drops
         // this same permit internally.)
         let q = new_local_sim_queue();
-        let held = q.clone().try_acquire_owned().expect("first permit available");
+        let held = q
+            .clone()
+            .try_acquire_owned()
+            .expect("first permit available");
 
         let q2 = q.clone();
         let waiter = tokio::spawn(async move { await_local_queue_permit(&q2, None).await });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        assert!(!waiter.is_finished(), "waiter must block while a staged run holds the permit");
+        assert!(
+            !waiter.is_finished(),
+            "waiter must block while a staged run holds the permit"
+        );
 
         drop(held);
         let got = waiter.await.expect("join ok");
-        assert!(got.is_ok(), "next staged run acquires after the prior one releases");
+        assert!(
+            got.is_ok(),
+            "next staged run acquires after the prior one releases"
+        );
     }
 }

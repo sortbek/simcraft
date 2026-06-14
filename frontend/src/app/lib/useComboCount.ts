@@ -8,10 +8,10 @@ interface ComboCountResponse {
 }
 
 /**
- * Debounced combo-count POST. Extracted from the duplicated effects in top-gear,
- * enchant-gem, and upgrade-compare. `enabled` gates the request (when false,
+ * Debounced combo-count POST. Extracted from the duplicated effects in top-gear
+ * and upgrade-compare. `enabled` gates the request (when false,
  * resets to 0). `buildBody` returns the request payload (or null to skip).
- * `debounceMs` keeps each page's existing timing (top-gear/upgrade 300, enchant 200).
+ * `debounceMs` keeps each page's existing timing (300).
  *
  * NOTE: the effect re-runs on `deps` only. Any value feeding `enabled` (or read
  * by `buildBody`) MUST be included in `deps`, or the request won't re-fire when

@@ -5,9 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use super::checkpoint::{
-    Checkpoint, CheckpointPhase, CheckpointSource, LocalStageCheckpoint,
-};
+use super::checkpoint::{Checkpoint, CheckpointPhase, CheckpointSource, LocalStageCheckpoint};
 use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIteratorConfig};
 use super::survivor_policy::{
     mean_error_from_result, prune_global, CandidateResult, PruneOutcome, PruneStats, SurvivorPolicy,
@@ -826,7 +824,10 @@ fn named_from_metadata(row: &ComboMetadataRow) -> NamedCandidate {
     }
 }
 
-fn candidate_results_from_simc(results: &[Value], batch: &[NamedCandidate]) -> Vec<CandidateResult> {
+fn candidate_results_from_simc(
+    results: &[Value],
+    batch: &[NamedCandidate],
+) -> Vec<CandidateResult> {
     let by_name: HashMap<&str, &NamedCandidate> =
         batch.iter().map(|c| (c.combo_name.as_str(), c)).collect();
     results
@@ -866,8 +867,8 @@ async fn persist_and_complete_batch(
         .iter()
         .filter(|candidate| result_ids.contains(&candidate.combo_id))
         .map(|candidate| {
-            let metadata_json =
-                serde_json::to_string(&candidate.candidate.metadata).unwrap_or_else(|_| "null".into());
+            let metadata_json = serde_json::to_string(&candidate.candidate.metadata)
+                .unwrap_or_else(|_| "null".into());
             let cursor_json = serde_json::to_string(&candidate.candidate.cursor_at_emission)
                 .unwrap_or_else(|_| "[]".into());
             (
@@ -988,8 +989,7 @@ async fn run_final_stage(
         |line| {
             if let Some((current, total)) = parse_profileset_progress(line) {
                 let bucket = (current.saturating_mul(20) / total.max(1)).min(20);
-                let prev = progress_buckets
-                    .fetch_max(bucket, std::sync::atomic::Ordering::Relaxed);
+                let prev = progress_buckets.fetch_max(bucket, std::sync::atomic::Ordering::Relaxed);
                 if bucket <= prev {
                     return;
                 }
@@ -1030,7 +1030,13 @@ async fn run_final_stage(
     let final_names = profileset_names_from_json(&output.json);
     output.json["simhammer"]["final_profileset_names"] =
         Value::Array(final_names.iter().cloned().map(Value::String).collect());
-    merge_eliminated_latest(&mut output.json, stage_results_repo, inputs.job_id, &final_names).await?;
+    merge_eliminated_latest(
+        &mut output.json,
+        stage_results_repo,
+        inputs.job_id,
+        &final_names,
+    )
+    .await?;
     Ok(Some(output))
 }
 
@@ -1100,7 +1106,9 @@ async fn merge_eliminated_latest(
 }
 
 fn profileset_names_from_json(json: &Value) -> HashSet<String> {
-    simc_runner::profileset_result_names(json).into_iter().collect()
+    simc_runner::profileset_result_names(json)
+        .into_iter()
+        .collect()
 }
 
 fn candidate_from_stage_row(row: StageResultRow) -> CandidateResult {

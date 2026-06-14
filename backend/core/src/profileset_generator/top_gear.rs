@@ -264,8 +264,8 @@ pub fn count_top_gear_combos_with_talents(
     catalyst_charges: Option<u32>,
     gem_opts: &GemEnchantOptions,
 ) -> Result<usize, String> {
-    let limit = max_combos_override
-        .unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
+    let limit =
+        max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
 
     // Gate on the analytic upper bound before paying for iterator construction.
     if limit > 0 {
@@ -308,8 +308,8 @@ pub fn generate_top_gear_input_with_talents(
     catalyst_charges: Option<u32>,
     gem_opts: &GemEnchantOptions,
 ) -> ProfilesetResult {
-    let limit = max_combos_override
-        .unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
+    let limit =
+        max_combos_override.unwrap_or(MAX_COMBINATIONS.load(std::sync::atomic::Ordering::Relaxed));
 
     // Gate on the analytic upper bound before paying for iterator construction.
     if limit > 0 {
@@ -430,8 +430,7 @@ pub fn generate_top_gear_input_with_talents(
     let mut count = 0usize;
     for cand in iter {
         lines.push(cand.profileset_simc);
-        let meta: Vec<Value> = serde_json::from_value(cand.metadata)
-            .unwrap_or_default();
+        let meta: Vec<Value> = serde_json::from_value(cand.metadata).unwrap_or_default();
         combo_metadata.insert(cand.profileset_name, meta);
         count += 1;
     }

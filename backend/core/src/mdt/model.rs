@@ -50,13 +50,14 @@ pub struct MdtPullEnemy {
 
 /// Interpret a deserialized AceSerializer preset into an [`MdtRoute`].
 pub fn parse_route(preset: &AceValue) -> Result<MdtRoute, String> {
-    let preset = preset
-        .as_table()
-        .ok_or("preset is not a table")?;
+    let preset = preset.as_table().ok_or("preset is not a table")?;
 
     let text = preset
         .get_str("text")
-        .and_then(|v| match v { AceValue::Str(s) => Some(s.clone()), _ => None })
+        .and_then(|v| match v {
+            AceValue::Str(s) => Some(s.clone()),
+            _ => None,
+        })
         .unwrap_or_default();
     let week = preset
         .get_str("week")
@@ -110,15 +111,26 @@ fn parse_lines(preset: &super::ace::AceTable) -> Vec<MdtLine> {
         if matches!(obj.get_str("n"), Some(AceValue::Bool(true))) {
             continue;
         }
-        let Some(l) = obj.get_str("l").and_then(AceValue::as_table) else { continue };
-        let coords: Vec<f64> = l.int_entries().into_iter().filter_map(|(_, v)| as_f64(v)).collect();
+        let Some(l) = obj.get_str("l").and_then(AceValue::as_table) else {
+            continue;
+        };
+        let coords: Vec<f64> = l
+            .int_entries()
+            .into_iter()
+            .filter_map(|(_, v)| as_f64(v))
+            .collect();
         if coords.len() < 4 {
             continue; // need at least two points
         }
         let sublevel = obj
             .get_str("d")
             .and_then(AceValue::as_table)
-            .and_then(|d| d.int_entries().into_iter().find(|(k, _)| *k == 3).and_then(|(_, v)| v.as_int()))
+            .and_then(|d| {
+                d.int_entries()
+                    .into_iter()
+                    .find(|(k, _)| *k == 3)
+                    .and_then(|(_, v)| v.as_int())
+            })
             .unwrap_or(1);
         let points = coords.chunks_exact(2).map(|c| (c[0], c[1])).collect();
         lines.push(MdtLine { sublevel, points });
@@ -154,6 +166,18 @@ fn parse_pull(pull: &AceValue) -> Result<MdtPull, String> {
     Ok(MdtPull { enemies, color })
 }
 
+/// The value for an enemy key is a sequence table of clone indices.
+fn clone_indices(clones: &AceValue) -> Vec<i64> {
+    let Some(table) = clones.as_table() else {
+        return Vec::new();
+    };
+    table
+        .int_entries()
+        .into_iter()
+        .filter_map(|(_, v)| v.as_int())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,14 +195,19 @@ mod tests {
         assert_eq!(route.text, "My Route");
         assert_eq!(route.keystone_level, 14);
         let order: Vec<i64> = route.pulls[0].enemies.iter().map(|e| e.enemy_idx).collect();
-        assert_eq!(order, vec![5, 1], "enemy order must follow storage, not be sorted");
+        assert_eq!(
+            order,
+            vec![5, 1],
+            "enemy order must follow storage, not be sorted"
+        );
     }
 
     #[test]
     fn parses_line_objects_skipping_notes() {
         // objects = { [1] = { n=true, d={...} },              -- a note, skipped
         //             [2] = { l={0,0,10,5}, d={ [3]=1 } } }   -- a line on sublevel 1
-        let s = "^1^T^Stext^SR^Sweek^N1^Sdifficulty^N2^Svalue^T^ScurrentDungeonIdx^N151^Spulls^T^t^t\
+        let s =
+            "^1^T^Stext^SR^Sweek^N1^Sdifficulty^N2^Svalue^T^ScurrentDungeonIdx^N151^Spulls^T^t^t\
                  ^Sobjects^T\
                  ^N1^T^Sn^B^Sd^T^N1^N5^N2^N5^t^t\
                  ^N2^T^Sl^T^N1^N0^N2^N0^N3^N10^N4^N5^t^Sd^T^N3^N1^t^t\
@@ -189,16 +218,4 @@ mod tests {
         assert_eq!(route.lines[0].sublevel, 1);
         assert_eq!(route.lines[0].points, vec![(0.0, 0.0), (10.0, 5.0)]);
     }
-}
-
-/// The value for an enemy key is a sequence table of clone indices.
-fn clone_indices(clones: &AceValue) -> Vec<i64> {
-    let Some(table) = clones.as_table() else {
-        return Vec::new();
-    };
-    table
-        .int_entries()
-        .into_iter()
-        .filter_map(|(_, v)| v.as_int())
-        .collect()
 }

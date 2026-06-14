@@ -212,7 +212,8 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
   const cloneOpacity = (i: number): number => {
     const pull = assignment[i];
     if (mode === 'draw') return pull === null ? (draft.includes(i) ? 1 : 0.9) : 0.22;
-    if (selected !== null) return pull === selected || (pull !== null && pick.includes(pull)) ? 1 : 0.12;
+    if (selected !== null)
+      return pull === selected || (pull !== null && pick.includes(pull)) ? 1 : 0.12;
     return pull !== null ? 1 : 0.4;
   };
 
@@ -267,12 +268,21 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
       }}
     >
       {mode !== 'view' && (
-        <ModeBanner mode={mode} pickCount={pick.length} draftCount={draft.length} onDone={onModeDone} />
+        <ModeBanner
+          mode={mode}
+          pickCount={pick.length}
+          draftCount={draft.length}
+          onDone={onModeDone}
+        />
       )}
 
       <div
         ref={containerRef}
-        style={{ height: '100%', width: '100%', cursor: mode === 'draw' ? 'crosshair' : dragRef.current ? 'grabbing' : 'grab' }}
+        style={{
+          height: '100%',
+          width: '100%',
+          cursor: mode === 'draw' ? 'crosshair' : dragRef.current ? 'grabbing' : 'grab',
+        }}
         onMouseDown={(e) => {
           movedRef.current = false;
           if (mode === 'draw') {
@@ -319,14 +329,22 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
           />
 
           {/* Route path + patrols */}
-          <svg style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }} width={MAP_W} height={MAP_H}>
+          <svg
+            style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}
+            width={MAP_W}
+            height={MAP_H}
+          >
             {visibleIdxs.map((i) =>
               enemies[i].patrol.length > 0 ? (
                 <polyline
                   key={`pat-${i}`}
                   points={patrolPoints(enemies[i])}
                   fill="none"
-                  stroke={assignment[i] !== null ? `#${pullColor[assignment[i]!] ?? DEFAULT_PULL_COLOR}` : UNPULLED_COLOR}
+                  stroke={
+                    assignment[i] !== null
+                      ? `#${pullColor[assignment[i]!] ?? DEFAULT_PULL_COLOR}`
+                      : UNPULLED_COLOR
+                  }
                   strokeWidth={2}
                   strokeDasharray="4 3"
                   vectorEffect="non-scaling-stroke"
@@ -356,7 +374,8 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
             const sx = e.x * SCALE_X;
             const sy = -e.y * SCALE_Y;
             const accent = draft.includes(i) || (pull !== null && pick.includes(pull));
-            const fill = pull !== null ? `#${pullColor[pull] ?? DEFAULT_PULL_COLOR}` : UNPULLED_COLOR;
+            const fill =
+              pull !== null ? `#${pullColor[pull] ?? DEFAULT_PULL_COLOR}` : UNPULLED_COLOR;
             return (
               <div
                 key={`mob-${i}`}
@@ -388,7 +407,9 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
                   cursor: 'pointer',
                 }}
               >
-                {e.is_boss && <span style={{ color: '#000', fontSize: d * 0.6, lineHeight: 1 }}>☠</span>}
+                {e.is_boss && (
+                  <span style={{ color: '#000', fontSize: d * 0.6, lineHeight: 1 }}>☠</span>
+                )}
               </div>
             );
           })}
@@ -468,13 +489,26 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
               padding: '7px 10px',
             }}
           >
-            <div style={{ fontSize: 12, fontWeight: 600, color: T.text, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {hover.enemy.is_boss && <span style={{ color: T.boss, display: 'flex' }}><IBoss s={11} /></span>}
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: T.text,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              {hover.enemy.is_boss && (
+                <span style={{ color: T.boss, display: 'flex' }}>
+                  <IBoss s={11} />
+                </span>
+              )}
               {hover.enemy.name}
             </div>
             <div style={{ fontSize: 10.5, color: T.muted, marginTop: 3 }}>
-              {hover.pull !== null ? t('route.pullN', { n: hover.pull }) : t('route.map.notPulled')} ·{' '}
-              {t('route.map.hp', { value: formatHp(hover.enemy.health) })}
+              {hover.pull !== null ? t('route.pullN', { n: hover.pull }) : t('route.map.notPulled')}{' '}
+              · {t('route.map.hp', { value: formatHp(hover.enemy.health) })}
             </div>
           </div>
         )}
@@ -499,7 +533,21 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
 
       {/* Sublevel tabs (only when a dungeon has more than one) */}
       {map.sublevels.length > 1 && (
-        <div style={{ position: 'absolute', left: 16, top: 16, zIndex: 20, display: 'flex', gap: 4, background: 'rgba(20,20,20,0.82)', backdropFilter: 'blur(8px)', border: `1px solid ${T.border}`, borderRadius: 7, padding: 3 }}>
+        <div
+          style={{
+            position: 'absolute',
+            left: 16,
+            top: 16,
+            zIndex: 20,
+            display: 'flex',
+            gap: 4,
+            background: 'rgba(20,20,20,0.82)',
+            backdropFilter: 'blur(8px)',
+            border: `1px solid ${T.border}`,
+            borderRadius: 7,
+            padding: 3,
+          }}
+        >
           {map.sublevels.map((s) => (
             <button
               key={s.index}
@@ -523,19 +571,93 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
       )}
 
       {/* Zoom control (bottom-left) */}
-      <div style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 20, display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(20,20,20,0.82)', backdropFilter: 'blur(8px)', border: `1px solid ${T.border}`, borderRadius: 7, padding: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
-        <button type="button" onClick={() => zoomAround(1 / 1.2)} style={zbtn} title={t('route.map.zoomOut')}><IMinus s={12} /></button>
-        <button type="button" onClick={fit} style={{ fontSize: 11, color: T.text2, width: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }} title={t('route.map.zoomFit')}>
+      <div
+        style={{
+          position: 'absolute',
+          left: 16,
+          bottom: 16,
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          background: 'rgba(20,20,20,0.82)',
+          backdropFilter: 'blur(8px)',
+          border: `1px solid ${T.border}`,
+          borderRadius: 7,
+          padding: 3,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => zoomAround(1 / 1.2)}
+          style={zbtn}
+          title={t('route.map.zoomOut')}
+        >
+          <IMinus s={12} />
+        </button>
+        <button
+          type="button"
+          onClick={fit}
+          style={{
+            fontSize: 11,
+            color: T.text2,
+            width: 44,
+            textAlign: 'center',
+            fontVariantNumeric: 'tabular-nums',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+          title={t('route.map.zoomFit')}
+        >
           {Number.isFinite(zoomPct) ? `${zoomPct}%` : '100%'}
         </button>
-        <button type="button" onClick={() => zoomAround(1.2)} style={zbtn} title={t('route.map.zoomIn')}><IPlus s={12} /></button>
+        <button
+          type="button"
+          onClick={() => zoomAround(1.2)}
+          style={zbtn}
+          title={t('route.map.zoomIn')}
+        >
+          <IPlus s={12} />
+        </button>
       </div>
 
       {/* Legend (bottom-right) */}
-      <div style={{ position: 'absolute', right: 16, bottom: 16, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 11px', fontSize: 10, color: T.text2, background: 'rgba(20,20,20,0.82)', backdropFilter: 'blur(8px)', border: `1px solid ${T.border}`, borderRadius: 7, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: T.gold }} /> {t('route.map.legendInPull')}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: UNPULLED_COLOR }} /> {t('route.map.notPulled')}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ color: T.boss, display: 'flex' }}><IBoss s={11} /></span> {t('route.map.legendBoss')}</div>
+      <div
+        style={{
+          position: 'absolute',
+          right: 16,
+          bottom: 16,
+          zIndex: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 5,
+          padding: '8px 11px',
+          fontSize: 10,
+          color: T.text2,
+          background: 'rgba(20,20,20,0.82)',
+          backdropFilter: 'blur(8px)',
+          border: `1px solid ${T.border}`,
+          borderRadius: 7,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.gold }} />{' '}
+          {t('route.map.legendInPull')}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: UNPULLED_COLOR }} />{' '}
+          {t('route.map.notPulled')}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ color: T.boss, display: 'flex' }}>
+            <IBoss s={11} />
+          </span>{' '}
+          {t('route.map.legendBoss')}
+        </div>
       </div>
     </div>
   );

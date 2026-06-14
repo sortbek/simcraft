@@ -8,8 +8,16 @@ import { T } from '../route-map/routeTheme';
  *  card. Otherwise (SimC/footer routes, or a shape not computed yet) it falls back
  *  to a deterministic decorative scatter keyed off the route id. */
 const DOT_COLORS = [
-  '#3f8fd0', '#5fbf6a', '#6ea7cc', '#9aa83f', '#4fc5a8',
-  '#8284d8', '#9a8ce6', '#d65fb8', '#7fd6c0', '#e08a3f',
+  '#3f8fd0',
+  '#5fbf6a',
+  '#6ea7cc',
+  '#9aa83f',
+  '#4fc5a8',
+  '#8284d8',
+  '#9a8ce6',
+  '#d65fb8',
+  '#7fd6c0',
+  '#e08a3f',
 ];
 
 interface Dot {
@@ -59,7 +67,10 @@ function makeDots(seed: number, count: number): Dot[] {
   const out: Dot[] = [];
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0.5 : i / (count - 1);
-    const x = Math.max(0.1, Math.min(0.9, 0.14 + 0.72 * t + 0.16 * Math.sin(t * Math.PI * 1.7 + seed)));
+    const x = Math.max(
+      0.1,
+      Math.min(0.9, 0.14 + 0.72 * t + 0.16 * Math.sin(t * Math.PI * 1.7 + seed))
+    );
     const y = Math.max(0.12, Math.min(0.88, 0.2 + 0.6 * t + (rnd() - 0.5) * 0.22));
     out.push({
       x,
@@ -86,9 +97,7 @@ function RouteMiniMap({
   h?: number;
 }) {
   const dots =
-    shape && shape.length
-      ? fitShape(shape)
-      : makeDots(seed, Math.max(1, Math.min(count, 11)));
+    shape && shape.length ? fitShape(shape) : makeDots(seed, Math.max(1, Math.min(count, 11)));
   return (
     <div
       style={{

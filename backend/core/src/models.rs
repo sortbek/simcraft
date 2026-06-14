@@ -25,7 +25,6 @@ pub enum SimMode {
     StatWeights,
     TopGear,
     Droptimizer,
-    EnchantGem,
     UpgradeCompare,
 }
 
@@ -38,7 +37,6 @@ impl SimMode {
             SimMode::StatWeights => "stat_weights",
             SimMode::TopGear => "top_gear",
             SimMode::Droptimizer => "droptimizer",
-            SimMode::EnchantGem => "enchant_gem",
             SimMode::UpgradeCompare => "upgrade_compare",
         }
     }
@@ -49,7 +47,6 @@ impl SimMode {
             "stat_weights" => Some(SimMode::StatWeights),
             "top_gear" => Some(SimMode::TopGear),
             "droptimizer" => Some(SimMode::Droptimizer),
-            "enchant_gem" => Some(SimMode::EnchantGem),
             "upgrade_compare" => Some(SimMode::UpgradeCompare),
             _ => None,
         }
@@ -62,10 +59,9 @@ impl SimMode {
     pub fn result_kind(self) -> ResultKind {
         match self {
             SimMode::Quick | SimMode::StatWeights => ResultKind::SingleActor,
-            SimMode::TopGear
-            | SimMode::Droptimizer
-            | SimMode::EnchantGem
-            | SimMode::UpgradeCompare => ResultKind::GearComparison,
+            SimMode::TopGear | SimMode::Droptimizer | SimMode::UpgradeCompare => {
+                ResultKind::GearComparison
+            }
         }
     }
 }
@@ -223,7 +219,7 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
     //
     // Two payload shapes are supported:
     //   - Single-actor (Quick Sim, Stat Weights): top-level `dps`.
-    //   - Gear comparison (Top Gear, Drop Finder, Enchant/Gem, Crest Upgrades):
+    //   - Gear comparison (Top Gear, Drop Finder, Crest Upgrades):
     //     top-level `base_dps` + a `results` array of `{name, dps, ...}`. The
     //     history "best DPS" should be the highest DPS the sim found —
     //     baseline or any improved combo — so we take the max.
@@ -297,7 +293,14 @@ impl Job {
         fight_style: String,
         target_error: f64,
     ) -> Self {
-        Self::new_with_provider(simc_input, sim_type, iterations, fight_style, target_error, "local".to_string())
+        Self::new_with_provider(
+            simc_input,
+            sim_type,
+            iterations,
+            fight_style,
+            target_error,
+            "local".to_string(),
+        )
     }
 
     pub fn new_with_provider(
@@ -347,7 +350,6 @@ mod sim_mode_tests {
             SimMode::StatWeights,
             SimMode::TopGear,
             SimMode::Droptimizer,
-            SimMode::EnchantGem,
             SimMode::UpgradeCompare,
         ] {
             assert_eq!(SimMode::from_wire(m.as_wire()), Some(m));
@@ -366,10 +368,6 @@ mod sim_mode_tests {
         assert_eq!(SimMode::TopGear.result_kind(), ResultKind::GearComparison);
         assert_eq!(
             SimMode::Droptimizer.result_kind(),
-            ResultKind::GearComparison
-        );
-        assert_eq!(
-            SimMode::EnchantGem.result_kind(),
             ResultKind::GearComparison
         );
         // Critical: Crest Upgrades is its own mode that *renders* as
@@ -395,7 +393,7 @@ mod summary_tests {
 
     #[test]
     fn gear_comparison_uses_best_of_base_and_results() {
-        // Top Gear / Drop Finder / Enchant Gem / Crest Upgrades all emit this
+        // Top Gear / Drop Finder / Crest Upgrades all emit this
         // shape — no top-level `dps`, just `base_dps` + per-combo `results`.
         // History must still surface a DPS so the row doesn't read "—".
         let json = r#"{

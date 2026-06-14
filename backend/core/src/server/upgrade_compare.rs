@@ -344,7 +344,11 @@ pub(super) async fn get_upgrade_compare_combo_count(
     // Apply both talent AND spec override, matching every other sim handler.
     // Without the spec_override pass, a cross-spec talent build would sim
     // the wrong profile silently.
-    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
+    let simc_input = preprocess_simc_input(
+        &req.simc_input,
+        &req.options.talents,
+        &req.options.spec_override,
+    );
 
     let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
         Ok(v) => v,
@@ -377,7 +381,11 @@ pub(super) async fn create_upgrade_compare_sim(
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
-    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
+    let simc_input = preprocess_simc_input(
+        &req.simc_input,
+        &req.options.talents,
+        &req.options.spec_override,
+    );
 
     let prepared = match prepare_upgrade_compare(&simc_input, &req.selected_slots) {
         Ok(v) => v,
@@ -412,11 +420,16 @@ pub(super) async fn create_upgrade_compare_sim(
     let (provider, avail) = match resolve_provider_for_request(
         "upgrade_compare",
         req.options.compute_provider.as_deref(),
-        WorkloadEstimate { combo_count, would_use_streaming_path: false },
+        WorkloadEstimate {
+            combo_count,
+            would_use_streaming_path: false,
+        },
         http_req.headers(),
         settings_repo.get_ref(),
         registry.get_ref(),
-    ).await {
+    )
+    .await
+    {
         Ok(t) => t,
         Err(resp) => return resp,
     };

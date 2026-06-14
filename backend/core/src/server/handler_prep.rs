@@ -10,11 +10,13 @@ use super::helpers::{apply_spec_override, apply_talent_override};
 /// Apply the standard talent-override → spec-override → talent-normalize chain
 /// that every sim handler runs before parsing the simc input. Single source of
 /// truth so the ordering can't drift between handlers.
-pub(super) fn preprocess_simc_input(simc_input: &str, talents: &str, spec_override: &str) -> String {
-    let with_overrides = apply_spec_override(
-        &apply_talent_override(simc_input, talents),
-        spec_override,
-    );
+pub(super) fn preprocess_simc_input(
+    simc_input: &str,
+    talents: &str,
+    spec_override: &str,
+) -> String {
+    let with_overrides =
+        apply_spec_override(&apply_talent_override(simc_input, talents), spec_override);
     crate::talent_normalize::normalize_simc_talents(&with_overrides)
 }
 
@@ -54,7 +56,7 @@ pub(super) fn socketed_item_ids(resolved: &crate::types::ResolveGearResponse) ->
 
 /// Serialize a `HashMap<String, Vec<Value>>` combo-metadata map into the
 /// `(combo_name, json_string)` pairs `ProfilesetSubmission` expects. Used by
-/// top_gear / enchant_gem / upgrade_compare (delta-list shape).
+/// top_gear / upgrade_compare (delta-list shape).
 pub(super) fn serialize_combo_metadata_vec(
     combo_metadata: &std::collections::HashMap<String, Vec<Value>>,
 ) -> Vec<(String, String)> {
@@ -93,7 +95,10 @@ mod tests {
     fn preprocess_applies_talent_then_spec_override() {
         let input = "warrior=t\nspec=arms\nhead=,id=1\n";
         let out = preprocess_simc_input(input, "ABBA", "fury");
-        assert!(out.contains("talents=ABBA"), "talents override missing: {out}");
+        assert!(
+            out.contains("talents=ABBA"),
+            "talents override missing: {out}"
+        );
         assert!(out.contains("spec=fury"), "spec override missing: {out}");
     }
 
@@ -102,8 +107,14 @@ mod tests {
         let input = "warrior=t\nspec=arms\nhead=,id=1\n";
         let out = preprocess_simc_input(input, "", "");
         // No talents= / spec= lines were forced in by empty overrides.
-        assert!(!out.contains("talents="), "empty talents must not inject: {out}");
-        assert!(out.contains("spec=arms"), "original spec must survive: {out}");
+        assert!(
+            !out.contains("talents="),
+            "empty talents must not inject: {out}"
+        );
+        assert!(
+            out.contains("spec=arms"),
+            "original spec must survive: {out}"
+        );
     }
 
     #[test]
@@ -116,7 +127,10 @@ mod tests {
     #[test]
     fn serialize_vec_metadata_round_trips() {
         let mut m = std::collections::HashMap::new();
-        m.insert("Combo 2".to_string(), vec![serde_json::json!({"slot":"head"})]);
+        m.insert(
+            "Combo 2".to_string(),
+            vec![serde_json::json!({"slot":"head"})],
+        );
         let out = serialize_combo_metadata_vec(&m);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].0, "Combo 2");

@@ -48,7 +48,10 @@ export const QUALITY_COLORS = QUALITY_HEX;
 function useBatchEffect<TItem, TFetch>(
   depKey: string,
   prepare: () => { cached: Record<number, TItem>; toFetch: TFetch[] },
-  fetchMissing: (toFetch: TFetch[], signalCancelled: () => boolean) => Promise<Record<number, TItem>>,
+  fetchMissing: (
+    toFetch: TFetch[],
+    signalCancelled: () => boolean
+  ) => Promise<Record<number, TItem>>,
   setState: Dispatch<SetStateAction<Record<number, TItem>>>
 ) {
   useEffect(() => {

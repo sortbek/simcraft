@@ -14,8 +14,7 @@ use crate::types::class_data::{self, ARMOR_SLOTS, GEAR_SLOTS};
 use crate::types::*;
 
 // Pattern intentionally omits ':' — preserves gear_resolver's original behavior.
-static RE_BONUS_ID_NO_COLON: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"bonus_id=([0-9/]+)").unwrap());
+static RE_BONUS_ID_NO_COLON: Lazy<Regex> = Lazy::new(|| Regex::new(r"bonus_id=([0-9/]+)").unwrap());
 
 /// Build a stable UID for deduplication: "item_id:sorted_bonus_ids:origin:raw_slot"
 fn make_uid(item: &RawParsedItem) -> String {

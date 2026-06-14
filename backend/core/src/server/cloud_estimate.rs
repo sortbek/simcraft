@@ -40,7 +40,7 @@ pub fn chunk_count(combos: u64, ceiling: usize) -> u64 {
 pub fn est_chunk_runtime_seconds(profilesets: u64, target_error: f64) -> u64 {
     let base: f64 = 30.0;
     let per_ps: f64 = 0.05; // ~50ms/profileset on 32 vCPU at te=0.1 (conservative)
-    // Tighter target_error costs ~quadratically more iterations; clamp te.
+                            // Tighter target_error costs ~quadratically more iterations; clamp te.
     let te = target_error.clamp(0.01, 0.5);
     let te_factor = (0.1 / te).max(1.0); // te=0.1 → 1×, te=0.05 → 2×, te=0.01 → 10×
     ((base + per_ps * profilesets as f64) * te_factor).ceil() as u64
@@ -80,9 +80,7 @@ async fn fetch_available_credits(
     Ok(result.credits_available)
 }
 
-fn normalized_talent_builds(
-    talent_builds: &[super::types::TalentBuild],
-) -> Vec<(String, String)> {
+fn normalized_talent_builds(talent_builds: &[super::types::TalentBuild]) -> Vec<(String, String)> {
     talent_builds
         .iter()
         .map(|tb| {
@@ -205,7 +203,9 @@ pub(super) async fn cloud_estimate_top_gear(
     };
 
     // Credit-fetch errors are non-fatal — treat as unknown (None).
-    let available_credits = fetch_available_credits(&provider, &avail).await.unwrap_or_default();
+    let available_credits = fetch_available_credits(&provider, &avail)
+        .await
+        .unwrap_or_default();
 
     let affordable = available_credits
         .map(|a| estimated_credits <= a)

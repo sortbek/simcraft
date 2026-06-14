@@ -75,6 +75,9 @@ mod tests {
             calculate_enemy_health(false, 1_000_000, 0, false),
             calculate_enemy_health(false, 1_000_000, 2, false)
         );
-        assert_eq!(calculate_enemy_health(false, 1_000_000, 0, false), 1_070_000);
+        assert_eq!(
+            calculate_enemy_health(false, 1_000_000, 0, false),
+            1_070_000
+        );
     }
 }

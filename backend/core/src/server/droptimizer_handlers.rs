@@ -21,7 +21,11 @@ pub(super) async fn create_droptimizer_sim(
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
-    let simc_input = preprocess_simc_input(&req.simc_input, &req.options.talents, &req.options.spec_override);
+    let simc_input = preprocess_simc_input(
+        &req.simc_input,
+        &req.options.talents,
+        &req.options.spec_override,
+    );
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let base_profile = parse_result.base_profile.clone();
 
@@ -43,11 +47,16 @@ pub(super) async fn create_droptimizer_sim(
     let (provider, avail) = match resolve_provider_for_request(
         "droptimizer",
         req.options.compute_provider.as_deref(),
-        WorkloadEstimate { combo_count, would_use_streaming_path: false },
+        WorkloadEstimate {
+            combo_count,
+            would_use_streaming_path: false,
+        },
         http_req.headers(),
         settings_repo.get_ref(),
         registry.get_ref(),
-    ).await {
+    )
+    .await
+    {
         Ok(t) => t,
         Err(resp) => return resp,
     };

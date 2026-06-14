@@ -91,7 +91,14 @@ export default function RouteImportPanel({
   };
 
   return (
-    <div style={{ background: T.panel, border: `1px solid ${T.border}`, borderRadius: 13, overflow: 'hidden' }}>
+    <div
+      style={{
+        background: T.panel,
+        border: `1px solid ${T.border}`,
+        borderRadius: 13,
+        overflow: 'hidden',
+      }}
+    >
       <div
         style={{
           display: 'flex',

@@ -61,9 +61,7 @@ export default function GeneralSettingsSection() {
                 <h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">
                   {t('settings.cpuThreads')}
                 </h3>
-                <p className="text-xs text-on-surface-variant">
-                  {t('settings.cpuThreadsDesc')}
-                </p>
+                <p className="text-xs text-on-surface-variant">{t('settings.cpuThreadsDesc')}</p>
               </div>
               <div className="text-right">
                 <span className="font-headline text-xl font-black text-primary">

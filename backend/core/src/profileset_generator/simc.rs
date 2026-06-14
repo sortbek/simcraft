@@ -1,6 +1,5 @@
 pub(super) use crate::simc_string::{
     extract_bonus_ids, extract_enchant_id, extract_gem_id, extract_gem_ids, extract_item_id,
-    set_enchant_id, set_gem_id,
 };
 
 const BASE64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -82,6 +81,7 @@ pub(super) fn gem_color(gem_item_id: u64) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simc_string::{set_enchant_id, set_gem_id};
     use crate::test_support::ensure_game_data_loaded;
 
     #[test]

@@ -2,20 +2,19 @@
 mod admin_handlers;
 mod api_routes;
 mod character_handlers;
+mod cloud_estimate;
+pub(crate) mod cloud_streaming;
 mod droptimizer_handlers;
-mod enchant_gem_handlers;
 mod frontend;
 mod game_data_handlers;
 mod handler_prep;
 pub(crate) mod helpers;
 mod job_handlers;
 mod mdt_handlers;
-pub mod request_json;
 mod provider_handlers;
+pub mod request_json;
 mod route_handlers;
 mod sim_handlers;
-mod cloud_estimate;
-pub(crate) mod cloud_streaming;
 mod streaming_top_gear;
 mod system_handlers;
 mod top_gear_handlers;
@@ -390,14 +389,13 @@ pub async fn start_server(
     // server-side queueing.
     let local_sim_queue = crate::compute::local::new_local_sim_queue();
     let local_queue_data = web::Data::new(local_sim_queue.clone());
-    let provider_registry = web::Data::new(Arc::new(
-        crate::compute::ProviderRegistry::new_default(
+    let provider_registry =
+        web::Data::new(Arc::new(crate::compute::ProviderRegistry::new_default(
             simc_bins.clone(),
             job_repo.pool().cloned(),
             local_sim_queue,
             http_client.clone(),
-        ),
-    ));
+        )));
     #[cfg(feature = "desktop")]
     let stats_data = web::Data::new(Arc::new(Mutex::new(system_handlers::SystemStats::new())));
     #[cfg(not(feature = "desktop"))]

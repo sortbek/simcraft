@@ -358,7 +358,9 @@ pub(crate) async fn finalize_local_stage_result(
     }
     let result_str = serde_json::to_string(&parsed).unwrap_or_else(|_| "{}".to_string());
     let raw_str = serde_json::to_string(output_json).ok();
-    let _ = repo.set_result(job_id, &result_str, raw_str.as_deref()).await;
+    let _ = repo
+        .set_result(job_id, &result_str, raw_str.as_deref())
+        .await;
     log_buffer.remove(job_id);
 }
 
@@ -374,7 +376,7 @@ enum JobUpdate {
 }
 
 /// Provider-agnostic profileset spawner. Used by Top Gear, Drop Finder,
-/// Upgrade Compare, and Enchant/Gem handlers — they pass the resolved
+/// and Upgrade Compare handlers — they pass the resolved
 /// `Arc<dyn SimcProvider>` directly and never branch on `provider.id()`.
 ///
 /// Decomposed into three pieces:
@@ -528,10 +530,14 @@ async fn finalize_gear_comparison_result(
         Ok(output) => {
             let job_snap = repo.get(job_id).await.ok().flatten();
             let raw_meta = load_combo_metadata(repo, job_id).await;
-            let meta: Option<HashMap<String, Vec<Value>>> =
-                if raw_meta.is_empty() { None } else { Some(raw_meta) };
+            let meta: Option<HashMap<String, Vec<Value>>> = if raw_meta.is_empty() {
+                None
+            } else {
+                Some(raw_meta)
+            };
 
-            let mut parsed = result_parser::parse_gear_comparison_result(&output.json, meta.as_ref(), sim_type);
+            let mut parsed =
+                result_parser::parse_gear_comparison_result(&output.json, meta.as_ref(), sim_type);
             inject_realm(&mut parsed, simc_input);
             if let Some(ref snap) = job_snap {
                 inject_total_elapsed(&mut parsed, &snap.created_at);
@@ -587,8 +593,8 @@ pub(crate) struct ProfilesetSubmission {
     pub generated_input: String,
     pub combo_count: usize,
     /// Pre-serialized `(combo_name, json_string)` pairs for `combo_metadata`.
-    /// Each handler serializes its own per-combo metadata shape (top_gear/
-    /// enchant_gem use `Vec<Value>`; droptimizer uses `Value`) before passing
+    /// Each handler serializes its own per-combo metadata shape (top_gear and
+    /// upgrade_compare use `Vec<Value>`; droptimizer uses `Value`) before passing
     /// here so this helper stays sim-type-agnostic.
     pub combo_metadata_serialized: Vec<(String, String)>,
     /// JSON body for the `NormalizedRequest` envelope (sim-type-specific).
@@ -614,9 +620,7 @@ pub(crate) async fn resolve_provider_for_request(
 > {
     let settings = crate::compute::ProviderSettings::load(settings_repo, &registry.remote_ids())
         .await
-        .map_err(|e| {
-            HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
-        })?;
+        .map_err(|e| HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})))?;
     let avail = crate::compute::ProviderAvailability::build(&settings, registry, req_headers);
     let provider = registry
         .for_request(sim_type, compute_provider, &avail, &est)
@@ -700,8 +704,10 @@ pub(crate) async fn submit_profileset_sim(
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();
 
-    let envelope =
-        crate::server::request_json::NormalizedRequest::new(submission.sim_type, submission.envelope_payload);
+    let envelope = crate::server::request_json::NormalizedRequest::new(
+        submission.sim_type,
+        submission.envelope_payload,
+    );
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = options.batch_id.clone();
 
@@ -854,7 +860,8 @@ pub(super) async fn write_combo_metadata_table_raw(
     metadata_strs: &[(String, String)],
     profileset_simc_lines: &[String],
 ) {
-    write_combo_metadata_table_raw_offset(repo, job_id, metadata_strs, profileset_simc_lines, 0).await;
+    write_combo_metadata_table_raw_offset(repo, job_id, metadata_strs, profileset_simc_lines, 0)
+        .await;
 }
 
 /// As [`write_combo_metadata_table_raw`], but assigns `combo_id = base + i + 1`.
@@ -899,7 +906,10 @@ pub(super) async fn write_combo_metadata_table_raw_offset(
             combo_key: "",
             batch_idx: None,
             cursor_json: "[]",
-            profileset_simc: profileset_simc_lines.get(i).map(String::as_str).unwrap_or(""),
+            profileset_simc: profileset_simc_lines
+                .get(i)
+                .map(String::as_str)
+                .unwrap_or(""),
             metadata_json: meta_json.as_str(),
         })
         .collect();
@@ -919,7 +929,7 @@ pub(super) async fn write_combo_metadata_table_raw_offset(
 }
 
 /// Convenience wrapper for handlers that have `HashMap<String, Vec<Value>>` combo_metadata
-/// (top_gear, enchant_gem, upgrade_compare).
+/// (top_gear, upgrade_compare).
 // `write_combo_metadata_table` and `write_combo_metadata_table_value` were
 // removed: each handler now pre-serializes its combo_metadata into the
 // `ProfilesetSubmission::combo_metadata_serialized` field, and

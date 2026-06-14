@@ -16,8 +16,9 @@ use serde::Serialize;
 /// map and saved as bare clone refs (serialize drops color), which would
 /// otherwise all collapse to one color on reload. Matches the frontend's drawing
 /// palette (NEW_PULL_COLORS) so a reloaded route keeps the colors it was drawn with.
-const PULL_PALETTE: [&str; 7] =
-    ["e08a3f", "c95fd6", "5fb0d6", "d6c45f", "6fd65f", "d65f7a", "7f9fe0"];
+const PULL_PALETTE: [&str; 7] = [
+    "e08a3f", "c95fd6", "5fb0d6", "d6c45f", "6fd65f", "d65f7a", "7f9fe0",
+];
 
 /// A colorless pull's display color: a palette slot chosen by pull index, so
 /// consecutive pulls stay visually distinct instead of all rendering identically.
@@ -160,7 +161,11 @@ pub fn pull_shape(map: &MdtMap) -> Vec<ShapePull> {
         .collect()
 }
 
-pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) -> Result<MdtSimc, String> {
+pub fn generate(
+    route: &MdtRoute,
+    db: &DungeonDb,
+    opts: &super::ConvertOptions,
+) -> Result<MdtSimc, String> {
     let dungeon = db
         .dungeon(route.dungeon_idx)
         .ok_or_else(|| format!("dungeon index {} not in MDT database", route.dungeon_idx))?;
@@ -172,9 +177,12 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
     let keystone_level = opts.keystone_level.unwrap_or(route.keystone_level).max(2);
 
     // max_time is required: a 0 would make SimC end every iteration at t=0.
-    let max_time = dungeon
-        .timer_max_seconds
-        .ok_or_else(|| format!("dungeon '{}' has no timer; cannot build a route", dungeon.name))?;
+    let max_time = dungeon.timer_max_seconds.ok_or_else(|| {
+        format!(
+            "dungeon '{}' has no timer; cannot build a route",
+            dungeon.name
+        )
+    })?;
     // keystone.guru names the primary enemy actor after the route, or after the
     // dungeon when there's no route text (an overview or a map-built route).
     let title = if route.text.trim().is_empty() {
@@ -222,7 +230,11 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
             let sim_health = full_health * opts.hp_percent / 100;
             // One specifier per clone in this pull — each clone is its own mob.
             for &clone_idx in &entry.clone_indices {
-                let n = { let c = npc_counts.entry(enemy.id).or_default(); *c += 1; *c };
+                let n = {
+                    let c = npc_counts.entry(enemy.id).or_default();
+                    *c += 1;
+                    *c
+                };
                 specifiers.push(format!("\"{slug}_{n}\":{sim_health}"));
                 enemy_count += 1;
                 total_health += full_health;
@@ -262,7 +274,10 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
     for (i, pull) in route.pulls.iter().enumerate() {
         for entry in &pull.enemies {
             for &clone_idx in &entry.clone_indices {
-                pull_of.insert((entry.enemy_idx, clone_idx), (i + 1, pull_colors[i].clone()));
+                pull_of.insert(
+                    (entry.enemy_idx, clone_idx),
+                    (i + 1, pull_colors[i].clone()),
+                );
             }
         }
     }
@@ -270,8 +285,12 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
     let mut all_enemies = Vec::new();
     for (&enemy_idx, enemy) in &dungeon.enemies {
         // health + race are identical for every clone of this enemy.
-        let health =
-            calculate_enemy_health(enemy.is_boss, enemy.health, keystone_level, enemy.ignore_fortified);
+        let health = calculate_enemy_health(
+            enemy.is_boss,
+            enemy.health,
+            keystone_level,
+            enemy.ignore_fortified,
+        );
         let race = enemy.creature_type.to_lowercase();
         for (&clone_idx, pos) in &enemy.clones {
             let (pull, color) = match pull_of.get(&(enemy_idx, clone_idx)) {
@@ -290,7 +309,11 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
                 count: enemy.count,
                 health,
                 race: race.clone(),
-                patrol: pos.patrol.iter().map(|p| MapPoint { x: p.x, y: p.y }).collect(),
+                patrol: pos
+                    .patrol
+                    .iter()
+                    .map(|p| MapPoint { x: p.x, y: p.y })
+                    .collect(),
                 pull,
                 color,
             });
@@ -323,7 +346,7 @@ pub fn generate(route: &MdtRoute, db: &DungeonDb, opts: &super::ConvertOptions) 
     };
 
     let header = format!(
-"fight_style=DungeonRoute
+        "fight_style=DungeonRoute
 override.bloodlust=0
 override.arcane_intellect=0
 override.power_word_fortitude=0
@@ -343,7 +366,11 @@ keystone_level={keystone_level}
 raid_events=/invulnerable,cooldown=5160,duration=5160,retarget=1",
     );
     let raid_events = pull_lines.join("\n");
-    let simc = if raid_events.is_empty() { header } else { format!("{header}\n{raid_events}") };
+    let simc = if raid_events.is_empty() {
+        header
+    } else {
+        format!("{header}\n{raid_events}")
+    };
 
     Ok(MdtSimc {
         mdt_version: db.mdt_version().to_string(),
@@ -376,5 +403,9 @@ fn sim_slug(name: &str, is_boss: bool) -> String {
         }
     }
     let slug = slug.trim_matches('-').to_string();
-    if is_boss { format!("BOSS_{slug}") } else { slug }
+    if is_boss {
+        format!("BOSS_{slug}")
+    } else {
+        slug
+    }
 }

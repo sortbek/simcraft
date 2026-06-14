@@ -1,5 +1,5 @@
-pub mod provider;
 pub mod local;
+pub mod provider;
 pub mod registry;
 pub mod simmit;
 

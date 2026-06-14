@@ -50,9 +50,7 @@ pub(super) struct StreamingTopGearStart {
 /// AND is not the local provider. `pick_provider` (routing) already guarantees a
 /// streaming-sized + explicit-cloud request resolves to such a provider; this is
 /// the live dispatch gate. Pure (no I/O) so it is unit-testable.
-pub(super) fn use_cloud_streaming(
-    provider: &Arc<dyn crate::compute::SimcProvider>,
-) -> bool {
+pub(super) fn use_cloud_streaming(provider: &Arc<dyn crate::compute::SimcProvider>) -> bool {
     provider.capabilities().cloud_streaming && provider.id() != "local"
 }
 
@@ -188,7 +186,12 @@ pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -
             p
         } else {
             let _ = repo_for_queue_wait
-                .update_progress(&jid_for_queue_wait, 0, "Queued", "waiting for active local sim to finish")
+                .update_progress(
+                    &jid_for_queue_wait,
+                    0,
+                    "Queued",
+                    "waiting for active local sim to finish",
+                )
                 .await;
             let cancel_tok = crate::cancel::CancelToken::new(
                 repo_for_queue_wait.clone(),
@@ -307,8 +310,9 @@ mod tests {
     #[test]
     fn simmit_provider_routes_to_cloud_streaming() {
         // A cloud-streaming-capable, non-local provider takes the cloud branch.
-        let provider: Arc<dyn crate::compute::SimcProvider> =
-            Arc::new(crate::compute::simmit::SimmitProvider::new(reqwest::Client::new()));
+        let provider: Arc<dyn crate::compute::SimcProvider> = Arc::new(
+            crate::compute::simmit::SimmitProvider::new(reqwest::Client::new()),
+        );
         assert!(use_cloud_streaming(&provider));
     }
 

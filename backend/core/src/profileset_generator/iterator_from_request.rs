@@ -228,8 +228,7 @@ mod tests {
         let cfg = build_iterator_from_request_json(&envelope.to_string())
             .expect("rebuild should succeed");
         assert_eq!(
-            cfg.max_catalyst_charges,
-            None,
+            cfg.max_catalyst_charges, None,
             "resumed config without catalyst_charges must be None"
         );
     }

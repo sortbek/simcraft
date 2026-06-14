@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { postJson } from './api';
-import type { ResolveGearResponse, ResolvedItem } from './types';
+import type { ResolveGearResponse } from './types';
 import type { GearItem } from '../components/gear/gearOverviewTypes';
 
 interface ResolveOptions {
@@ -16,7 +16,7 @@ interface ResolveOptions {
 
 /**
  * Debounced POST /api/gear/resolve. Extracted from the near-identical effects in
- * quick-sim, enchant-gem, and top-gear. Returns the full response (callers map
+ * quick-sim and top-gear. Returns the full response (callers map
  * to whatever subset they need) plus a `resolving` flag. Errors resolve to
  * `null` (the gear preview is non-critical) — no silent swallow of unexpected
  * throws beyond that.
@@ -65,18 +65,6 @@ export function useResolvedGear(
   }, [simcInput, minLength, debounceMs, maxUpgrade, catalyst, voidForge]);
 
   return { resolved, resolving };
-}
-
-/** Map a resolve response to equipped-only ResolvedItem per slot (enchant-gem). */
-export function equippedSlots(
-  resolved: ResolveGearResponse | null
-): Record<string, ResolvedItem> | null {
-  if (!resolved) return null;
-  const map: Record<string, ResolvedItem> = {};
-  for (const [slot, resolution] of Object.entries(resolved.slots)) {
-    if (resolution.equipped) map[slot] = resolution.equipped;
-  }
-  return Object.keys(map).length > 0 ? map : null;
 }
 
 /** Map a resolve response to a GearItem map for GearOverview (quick-sim). */

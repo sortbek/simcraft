@@ -342,7 +342,10 @@ mod tests {
                 assert_eq!(cc.iterator_cursor, vec![1, 0]);
                 assert_eq!(cc.chunk_size, 5000);
                 assert_eq!(cc.total_chunks_estimate, 10);
-                assert_eq!(cc.next_name_idx, 1, "missing next_name_idx should default to 1");
+                assert_eq!(
+                    cc.next_name_idx, 1,
+                    "missing next_name_idx should default to 1"
+                );
             }
             _ => panic!("expected CloudStreaming phase"),
         }

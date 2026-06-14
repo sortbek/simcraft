@@ -58,10 +58,14 @@ pub enum RunError {
 }
 
 impl From<String> for RunError {
-    fn from(s: String) -> Self { Self::Other(s) }
+    fn from(s: String) -> Self {
+        Self::Other(s)
+    }
 }
 impl From<&str> for RunError {
-    fn from(s: &str) -> Self { Self::Other(s.to_string()) }
+    fn from(s: &str) -> Self {
+        Self::Other(s.to_string())
+    }
 }
 impl std::fmt::Display for RunError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -118,7 +122,9 @@ pub trait SimcProvider: Send + Sync {
     /// Default (suitable for `local`): success with no credits info.
     /// Remote providers override to hit their own endpoint.
     async fn test_credential(&self, _api_key: &str) -> Result<CredentialTest, String> {
-        Ok(CredentialTest { credits_available: None })
+        Ok(CredentialTest {
+            credits_available: None,
+        })
     }
 
     /// Fetch per-account runtime/concurrency limits. Default: unknown (no

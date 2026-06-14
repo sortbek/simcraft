@@ -91,11 +91,11 @@ function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number 
                 {precisionBandLabel(pct, t)}
               </span>
             </div>
-            <div className="mt-1 whitespace-nowrap font-mono text-[11px] leading-tight tabular-nums text-on-surface-variant">
+            <div className="mt-1 whitespace-nowrap font-mono text-[11px] tabular-nums leading-tight text-on-surface-variant">
               ±{pct.toFixed(2)}% <span className="text-on-surface-variant/50">· 95% CI</span>
             </div>
             {targetError != null && (
-              <div className="whitespace-nowrap font-mono text-[11px] leading-tight tabular-nums text-on-surface-variant/60">
+              <div className="whitespace-nowrap font-mono text-[11px] tabular-nums leading-tight text-on-surface-variant/60">
                 target {targetError.toFixed(2)}%
               </div>
             )}

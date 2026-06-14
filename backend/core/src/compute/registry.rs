@@ -37,18 +37,28 @@ impl ProviderAvailability {
         for &id in &remote_order {
             if let Some(key) = settings.get_api_key(id) {
                 ready.insert(id);
-                auth_by_id.insert(id, ProviderAuth::BearerToken(SecretString::new(key.to_string().into())));
+                auth_by_id.insert(
+                    id,
+                    ProviderAuth::BearerToken(SecretString::new(key.to_string().into())),
+                );
                 continue;
             }
             let header_name = format!("X-Provider-{}-Key", id);
             if let Some(val) = req_headers.get(&header_name).and_then(|h| h.to_str().ok()) {
                 if !val.is_empty() {
                     ready.insert(id);
-                    auth_by_id.insert(id, ProviderAuth::BearerToken(SecretString::new(val.to_string().into())));
+                    auth_by_id.insert(
+                        id,
+                        ProviderAuth::BearerToken(SecretString::new(val.to_string().into())),
+                    );
                 }
             }
         }
-        Self { ready, remote_order, auth_by_id }
+        Self {
+            ready,
+            remote_order,
+            auth_by_id,
+        }
     }
 
     pub fn is_ready(&self, id: &str) -> bool {
@@ -56,11 +66,17 @@ impl ProviderAvailability {
     }
 
     pub fn first_configured_remote(&self) -> Option<&'static str> {
-        self.remote_order.iter().copied().find(|id| self.ready.contains(id))
+        self.remote_order
+            .iter()
+            .copied()
+            .find(|id| self.ready.contains(id))
     }
 
     pub fn auth_for(&self, id: &str) -> ProviderAuth {
-        self.auth_by_id.get(id).cloned().unwrap_or(ProviderAuth::None)
+        self.auth_by_id
+            .get(id)
+            .cloned()
+            .unwrap_or(ProviderAuth::None)
     }
 }
 
@@ -130,8 +146,10 @@ fn smart_default(
     avail: &ProviderAvailability,
     est: &WorkloadEstimate,
 ) -> &'static str {
-    let big_job = matches!(sim_type, "top_gear" | "droptimizer" | "enchant_gem" | "upgrade_compare")
-        && est.combo_count >= 50;
+    let big_job = matches!(
+        sim_type,
+        "top_gear" | "droptimizer" | "upgrade_compare"
+    ) && est.combo_count >= 50;
     if big_job {
         avail.first_configured_remote().unwrap_or("local")
     } else {
@@ -159,7 +177,9 @@ impl ProviderSettings {
                     api_keys.insert(id, k);
                 }
             }
-            let on = repo.get(&format!("provider.{}.enabled", id)).await?
+            let on = repo
+                .get(&format!("provider.{}.enabled", id))
+                .await?
                 .map(|v| v == "true")
                 .unwrap_or(true);
             enabled.insert(id, on);
@@ -236,10 +256,16 @@ impl ProviderRegistry {
             .filter(|(_, p)| p.capabilities().cloud_streaming)
             .map(|(id, _)| *id)
             .collect();
-        let id = pick_provider(sim_type, compute_provider, avail, est, &known, &cloud_streaming)?;
-        self.get(id).ok_or_else(|| {
-            crate::compute::provider::ProviderError::UnknownProvider(id.to_string())
-        })
+        let id = pick_provider(
+            sim_type,
+            compute_provider,
+            avail,
+            est,
+            &known,
+            &cloud_streaming,
+        )?;
+        self.get(id)
+            .ok_or_else(|| crate::compute::provider::ProviderError::UnknownProvider(id.to_string()))
     }
 }
 
@@ -257,19 +283,36 @@ mod tests {
         }
     }
     fn est(combos: usize, streaming: bool) -> WorkloadEstimate {
-        WorkloadEstimate { combo_count: combos, would_use_streaming_path: streaming }
+        WorkloadEstimate {
+            combo_count: combos,
+            would_use_streaming_path: streaming,
+        }
     }
-    const REMOTES: &[&'static str] = &["simmit"];
-    const CLOUD_STREAMING: &[&'static str] = &["simmit"];
+    const REMOTES: &[&str] = &["simmit"];
+    const CLOUD_STREAMING: &[&str] = &["simmit"];
 
     #[test]
     fn explicit_local_always_succeeds_even_streaming() {
-        let r = pick_provider("top_gear", Some("local"), &avail(&[]), &est(2000, true), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            Some("local"),
+            &avail(&[]),
+            &est(2000, true),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert_eq!(r.unwrap(), "local");
     }
     #[test]
     fn explicit_simmit_unconfigured_errors() {
-        let r = pick_provider("top_gear", Some("simmit"), &avail(&["local"]), &est(100, false), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            Some("simmit"),
+            &avail(&["local"]),
+            &est(100, false),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert!(matches!(r, Err(ProviderError::UnconfiguredProvider(ref id)) if id == "simmit"));
     }
     #[test]
@@ -277,44 +320,97 @@ mod tests {
         // A configured remote that is NOT in cloud_streaming_ids still errors
         // for a streaming-sized job.
         let r = pick_provider(
-            "top_gear", Some("simmit"), &avail(&["local", "simmit"]),
-            &est(2000, true), REMOTES, &[], // empty cloud-streaming set
+            "top_gear",
+            Some("simmit"),
+            &avail(&["local", "simmit"]),
+            &est(2000, true),
+            REMOTES,
+            &[], // empty cloud-streaming set
         );
         assert!(matches!(r, Err(ProviderError::StreamingTooLargeForRemote)));
     }
     #[test]
     fn explicit_simmit_configured_normal_ok() {
-        let r = pick_provider("top_gear", Some("simmit"), &avail(&["local","simmit"]), &est(100, false), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            Some("simmit"),
+            &avail(&["local", "simmit"]),
+            &est(100, false),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert_eq!(r.unwrap(), "simmit");
     }
     #[test]
     fn explicit_unknown_provider_errors() {
-        let r = pick_provider("top_gear", Some("raidbots"), &avail(&["local"]), &est(100, false), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            Some("raidbots"),
+            &avail(&["local"]),
+            &est(100, false),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert!(matches!(r, Err(ProviderError::UnknownProvider(ref id)) if id == "raidbots"));
     }
     #[test]
     fn auto_streaming_falls_back_to_local_quietly() {
-        let r = pick_provider("top_gear", Some("auto"), &avail(&["local","simmit"]), &est(2000, true), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            Some("auto"),
+            &avail(&["local", "simmit"]),
+            &est(2000, true),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert_eq!(r.unwrap(), "local");
     }
     #[test]
     fn auto_big_job_picks_remote_when_configured() {
-        let r = pick_provider("top_gear", None, &avail(&["local","simmit"]), &est(100, false), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            None,
+            &avail(&["local", "simmit"]),
+            &est(100, false),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert_eq!(r.unwrap(), "simmit");
     }
     #[test]
     fn auto_big_job_falls_back_to_local_when_remote_unconfigured() {
-        let r = pick_provider("top_gear", None, &avail(&["local"]), &est(100, false), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            None,
+            &avail(&["local"]),
+            &est(100, false),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert_eq!(r.unwrap(), "local");
     }
     #[test]
     fn auto_quick_sim_stays_local_even_when_remote_ready() {
-        let r = pick_provider("quick", None, &avail(&["local","simmit"]), &est(0, false), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "quick",
+            None,
+            &avail(&["local", "simmit"]),
+            &est(0, false),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert_eq!(r.unwrap(), "local");
     }
     #[test]
     fn auto_small_top_gear_stays_local() {
-        let r = pick_provider("top_gear", None, &avail(&["local","simmit"]), &est(20, false), REMOTES, CLOUD_STREAMING);
+        let r = pick_provider(
+            "top_gear",
+            None,
+            &avail(&["local", "simmit"]),
+            &est(20, false),
+            REMOTES,
+            CLOUD_STREAMING,
+        );
         assert_eq!(r.unwrap(), "local");
     }
 
@@ -326,8 +422,12 @@ mod tests {
         // that provider (not StreamingTooLargeForRemote). The B2 orchestrator
         // takes over from here.
         let r = pick_provider(
-            "top_gear", Some("simmit"), &avail(&["local", "simmit"]),
-            &est(2000, true), REMOTES, CLOUD_STREAMING,
+            "top_gear",
+            Some("simmit"),
+            &avail(&["local", "simmit"]),
+            &est(2000, true),
+            REMOTES,
+            CLOUD_STREAMING,
         );
         assert_eq!(r.unwrap(), "simmit");
     }
@@ -337,8 +437,12 @@ mod tests {
         // Auto + streaming-sized must never silently start a cloud bill, even
         // when a cloud-streaming-capable provider is configured.
         let r = pick_provider(
-            "top_gear", Some("auto"), &avail(&["local", "simmit"]),
-            &est(2000, true), REMOTES, CLOUD_STREAMING,
+            "top_gear",
+            Some("auto"),
+            &avail(&["local", "simmit"]),
+            &est(2000, true),
+            REMOTES,
+            CLOUD_STREAMING,
         );
         assert_eq!(r.unwrap(), "local");
     }

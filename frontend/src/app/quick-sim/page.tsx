@@ -63,10 +63,7 @@ export default function QuickSimPage() {
   const { resolved } = useResolvedGear(simcInput);
   const equippedGear = useMemo(() => equippedGearItems(resolved), [resolved]);
 
-  const goItemQueries = useMemo(
-    () => collectItemQueries(equippedGear ?? {}),
-    [equippedGear]
-  );
+  const goItemQueries = useMemo(() => collectItemQueries(equippedGear ?? {}), [equippedGear]);
   const goEnchantIds = useMemo(() => collectEnchantIds(equippedGear ?? {}), [equippedGear]);
   const goGemIds = useMemo(() => collectGemIds(equippedGear ?? {}), [equippedGear]);
   const goItemInfo = useItemInfo(goItemQueries);
@@ -109,9 +106,7 @@ export default function QuickSimPage() {
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
           {t('nav.quickSim')}
         </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">
-          {t('page.quickSimSubtitle')}
-        </p>
+        <p className="max-w-2xl text-sm text-on-surface-variant">{t('page.quickSimSubtitle')}</p>
       </div>
 
       {/* Character summary card */}

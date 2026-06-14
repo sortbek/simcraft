@@ -23,7 +23,10 @@ fn simmit_pause_capability(chunk_count: Option<i64>) -> bool {
 
 /// Per-run effective capabilities. For a cloud-streaming run, pause is only
 /// possible when the run spans more than one chunk.
-pub(super) fn effective_capabilities(provider_id: &str, chunk_count: Option<i64>) -> serde_json::Value {
+pub(super) fn effective_capabilities(
+    provider_id: &str,
+    chunk_count: Option<i64>,
+) -> serde_json::Value {
     let is_cloud = provider_id == "simmit"; // any cloud-streaming provider
     serde_json::json!({
         "cancel": true, // both local and cloud runs are cancellable
@@ -49,9 +52,9 @@ mod cap_tests {
     }
     #[test]
     fn simmit_pause_capability_does_not_hide_on_read_failure() {
-        assert_eq!(simmit_pause_capability(None), true);   // transient read error → still pausable
-        assert_eq!(simmit_pause_capability(Some(1)), false);
-        assert_eq!(simmit_pause_capability(Some(3)), true);
+        assert!(simmit_pause_capability(None)); // transient read error → still pausable
+        assert!(!simmit_pause_capability(Some(1)));
+        assert!(simmit_pause_capability(Some(3)));
     }
 }
 

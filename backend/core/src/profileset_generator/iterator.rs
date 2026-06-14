@@ -416,10 +416,8 @@ impl ProfilesetIterator {
                 } else {
                     base_simc.to_string()
                 };
-                let item_sockets = item
-                    .get("sockets")
-                    .and_then(|s| s.as_u64())
-                    .unwrap_or(0) as usize;
+                let item_sockets =
+                    item.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
                 // apply_item_gems uses item_sockets from game data as authoritative:
                 // items with sockets:0 are never gemmed, regardless of socketed_item_ids.
                 // replace_gems=true here because eff_gems is already filtered upstream
@@ -493,35 +491,36 @@ impl ProfilesetIterator {
         // `socketed` is derived from `simc_has_socket` on equipped simc strings
         // (possibly with an enchant already applied). Returns empty when no
         // equipped simc has a socket indicator.
-        let gem_entries_simc_filtered = |enchant_overrides: &HashMap<String, u64>| -> Vec<serde_json::Value> {
-            if self.cfg.gem_combos_resolver.is_empty() {
-                return Vec::new();
-            }
-            let combo = match self.cfg.gem_combos_resolver.nth(gem_combo_idx) {
-                Some(c) => c,
-                None => return Vec::new(),
+        let gem_entries_simc_filtered =
+            |enchant_overrides: &HashMap<String, u64>| -> Vec<serde_json::Value> {
+                if self.cfg.gem_combos_resolver.is_empty() {
+                    return Vec::new();
+                }
+                let combo = match self.cfg.gem_combos_resolver.nth(gem_combo_idx) {
+                    Some(c) => c,
+                    None => return Vec::new(),
+                };
+                let mut entries = Vec::new();
+                for (slot, gids) in combo {
+                    // Build the (possibly enchant-modified) equipped simc string.
+                    let simc = match equipped_simc_for(slot) {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    let modified = if let Some(&eid) = enchant_overrides.get(slot) {
+                        crate::simc_string::set_enchant_id(&simc, eid)
+                    } else {
+                        simc.clone()
+                    };
+                    if !super::simc::simc_has_socket(&modified) {
+                        continue; // eager filters by simc_has_socket
+                    }
+                    for &gid in gids {
+                        entries.push(super::emit::build_gem_entry(slot, gid));
+                    }
+                }
+                entries
             };
-            let mut entries = Vec::new();
-            for (slot, gids) in combo {
-                // Build the (possibly enchant-modified) equipped simc string.
-                let simc = match equipped_simc_for(slot) {
-                    Some(s) => s,
-                    None => continue,
-                };
-                let modified = if let Some(&eid) = enchant_overrides.get(slot) {
-                    crate::simc_string::set_enchant_id(&simc, eid)
-                } else {
-                    simc.clone()
-                };
-                if !super::simc::simc_has_socket(&modified) {
-                    continue; // eager filters by simc_has_socket
-                }
-                for &gid in gids {
-                    entries.push(super::emit::build_gem_entry(slot, gid));
-                }
-            }
-            entries
-        };
 
         // ── Build metadata matching the eager's per-combo-type logic ─────────
         //
@@ -981,7 +980,9 @@ mod tests {
         // No gem delta entry: alt item simc string has no socket bonus →
         // simc_has_socket is false → mirrors eager behavior.
         assert!(
-            !items.iter().any(|v| v.get("type").and_then(|t| t.as_str()) == Some("gem")),
+            !items
+                .iter()
+                .any(|v| v.get("type").and_then(|t| t.as_str()) == Some("gem")),
             "eager shape: no gem delta entry when simc_has_socket is false; got: {items:?}"
         );
     }

@@ -152,7 +152,8 @@ function BatchGroup({
 }) {
   const { t } = useLanguage();
   const first = entry.sims[0];
-  const simType = SIM_TYPE_LABELS[first?.sim_type ?? ''] || first?.sim_type || t('sims.simFallback');
+  const simType =
+    SIM_TYPE_LABELS[first?.sim_type ?? ''] || first?.sim_type || t('sims.simFallback');
   return (
     <div className="border-b border-outline-variant/10">
       <div className="flex items-center justify-between border-b border-outline-variant/5 bg-surface-container/50 px-6 py-2">

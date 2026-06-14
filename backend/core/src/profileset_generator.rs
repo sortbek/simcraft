@@ -3,7 +3,6 @@ pub mod checkpoint;
 mod constraints;
 mod droptimizer;
 mod emit;
-mod enchant_gem;
 mod estimate;
 pub mod gem_combos;
 pub mod identity_key;
@@ -210,22 +209,6 @@ pub fn generate_upgrade_compare_input(
     )
 }
 
-pub fn generate_enchant_gem_input(
-    base_profile: &str,
-    enchant_selections: &HashMap<String, Vec<u64>>,
-    gem_options: &[u64],
-    socketed_item_ids: &HashSet<u64>,
-    max_combos_override: Option<usize>,
-) -> ProfilesetResult {
-    enchant_gem::generate_enchant_gem_input(
-        base_profile,
-        enchant_selections,
-        gem_options,
-        socketed_item_ids,
-        max_combos_override,
-    )
-}
-
 #[cfg(test)]
 mod classifier_tests {
     use super::{classify_generator_error, GeneratorError};
@@ -264,40 +247,12 @@ mod classifier_tests {
 #[cfg(test)]
 mod tests {
     use super::{
-        count_top_gear_combos_with_talents, generate_droptimizer_input, generate_enchant_gem_input,
+        count_top_gear_combos_with_talents, generate_droptimizer_input,
         generate_top_gear_input_with_talents, generate_upgrade_compare_input, GemEnchantOptions,
     };
     use crate::test_support::{ensure_game_data_loaded, TestItem};
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
-
-    #[test]
-    fn enchant_gem_generator_builds_non_baseline_enchant_combo() {
-        ensure_game_data_loaded();
-
-        let base_profile = "\
-mage=test\n\
-spec=frost\n\
-head=,id=100,enchant_id=11\n\
-main_hand=,id=200\n";
-
-        let mut enchant_selections = HashMap::new();
-        enchant_selections.insert("head".to_string(), vec![22]);
-
-        let (input, combo_count, metadata) = generate_enchant_gem_input(
-            base_profile,
-            &enchant_selections,
-            &[],
-            &HashSet::new(),
-            Some(10),
-        )
-        .unwrap();
-
-        assert_eq!(combo_count, 1);
-        assert!(input.contains("profileset.\"Combo 2\"+=head=,id=100,enchant_id=22"));
-        assert!(metadata.contains_key("Currently Equipped"));
-        assert!(metadata.contains_key("Combo 2"));
-    }
 
     #[test]
     fn droptimizer_generator_emits_head_drop_combo() {
@@ -1304,21 +1259,7 @@ finger2=,id=101\n";
         );
     }
 
-    // ---- Enchant/gem generator edge cases ----
-
-    #[test]
-    fn enchant_gem_returns_zero_when_no_selections() {
-        let base_profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let (_, count, _) = generate_enchant_gem_input(
-            base_profile,
-            &HashMap::new(),
-            &[],
-            &HashSet::new(),
-            Some(20),
-        )
-        .unwrap();
-        assert_eq!(count, 0);
-    }
+    // ---- Top Gear enchant/gem combo-count edge cases ----
 
     #[test]
     fn count_only_path_matches_full_generator_count() {
@@ -1449,7 +1390,13 @@ main_hand=,id=200\n";
         };
 
         let exact = super::count_top_gear_combos_with_talents(
-            &base, &items_by_slot, &selected, None, &[], None, &gem_opts,
+            &base,
+            &items_by_slot,
+            &selected,
+            None,
+            &[],
+            None,
+            &gem_opts,
         )
         .unwrap();
 
@@ -1517,7 +1464,13 @@ main_hand=,id=200\n";
         };
 
         let exact = super::count_top_gear_combos_with_talents(
-            &base, &items_by_slot, &selected, None, &[], None, &gem_opts,
+            &base,
+            &items_by_slot,
+            &selected,
+            None,
+            &[],
+            None,
+            &gem_opts,
         )
         .unwrap();
 
@@ -1541,8 +1494,8 @@ main_hand=,id=200\n";
         // the UI). Mirrors the populated items_by_slot the real flow sends.
         ensure_game_data_loaded();
 
-        let base = "mage=test\nspec=frost\nhead=,id=100,gem_id=213453\nmain_hand=,id=200\n"
-            .to_string();
+        let base =
+            "mage=test\nspec=frost\nhead=,id=100,gem_id=213453\nmain_hand=,id=200\n".to_string();
         let equipped_head = json!({
             "slot": "head", "simc_string": ",id=100,gem_id=213453",
             "is_equipped": true, "origin": "equipped", "item_id": 100,
@@ -1563,7 +1516,13 @@ main_hand=,id=200\n";
         };
 
         let exact = super::count_top_gear_combos_with_talents(
-            &base, &items_by_slot, &selected, None, &[], None, &gem_opts,
+            &base,
+            &items_by_slot,
+            &selected,
+            None,
+            &[],
+            None,
+            &gem_opts,
         )
         .unwrap();
 
@@ -1571,33 +1530,14 @@ main_hand=,id=200\n";
             super::build_iterator_config(&base, &items_by_slot, &selected, &[], &gem_opts, None);
         let iter_count = super::ProfilesetIterator::new(cfg).count();
 
-        assert_eq!(exact, 0, "count should be 0 (no empty sockets, replace off)");
+        assert_eq!(
+            exact, 0,
+            "count should be 0 (no empty sockets, replace off)"
+        );
         assert_eq!(
             iter_count, 0,
             "iterator emitted {iter_count} profilesets but count is 0 — combos would leak to cloud"
         );
-    }
-
-    #[test]
-    fn enchant_gem_multiple_slots_create_cartesian_product() {
-        ensure_game_data_loaded();
-        let base_profile =
-            "mage=test\nspec=frost\nhead=,id=100,enchant_id=7000\nchest=,id=101,enchant_id=7100\n";
-
-        let mut enchant_selections = HashMap::new();
-        enchant_selections.insert("head".to_string(), vec![7001_u64]);
-        enchant_selections.insert("chest".to_string(), vec![7101_u64]);
-
-        let (_, count, _) = generate_enchant_gem_input(
-            base_profile,
-            &enchant_selections,
-            &[],
-            &HashSet::new(),
-            Some(20),
-        )
-        .unwrap();
-        // (1 head + baseline) × (1 chest + baseline) - 1 baseline = 3
-        assert_eq!(count, 3);
     }
 
     // ---- More top_gear edge cases ----
@@ -1939,7 +1879,12 @@ head=,id=100\n";
         let module_combos = enumerate_all(&builder);
         // 3 gems across head (1 socket) + neck (2 sockets) → 18 raw cross-product,
         // then dedupe_gem_assignments collapses slot-order-equivalent combos → 10 unique.
-        assert_eq!(module_combos.len(), 10, "module baseline changed: {}", module_combos.len());
+        assert_eq!(
+            module_combos.len(),
+            10,
+            "module baseline changed: {}",
+            module_combos.len()
+        );
     }
 
     /// Characterization test — pins the CURRENT eager simc lines + metadata shape
@@ -1982,10 +1927,19 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         let mut items: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
         // Include head and main_hand so the iterator's slot_item_lists matches the eager's
         // equipped_gear, ensuring both paths emit the same simc lines for enchant overrides.
-        items.insert("head".into(), vec![mk_simc("head", 100, ",id=100,enchant_id=7000", true, 0)]);
+        items.insert(
+            "head".into(),
+            vec![mk_simc("head", 100, ",id=100,enchant_id=7000", true, 0)],
+        );
         items.insert("main_hand".into(), vec![mk("main_hand", 200, true, 0)]);
-        items.insert("finger1".into(), vec![mk("finger1", 400, true, 1), mk("finger1", 402, false, 1)]);
-        items.insert("finger2".into(), vec![mk("finger2", 401, true, 1), mk("finger2", 403, false, 1)]);
+        items.insert(
+            "finger1".into(),
+            vec![mk("finger1", 400, true, 1), mk("finger1", 402, false, 1)],
+        );
+        items.insert(
+            "finger2".into(),
+            vec![mk("finger2", 401, true, 1), mk("finger2", 403, false, 1)],
+        );
         let mut selected: HashMap<String, Vec<String>> = HashMap::new();
         selected.insert("finger1".into(), vec!["402::bags:finger1".into()]);
         selected.insert("finger2".into(), vec!["403::bags:finger2".into()]);
@@ -1993,7 +1947,10 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         enchants.insert("head".into(), vec![7001]);
         let gems = vec![213454_u64, 213455];
         let socketed = HashSet::from([400_u64, 401, 402, 403]);
-        let talents = vec![("A".to_string(), "AAAA".to_string()), ("B".to_string(), "BBBB".to_string())];
+        let talents = vec![
+            ("A".to_string(), "AAAA".to_string()),
+            ("B".to_string(), "BBBB".to_string()),
+        ];
         (base, items, selected, enchants, gems, socketed, talents)
     }
 
@@ -2032,7 +1989,10 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         }
         let bundle = format!("COUNT={count}\n---INPUT---\n{input}\n---META---\n{meta_dump}");
         let expected = include_str!("profileset_generator/testdata/golden_top_gear.txt");
-        assert_eq!(bundle, expected, "eager output drifted from golden snapshot");
+        assert_eq!(
+            bundle, expected,
+            "eager output drifted from golden snapshot"
+        );
     }
 
     #[test]
@@ -2075,7 +2035,9 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         );
 
         // Verify metadata shape for Combo 2.
-        let combo = metadata.get("Combo 2").expect("Combo 2 metadata must exist");
+        let combo = metadata
+            .get("Combo 2")
+            .expect("Combo 2 metadata must exist");
 
         // Head item must be present with correct fields.
         let head = combo
@@ -2083,12 +2045,19 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             .find(|v| v["slot"] == "head")
             .expect("head entry missing from Combo 2 metadata");
         assert_eq!(head["item_id"], json!(300), "item_id mismatch");
-        assert_eq!(head["is_kept"], json!(false), "is_kept must be false for alt");
+        assert_eq!(
+            head["is_kept"],
+            json!(false),
+            "is_kept must be false for alt"
+        );
         assert_eq!(head["origin"], json!("bags"), "origin mismatch");
         assert!(head.get("ilevel").is_some(), "ilevel field required");
         assert!(head.get("name").is_some(), "name field required");
         assert!(head.get("bonus_ids").is_some(), "bonus_ids field required");
-        assert!(head.get("enchant_id").is_some(), "enchant_id field required");
+        assert!(
+            head.get("enchant_id").is_some(),
+            "enchant_id field required"
+        );
         assert!(head.get("gem_id").is_some(), "gem_id field required");
 
         // Synthetic off_hand entry (item_id=0, is_kept=false, origin="system").
@@ -2097,8 +2066,16 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             .find(|v| v["slot"] == "off_hand")
             .expect("off_hand synthetic entry missing from Combo 2 metadata");
         assert_eq!(off["item_id"], json!(0), "off_hand item_id must be 0");
-        assert_eq!(off["is_kept"], json!(false), "off_hand is_kept must be false");
-        assert_eq!(off["origin"], json!("system"), "off_hand origin must be system");
+        assert_eq!(
+            off["is_kept"],
+            json!(false),
+            "off_hand is_kept must be false"
+        );
+        assert_eq!(
+            off["origin"],
+            json!("system"),
+            "off_hand origin must be system"
+        );
     }
 
     /// Behavior test (Step 1 of the gem-apply fix): pins correct per-item socket behavior
@@ -2166,7 +2143,8 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             socketed_item_ids: Some(&sockets_a),
             ..Default::default()
         };
-        let cfg_a = super::build_iterator_config(base_a, &items_a, &HashMap::new(), &[], &gem_opts_a, None);
+        let cfg_a =
+            super::build_iterator_config(base_a, &items_a, &HashMap::new(), &[], &gem_opts_a, None);
         let iter_a: Vec<_> = super::ProfilesetIterator::new(cfg_a).collect();
         assert_eq!(
             iter_a.len(), 1,
@@ -2209,11 +2187,12 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         };
 
         // Iterator path: the gem-only baseline combo (equipped neck) must NOT have gem_id
-        let cfg_b = super::build_iterator_config(base_b, &items_b, &selected_b, &[], &gem_opts_b, None);
+        let cfg_b =
+            super::build_iterator_config(base_b, &items_b, &selected_b, &[], &gem_opts_b, None);
         let iter_b: Vec<_> = super::ProfilesetIterator::new(cfg_b).collect();
         // There MUST be at least one combo (the alt neck with gem).
         assert!(
-            iter_b.len() >= 1,
+            !iter_b.is_empty(),
             "Scenario B: at least one combo expected (alt+gem), got 0"
         );
         // Any combo using the equipped neck (id=250012) must NOT have gem_id applied.
@@ -2240,9 +2219,7 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         .unwrap();
         for block in input_b.split("### ").skip(1) {
             if block.contains("neck=,id=250012") && block.contains("gem_id=") {
-                panic!(
-                    "Scenario B (eager): 0-socket equipped neck must NOT be gemmed:\n{block}"
-                );
+                panic!("Scenario B (eager): 0-socket equipped neck must NOT be gemmed:\n{block}");
             }
         }
     }
@@ -2295,7 +2272,7 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         input
             .split("### ")
             .filter(|b| b.starts_with("Combo ") && b.contains("profileset."))
-            .map(|b| strip_combo_name(b))
+            .map(strip_combo_name)
             .collect()
     }
 
@@ -2347,18 +2324,31 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         let mut checked = 0;
         for cand in iter {
             let key = strip_combo_name(&cand.profileset_simc);
-            let expected = eager_body_to_meta
-                .get(&key)
-                .unwrap_or_else(|| panic!("eager has no metadata for simc body of {}", cand.profileset_name));
+            let expected = eager_body_to_meta.get(&key).unwrap_or_else(|| {
+                panic!(
+                    "eager has no metadata for simc body of {}",
+                    cand.profileset_name
+                )
+            });
             let actual: Vec<serde_json::Value> =
                 serde_json::from_value(cand.metadata.clone()).unwrap();
-            assert_eq!(&actual, *expected, "metadata mismatch for {} (simc body lookup)", cand.profileset_name);
+            assert_eq!(
+                &actual, *expected,
+                "metadata mismatch for {} (simc body lookup)",
+                cand.profileset_name
+            );
             checked += 1;
         }
         assert!(checked > 0, "no candidates checked");
         // Every eager profileset (Combo 2..) must be covered by the iterator.
-        let eager_profilesets = eager_meta.keys().filter(|k| k.starts_with("Combo ")).count();
-        assert_eq!(checked, eager_profilesets, "iterator did not cover all eager profileset combos");
+        let eager_profilesets = eager_meta
+            .keys()
+            .filter(|k| k.starts_with("Combo "))
+            .count();
+        assert_eq!(
+            checked, eager_profilesets,
+            "iterator did not cover all eager profileset combos"
+        );
     }
 
     #[test]
@@ -2377,15 +2367,24 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
         .unwrap();
         // emitted profileset blocks = "### Combo " count minus the base actor (Combo 1)
         let emitted = input.matches("### Combo ").count().saturating_sub(1);
-        assert_eq!(count, emitted, "returned count must match emitted ### Combo blocks");
+        assert_eq!(
+            count, emitted,
+            "returned count must match emitted ### Combo blocks"
+        );
         // metadata has one entry per profileset plus the baseline "Currently Equipped*" keys
         let profileset_meta = meta.keys().filter(|k| k.starts_with("Combo ")).count();
-        assert_eq!(count, profileset_meta, "count must match profileset metadata entries");
+        assert_eq!(
+            count, profileset_meta,
+            "count must match profileset metadata entries"
+        );
         let cnt = count_top_gear_combos_with_talents(
             &base, &items, &selected, None, &talents, None, &gem_opts,
         )
         .unwrap();
-        assert_eq!(count, cnt, "generate count must equal count_top_gear_combos_with_talents");
+        assert_eq!(
+            count, cnt,
+            "generate count must equal count_top_gear_combos_with_talents"
+        );
     }
 
     /// Regression guard: `count_emitted()` must return the SAME count as the full
@@ -2447,8 +2446,7 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             selected.insert("head".into(), vec!["200::bags:head".into()]);
             selected.insert("chest".into(), vec!["201::bags:chest".into()]);
             let gem_opts = GemEnchantOptions::default();
-            let cfg =
-                super::build_iterator_config(&base, &items, &selected, &[], &gem_opts, None);
+            let cfg = super::build_iterator_config(&base, &items, &selected, &[], &gem_opts, None);
             let full = super::ProfilesetIterator::new(cfg.clone()).count();
             let fast = super::ProfilesetIterator::new(cfg).count_emitted();
             assert_eq!(
@@ -2475,14 +2473,8 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
                 socketed_item_ids: Some(&socketed),
                 ..Default::default()
             };
-            let cfg = super::build_iterator_config(
-                &base,
-                &items,
-                &HashMap::new(),
-                &[],
-                &gem_opts,
-                None,
-            );
+            let cfg =
+                super::build_iterator_config(&base, &items, &HashMap::new(), &[], &gem_opts, None);
             let full = super::ProfilesetIterator::new(cfg.clone()).count();
             let fast = super::ProfilesetIterator::new(cfg).count_emitted();
             assert_eq!(
@@ -2492,5 +2484,4 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             assert!(full > 0, "gem-only config must emit combos");
         }
     }
-
 }
