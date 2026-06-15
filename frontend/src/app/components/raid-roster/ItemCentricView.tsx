@@ -14,8 +14,12 @@ interface Props {
 
 function slotLabel(slot: string): string {
   // e.g. "trinket1" → "Trinket", "main_hand" → "Main Hand"
-  const clean = slot.replace(/\d+$/, '').replace(/_/g, ' ');
-  return clean.charAt(0).toUpperCase() + clean.slice(1);
+  return slot
+    .replace(/\d+$/, '')
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 }
 
 function ResultRow({
