@@ -10,6 +10,7 @@ use super::job_handlers;
 use super::mdt_handlers;
 use super::provider_handlers;
 use super::roster_handlers;
+use super::roster_run_handlers;
 use super::route_handlers;
 use super::sim_handlers;
 use super::system_handlers;
@@ -255,6 +256,14 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/rosters/{id}/import",
             web::post().to(roster_handlers::import_members),
+        )
+        .route(
+            "/api/rosters/{id}/runs",
+            web::post().to(roster_run_handlers::start_run),
+        )
+        .route(
+            "/api/rosters/runs/{run_id}",
+            web::get().to(roster_run_handlers::get_run),
         );
 
     #[cfg(feature = "desktop")]

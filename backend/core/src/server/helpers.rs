@@ -776,8 +776,7 @@ async fn insert_and_spawn_profileset_job(
 /// for any up-front `simc_branch` validation; this helper reuses the same
 /// job-creation core as `submit_profileset_sim`, so child jobs are spawned with
 /// identical auth/staged-context semantics to the HTTP path.
-// Consumed by the Phase 2 roster-run endpoint (next task); staged ahead of it.
-#[allow(dead_code)]
+// Consumed by the Phase 2 roster-run endpoint (`roster_run_handlers::start_run`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn spawn_droptimizer_child(
     simc_input: &str,

@@ -14,6 +14,7 @@ mod mdt_handlers;
 mod provider_handlers;
 pub mod request_json;
 mod roster_handlers;
+mod roster_run_handlers;
 mod route_handlers;
 mod sim_handlers;
 mod streaming_top_gear;
@@ -30,7 +31,9 @@ use std::sync::Arc;
 #[cfg(feature = "desktop")]
 use std::sync::Mutex;
 
-use crate::db::{CharacterRepo, Database, JobRepo, RosterRepo, RouteRepo, SettingsRepo};
+use crate::db::{
+    CharacterRepo, Database, JobRepo, RosterRepo, RosterRunRepo, RouteRepo, SettingsRepo,
+};
 use crate::log_buffer::LogBuffer;
 use types::FrontendDir;
 
@@ -295,13 +298,14 @@ pub async fn start_server(
     data_dir: Option<PathBuf>,
 ) -> u16 {
     #[cfg(feature = "desktop")]
-    let (job_repo, route_repo, char_repo, roster_repo, settings_repo) =
+    let (job_repo, route_repo, char_repo, roster_repo, roster_run_repo, settings_repo) =
         match Database::connect(database_url).await {
             Ok(db) => (
                 web::Data::new(JobRepo::new(db.pool.clone())),
                 web::Data::new(RouteRepo::new(db.pool.clone())),
                 web::Data::new(CharacterRepo::new(db.pool.clone())),
                 web::Data::new(RosterRepo::new(db.pool.clone())),
+                web::Data::new(RosterRunRepo::new(db.pool.clone())),
                 web::Data::new(SettingsRepo::new(db.pool.clone())),
             ),
             Err(err) => {
@@ -314,12 +318,13 @@ pub async fn start_server(
                     web::Data::new(RouteRepo::new_memory()),
                     web::Data::new(CharacterRepo::new_memory()),
                     web::Data::new(RosterRepo::new_memory()),
+                    web::Data::new(RosterRunRepo::new_memory()),
                     web::Data::new(SettingsRepo::new_memory()),
                 )
             }
         };
     #[cfg(not(feature = "desktop"))]
-    let (job_repo, route_repo, char_repo, roster_repo, settings_repo) = {
+    let (job_repo, route_repo, char_repo, roster_repo, roster_run_repo, settings_repo) = {
         let db = Database::connect(database_url)
             .await
             .expect("Failed to connect to database");
@@ -328,6 +333,7 @@ pub async fn start_server(
             web::Data::new(RouteRepo::new(db.pool.clone())),
             web::Data::new(CharacterRepo::new(db.pool.clone())),
             web::Data::new(RosterRepo::new(db.pool.clone())),
+            web::Data::new(RosterRunRepo::new(db.pool.clone())),
             web::Data::new(SettingsRepo::new(db.pool.clone())),
         )
     };
@@ -421,6 +427,7 @@ pub async fn start_server(
             .app_data(route_repo.clone())
             .app_data(char_repo.clone())
             .app_data(roster_repo.clone())
+            .app_data(roster_run_repo.clone())
             .app_data(settings_repo.clone())
             .app_data(provider_registry.clone())
             .app_data(local_queue_data.clone())
