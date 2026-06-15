@@ -170,4 +170,25 @@ mod tests {
         assert!(parsed.items.iter().any(|i| i.raw_slot == "head"));
         assert!(parsed.items.iter().any(|i| i.raw_slot == "trinket1"));
     }
+
+    #[test]
+    fn empty_json_does_not_panic_and_omits_class_spec_items() {
+        let empty = serde_json::json!({});
+        let simc = armory_to_simc("Nobody", "Some Realm", &empty, &empty);
+        assert!(!simc.contains("spec="), "no spec line expected:\n{simc}");
+        let parsed = crate::addon_parser::parse_simc_input(&simc);
+        assert_eq!(parsed.character.class_name, None);
+        assert!(parsed.items.is_empty(), "no items expected:\n{simc}");
+    }
+
+    #[test]
+    fn unknown_spec_id_omits_class_but_keeps_gear() {
+        let eq = load("armory_equipment_sample.json");
+        let spec = serde_json::json!({ "active_specialization": { "id": 999999 } });
+        let simc = armory_to_simc("Thrall", "Tarren Mill", &eq, &spec);
+        assert!(!simc.contains("spec="), "no spec line for unknown id:\n{simc}");
+        let parsed = crate::addon_parser::parse_simc_input(&simc);
+        assert_eq!(parsed.character.class_name, None);
+        assert!(parsed.items.iter().any(|i| i.raw_slot == "head"));
+    }
 }
