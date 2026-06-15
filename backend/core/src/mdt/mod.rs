@@ -79,10 +79,9 @@ pub fn overview(
     generate::generate(&route, db, opts)
 }
 
-/// Re-serialize an edited pull assignment — clone `(enemy_idx, clone_idx)`
-/// references grouped per pull — into a SimC `DungeonRoute` with travel-time
-/// delays. Used to save/sim routes built or edited on the map (no MDT string).
-/// No drawn line is involved, so delays use the straight-line estimate.
+/// Re-serialize an edited pull assignment (clone `(enemy_idx, clone_idx)` refs
+/// grouped per pull) into a SimC `DungeonRoute`. For routes built/edited on the
+/// map (no MDT string): no drawn line, so delays use the straight-line estimate.
 pub fn serialize(
     dungeon_idx: i64,
     pulls: Vec<Vec<(i64, i64)>>,

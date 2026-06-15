@@ -16,9 +16,8 @@ enum JobBackend {
 
 /// Default cap when the caller doesn't pass a limit.
 const DEFAULT_LIST_LIMIT: usize = 200;
-/// When post-filtering by player/realm, fetch this many rows from the DB
-/// before retaining only matches. The retained set is then truncated to the
-/// caller-requested limit.
+/// When post-filtering by player/realm, prefetch this many rows before retaining
+/// matches and truncating to the caller's limit.
 const FILTER_PREFETCH_LIMIT: usize = 1000;
 
 /// Filter passed to `list_jobs`. Powers the unified /sims overview page.
@@ -81,10 +80,9 @@ fn str_to_status(s: &str) -> JobStatus {
     }
 }
 
-/// Build an overview summary from an in-memory `Job` plus a precomputed
-/// `ResultSummary`. The Memory backend computes the `ResultSummary` once and
-/// reuses it for filtering, so this helper takes it as a parameter rather
-/// than re-deriving it from the job's columns.
+/// Overview summary from an in-memory `Job` plus a precomputed `ResultSummary`.
+/// The Memory backend computes the summary once (for filtering) and passes it in,
+/// rather than re-deriving it here.
 fn job_to_overview_summary(
     j: &Job,
     s: crate::models::ResultSummary,
@@ -112,9 +110,9 @@ fn job_to_overview_summary(
     }
 }
 
-/// Convert a `jobs` row (with `simc_input_head` populated via SUBSTR and
-/// optionally `result_json`) into a `JobOverviewSummary`. Used by both
-/// `list_active` and `list_jobs` so the field-mapping logic lives in one place.
+/// Convert a `jobs` row (with `simc_input_head` via SUBSTR, optional
+/// `result_json`) into a `JobOverviewSummary`. Shared by `list_active` and
+/// `list_jobs` so the field mapping lives in one place.
 fn row_to_overview_summary(
     r: &sqlx::any::AnyRow,
     has_result_json: bool,
@@ -310,14 +308,10 @@ impl JobRepo {
         }
     }
 
-    /// Atomic cancellation: transition to Cancelled only when the current
-    /// status is Pending, Running, or Paused. Returns true when the
-    /// transition happened.
-    ///
-    /// This closes the read-then-write race in the cancel handler: a separate
-    /// `get` followed by `update_status(Cancelled)` lets a Done write between
-    /// them get clobbered. Doing the predicate in the same statement preserves
-    /// terminal Done/Failed outcomes.
+    /// Atomic cancel: → Cancelled only from Pending/Running/Paused; returns true
+    /// if it transitioned. The predicate is in the same statement to close the
+    /// read-then-write race (a separate get + update_status could clobber a Done
+    /// that landed between them), preserving terminal Done/Failed outcomes.
     pub async fn cancel_if_active(&self, id: &str) -> Result<bool, sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
@@ -345,10 +339,9 @@ impl JobRepo {
         }
     }
 
-    /// Update job status with the terminal-state invariant: Cancelled is sticky.
-    /// No transition out of Cancelled is allowed via this method; cancel cancel
-    /// is idempotent. Callers that need to record a cancellation should call
-    /// this with `JobStatus::Cancelled` directly — it'll always succeed.
+    /// Update status with the terminal-state invariant: Cancelled is sticky — no
+    /// transition out of it (cancel-cancel is idempotent). Passing
+    /// `JobStatus::Cancelled` always succeeds.
     pub async fn update_status(&self, id: &str, status: JobStatus) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
@@ -450,10 +443,9 @@ impl JobRepo {
         Ok(())
     }
 
-    /// Terminal-state invariant: once a job is Cancelled, neither a successful
-    /// result write nor a failure write can resurrect it. Cancellation is
-    /// sticky. Without this, a cancel that arrives while results are being
-    /// persisted gets silently overwritten by `set_result`.
+    /// Terminal-state invariant: a Cancelled job can't be resurrected by a result
+    /// or failure write. Without it, a cancel arriving mid-persist gets silently
+    /// overwritten.
     pub async fn set_result(
         &self,
         id: &str,
@@ -462,7 +454,6 @@ impl JobRepo {
     ) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
-                // SQL guard: only overwrite when status is not already terminal-cancelled.
                 sqlx::query(
                     "UPDATE jobs SET result_json = $1, raw_json = $2, status = 'done', \
                      progress_pct = 100 WHERE id = $3 AND status != 'cancelled'",
@@ -513,10 +504,9 @@ impl JobRepo {
         Ok(())
     }
 
-    /// Terminal-state invariant: cancelled jobs must not get report artifacts.
-    /// Reports are served from the same row regardless of status, so writing
-    /// them after `set_result` was suppressed would expose simulation output
-    /// the user explicitly aborted.
+    /// Terminal-state invariant: cancelled jobs get no report artifacts. Reports
+    /// serve from the same row regardless of status, so writing them after
+    /// `set_result` was suppressed would expose output the user aborted.
     pub async fn set_report_files(
         &self,
         id: &str,
@@ -630,14 +620,11 @@ impl JobRepo {
         }
     }
 
-    /// Return all active (Pending / Running / Paused) jobs plus the most
-    /// recent `limit_recent` terminal jobs. Used by the sims overview page.
-    ///
-    /// Returns a slim `JobOverviewSummary` (no full simc_input / result_json
-    /// bodies). The Database backend reads only the head of `simc_input`
-    /// (4 KB) to extract player_name/class via regex, keeping per-poll I/O
-    /// cheap even with many jobs. The header where the player= line lives
-    /// is always near the start of the profile, so the truncation is safe.
+    /// All active (Pending/Running/Paused) jobs plus the most recent
+    /// `limit_recent` terminal jobs, as slim `JobOverviewSummary` (no full
+    /// simc_input/result_json). The Database backend reads only the first 4 KB of
+    /// `simc_input` for player_name/class — the `player=` header sits near the
+    /// start, so the truncation is safe and keeps per-poll I/O cheap.
     pub async fn list_active(
         &self,
         limit_recent: usize,
@@ -703,9 +690,8 @@ impl JobRepo {
         }
     }
 
-    /// Unified job listing for the /sims overview page (combined Active/All view
-    /// + stats panel + batch grouping). Returns a single ordered list filtered
-    ///   by the requested status set, with optional player/realm scoping.
+    /// Unified job listing for the /sims overview page: one ordered list filtered
+    /// by the requested status set, with optional player/realm scoping.
     pub async fn list_jobs(
         &self,
         filter: ListJobsFilter<'_>,
@@ -713,9 +699,8 @@ impl JobRepo {
         use crate::models::JobOverviewSummary;
         let final_limit = filter.limit.unwrap_or(DEFAULT_LIST_LIMIT);
         let has_post_filter = filter.player.is_some() || filter.realm.is_some();
-        // Post-filtering (player/realm) happens in Rust because neither field is a
-        // column. Widen the DB-side limit so the trimmed result still has a
-        // reasonable cap.
+        // Player/realm aren't columns, so post-filter in Rust; widen the DB limit
+        // so the trimmed result still has a reasonable cap.
         let db_limit = if has_post_filter {
             FILTER_PREFETCH_LIMIT
         } else {
@@ -759,9 +744,8 @@ impl JobRepo {
             }
             JobBackend::Memory(jobs) => {
                 let guard = jobs.lock().unwrap();
-                // Compute the result summary once per job — it parses JSON and
-                // scans the simc input; doing it inside the filter+map chain
-                // would re-parse three times per row.
+                // Compute the result summary once per job (it parses JSON + scans
+                // the simc input) instead of re-parsing thrice in filter+map.
                 let mut all: Vec<JobOverviewSummary> = guard
                     .iter()
                     .filter(|j| filter.status.includes(&j.status))
@@ -787,8 +771,7 @@ impl JobRepo {
         }
     }
 
-    /// Delete a terminal-state job and its associated rows in dedup / metadata /
-    /// triage_batches tables. Returns an error if the job is still active.
+    /// Delete a terminal-state job plus its dedup/metadata/triage_batches rows.
     pub async fn delete_job(&self, id: &str) -> Result<(), sqlx::Error> {
         match &self.backend {
             JobBackend::Database(pool) => {
@@ -810,9 +793,9 @@ impl JobRepo {
         }
     }
 
-    /// Slim read for `get_sim_status`. Returns only the columns the status
-    /// endpoint actually reads — excludes raw_json, html_report, text_output,
-    /// request_json, and simc_input (which can be many MB for completed jobs).
+    /// Slim read for `get_sim_status`: only the columns the status endpoint reads,
+    /// excluding the heavy raw_json/html_report/text_output/request_json/simc_input
+    /// (many MB for completed jobs).
     pub async fn get_status_summary(
         &self,
         id: &str,
@@ -835,7 +818,6 @@ impl JobRepo {
                     let status_str: String = r.get("status");
                     let status = str_to_status(&status_str);
                     let pct: i32 = r.get("progress_pct");
-                    // Only return result_json when the job is done.
                     let result_json: Option<String> = if status == JobStatus::Done {
                         r.get("result_json")
                     } else {

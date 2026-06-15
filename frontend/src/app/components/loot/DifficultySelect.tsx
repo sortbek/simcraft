@@ -68,7 +68,6 @@ export default function DifficultySelect({
 
   return (
     <div ref={ref} className="relative">
-      {/* Trigger */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -100,7 +99,6 @@ export default function DifficultySelect({
         </svg>
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container shadow-xl">
           {groups.map((group, gi) => (

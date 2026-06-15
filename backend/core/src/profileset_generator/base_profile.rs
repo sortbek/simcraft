@@ -136,11 +136,9 @@ head=,id=100\n";
 
     #[test]
     fn route_lines_do_not_affect_gear_or_talents() {
-        // The streaming/cloud dungeon-route fix appends the DungeonRoute block to
-        // base_profile before build_iterator_config runs. That config derives only
-        // from gear/talents/spec, so parse_base_profile must treat the route lines
-        // as non-gear — otherwise combo generation would differ with vs without the
-        // appended route.
+        // An appended DungeonRoute block must parse as non-gear, or combo
+        // generation (which derives only from gear/talents/spec) would differ
+        // with vs without the route.
         let clean = "mage=test\nlevel=80\nhead=,id=100\ntalents=ABC\nspec=fire";
         let routed = "mage=test\nlevel=80\nhead=,id=100\ntalents=ABC\nspec=fire\n\
 fight_style=DungeonRoute\nenemy=\"Dayshade\"\nenemy_health=999999\n\

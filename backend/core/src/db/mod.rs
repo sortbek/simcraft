@@ -63,9 +63,8 @@ pub fn init_limits() {
 }
 
 /// Build a multi-row `VALUES` placeholder string like `($1, $2),($3, $4)` for
-/// `rows` rows of `cols` contiguous 1-based bind parameters each. Used by the
-/// chunked bulk-insert repos (combo_dedup, combo_metadata, stage_results) so the
-/// placeholder arithmetic lives in one place.
+/// `rows` rows of `cols` contiguous 1-based binds. Shared by the chunked
+/// bulk-insert repos so the placeholder arithmetic lives in one place.
 pub(crate) fn values_placeholders(rows: usize, cols: usize) -> String {
     (0..rows)
         .map(|r| {

@@ -1,6 +1,5 @@
 /** Shared helpers for parsing the SimC export "name line" and persisting the
- * last-seen character to localStorage. Replaces several identical copies that
- * lived in TopBar, SidebarCharacter, and quick-sim/page. */
+ * last-seen character to localStorage. */
 
 export const LAST_CHARACTER_KEY = 'simhammer_last_character';
 
@@ -22,12 +21,10 @@ const SPEC_LINE = /^spec=(\w+)/m;
 const SERVER_LINE = /^server=(.+)$/m;
 const REGION_LINE = /^region=(\w+)/m;
 
-/** Parse a SimC addon export. Returns null when no class line is present.
- *
- * Side effect: when both name and realm are extractable, the (name, realm)
- * pair is persisted under `LAST_CHARACTER_KEY` so navigation away from a
- * configured sim doesn't lose the current character context. Keeping the
- * write site here avoids multiple components fighting over the same key. */
+/** Parse a SimC addon export; returns null when no class line is present.
+ *  Side effect: when name + realm are present, persists them under
+ *  `LAST_CHARACTER_KEY` so navigation doesn't lose character context. Single
+ *  write site avoids components fighting over the key. */
 export function parseCharacterInfo(input: string): CharacterInfo | null {
   if (!input) return null;
   const nameMatch = input.match(NAME_LINE);

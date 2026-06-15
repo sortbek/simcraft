@@ -39,9 +39,8 @@ impl SimcProvider for SimmitProvider {
         input: &str,
         _opts: &Value,
     ) -> Result<SimcOutput, RunError> {
-        // Input is already in final form — the handler ran it through
-        // build_simc_input_from_options before invoking the provider.
-        // We only strip Simmit-forbidden directives (threads=, output=, ...).
+        // Input is pre-built by the handler; we only strip Simmit-forbidden
+        // directives (threads=, output=, ...).
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
         // One submission per job → idempotency key = job_id (dedups a network retry).
@@ -60,9 +59,8 @@ impl SimcProvider for SimmitProvider {
         _combo_count: usize,
         _staged_ctx: crate::compute::StagedExecutionContext,
     ) -> Result<SimcOutput, RunError> {
-        // Server-side multistage handles its own staged execution — the
-        // resume_state / triage_constants from staged_ctx don't apply here.
-        // Input is pre-built by the handler.
+        // Server-side multistage handles its own staging, so staged_ctx
+        // (resume_state / triage_constants) doesn't apply here.
         let bearer = Self::bearer(&ctx)?;
         let stripped = strip_simmit_blocked_directives(input);
         let remote_id = self
@@ -87,8 +85,7 @@ impl SimcProvider for SimmitProvider {
             return Err(format!("Simmit returned {}", resp.status()));
         }
         let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
-        // Simmit /v1/simc/credits shape:
-        //   { purchased, reserved, grants: [{ remaining, ... }, ...] }
+        // /v1/simc/credits: { purchased, reserved, grants: [{ remaining }, ...] }
         // Available = purchased + Σ grants[].remaining − reserved.
         let purchased = body.get("purchased").and_then(|v| v.as_u64()).unwrap_or(0);
         let reserved = body.get("reserved").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -133,8 +130,7 @@ impl SimcProvider for SimmitProvider {
     }
 
     /// Submit a chunk and return Simmit's remote job id immediately (before it
-    /// runs), so the orchestrator can persist it to `cloud_chunks.remote_job_id`
-    /// for resume re-polling. Pair with `poll_and_fetch_chunk`.
+    /// runs), so the orchestrator can persist it for resume re-polling.
     async fn submit_chunk_for_id(
         &self,
         auth: &crate::compute::ProviderAuth,
@@ -154,15 +150,14 @@ impl SimcProvider for SimmitProvider {
             }
         };
         let stripped = strip_simmit_blocked_directives(input);
-        // Each chunk is a DISTINCT Simmit job, so it needs its own idempotency key
-        // (Simmit rejects key reuse with 409). `simhammer_job_id` metadata still
-        // carries the real job id for mapping.
+        // Each chunk is a DISTINCT Simmit job → its own idempotency key (Simmit
+        // 409s on key reuse). `simhammer_job_id` metadata maps back to the job.
         self.submit(&bearer, job_id, idempotency_key, &stripped, true)
             .await
     }
 
     /// Poll an already-submitted remote chunk to terminal and fetch its result.
-    /// Used both for the live submit path and for resume re-polling.
+    /// Used for both the live submit path and resume re-polling.
     async fn poll_and_fetch_chunk(
         &self,
         ctx: RunCtx<'_>,
@@ -232,9 +227,8 @@ pub fn strip_simmit_blocked_directives(input: &str) -> String {
 
 const SIMMIT_BASE_URL: &str = "https://api.simmit.com";
 
-/// Submission runtime ceiling. We never ask Simmit for more than 1800s, and we
-/// honor a lower per-account cap (`ProviderUsage.max_runtime_seconds`) when it's
-/// known — submitting above the account cap gets the job rejected.
+/// Submission runtime ceiling: cap at 1800s, but honor a lower per-account cap
+/// when known — submitting above the account cap gets the job rejected.
 fn submit_runtime_seconds(account_max: Option<u32>) -> u32 {
     account_max.map(|a| a.min(1800)).unwrap_or(1800)
 }
@@ -312,12 +306,9 @@ impl SimmitProvider {
             profile: SubmitProfile { text: input },
             runtime: SubmitRuntime {
                 multi_stage: if enable_multistage { Some(true) } else { None },
-                // The per-account cap (`ProviderUsage.max_runtime_seconds` from
-                // `get_usage`) is not threaded to this private submit path today —
-                // the provider is a shared `Arc<dyn SimcProvider>` singleton, so it
-                // can't cache a per-account value safely, and `RunCtx` carries no
-                // usage. `None` preserves the 1800s ceiling; once the cap is
-                // threaded in, pass it here and the helper clamps it correctly.
+                // Per-account cap isn't threaded here yet: the provider is a shared
+                // Arc singleton (can't cache a per-account value) and RunCtx carries
+                // no usage. `None` keeps the 1800s ceiling; pass the cap once available.
                 max_runtime_seconds: submit_runtime_seconds(None),
             },
             artifacts: SubmitArtifacts {
@@ -345,7 +336,7 @@ impl SimmitProvider {
             if !parsed.success {
                 return Err(RunError::Other("Simmit returned success=false".into()));
             }
-            let _ = parsed.warnings; // We don't surface warnings in v1.
+            let _ = parsed.warnings; // not surfaced in v1
             parsed
                 .id
                 .ok_or_else(|| RunError::Other("Simmit submit returned no id".into()))
@@ -452,10 +443,9 @@ where
 }
 
 #[derive(Deserialize, Debug)]
-/// We deserialize but don't inspect the body — Simmit's HTTP status code is
-/// the source of truth for whether the cancel was accepted. The fields are
-/// kept structured for forward-compat (we may surface `status` in the UI
-/// later) but marked allow(dead_code) so the compiler doesn't complain.
+/// Body is deserialized but not inspected — Simmit's HTTP status code is the
+/// source of truth for whether the cancel was accepted. Fields kept for
+/// forward-compat (may surface `status` in the UI later).
 #[allow(dead_code)]
 struct CancelResponse {
     #[serde(default)]
@@ -468,8 +458,8 @@ fn is_terminal(status: &str) -> bool {
     matches!(status, "completed" | "failed" | "cancelled" | "timed_out")
 }
 
-/// Maps a terminal `StatusResponse` to `Ok` (completed) or the appropriate `RunError`.
-/// Extracted as a pure helper so it can be unit-tested without HTTP.
+/// Maps a terminal `StatusResponse` to `Ok` or the appropriate `RunError`.
+/// Pure helper so it can be unit-tested without HTTP.
 fn terminal_status_to_result(s: &StatusResponse) -> Result<(), RunError> {
     if s.status == "completed" {
         return Ok(());
@@ -488,11 +478,10 @@ fn terminal_status_to_result(s: &StatusResponse) -> Result<(), RunError> {
     Err(RunError::Other(msg))
 }
 
-/// Poll cadence (ms) by Simmit job status. A queued job won't change for a while,
-/// so we back off to spare Simmit's API read limit (a 60s queue at 1.5s is ~40
-/// pointless reads); once it's starting/running we poll faster to keep progress
-/// and logs live. Cancel latency is bounded by this interval too, but a queued
-/// job is fine to cancel a few seconds late.
+/// Poll cadence (ms) by status. Back off while queued to spare Simmit's read
+/// limit (a 60s queue at 1.5s is ~40 pointless reads); poll faster once
+/// starting/running to keep progress/logs live. Cancel latency is bounded by
+/// this too, but a queued job is fine to cancel a few seconds late.
 fn poll_interval_ms(status: &str) -> u64 {
     match status {
         "queued" | "pending" => 5000,
@@ -501,9 +490,9 @@ fn poll_interval_ms(status: &str) -> u64 {
     }
 }
 
-/// Max consecutive transient poll failures (network blip, 5xx, 429) tolerated
-/// before a chunk gives up. The remote job keeps running regardless, so a flaky
-/// connection must not abort a chunk (and, via split-retry, the whole sim).
+/// Max consecutive transient poll failures (network blip, 5xx, 429) before a
+/// chunk gives up. The remote job keeps running, so a flaky link must not abort
+/// a chunk (and, via split-retry, the whole sim).
 const MAX_POLL_TRANSIENT_FAILURES: u32 = 5;
 
 /// Backoff (ms) before retrying a transient poll failure. Escalates
@@ -520,11 +509,9 @@ impl SimmitProvider {
         ctx: &RunCtx<'_>,
     ) -> Result<StatusResponse, RunError> {
         let mut last_log_ts: u64 = 0;
-        // Consecutive transient failures (network blip, 5xx, 429). Reset to 0 on
-        // every clean poll; a long-running remote job must survive a flaky link.
+        // Reset to 0 on every clean poll so a long-running job survives a flaky link.
         let mut transient_failures: u32 = 0;
         loop {
-            // Cancel between polls.
             if let Some(tok) = ctx.cancel.as_ref() {
                 if tok.is_cancelled().await {
                     self.cancel_remote(bearer, remote_job_id).await;
@@ -536,8 +523,8 @@ impl SimmitProvider {
                 SIMMIT_BASE_URL, remote_job_id
             );
 
-            // ── One poll attempt. Transient transport errors, 5xx and 429 are
-            // retried with backoff instead of aborting the chunk. ────────────
+            // One poll attempt; transient transport errors, 5xx and 429 retry
+            // with backoff instead of aborting the chunk.
             let resp = match self.http.get(&url).bearer_auth(bearer).send().await {
                 Ok(r) => r,
                 Err(e) => {
@@ -610,7 +597,7 @@ impl SimmitProvider {
                 eprintln!("[simmit] status decode failed: {} | body: {}", e, preview);
                 RunError::Other(format!("Simmit poll decode: {}", e))
             })?;
-            // A clean poll → connectivity is back; reset the transient counter.
+            // Clean poll → connectivity back; reset the transient counter.
             transient_failures = 0;
 
             // Stream new log lines, dedup by ts.
@@ -624,9 +611,8 @@ impl SimmitProvider {
                 last_log_ts = log.ts;
             }
 
-            // Map progress. Single-stage Simmit jobs report stage = {1,1,"initial"};
-            // suppress that as noise and just show the percent. Multistage shows
-            // the live stage label + N/M.
+            // Single-stage jobs report stage = {1,1,"initial"} — suppress as noise,
+            // just show percent. Multistage shows the live stage label + N/M.
             let pct = s
                 .progress
                 .as_ref()
@@ -665,7 +651,7 @@ impl SimmitProvider {
                 }
                 other => (format!("Simmit: {}", other), String::new()),
             };
-            // Floor the percent at 5 while pending/queued so the bar doesn't sit at 0.
+            // Floor at 5% while pending/queued so the bar doesn't sit at 0.
             let display_pct = if matches!(s.status.as_str(), "queued" | "pending" | "starting") {
                 pct.max(5)
             } else {
@@ -715,8 +701,8 @@ impl SimmitProvider {
             RunError::Other(format!("Simmit result decode: {}", e))
         })?;
 
-        // Prefer the full SimC JSON artifact (has per-ability damage breakdown).
-        // Fall back to the synthesized summary if the artifact isn't downloadable.
+        // Prefer the full SimC JSON artifact (has per-ability breakdown); fall
+        // back to the synthesized summary if it isn't downloadable.
         let artifact_url = body.result.as_ref().and_then(|r| {
             r.artifacts
                 .iter()
@@ -729,8 +715,8 @@ impl SimmitProvider {
                 Ok(r) if r.status().is_success() => {
                     match r.json::<serde_json::Value>().await {
                         Ok(mut full_json) => {
-                            // Inject the simmit metadata block so the result-page
-                            // footer can show credits / build commit.
+                            // Inject simmit metadata so the result-page footer
+                            // can show credits / build commit.
                             if let Some(obj) = full_json.as_object_mut() {
                                 obj.insert("simmit".to_string(), simmit_metadata(&body));
                             }
@@ -811,8 +797,7 @@ struct MainActor {
 }
 #[derive(Deserialize, Debug, Default)]
 struct ProfilesetsBlock {
-    // `count` is in Simmit's response shape but we don't use it — we trust
-    // `results.len()` instead. Drop the field rather than carry a dead one.
+    // Simmit's `count` is intentionally dropped — we trust `results.len()`.
     #[serde(default)]
     results: Vec<serde_json::Value>,
 }
@@ -847,8 +832,8 @@ fn parse_usage(body: &serde_json::Value) -> crate::compute::ProviderUsage {
     }
 }
 
-/// Provider metadata block injected into the result JSON. The frontend's
-/// result-page footer reads `result.simmit.{credits_consumed,build_commit}`.
+/// Metadata block injected into the result JSON; the result-page footer reads
+/// `result.simmit.{credits_consumed,build_commit}`.
 fn simmit_metadata(body: &ResultBody) -> serde_json::Value {
     serde_json::json!({
         "credits_consumed": body.runtime.as_ref().and_then(|r| r.credits_consumed),
@@ -858,8 +843,8 @@ fn simmit_metadata(body: &ResultBody) -> serde_json::Value {
     })
 }
 
-/// Adapter: build a SimC-shaped JSON from Simmit's response body so the
-/// existing `result_parser::parse_simc_result` can ingest it unchanged.
+/// Adapter: build SimC-shaped JSON from Simmit's body so the existing
+/// `result_parser::parse_simc_result` ingests it unchanged.
 fn simmit_result_to_simc_output(body: &ResultBody) -> SimcOutput {
     let actor = body.result.as_ref().map(|r| &r.summary.main_actor);
     let actor_name = actor.and_then(|a| a.name.clone()).unwrap_or_default();

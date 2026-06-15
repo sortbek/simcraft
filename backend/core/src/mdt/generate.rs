@@ -1,21 +1,19 @@
 //! Generate a SimulationCraft `DungeonRoute` fight definition from a decoded MDT
 //! route plus the static enemy database.
 //!
-//! Output: a multi-line header (`fight_style=DungeonRoute`, overrides, `max_time`,
-//! `enemy`, `keystone_level`, invulnerable event) followed by one
-//! `raid_events+=/pull,...` line per pull. Each enemy specifier uses keystone.guru's
-//! slug-N format: `"slug_N":health` (bosses prefixed `BOSS_`), no `:creatureType`
-//! suffix. Health in the SimC specifier is scaled to `hp_percent` of full health.
+//! Output: a header (`fight_style`, `max_time`, `enemy`, `keystone_level`,
+//! invulnerable event) plus one `raid_events+=/pull,...` line per pull. Enemy
+//! specifiers use keystone.guru's slug-N format `"slug_N":health` (bosses
+//! prefixed `BOSS_`, no `:creatureType` suffix); health is `hp_percent` of full.
 
 use super::enemy_db::DungeonDb;
 use super::health_scaling::calculate_enemy_health;
 use super::model::MdtRoute;
 use serde::Serialize;
 
-/// Palette for pulls that carry no color of their own — e.g. routes built on the
-/// map and saved as bare clone refs (serialize drops color), which would
-/// otherwise all collapse to one color on reload. Matches the frontend's drawing
-/// palette (NEW_PULL_COLORS) so a reloaded route keeps the colors it was drawn with.
+/// Fallback colors for pulls saved without one (map-built routes drop color on
+/// serialize, else all collapse to one on reload). Mirrors the frontend's
+/// NEW_PULL_COLORS so a reloaded route keeps its drawn colors.
 const PULL_PALETTE: [&str; 7] = [
     "e08a3f", "c95fd6", "5fb0d6", "d6c45f", "6fd65f", "d65f7a", "7f9fe0",
 ];
@@ -29,8 +27,8 @@ fn pull_palette_color(i: usize) -> String {
 #[derive(Debug, Clone, Serialize)]
 pub struct MdtSimc {
     /// MDT addon version the enemy DB was extracted from (`""` if unknown).
-    /// Mob positions shift between MDT releases, so the UI shows this to make
-    /// route-vs-map discrepancies explainable.
+    /// Mob positions shift between releases, so the UI shows this to explain
+    /// route-vs-map discrepancies.
     pub mdt_version: String,
     pub dungeon_name: String,
     pub week: i64,
@@ -81,13 +79,13 @@ pub struct MapPull {
     pub color: String,
 }
 
-/// One clone in the full mob layer, tagged with its pull membership
-/// (`None` = not pulled, drawn dimmed) and its patrol path. `(x, y)` are MDT map
-/// coordinates; the frontend plots the center at `(x * s, -y * s)` (y is flipped).
+/// One clone in the full mob layer, tagged with pull membership (`None` = not
+/// pulled, drawn dimmed). `(x, y)` are MDT coords; the frontend plots the center
+/// at `(x * s, -y * s)` (y flipped).
 #[derive(Debug, Clone, Serialize)]
 pub struct MapEnemy {
-    /// MDT enemy index + clone index — the stable reference the frontend sends
-    /// back to `/api/mdt/serialize` to rebuild an edited pull assignment.
+    /// MDT enemy + clone index — the stable ref the frontend posts back to
+    /// `/api/mdt/serialize` to rebuild an edited pull assignment.
     pub enemy_idx: i64,
     pub clone_idx: i64,
     pub x: f64,
@@ -117,10 +115,9 @@ pub struct MapPoint {
     pub y: f64,
 }
 
-/// One pull's centroid for the route-card thumbnail: the average position of its
-/// clones, normalized to `[0,1]` in the map frame (x = x/840, y = -y/560 — the
-/// same y-flip the map uses). `boss` is true if the pull contains a boss. Pure
-/// geometry, independent of keystone level — safe to compute once and store.
+/// One pull's centroid for the route-card thumbnail: clone-average position
+/// normalized to `[0,1]` (x/840, -y/560 — same y-flip the map uses). `boss` is
+/// set if the pull holds a boss. Keystone-independent: compute once and store.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ShapePull {
     pub x: f64,
@@ -170,10 +167,9 @@ pub fn generate(
         .dungeon(route.dungeon_idx)
         .ok_or_else(|| format!("dungeon index {} not in MDT database", route.dungeon_idx))?;
 
-    // Clamp to the keystone floor (2) so the emitted `keystone_level=` and the
-    // enemy health (which `calculate_enemy_health` also floors at 2) agree — an
-    // overview/serialize with no level chosen would otherwise pair a declared
-    // level 0 with level-2-scaled health.
+    // Floor at keystone 2 so the emitted level agrees with the health (which
+    // calculate_enemy_health also floors at 2); else an overview with no level
+    // pairs a declared 0 with level-2 health.
     let keystone_level = opts.keystone_level.unwrap_or(route.keystone_level).max(2);
 
     // max_time is required: a 0 would make SimC end every iteration at t=0.
@@ -320,8 +316,7 @@ pub fn generate(
         }
     }
     // Stable order: unpulled first (drawn underneath), then by pull number, so
-    // pulled mobs paint on top — and the output is deterministic despite the
-    // HashMap iteration above.
+    // pulled mobs paint on top — and output is deterministic despite the HashMap.
     all_enemies.sort_by(|a, b| {
         a.pull
             .is_some()
@@ -345,13 +340,8 @@ pub fn generate(
         enemies: all_enemies,
     };
 
-    // Raid buffs are intentionally NOT hardcoded here. The route is generated at
-    // import time and stored, with no access to the user's raid-buff settings —
-    // those are applied per-sim by `simc_runner::build_full_simc_input`, which
-    // emits the chosen `override.*` lines after this block (so they win in
-    // Dungeon Route mode). Hardcoding `override.*=0` here would only be a
-    // redundant default, and `override.power_infusion` is no longer a valid SimC
-    // option (it emits an "Unknown option" warning).
+    // Raid buffs aren't hardcoded here — build_full_simc_input applies them
+    // per-sim (this block is generated at import time, before user settings exist).
     let header = format!(
         "fight_style=DungeonRoute
 single_actor_batch=1

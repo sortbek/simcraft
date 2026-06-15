@@ -58,7 +58,6 @@ export default function DropSlotList({
 
   const allItems = useMemo(() => Object.values(drops).flat(), [drops]);
 
-  // Count selected embellished items
   const selectedEmbellished = useMemo(() => {
     let count = 0;
     for (const items of Object.values(drops)) {

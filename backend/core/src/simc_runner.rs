@@ -184,14 +184,9 @@ const STAGE_CANDIDATES: &[(f64, &str)] = &[(1.0, "Broad"), (0.5, "Refine")];
 /// Build the staged schedule for the user's requested `target_error`.
 ///
 /// Keeps every candidate stage looser than `user_target_error`, then appends a
-/// "Final" stage at the user's exact precision. Stages pass profilesets through
-/// progressively tighter SimC passes; intermediate stages prune via
-/// `STAGE_CUTOFF_MULTIPLIER * target_error` of the top (and baseline) mean.
-///
-/// Examples:
-///   0.2  -> Broad, Refine, Final(0.2)     (3 stages)
-///   0.05 -> Broad, Refine, Final(0.05)    (3 stages)
-///   0.01 -> Broad, Refine, Final(0.01)    (3 stages)
+/// "Final" stage at the user's exact precision. Stages run progressively tighter
+/// SimC passes; intermediates prune via `STAGE_CUTOFF_MULTIPLIER * target_error`
+/// of the top (and baseline) mean. E.g. 0.2/0.05/0.01 all yield Broad,Refine,Final.
 fn build_stage_schedule(user_target_error: f64) -> Vec<Stage> {
     let mut schedule: Vec<Stage> = STAGE_CANDIDATES
         .iter()
@@ -239,15 +234,11 @@ pub(crate) fn parse_stage_schedule_array(
     out
 }
 
-/// Test/benchmark override for the staged schedule. Production does not send
-/// this option; the calibration bench uses it to compare alternative brackets
-/// through the same local staged runner. Accepted shapes:
-/// - `"current"` / absent: normal production schedule
-/// - `[1.0, 0.5]`: named automatically as Stage 1, Stage 2
-/// - `[{"name":"Broad","target_error":1.0}]`
-///
-/// The final user target is always appended, unless the override already ends
-/// at that exact target.
+/// Test/benchmark override for the staged schedule (production omits this option;
+/// the calibration bench uses it to compare brackets through the same runner).
+/// Accepted shapes: `"current"`/absent (normal schedule), `[1.0, 0.5]`, or
+/// `[{"name":"Broad","target_error":1.0}]`. The user's final target is always
+/// appended unless the override already ends at it.
 fn build_stage_schedule_from_options(options: &Value, user_target_error: f64) -> Vec<Stage> {
     let Some(raw) = options.get("stage_schedule") else {
         return build_stage_schedule(user_target_error);
@@ -335,11 +326,9 @@ const STAGE_MIN_KEEP: usize = 5;
 /// final precision stage instead of walking the remaining intermediate stages.
 const SKIP_TO_FINAL_THRESHOLD: usize = 5;
 
-/// Iteration count simc receives for `stage`. Used purely as a safety ceiling
-/// — `target_error` drives the per-profileset iteration count, and simc stops
-/// once that precision is hit. Looser stages converge quickly; the final stage
-/// can need most of the user's budget. The user's iteration budget is the right
-/// cap for every stage.
+/// Iteration count simc receives for `stage`. Purely a safety ceiling —
+/// `target_error` drives the actual per-profileset count and simc stops once
+/// that precision is hit, so the user's budget is the right cap for every stage.
 fn iterations_for_stage(_stage: &Stage, user_iters: u32) -> u32 {
     user_iters
 }
@@ -356,27 +345,16 @@ fn progress_range_for_stage(stage_idx: usize, total_stages: usize, base_start: u
     (start, end)
 }
 
-/// Multiplier on a stage's target_error used to set the keep threshold.
-///
-/// At a stage's target_error `te` (95% CI half-width as a percent), two profileset
-/// means could in the worst case overlap by `2 * te`. Anything below that gap from
-/// the top mean provably cannot be the true best — safe to prune. We keep `min_keep`
-/// as a floor so a flat distribution (all combos statistically tied) still progresses.
+/// Multiplier on a stage's target_error for the keep threshold. At target_error
+/// `te` (95% CI half-width %), two means can overlap by up to `2 * te`; anything
+/// further below the top provably can't be best, so it's safe to prune.
 const STAGE_CUTOFF_MULTIPLIER: f64 = 2.0;
 
-/// Decide which profilesets survive a stage cut.
-///
-/// Drops any profileset whose mean falls more than `STAGE_CUTOFF_MULTIPLIER * target_error`
-/// percent below **both**:
-/// - the top mean (can no longer be the best at this precision), and
-/// - `baseline_mean`, if provided (can no longer be an upgrade at this precision).
-///
-/// The baseline cutoff matters most when the user already has good gear and most
-/// alternatives aren't actually upgrades — those get pruned at Probe instead of
-/// trickling through every stage just because they cluster near the (small) top.
-///
-/// `min_keep` is a floor: if fewer than `min_keep` clear both thresholds we top
-/// up from the sorted list, so a flat distribution still progresses.
+/// Decide which profilesets survive a stage cut. Drops any whose mean falls more
+/// than `STAGE_CUTOFF_MULTIPLIER * target_error` percent below BOTH the top mean
+/// (can't be best) and `baseline_mean` if provided (can't be an upgrade). The
+/// baseline cutoff prunes non-upgrades early when the user already has good gear.
+/// `min_keep` is a floor so a flat distribution still progresses.
 fn select_kept_profilesets(
     profilesets: &[Value],
     target_error: f64,
@@ -458,11 +436,9 @@ fn baseline_mean_for_pruning(raw: &Value, profilesets: &[Value]) -> Option<f64> 
     }
 }
 
-/// Named-field inputs for [`build_full_simc_input`]. The booleans
-/// (`calculate_scale_factors` / `single_actor_batch` / `is_dungeon_route` /
-/// `report_details`) all type-check identically as positional args, which made
-/// the old signature error-prone — the struct forces each call site to label
-/// what it's setting.
+/// Named-field inputs for [`build_full_simc_input`]. The several `bool` fields
+/// type-check identically as positional args, so the struct forces each call
+/// site to label what it's setting.
 pub struct SimcInputBuild<'a> {
     pub simc_input: &'a str,
     pub options: &'a Value,
@@ -514,15 +490,11 @@ impl<'a> SimcInputBuild<'a> {
     }
 }
 
-/// The user-controlled simulation parameters parsed once from the options
-/// `Value`. Single source of truth for defaults so the various entry points
-/// (`build_simc_input_from_options`, `run_simc`, `run_simc_staged`,
-/// `run_simc_triage_batch`) can no longer drift apart.
-///
-/// The `unwrap_or` defaults here (0.1 target_error, 10_000 iterations, etc.)
-/// are a safety net only: every production caller populates these via
-/// `SimOptions::to_json()`, so the defaults are not normally reached. They are
-/// chosen to match `build_simc_input_from_options`' historical values.
+/// User-controlled simulation parameters parsed once from the options `Value` —
+/// single source of truth for defaults so the entry points can't drift apart.
+/// The `unwrap_or` defaults are a safety net only (every production caller
+/// populates these via `SimOptions::to_json()`) chosen to match the historical
+/// `build_simc_input_from_options` values.
 #[derive(Debug, Clone)]
 pub struct SimParams {
     pub fight_style: String,
@@ -568,10 +540,8 @@ impl SimParams {
     }
 }
 
-/// Whether a SimC input is a dungeon route — it carries a `fight_style=DungeonRoute`
-/// line (bare or quoted) of its own. The input builders and the server's
-/// eager/streaming route injection all use this so they agree on what counts as a
-/// dungeon route.
+/// Whether a SimC input carries its own `fight_style=DungeonRoute` line (bare or
+/// quoted). Shared by the input builders and the server's route injection.
 pub fn is_dungeon_route_input(simc_input: &str) -> bool {
     simc_input.lines().any(|l| {
         let t = l.trim();
@@ -738,19 +708,14 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
     // Scale factors
     result.push_str("scale_only=strength,intellect,agility,crit,mastery,vers,haste,weapon_dps,weapon_offhand_dps\n");
 
-    // Fight style must precede the raid buff overrides: parsing fight_style
-    // resets all override.* values to 0, so any overrides emitted before it
-    // would be silently discarded. For dungeon routes the fight_style line lives
-    // inside the route block (which also zeroes every raid buff), so we skip
-    // emitting it again here — but the overrides below still come after it.
+    // fight_style must precede the overrides — parsing it zeroes all override.*.
+    // Dungeon routes carry their own fight_style in the route block, so skip it here.
     if !is_dungeon_route {
         result.push_str(&format!("fight_style={}\n", fight_style));
     }
 
-    // Raid buff overrides (the user's per-buff toggles). Emitted at the very end,
-    // after the fight_style line — parsing fight_style zeroes all override.*, so
-    // overrides must follow it. This also lets the user's choices win over any
-    // `override.*=0` baked into a legacy saved route block (last assignment wins).
+    // User raid-buff toggles, emitted after the fight_style line so they aren't
+    // zeroed — also overrides any `=0` baked into a legacy saved route block.
     for opt in OVERRIDES {
         let key = opt
             .strip_prefix("override.")
@@ -779,17 +744,13 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
     result.push_str("optimize_expressions=1\n");
     result.push_str(&format!("target_error={}\n", target_error));
 
-    // Run profilesets in parallel (each on one thread) instead of the default
-    // sequential mode where each profileset uses all iteration threads. Whether
-    // this wins depends on iteration count per profileset, which target_error
-    // controls. Measured on a 19-thread box:
-    //   te=1.0  (≈150 iters/profileset)   → pwt=1 is 2.5× faster (sync overhead dominates)
-    //   te=0.2  (≈1.5k iters/profileset)  → roughly equal (within noise)
-    //   te=0.05 (≈14k iters/profileset)   → pwt=1 is 12% slower (iter parallelism wins)
-    // Cutoff at te > 0.2 enables pwt=1 only for the early staged Top Gear stages
-    // (Broad/Refine) where the win is clear. Medium (te=0.2) and below are
-    // marginal or slower, so we leave SimC's default sequential mode in place.
-    // The `parallel_profilesets` option overrides this for A/B testing.
+    // profileset_work_threads=1 runs profilesets in parallel (one thread each)
+    // instead of SimC's default sequential mode (each profileset uses all iter
+    // threads). The win depends on iters/profileset, set by target_error: at
+    // te=1.0 (~150 iters) pwt=1 is 2.5× faster (sync overhead dominates); at
+    // te=0.05 (~14k iters) it's 12% slower (iter parallelism wins). So enable
+    // only for te > 0.2 (the early Broad/Refine stages). `parallel_profilesets`
+    // overrides this for A/B testing.
     let combo_count = simc_input
         .lines()
         .filter(|l| l.trim_start().starts_with("### Combo "))
@@ -863,16 +824,10 @@ async fn run_simc_subprocess(
 
     let is_dungeon_route = is_dungeon_route_input(simc_input);
 
-    // Build the full input file with all options inline.
-    //
-    // `prebuilt`: handler already ran the simc_input through
-    // `build_simc_input_from_options`, so we pass it through verbatim. This
-    // keeps "input creation" as a single step in the handler, no matter which
-    // provider executes the job. Stage-specific overrides (target_error,
-    // profileset_work_threads) are appended by `run_simc_staged` per stage.
-    //
-    // `raw`: legacy API-level flag (req.raw=true). Same effect for the
-    // subprocess — skip the internal build — but signals user intent.
+    // Build the full input file with all options inline. Both `prebuilt` (handler
+    // already ran build_simc_input_from_options; staged overrides appended per
+    // stage) and `raw` (legacy req.raw=true) skip the internal build and pass the
+    // input through verbatim.
     let prebuilt = options
         .get("prebuilt")
         .and_then(|v| v.as_bool())
@@ -933,12 +888,10 @@ async fn run_simc_subprocess(
         set_process_affinity(pid, threads);
     }
 
-    // Post-spawn cancel gate. Closes the spawn-to-register window where a
-    // cancel can arrive before the PID is in the registry — kill_job would
-    // find nothing and the freshly spawned subprocess would run to completion.
-    // Once we're past register_process, kill_job *could* find the PID, but a
-    // cancel between the boundary check and this point would still race; this
-    // explicit kill makes it deterministic.
+    // Post-spawn cancel gate. Closes the spawn-to-register window where a cancel
+    // arriving before the PID is registered would leave kill_job nothing to find,
+    // letting the fresh subprocess run to completion. This explicit kill makes it
+    // deterministic.
     if let Some(tok) = cancel.as_ref() {
         if tok.is_cancelled().await {
             let _ = child.kill().await;
@@ -1217,20 +1170,12 @@ fn parse_combo_id(name: &str) -> Option<i64> {
         .and_then(|s| s.trim().parse::<i64>().ok())
 }
 
-/// Run a multi-stage simulation for Top Gear. Pass `cancel = Some(token)` to
-/// abort cleanly at stage boundaries when the job is cancelled.
-///
-/// `base_start` is the lower bound of the progress-bar range allocated to the
-/// staged pipeline (10 for inline/eager jobs, 50 for streamed jobs that ran
-/// Triage first and already consumed 5-50%).
-///
-/// `pool` is required for Streamed-mode jobs (checkpoint writes + pause polling).
-/// Inline-mode jobs pass `None` and skip those paths entirely.
-///
-/// `start_stage_idx` controls which stage to begin at. Pass `0` for a fresh run.
-/// Resume calls pass the `next_stage_idx` from the Staged checkpoint to skip
-/// already-completed stages. The `simc_input` must already contain only the
-/// survivor profilesets for the resumed stage.
+/// Run a multi-stage simulation for Top Gear. `cancel = Some(token)` aborts
+/// cleanly at stage boundaries. `base_start` is the lower bound of the progress
+/// range (10 for inline jobs, 50 for streamed jobs that ran Triage first). `pool`
+/// is required for Streamed jobs (checkpoint writes + pause polling); inline jobs
+/// pass `None`. Resume sets `start_stage_idx`/batch state; the `simc_input` must
+/// then contain only the survivor profilesets for the resumed stage.
 /// Persist a Staged checkpoint and check whether a pause has been requested.
 /// No-op for non-Streamed jobs or when no pool is configured.
 ///
@@ -1716,12 +1661,9 @@ pub(crate) fn profileset_result_names(json: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Run simc on a single Triage batch's profileset input.
-/// Uses the same gameplay-affecting options as staged simulation, while
-/// keeping Triage cheap through loose precision and forced profileset
-/// parallelism. Detailed output remains enabled for completed report data;
-/// live parallel progress is surfaced through the Triage progress callback.
-/// Returns the parsed `sim.profilesets.results` JSON array.
+/// Run simc on a single Triage batch's profileset input. Same gameplay options
+/// as staged sims, but kept cheap via loose precision and forced profileset
+/// parallelism. Returns the parsed `sim.profilesets.results` JSON array.
 #[allow(clippy::too_many_arguments)]
 pub async fn run_simc_triage_batch(
     base_profile: &str,

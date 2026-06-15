@@ -23,15 +23,10 @@ use crate::types::ResolveGearResponse;
 
 /// Write the terminal state for a simulation job (success or failure).
 ///
-/// One place owns: parsing the simc result into the user-facing shape,
-/// stamping the realm onto it, persisting result/raw/report rows, and
-/// suppressing the error write when the job was already cancelled. Use
-/// this from every code path that drives a job to completion so the
-/// finalize semantics can't drift across handlers.
-///
-/// `parse` lets callers pick the result-shape parser their sim mode emits
-/// (single-actor `parse_simc_result` vs gear-comparison `parse_gear_comparison_result`
-/// + metadata). Both shapes go through the same terminal-state guard.
+/// Single owner of parse → stamp realm → persist result/raw/report → suppress
+/// the error write on an already-cancelled job, so finalize semantics can't drift
+/// across handlers. `parse` lets callers pick their mode's result-shape parser
+/// (single-actor vs gear-comparison + metadata); both go through one terminal guard.
 pub(super) async fn finalize_job_outcome(
     repo: &JobRepo,
     job_id: &str,
@@ -86,12 +81,10 @@ pub(super) fn sanitize_custom_simc(input: &str) -> String {
 
 /// Inject expert mode fields at the correct positions in the SimC profile.
 ///
-/// For profileset sims (has `# Base Actor` and `### Combo` markers):
-///   {header} → # Base Actor → {base lines} → {base_player} → ### Combo 1 →
-///   {gear} → {raid_actors} → ### Combo 2..N → {post_combos} → {footer}
-///
-/// For quick sim (no markers):
-///   {header} → {raw input} → {base_player} → {raid_actors} → {post_combos} → {footer}
+/// Profileset sims (has `# Base Actor` + `### Combo` markers): header → base lines →
+/// base_player → Combo 1 → gear → raid_actors → Combo 2..N → post_combos → footer.
+/// Quick sim (no markers): header → raw input → base_player → raid_actors →
+/// post_combos → footer.
 pub(super) fn inject_expert_fields(simc_input: &str, options: &SimOptions) -> String {
     let header = sanitize_custom_simc(&options.simc_header);
     let base_player = sanitize_custom_simc(&options.simc_base_player);
@@ -100,11 +93,9 @@ pub(super) fn inject_expert_fields(simc_input: &str, options: &SimOptions) -> St
     let post_combos = sanitize_custom_simc(&options.simc_post_combos);
     let footer = sanitize_custom_simc(&options.simc_footer);
 
-    // A dungeon-route custom_apl ends with `enemy=` / `raid_events` declarations.
-    // Injected before the combo gear lines (where ordinary custom_apl goes), that
-    // gear binds to the enemy actor and SimC aborts with
-    // "Enemy '…': Item '…' Slot '…': Invalid type". Route APL is therefore
-    // appended at the very end instead — after the player and all profilesets.
+    // A dungeon-route custom_apl ends with `enemy=`/`raid_events`; if injected
+    // before the combo gear (like ordinary custom_apl), that gear binds to the
+    // enemy actor. So it's appended at the very end instead — after all profilesets.
     let custom_apl_is_route = crate::simc_runner::is_dungeon_route_input(&custom_apl);
 
     let all_empty = header.trim().is_empty()
@@ -241,8 +232,7 @@ pub(super) fn inject_expert_fields(simc_input: &str, options: &SimOptions) -> St
         result.push(footer);
     }
 
-    // Dungeon route block last of all: its `enemy=` declarations must follow the
-    // player's gear and every profileset (see `custom_apl_is_route` above).
+    // Route block last of all: its `enemy=` must follow the gear + profilesets.
     if custom_apl_is_route {
         result.push(String::new());
         result.push("# Dungeon Route".to_string());
@@ -390,17 +380,12 @@ enum JobUpdate {
     },
 }
 
-/// Provider-agnostic profileset spawner. Used by Top Gear, Drop Finder,
-/// and Upgrade Compare handlers — they pass the resolved
-/// `Arc<dyn SimcProvider>` directly and never branch on `provider.id()`.
-///
-/// Decomposed into three pieces:
-///   - `make_run_ctx` builds the ordered-update channel + `RunCtx` callbacks
-///   - `run_profileset_job_task` owns the spawn + execute path
-///   - `finalize_gear_comparison_result` writes the parsed result + report files
-///
-/// Streaming Top Gear's post-triage handoff and resume's staged path also use
-/// this spawner, routing through `LocalSimcProvider` (local-only by rule).
+/// Provider-agnostic profileset spawner (Top Gear, Drop Finder, Upgrade Compare).
+/// Callers pass the resolved `Arc<dyn SimcProvider>` and never branch on its id.
+/// Decomposed into `make_run_ctx` (update channel + callbacks),
+/// `run_profileset_job_task` (spawn + execute), `finalize_gear_comparison_result`
+/// (parse + report). Streaming Top Gear's post-triage handoff and resume's staged
+/// path route through here via `LocalSimcProvider` (local-only by rule).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_profileset_sim(
     repo: JobRepo,
@@ -494,9 +479,8 @@ fn make_run_ctx<'a>(
     (ctx, tx, writer_handle)
 }
 
-/// The actual spawned future. Sets Running status, builds the `RunCtx`,
-/// calls the provider, drains the writer, then finalizes by gear-comparison
-/// parser. Independently testable without touching `tokio::spawn`.
+/// The spawned future: set Running, build `RunCtx`, call provider, drain writer,
+/// finalize via gear-comparison parser. Testable without `tokio::spawn`.
 #[allow(clippy::too_many_arguments)]
 async fn run_profileset_job_task(
     repo: JobRepo,
@@ -529,11 +513,10 @@ async fn run_profileset_job_task(
     log_buffer.remove(&job_id);
 }
 
-/// Translate the provider's `Result<SimcOutput, RunError>` into the right
-/// terminal state: parse via gear-comparison, persist; Paused / Cancelled
-/// are no-ops (status already set elsewhere); Other writes an error.
-/// `sim_type` is the actual wire string ("top_gear", "droptimizer", etc.) —
-/// it's stamped into the parsed result so mode identity isn't lost.
+/// Translate the provider's `Result<SimcOutput, RunError>` into a terminal state:
+/// parse via gear-comparison + persist; Paused/Cancelled are no-ops (status set
+/// elsewhere); Other writes an error. `sim_type` is the wire string ("top_gear",
+/// "droptimizer", …), stamped into the parsed result so mode identity isn't lost.
 async fn finalize_gear_comparison_result(
     repo: &JobRepo,
     job_id: &str,
@@ -651,11 +634,9 @@ fn eager_branch_reject(is_local: bool, resolve_ok: bool) -> bool {
 }
 
 /// Up-front `simc_branch` validation for the EAGER (non-streaming) submit path.
-/// When the resolved provider is LOCAL, the requested branch must resolve to a
-/// local SimC binary BEFORE we insert a Job — otherwise an invalid branch leaves
-/// an orphan Pending row that nothing can ever finish (and only surfaces as an
-/// async Error). On a cloud provider this is skipped (no local binary involved).
-/// Returns `Some(BadRequest)` to reject, `None` to proceed.
+/// LOCAL provider: branch must resolve to a local binary BEFORE inserting a Job,
+/// else a bad branch leaves an orphan Pending row that only fails async. Skipped
+/// for cloud. Returns `Some(BadRequest)` to reject, `None` to proceed.
 pub(crate) fn validate_eager_branch(
     provider: &Arc<dyn crate::compute::SimcProvider>,
     simc_bins: &SimcBinaries,
@@ -675,12 +656,10 @@ pub(crate) fn validate_eager_branch(
     }
 }
 
-/// Shared post-resolution finalize for profileset workloads. Owns the entire
-/// "build Job, insert, write metadata, spawn, return SimResponse" sequence
-/// that previously sat duplicated at the bottom of four handlers.
-///
-/// Streaming Top Gear bypasses this helper because its long-tail flow lives
-/// in `streaming_top_gear.rs` and is local-only by routing rule.
+/// Shared post-resolution finalize for profileset workloads: build Job, insert,
+/// write metadata, spawn, return SimResponse (previously duplicated across four
+/// handlers). Streaming Top Gear bypasses this — its flow lives in
+/// `streaming_top_gear.rs` and is local-only by routing rule.
 pub(crate) async fn submit_profileset_sim(
     submission: ProfilesetSubmission,
     options: &crate::server::types::SimOptions,
@@ -698,9 +677,8 @@ pub(crate) async fn submit_profileset_sim(
 
     let provider_id_str = provider.id().to_string();
     let mut options_json = options.to_json();
-    // The handler-built `display_input` is the final ready-to-execute simc
-    // text. It's what we store on the Job and what we hand to the provider.
-    // `prebuilt: true` tells simc_runner to skip its internal rebuild;
+    // `display_input` is the final ready-to-execute text (stored on the Job, handed
+    // to the provider). `prebuilt: true` tells simc_runner to skip its rebuild;
     // SimmitProvider submits the text as-is.
     let display_input = crate::simc_runner::build_simc_input_from_options(
         &submission.generated_input,
@@ -880,9 +858,8 @@ pub(super) async fn write_combo_metadata_table_raw(
 }
 
 /// As [`write_combo_metadata_table_raw`], but assigns `combo_id = base + i + 1`.
-/// The cloud-streaming path writes one slice per chunk and must keep combo_ids
-/// globally unique across chunks (the table PK is `(job_id, combo_id)`), so each
-/// chunk passes the running count of combos already written as `combo_id_base`.
+/// The cloud-streaming path writes one slice per chunk; passing the running combo
+/// count as `combo_id_base` keeps combo_ids unique across chunks (PK is `(job_id, combo_id)`).
 pub(super) async fn write_combo_metadata_table_raw_offset(
     repo: &JobRepo,
     job_id: &str,
@@ -945,10 +922,8 @@ pub(super) async fn write_combo_metadata_table_raw_offset(
 
 /// Convenience wrapper for handlers that have `HashMap<String, Vec<Value>>` combo_metadata
 /// (top_gear, upgrade_compare).
-// `write_combo_metadata_table` and `write_combo_metadata_table_value` were
-// removed: each handler now pre-serializes its combo_metadata into the
-// `ProfilesetSubmission::combo_metadata_serialized` field, and
-// `submit_profileset_sim` writes via `write_combo_metadata_table_raw`.
+// `write_combo_metadata_table`/`_value` removed: handlers now pre-serialize into
+// `ProfilesetSubmission::combo_metadata_serialized` and write via the `_raw` variant.
 
 /// Load combo_metadata for a job from the `combo_metadata` table.
 /// Returns an empty map for in-memory repos or when no rows exist.

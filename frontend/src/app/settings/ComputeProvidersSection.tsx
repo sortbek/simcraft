@@ -64,12 +64,8 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
   }
 
   async function testConn() {
-    // Three sources for the key, in priority order:
-    //   1. text input (`key`) — user is replacing or testing before save
-    //   2. localStorage (web only)
-    //   3. backend-stored secret (desktop) — fetched via /api/providers/{id}/test-stored
-    // Without #3, desktop's "Test" required re-typing the stored key, which
-    // defeats the purpose of "Ready".
+    // Key source priority: 1) text input, 2) localStorage (web), 3) backend-stored
+    // secret (desktop, via test-stored) — without #3, desktop's Test would need the key re-typed.
     const trimmed = key.trim();
     if (trimmed) {
       await postTest(trimmed);

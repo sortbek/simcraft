@@ -1,12 +1,8 @@
-// Pure-data module. Mirrors three backend functions — keep in sync when those
-// change:
+// Pure-data module. Mirrors three backend functions — keep in sync:
 //   - parse_base_profile  in backend/core/src/profileset_generator/base_profile.rs
 //   - inv_type_to_slots   in backend/core/src/types/class_data.rs
-//   - can_dual_wield      in backend/core/src/types/class_data.rs
-//                         (drives the DUAL_WIELD_SPECS set below)
-//
-// Used by the drop finder to compute the per-slot `slot_inherits` payload it
-// sends to the backend, and to render inherit badges in the loot table.
+//   - can_dual_wield      in backend/core/src/types/class_data.rs (drives DUAL_WIELD_SPECS)
+// Used by the drop finder for the per-slot `slot_inherits` payload and inherit badges.
 
 export const GEAR_SLOTS = [
   'head',
@@ -61,10 +57,8 @@ function canDualWield(spec: string): boolean {
   return DUAL_WIELD_SPECS.has(spec);
 }
 
-/**
- * Parse equipped enchant_id and gem_id per slot from a simc input string.
- * Mirrors the backend `parse_base_profile` regex behavior.
- */
+/** Parse equipped enchant_id and gem_id per slot from a simc input string.
+ *  Mirrors backend `parse_base_profile` regex behavior. */
 export function parseEquippedGear(simcInput: string): EquippedGear {
   const result: EquippedGear = {};
   if (!simcInput) return result;
@@ -82,8 +76,8 @@ export function parseEquippedGear(simcInput: string): EquippedGear {
     const rest = m[2];
 
     const cleaned = rest.trim();
+    // Placeholder line (e.g. `off_hand=,`) — no item equipped in this slot.
     if (cleaned === '' || cleaned === ',') {
-      // Placeholder line (e.g. `off_hand=,`) — no item equipped in this slot.
       continue;
     }
 
@@ -104,10 +98,7 @@ export function parseEquippedGear(simcInput: string): EquippedGear {
   return result;
 }
 
-/**
- * Map an item's inventory_type to candidate gear slots.
- * TS port of backend `inv_type_to_slots`.
- */
+/** Map an item's inventory_type to candidate gear slots. TS port of backend `inv_type_to_slots`. */
 export function slotsForInvType(invType: number, spec: string): Slot[] {
   switch (invType) {
     case 1:
@@ -153,11 +144,8 @@ export function slotsForInvType(invType: number, spec: string): Slot[] {
   }
 }
 
-/**
- * Compute the candidate slots and per-slot inheritance for a single drop item.
- * Mirrors backend filtering: drops `off_hand` when a two-hand is equipped,
- * unless the spec is fury (Titan's Grip).
- */
+/** Compute candidate slots and per-slot inheritance for a drop item. Mirrors backend:
+ *  drops `off_hand` when a two-hand is equipped, unless the spec is fury (Titan's Grip). */
 export function resolveInherits(
   invType: number | undefined,
   spec: string,

@@ -93,7 +93,6 @@ export default function TalentPicker({
       setSavedBuilds([]);
       return;
     }
-    // Extract name+realm to find the character
     const nameMatch = simcInput.match(/^\w+="(.+)"$/m);
     const realmMatch = simcInput.match(/^server=(.+)$/m);
     if (!nameMatch || !realmMatch) {
@@ -110,7 +109,7 @@ export default function TalentPicker({
         return;
       }
       getTalentBuilds(char.id).then((builds) => {
-        // Convert to TalentLoadoutParsed, filtering out builds already in addon loadouts
+        // Drop builds already present in the addon loadouts
         const addonStrings = new Set(parseTalentLoadouts(simcInput).map((l) => l.talentString));
         const extra: TalentLoadoutParsed[] = builds
           .filter((b) => !addonStrings.has(b.talent_string))
@@ -261,11 +260,9 @@ export default function TalentPicker({
   // Sync talentBuilds from compareIndices
   useEffect(() => {
     if (!compareMode) return;
-    // Sort by loadout index (not checkbox-click order). The backend treats the
-    // first build as the "Currently Equipped" baseline — both for the sim and
-    // the label — and the active/equipped loadout is always allLoadouts[0], so
-    // ascending order keeps it as the baseline instead of whichever card the
-    // user happened to click first.
+    // Sort by loadout index, not click order: the backend treats the first
+    // build as the "Currently Equipped" baseline, and the equipped loadout is
+    // always allLoadouts[0], so ascending order keeps it as the baseline.
     const builds = [...compareIndices]
       .sort((a, b) => a - b)
       .filter((idx) => idx < allLoadouts.length)
@@ -273,7 +270,7 @@ export default function TalentPicker({
         name: allLoadouts[idx].name,
         talentString: allLoadouts[idx].talentString,
       }));
-    // Deduplicate by talent string (no point simming identical builds twice)
+    // Deduplicate by talent string — no point simming identical builds twice
     const seen = new Set<string>();
     const unique = builds.filter((b) => {
       if (seen.has(b.talentString)) return false;

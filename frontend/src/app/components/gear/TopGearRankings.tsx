@@ -20,20 +20,14 @@ import { useLanguage } from '../../lib/i18n';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
 import { gemBadgeClass, groupResults } from './topGearResultsUtils';
 
-/** Extract the numeric combo id from a "Combo N" result name. Returns null
- * for any other shape (e.g. "Currently Equipped"). */
+/** Numeric combo id from a "Combo N" name; null for other shapes (e.g. "Currently Equipped"). */
 function comboIdFromName(name: string): number | null {
   const match = name.match(/^Combo (\d+)$/);
   return match ? Number(match[1]) : null;
 }
 
-/** Dot fill for a precision value (95% CI half-width as % of mean) — how
- * trustworthy the displayed DPS is, not what was targeted. Greener = tighter.
- *   ≤0.5% → green     (final-pass precision)
- *   ≤1.0% → emerald   (refine band)
- *   ≤2.0% → yellow    (coarse band)
- *   ≤4.0% → orange    (probe / rough)
- *   >4.0% → red       (early-stage prune, treat with caution) */
+/** Dot tone for precision (95% CI half-width as % of mean = how trustworthy the DPS is,
+ * not what was targeted). Greener = tighter: ≤0.5 green, ≤1 emerald, ≤2 yellow, ≤4 orange, else red. */
 function precisionDotTone(pct: number): string {
   if (pct <= 0.5) return 'bg-emerald-400';
   if (pct <= 1.0) return 'bg-emerald-500';
@@ -54,9 +48,8 @@ function precisionBandLabel(
   return t('gear.precisionPrune');
 }
 
-/** A precision dot with a styled hover card. The card is portal-rendered at a
- * fixed position so it escapes the row's `overflow-hidden` (the DPS bar clip);
- * a plain CSS popover would be cropped at the row edge. */
+/** Precision dot with hover card. Card is portal-rendered at a fixed position so it escapes
+ * the row's `overflow-hidden` (DPS bar clip); a plain CSS popover would be cropped at the edge. */
 function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number }) {
   const { t } = useLanguage();
   const ref = useRef<HTMLSpanElement>(null);
@@ -106,10 +99,8 @@ function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number 
   );
 }
 
-/** The result page only ever surfaces the top N rows — past ~10 the deltas
- * dwindle into noise of the per-row CI and adding more clutters the UI
- * without changing decisions. Grouped views (by slot/boss) are naturally
- * bounded by group size so they don't apply this cap. */
+/** Cap on surfaced rows: past ~10, deltas dwindle into per-row CI noise and add clutter without
+ * changing decisions. Grouped views (slot/boss) are bounded by group size, so they skip this cap. */
 const MAX_VISIBLE = 10;
 
 interface TopGearRankingsProps {
@@ -339,8 +330,8 @@ const ResultRow = memo(function ResultRow({
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
-  /** When present, the row shows a "Sim" button that re-runs this combo as
-   * a high-precision Quick Sim. Omitted for non-streamed source jobs. */
+  /** When present, the row shows a "Sim" button that re-runs this combo as a high-precision
+   * Quick Sim. Omitted for non-streamed source jobs. */
   sourceJobId?: string;
 }) {
   const { t } = useLanguage();

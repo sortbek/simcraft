@@ -11,10 +11,7 @@ import { materializeRoute } from './active-route';
 interface UseSimSubmitOptions {
   /** API endpoint path, e.g. "/api/sim" */
   endpoint: string;
-  /**
-   * Build per-page payload fields (merged into the shared payload).
-   * Return null to abort submission.
-   */
+  /** Build per-page payload fields (merged into the shared payload). Return null to abort. */
   buildPayload: () => Record<string, unknown> | null;
   /** Optional pre-submit validation. Return an error string to abort. */
   validate?: () => string | null;
@@ -56,11 +53,8 @@ export function useSimSubmit({
       }
     }
 
-    // No pre-submit warning. The backend queues local sims (see
-    // LocalSimcProvider) and Simmit handles its own queue, so simultaneous
-    // submits can't actually fight for resources. While a sim waits in the
-    // local queue the SimStatus screen surfaces "Queued · waiting for active
-    // local sim to finish" via the standard progress channel.
+    // No pre-submit warning: the backend queues local sims (LocalSimcProvider) and
+    // Simmit has its own queue, so simultaneous submits can't fight for resources.
 
     const pagePayload = buildPayload();
     if (pagePayload === null) return;
@@ -69,10 +63,9 @@ export function useSimSubmit({
     clearScenarioSiblings();
 
     try {
-      // Scenarios sweep fight styles, but Dungeon Route mode forces
-      // fight_style=DungeonRoute and a loaded route is applied to every run — either
-      // would silently run the same thing N times. Ignore queued scenarios in both
-      // cases (the scenario builder is hidden in the same cases).
+      // Ignore queued scenarios when a route is loaded or in Dungeon Route mode:
+      // both force one fight style, so scenarios would silently run the same thing
+      // N times (the scenario builder is hidden in these cases anyway).
       const useScenarios = scenarios.length > 0 && !activeRoute && !isDungeonRoute;
       const configs: FightScenario[] = useScenarios
         ? scenarios
@@ -86,10 +79,9 @@ export function useSimSubmit({
         ...(batchId ? { batch_id: batchId } : {}),
       };
 
-      // Materialize the active dungeon route to SimC at sim time, applying the
-      // currently-chosen keystone level + HP share, and prepend it to custom_apl
-      // (its `fight_style=DungeonRoute` line is what the backend detects). Held as
-      // data until now so one route sims at any level without re-importing.
+      // Materialize the active route to SimC now (applying current key level + HP share)
+      // and prepend to custom_apl — its `fight_style=DungeonRoute` line is what the backend
+      // detects. Held as data until now so one route sims at any level without re-importing.
       if (activeRoute) {
         const routeSimc = await materializeRoute(activeRoute);
         const payload = sharedPayload as Record<string, unknown>;

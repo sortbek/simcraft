@@ -26,12 +26,10 @@ pub struct ResumeInputs {
     /// Server-side provider settings store — cloud-streaming resume reads the
     /// Simmit API key from it when no per-request key was supplied.
     pub settings_repo: crate::db::SettingsRepo,
-    /// Per-request provider auth derived from the resume request's
-    /// `X-Provider-<id>-Key` headers (exactly as submit builds it). Present for a
-    /// web BYO-key caller; `None`/`ProviderAuth::None` for desktop or when the key
-    /// only lives in server-side Settings. Cloud-streaming resume PREFERS this
-    /// over the server-side Settings key so a web BYO-key cloud run can resume,
-    /// not just be paused. Triage/staged resume ignore it (local-only).
+    /// Per-request provider auth from the resume request's `X-Provider-<id>-Key`
+    /// headers. Cloud-streaming resume PREFERS this over the server-side Settings
+    /// key so a web BYO-key cloud run can resume (not just pause). Triage/staged
+    /// resume ignore it (local-only).
     pub request_auth: crate::compute::ProviderAuth,
 }
 
@@ -116,11 +114,9 @@ async fn resume_local_stage(
         .to_string();
     let iter_cfg = super::iterator_from_request::build_iterator_from_request_json(request_json)?;
 
-    // Checkpoint-driven mid-stage resume: load the LocalStage checkpoint, find
-    // any committed-but-incomplete batch, validate it forms a clean suffix,
-    // clean up its uncommitted side effects (dedup keys + ledger row), and
-    // compute the resume state (rewind to the pending batch, or use the
-    // pre-advanced checkpoint scalars at a clean boundary).
+    // Mid-stage resume: find any committed-but-incomplete batch, validate it
+    // forms a clean suffix, clean up its uncommitted side effects (dedup keys +
+    // ledger row), then rewind to it (or use the pre-advanced checkpoint scalars).
     let local_cp = match &checkpoint.phase {
         CheckpointPhase::LocalStage(c) => c.clone(),
         _ => {
@@ -427,9 +423,8 @@ async fn resume_triage(
     };
 
     // 1. Clean up committed-but-not-completed batches. The checkpoint is written
-    // before simc runs, so a crash here means the batch's dedup keys exist but
-    // survivor metadata does not. Delete those batch-scoped keys and rewind to
-    // the first pending batch's start cursor so no candidates are lost.
+    // before simc runs, so a crash leaves dedup keys without survivor metadata.
+    // Delete those batch-scoped keys and rewind to the first pending start cursor.
     let triage_repo = crate::db::TriageBatchesRepo::new(inputs.pool.clone());
     let dedup_repo = crate::db::ComboDedupRepo::new(inputs.pool.clone());
     let pending = triage_repo
@@ -450,11 +445,9 @@ async fn resume_triage(
             .map_err(|e| format!("Failed to delete pending triage batch: {}", e))?;
     }
 
-    // 2. Re-load already-collected survivors from combo_metadata so the
-    // all_survivors accumulator in run_triage_with_constants is seeded correctly
-    // for the final Triage→Staged handoff checkpoint. Only combo_ids are needed;
-    // loading full rows (including profileset_simc payloads) would be ~200 MB at
-    // 150K survivors.
+    // 2. Re-load already-collected survivor combo_ids to seed the all_survivors
+    // accumulator for the Triage→Staged handoff. Only ids — loading full rows
+    // (with profileset_simc) would be ~200 MB at 150K survivors.
     let metadata_repo = crate::db::ComboMetadataRepo::new(inputs.pool.clone());
     let already_collected_survivors = metadata_repo
         .list_combo_ids_for_job(job_id)
@@ -462,8 +455,7 @@ async fn resume_triage(
         .map_err(|e| format!("Failed to load survivors: {}", e))?;
     let survivors_so_far = already_collected_survivors.len();
 
-    // 3. Rebuild the iterator config from request_json. Also parse the
-    // envelope once so step 6 can read options.simc_branch without re-parsing.
+    // 3. Rebuild iterator config; parse the envelope once (step 6 reads simc_branch).
     let iter_cfg = super::iterator_from_request::build_iterator_from_request_json(request_json)?;
     let envelope: crate::server::request_json::NormalizedRequest =
         serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
@@ -507,17 +499,16 @@ async fn resume_triage(
         already_collected_survivors,
     };
 
-    // 5. Clear pause_requested. Running status is set inside the spawn after
-    //    the queue permit is acquired, so the UI correctly shows Queued while
-    //    the job waits for the semaphore (mirrors streaming_top_gear.rs).
+    // 5. Clear pause_requested. Running status is set in the spawn after the
+    //    queue permit is acquired, so the UI shows Queued while waiting (mirrors
+    //    streaming_top_gear.rs).
     inputs
         .repo
         .set_pause_requested(job_id, false)
         .await
         .map_err(|e| format!("Failed to clear pause_requested: {}", e))?;
 
-    // 6. Resolve the simc binary using the original branch from request_json
-    // (an empty string falls back to the default branch).
+    // 6. Resolve the simc binary from the request_json branch (empty → default).
     let simc_bin_path = inputs
         .simc_bins
         .resolve(simc_branch_from_payload(&envelope.payload))
@@ -534,9 +525,8 @@ async fn resume_triage(
     let constants_for_task = checkpoint.constants;
 
     tokio::spawn(async move {
-        // Mirror the fresh streaming path: hold a queue permit across the
-        // entire triage run so resumed triage doesn't fight Quick Sim for
-        // the CPU. Emit a Queued banner if we have to wait.
+        // Hold a queue permit across the whole triage run so resumed triage doesn't
+        // fight Quick Sim for the CPU; emit a Queued banner while waiting.
         let permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
             p
         } else {
@@ -561,8 +551,7 @@ async fn resume_triage(
             }
         };
 
-        // Flip status to Running now that the permit is held and the sim is
-        // about to start. Mirrors the fresh streaming path in streaming_top_gear.rs.
+        // Flip to Running now the permit is held (mirrors streaming_top_gear.rs).
         if let Err(e) = repo_for_task
             .update_status(&job_id_owned, crate::models::JobStatus::Running)
             .await
@@ -574,7 +563,7 @@ async fn resume_triage(
             let repo = repo_for_task.clone();
             let jid = job_id_owned.clone();
             move |pct: u8, detail: String| {
-                // Map triage 0-100 → overall 5-50
+                // Map triage 0-100 → overall 5-50.
                 let mapped: u8 = (5u32 + (pct as u32 * 45 / 100)).min(50) as u8;
                 let r = repo.clone();
                 let i = jid.clone();
@@ -605,9 +594,8 @@ async fn resume_triage(
         .await
         {
             Ok(super::triage::TriageRunOutcome::Completed(result)) => {
-                // Release the triage permit so the provider-driven staged run
-                // can acquire it itself (single-permit queue → holding it here
-                // while the provider re-acquires would deadlock).
+                // Release the permit so the provider-driven staged run can acquire
+                // it (single-permit queue → holding it here would deadlock).
                 drop(permit);
                 crate::server::helpers::handoff_streamed_top_gear_to_staged(
                     &pool_for_task,
@@ -634,13 +622,11 @@ async fn resume_triage(
     Ok(())
 }
 
-/// Staged-phase resume. Loads survivor profileset_simc fragments from
-/// combo_metadata for the combo_ids saved in the Staged checkpoint, builds the
-/// combined simc input (raw base_profile + "# Base Actor\n" prefix + survivors),
-/// and spawns a staged run via `spawn_profileset_sim` starting at the saved
-/// `next_stage_idx`. The base_profile is taken from request_json.payload.base_profile
-/// (not from job.simc_input, which for streamed jobs is the decorated form produced
-/// by build_simc_input_from_options and not suitable as a raw profileset base).
+/// Staged-phase resume. Loads survivor profileset_simc fragments for the saved
+/// combo_ids, builds the combined input (`# Base Actor\n` + raw base_profile +
+/// survivors), and spawns a staged run from the saved `next_stage_idx`.
+/// base_profile comes from request_json.payload (NOT job.simc_input, which for
+/// streamed jobs is the decorated build_simc_input_from_options form).
 async fn resume_staged(
     job_id: &str,
     job: &Job,
@@ -685,14 +671,12 @@ async fn resume_staged(
         return Err("No survivor profileset_simc fragments to resume with".to_string());
     }
 
-    // Use raw base_profile prefixed with "# Base Actor\n" to match the format
-    // produced by the fresh handoff_to_staged path in top_gear_handlers.rs.
+    // "# Base Actor\n" prefix matches the fresh handoff_to_staged path.
     let combined = format!("# Base Actor\n{}\n{}", base_profile, survivor_simc);
     let combo_count = rows.len();
 
-    // 2. Clear pause_requested so the job is resumable. Running status is set
-    //    by run_profileset_job_task after the provider acquires a queue permit,
-    //    so the UI correctly shows Queued while the job waits for the semaphore.
+    // 2. Clear pause_requested. Running status is set by run_profileset_job_task
+    //    after the provider acquires a permit, so the UI shows Queued while waiting.
     inputs
         .repo
         .set_pause_requested(job_id, false)
@@ -700,14 +684,10 @@ async fn resume_staged(
         .map_err(|e| format!("Failed to clear pause_requested: {}", e))?;
 
     // 3. Spawn the staged pipeline at the saved next_stage_idx + next_batch_idx.
-    //    (simc binary resolution is handled internally by the provider — it
-    //    reads simc_branch from the options payload, same as a fresh job.)
-    //    base_start=50 because Triage already ran (5-50% covered); staged
-    //    pipeline uses 50-95%. If the checkpoint captured mid-stage batch
-    //    state, resumed_batch_results gets seeded so completed batches don't
-    //    re-run.
-    //    The resume path holds no permit (unlike triage) — the provider acquires
-    //    the queue permit internally, so no release-before-acquire concern here.
+    //    The provider resolves simc internally (reads simc_branch from options).
+    //    base_start=50: Triage already covered 5-50%, staged uses 50-95%.
+    //    resumed_batch_results seeds completed batches so they don't re-run. No
+    //    permit held here (unlike triage) — the provider acquires it internally.
     let resume_state = crate::simc_runner::StagedResumeState {
         start_stage_idx: staged_cp.next_stage_idx,
         start_batch_idx: staged_cp.next_batch_idx,

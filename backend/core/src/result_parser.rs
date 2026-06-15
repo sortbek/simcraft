@@ -233,11 +233,9 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         .get("desired_targets")
         .and_then(|v| v.as_u64())
         .unwrap_or(1);
-    // Achieved 95% CI half-width as a percent of the mean (matches the
-    // semantics of the user's `target_error` input). When simc hits target
-    // this equals target_error; when it undershoots (iteration budget), the
-    // displayed number is honestly larger. Same formula as the per-row badges
-    // so the hero card and the rows agree.
+    // Achieved 95% CI half-width as % of mean (same semantics as the user's
+    // `target_error`): equals target_error when hit, honestly larger when the
+    // iteration budget undershoots. Same formula as the per-row badges.
     let error_pct = precision_pct_from_simc(dps_data, dps_mean).unwrap_or(target_error);
     let dps_error_abs = dps_mean * error_pct / 100.0;
 
@@ -430,15 +428,9 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
     baseline
 }
 
-/// Extract profileset results from simc JSON output for Top Gear.
 /// Parse a profileset/gear-comparison SimC result (Top Gear, Drop Finder,
-/// Upgrade Compare). The `sim_type` parameter is the exact
-/// wire string of the mode that produced the result; it lands in the
-/// returned payload as `"type"`.
-///
-/// This was historically named `parse_top_gear_result` back when Top Gear
-/// was the only caller. After the SimMode/ResultKind split and sim_type
-/// parameterization, the broader name reflects the actual contract.
+/// Upgrade Compare). `sim_type` is the wire string of the producing mode; it
+/// lands in the returned payload as `"type"`.
 pub fn parse_gear_comparison_result(
     raw: &Value,
     combo_metadata: Option<&HashMap<String, Vec<Value>>>,
@@ -650,13 +642,10 @@ pub fn parse_gear_comparison_result(
 }
 
 /// 95% CI half-width as a percent of the mean, read from a simc result block.
-///
-/// The two block shapes name the standard error of the mean DIFFERENTLY:
-/// `player.collected_data.dps` uses `mean_std_dev`, while a `profilesets.results`
-/// entry uses `mean_stddev` (and also exposes `mean_error` = 1.96 × that, i.e. the
-/// 95% CI half-width already). Accept all three so the badge renders for both —
-/// reading only `mean_std_dev` silently returned `None` for every profileset row.
-/// Returns `None` when no error field is present or the mean is zero.
+/// The two block shapes name the standard error differently: `collected_data.dps`
+/// uses `mean_std_dev`, a `profilesets.results` entry uses `mean_stddev` (plus
+/// `mean_error` = the 95% half-width already). Accept all three or the badge goes
+/// `None` for every profileset row. Returns `None` if no error field or mean is 0.
 fn precision_pct_from_simc(block: &Value, mean: f64) -> Option<f64> {
     if mean <= 0.0 {
         return None;

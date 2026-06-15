@@ -15,11 +15,9 @@ interface ResolveOptions {
 }
 
 /**
- * Debounced POST /api/gear/resolve. Extracted from the near-identical effects in
- * quick-sim and top-gear. Returns the full response (callers map
- * to whatever subset they need) plus a `resolving` flag. Errors resolve to
- * `null` (the gear preview is non-critical) — no silent swallow of unexpected
- * throws beyond that.
+ * Debounced POST /api/gear/resolve, shared by quick-sim and top-gear. Returns the
+ * full response (callers map their own subset) plus a `resolving` flag. Errors
+ * resolve to `null` since the gear preview is non-critical.
  */
 export function useResolvedGear(
   simcInput: string,

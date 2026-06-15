@@ -13,21 +13,18 @@ use crate::profileset_generator::checkpoint::{
     Checkpoint, CheckpointPhase, StagedCheckpoint, TriageCheckpoint,
 };
 
-// Default batch sizing. Smaller batches tighten the worst-case pause latency
-// (one batch's work is the longest a pause can be delayed) at a modest
-// throughput cost. Do NOT lower MIN below MIN_KEEP_PER_BATCH — retention
-// assumes the batch is large enough to drop ineligible profilesets.
+// Default batch sizing. Smaller batches tighten worst-case pause latency (one
+// batch is the longest a pause is delayed) at a modest throughput cost. Do NOT
+// lower MIN below MIN_KEEP_PER_BATCH — retention needs room to drop losers.
 pub const TARGET_BATCH_INPUT_BYTES: usize = 1024 * 1024;
 pub const MIN_BATCH_PROFILESETS: usize = 100;
 pub const MAX_BATCH_PROFILESETS: usize = 250;
-/// Triage `target_error` (percent). Drives simc's per-profileset auto-tuner;
-/// each profileset runs only as many iterations as needed to hit this CI
-/// half-width. Looser than the user's final precision so triage stays a cheap
-/// coarse pre-filter — anything within ~3× this margin of the top survives.
+/// Triage `target_error` (percent) — the CI half-width simc's auto-tuner runs
+/// each profileset to. Looser than the user's final precision so triage stays a
+/// cheap coarse pre-filter (anything within ~3× of the top survives).
 pub const TRIAGE_TARGET_ERROR: f64 = 2.0;
-/// Iteration ceiling per profileset in Triage. With `TRIAGE_TARGET_ERROR=2.0`
-/// most profilesets converge in 50-150 iterations; this cap exists only as a
-/// safety net for unusually noisy specs that would otherwise run unbounded.
+/// Per-profileset iteration ceiling — safety net only (most converge in 50-150
+/// at `TRIAGE_TARGET_ERROR=2.0`); guards unusually noisy specs from running unbounded.
 pub const TRIAGE_ITERATIONS: u32 = 10_000;
 pub const TRIAGE_CUTOFF_MULTIPLIER: f64 = 3.0;
 pub const MIN_TRIAGE_TARGET_ERROR_FALLBACK: f64 = 1.0;
@@ -84,9 +81,8 @@ pub struct BatchDriver<'a> {
     pub job_id: &'a str,
 }
 
-/// Write the Checkpoint JSON blob to jobs.checkpoint inside the caller's
-/// transaction. Used by pre_simc_phase so the batch_idx + cursor + survivor
-/// counts land atomically with the dedup INSERTs and triage_batches row.
+/// Write the Checkpoint blob to jobs.checkpoint inside the caller's tx, so
+/// cursor + batch state land atomically with the dedup INSERTs + triage_batches row.
 async fn write_checkpoint_in_tx(
     executor: &mut sqlx::AnyConnection,
     job_id: &str,
@@ -117,17 +113,14 @@ fn rename_profileset_candidate(
 }
 
 impl<'a> BatchDriver<'a> {
-    /// Pull `target_count` candidates from the iterator. Snapshot existing keys
-    /// in the SAME transaction as dedup inserts to detect duplicates. Assigns
-    /// combo_ids to newly-accepted candidates. Inserts the 'committed' row in
-    /// triage_batches. Commits BEFORE simc runs.
+    /// Pull `target_count` candidates, snapshot+insert dedup keys in one tx,
+    /// assign combo_ids to new ones, write the 'committed' triage_batches row,
+    /// and commit BEFORE simc runs.
     ///
-    /// Crash safety: the persisted checkpoint already advances next_cursor PAST
-    /// this batch's range. On resume, an orphan committed-but-not-completed row
-    /// is deleted, dedup rows stay (harmless since the iterator only moves
-    /// forward), and any candidates that were accepted but not sim'd are
-    /// silently dropped. Worst-case data loss: one batch's accepted candidates,
-    /// bounded by ~MAX_BATCH_PROFILESETS. Acceptable for Phase 2 v1.
+    /// Crash safety: the checkpoint already advances next_cursor PAST this batch.
+    /// On resume the orphan committed-not-completed row is deleted, dedup rows stay
+    /// (harmless — iterator only moves forward), and accepted-but-unsim'd candidates
+    /// are dropped. Worst-case loss: one batch (~MAX_BATCH_PROFILESETS).
     pub async fn pre_simc_phase(
         &self,
         iter: &mut ProfilesetIterator,
@@ -177,10 +170,9 @@ impl<'a> BatchDriver<'a> {
             .insert_chunked(&mut tx, self.job_id, batch_idx, &candidate_keys)
             .await?;
 
-        // Filter pending â†’ accepted (new keys only). Assign combo_ids.
-        // state.next_combo_id is incremented here and persisted in the checkpoint.
-        // If the process crashes before commit_survivors, resume rewinds to this
-        // batch's start cursor and deletes the batch-scoped dedup keys.
+        // Filter pending → accepted (new keys only) and assign combo_ids. If we
+        // crash before commit_survivors, resume rewinds to this batch's start
+        // cursor and deletes its dedup keys.
         let mut accepted: Vec<AcceptedCandidate> = Vec::new();
         for (cand, key) in pending.into_iter().zip(candidate_keys.iter()) {
             if !existing.contains(key) {
@@ -208,22 +200,15 @@ impl<'a> BatchDriver<'a> {
             )
             .await?;
 
-        // Persist Checkpoint inside the same transaction so cursor + batch state
-        // land atomically with the dedup rows. On resume:
-        //   - triage_batches shows this batch as 'committed' (not yet 'completed')
-        //   - jobs.checkpoint shows next_cursor = where we'll resume from after this batch
-        //   - if simc never finishes for this batch, resume deletes this batch's
-        //     dedup keys and replays it from start_cursor.
+        // Persist the Checkpoint in this same tx so cursor + batch state land
+        // atomically with the dedup rows. If simc never finishes this batch,
+        // resume deletes its dedup keys and replays from start_cursor.
         let checkpoint = Checkpoint {
             phase: CheckpointPhase::Triage(TriageCheckpoint {
-                // After the current batch completes, the iterator will be at the cursor
-                // we just captured as end_cursor. That's where the NEXT batch starts.
+                // end_cursor is where the NEXT batch starts.
                 next_cursor: end_cursor.clone(),
-                // state.next_batch_idx still holds the CURRENT batch's idx; it'll be
-                // incremented after this commit. Persist the post-increment value so
-                // resume picks up the next batch.
+                // Persist the post-increment idx so resume picks up the next batch.
                 next_batch_idx: state.next_batch_idx + 1,
-                // state.next_combo_id was already advanced for this batch's accepted candidates.
                 next_combo_id: state.next_combo_id,
                 estimated_total_batches: state.estimated_total_batches,
                 survivors_so_far: state.survivors_so_far,
@@ -256,7 +241,7 @@ impl<'a> BatchDriver<'a> {
     ) -> Result<(), sqlx::Error> {
         let survivor_set: HashSet<i64> = survivors_combo_ids.iter().copied().collect();
 
-        // Collect owned strings so the InsertRow borrow lifetimes work.
+        // Owned strings so the InsertRow borrow lifetimes work.
         let owned: Vec<(i64, String, String, String, String, String)> = accepted
             .iter()
             .filter(|ac| survivor_set.contains(&ac.combo_id))
@@ -302,9 +287,8 @@ impl<'a> BatchDriver<'a> {
     }
 }
 
-/// Tunable Triage parameters. Defaults come from the module-level constants;
-/// the calibration harness varies these to grid-search optimal values.
-/// Production callers use `TriageConstants::default()`.
+/// Tunable Triage parameters (defaults from module-level constants). The
+/// calibration harness grid-searches these; production uses `default()`.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct TriageConstants {
     pub target_batch_input_bytes: usize,
@@ -346,10 +330,8 @@ impl Default for TriageConstants {
 }
 
 impl TriageConstants {
-    /// Apply a user-selected throughput/pausing tradeoff for streamed Top Gear.
-    ///
-    /// The selected value caps ordinary batches. The corresponding byte budget
-    /// still allows batches to shrink if profileset input is unusually bulky.
+    /// Apply a user-selected throughput/pausing tradeoff: the value caps ordinary
+    /// batches, but the scaled byte budget still lets bulky batches shrink.
     pub fn with_requested_max_batch_profilesets(mut self, requested: Option<usize>) -> Self {
         let Some(requested) = requested else {
             return self;
@@ -590,14 +572,10 @@ pub fn select_survivors_with(
         return vec![];
     }
 
-    // NOTE: This averages raw stddev/mean*100, not the simc CI half-width
-    // (which would be 1.96 * stddev / sqrt(iterations) / mean * 100). The result is
-    // roughly sqrt(iterations) times too generous at keeping survivors compared to
-    // a true CI half-width â€” at triage_iterations=50 that's about 7x over-keep.
-    // This is the SAFE direction (false positives, not false negatives). The
-    // calibration harness (backend/calibration) tunes TRIAGE_CUTOFF_MULTIPLIER
-    // against winner-loss rates on a real scenario; running calibration once will
-    // pick a multiplier that compensates for the formula's looseness. See spec O2.
+    // NOTE: averages raw stddev/mean*100, not the simc CI half-width — ~sqrt(iters)
+    // too generous (≈7x over-keep at 50 iters), but the SAFE direction (false
+    // positives, not negatives). TRIAGE_CUTOFF_MULTIPLIER is calibrated
+    // (backend/calibration) to compensate for the looseness. See spec O2.
     let s: f64 = sorted
         .iter()
         .map(|(_, m, sd)| if *m > 0.0 { sd / m * 100.0 } else { 0.0 })
@@ -816,9 +794,9 @@ pub struct TriageResumeState {
     pub state: TriageState,
     /// Cursor position to seek the iterator to before pulling the next batch.
     pub cursor: Vec<usize>,
-    /// combo_ids of survivors already accepted in prior batches. Used to seed
-    /// the all_survivors accumulator so the final Triage→Staged checkpoint
-    /// includes everything, not just survivors from the resumed batches.
+    /// Survivor combo_ids from prior batches — seeds the all_survivors
+    /// accumulator so the final Triage→Staged checkpoint includes everything,
+    /// not just the resumed batches.
     pub already_collected_survivors: Vec<i64>,
 }
 
@@ -848,8 +826,8 @@ pub async fn run_triage_with_constants(
     constants: TriageConstants,
     resume: Option<TriageResumeState>, // None = fresh run; Some = resumed from checkpoint
 ) -> Result<TriageRunOutcome, String> {
-    // Shadow module-level consts with values from the constants struct so all
-    // helper call-sites below read from the struct without needing extra parameters.
+    // Shadow module-level consts with the struct's values so call-sites below
+    // read from the struct without extra parameters.
     let target_batch_input_bytes = constants.target_batch_input_bytes;
     let min_batch_profilesets = constants.min_batch_profilesets;
     let max_batch_profilesets = constants.max_batch_profilesets;
@@ -954,12 +932,9 @@ pub async fn run_triage_with_constants(
 
         let batch_number = pre.batch_idx + 1;
         let estimated_batches = state.estimated_total_batches.max(1);
-        // 5%-bucket gate: `on_progress` ultimately spawns a DB `UPDATE jobs`,
-        // so firing it on every simc profileset tick would be ~thousands of
-        // writes per batch. Throttle both the DB update and the log line to
-        // ~20 events per batch. AtomicUsize (not Cell) because the closure
-        // is captured into a Send future via `tokio::spawn` upstream — the
-        // sync overhead is negligible per tick.
+        // 5%-bucket gate: on_progress spawns a DB `UPDATE jobs`, so throttle the
+        // DB update + log line to ~20 events/batch. AtomicUsize (not Cell) because
+        // the closure is captured into a Send future via tokio::spawn upstream.
         let last_logged_progress_bucket = std::sync::atomic::AtomicUsize::new(0);
         let batch_start = std::time::Instant::now();
         let pause_check_repo = crate::db::JobRepo::new(inputs.pool.clone());
@@ -969,9 +944,8 @@ pub async fn run_triage_with_constants(
             inputs.options,
             triage_iterations,
             inputs.fight_style,
-            // Triage-specific target_error: loose enough that simc converges
-            // in O(100) iterations per profileset. The user's tight final
-            // target_error is reserved for the Staged Final stage.
+            // Loose Triage target_error (~O(100) iters/profileset); the user's
+            // tight final target_error is reserved for the Staged Final stage.
             triage_target_error,
             inputs.simc_bin,
             inputs.job_id,
@@ -1051,7 +1025,7 @@ pub async fn run_triage_with_constants(
             survivors.len(),
             global_survivor_hard_max,
         ) {
-            None => Vec::new(), // hard max hit; treat as zero survivors but still commit the batch
+            None => Vec::new(), // hard max hit; zero survivors but still commit the batch
             Some(n) => survivors.into_iter().take(n).collect::<Vec<_>>(),
         };
 
@@ -1122,15 +1096,14 @@ pub async fn run_triage_with_constants(
 
         all_survivors.extend(survivors);
 
-        // Pause boundary: honor a pending pause request at the cleanest possible point —
-        // after survivors are persisted and state is fully consistent. The checkpoint
-        // is already on disk from pre_simc_phase, so resume picks up at exactly the
-        // next batch's cursor. Clear the flag and transition to Paused.
+        // Pause boundary: honor a pending pause at the cleanest point — survivors
+        // persisted, state consistent, checkpoint already on disk so resume picks
+        // up at the next batch's cursor.
         let pause_check_repo = crate::db::JobRepo::new(inputs.pool.clone());
         match pause_check_repo.get_pause_requested(inputs.job_id).await {
             Ok(true) => {
-                // Clear the flag and flip status. Order matters: clear flag first so a
-                // concurrent reader doesn't see Paused + pending pause.
+                // Clear flag before flipping status so a concurrent reader never
+                // sees Paused + pending pause.
                 let _ = pause_check_repo
                     .set_pause_requested(inputs.job_id, false)
                     .await;
@@ -1156,10 +1129,9 @@ pub async fn run_triage_with_constants(
         }
     }
 
-    // Final Triageâ†’Staged transition checkpoint. The staged pipeline
-    // will write its own Checkpoints from here on. If a crash happens between
-    // Triage completion and the first staged stage starting, this checkpoint
-    // is what resume uses to skip Triage entirely.
+    // Final Triage→Staged transition checkpoint — lets resume skip Triage
+    // entirely if a crash happens before the first staged stage starts. The
+    // staged pipeline writes its own Checkpoints from here on.
     let final_checkpoint = Checkpoint {
         phase: CheckpointPhase::Staged(StagedCheckpoint {
             next_stage_idx: 0,

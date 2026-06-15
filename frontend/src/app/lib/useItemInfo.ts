@@ -21,7 +21,7 @@ export interface ItemInfo {
   inventory_type?: number; // 13=One-hand, 14=Shield, 17=Two-hand, 21=Main-hand, 22=Off-hand, 23=Held
 }
 
-// Module-level cache so it persists across renders/components
+// Module-level cache persists across renders/components.
 const cache: Record<string, ItemInfo> = {};
 
 function cacheKey(item_id: number, bonus_ids?: number[]): string {
@@ -34,16 +34,12 @@ export const QUALITY_COLORS = QUALITY_HEX;
 
 /**
  * Shared effect skeleton for the three batch-info hooks.
- *
- * `depKey`      – stable string that drives the effect dependency array.
- * `prepare`     – splits inputs into already-cached and missing entries;
- *                 returns `{ cached, toFetch }`. Called inside the effect so
- *                 module-cache reads are always fresh.
- * `fetchMissing`– fires the POST and populates the module cache; receives the
- *                 `toFetch` list from `prepare` and a `cancelled()` guard;
- *                 resolves with the new entries to merge into state.
- * `setState`    – the hook's own `setState` dispatcher (typed generically so
- *                 each hook keeps its concrete Record type).
+ * - `depKey` drives the effect dependency array.
+ * - `prepare` runs inside the effect (so module-cache reads are fresh) and
+ *   splits inputs into `{ cached, toFetch }`.
+ * - `fetchMissing` POSTs `toFetch`, populates the module cache, and resolves
+ *   the new entries; takes a `cancelled()` guard.
+ * - `setState` is the hook's own dispatcher (generic so each keeps its Record type).
  */
 function useBatchEffect<TItem, TFetch>(
   depKey: string,
@@ -259,7 +255,7 @@ function ensureItemNames() {
   fetch(`${API_URL}/api/item-names`)
     .then((r) => (r.ok ? r.json() : {}))
     .then((data: Record<string, Record<string, string>>) => {
-      // Convert string keys to number keys
+      // JSON object keys are strings; rekey by number.
       const map: Record<number, Record<string, string>> = {};
       for (const [id, locales] of Object.entries(data)) {
         map[Number(id)] = locales;
@@ -342,11 +338,8 @@ export function getWowheadUrl(itemId: number, locale?: string): string {
   return `https://${domain}/item=${itemId}`;
 }
 
-/**
- * Normalize the two gem-id shapes (single `gem_id` legacy field, full
- * `gem_ids` array) into a single filtered list. Use this whenever you
- * need to render or query Wowhead with the gems on a slot.
- */
+/** Normalize the two gem-id shapes (legacy `gem_id`, full `gem_ids` array) into one
+ *  filtered list. Use whenever rendering or querying Wowhead with a slot's gems. */
 export function toGemIdList(opts: { gem_id?: number; gem_ids?: number[] }): number[] {
   const raw = opts.gem_ids?.length ? opts.gem_ids : opts.gem_id ? [opts.gem_id] : [];
   return raw.filter((g) => g > 0);

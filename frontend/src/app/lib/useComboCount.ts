@@ -8,14 +8,12 @@ interface ComboCountResponse {
 }
 
 /**
- * Debounced combo-count POST. Extracted from the duplicated effects in top-gear
- * and upgrade-compare. `enabled` gates the request (when false,
- * resets to 0). `buildBody` returns the request payload (or null to skip).
- * `debounceMs` keeps each page's existing timing (300).
+ * Debounced combo-count POST, shared by top-gear and upgrade-compare. `enabled`
+ * gates the request (resets to 0 when false), `buildBody` returns the payload
+ * (or null to skip), `debounceMs` defaults to 300.
  *
- * NOTE: the effect re-runs on `deps` only. Any value feeding `enabled` (or read
- * by `buildBody`) MUST be included in `deps`, or the request won't re-fire when
- * it changes. Today's callers derive `enabled` from values already in their deps.
+ * NOTE: the effect re-runs on `deps` only. Any value feeding `enabled` or read
+ * by `buildBody` MUST be in `deps`, or the request won't re-fire on change.
  */
 export function useComboCount(
   endpoint: string,

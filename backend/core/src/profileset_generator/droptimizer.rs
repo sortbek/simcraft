@@ -7,16 +7,11 @@ use super::constraints::{is_legal_gear_set, GearSetContext};
 use crate::simc_string::{extract_bonus_ids, extract_item_id};
 use crate::types::class_data::{self, GEAR_SLOTS};
 
-/// Validate that placing `drop_item_id` (with `drop_bonus_ids`) in `target_slot`
-/// — while every other slot keeps its equipped item — yields a legal gear set
-/// under the shared `is_legal_gear_set` rules. False = skip the combo; the
-/// user can still see the comparison via the combo for the slot that holds
-/// the conflicting copy (which gets replaced, not duplicated).
-///
-/// Mirrors the profileset-emission normalization where a 2H drop in main_hand
-/// for non-Fury clears the off_hand — the candidate gear set must match the
-/// gear set simc actually receives, or the weapon-pairing check would flag a
-/// state that doesn't exist in the emitted profileset.
+/// True if dropping `drop_item_id` into `target_slot` (other slots unchanged)
+/// is a legal gear set under `is_legal_gear_set`. False = skip this combo (the
+/// conflicting slot still gets its own replacement combo). Mirrors the emission
+/// normalization (2H drop in main_hand for non-Fury clears off_hand) so the
+/// candidate matches what simc actually receives.
 fn drop_combo_is_valid(
     equipped: &HashMap<String, String>,
     target_slot: &str,
@@ -86,13 +81,9 @@ pub(super) fn generate_droptimizer_input(
         oh.is_none() || oh == Some("") || oh == Some(",")
     };
 
-    // Backend is the single source of truth for inheritance: copy enchant_id
-    // and gem_id from the equipped item in the drop's target slot. The
-    // frontend used to send a precomputed `slot_inherits` array; that field
-    // is now ignored (and removed from the frontend payload) because the
-    // browser shouldn't be calculating simulation semantics. SimC is
-    // tolerant of `gem_id=` on items without sockets (treated as no-op), so
-    // unconditional inheritance is safe.
+    // Backend is the single source of truth for inheritance: copy enchant_id/
+    // gem_id from the equipped item in the drop's target slot. The frontend's
+    // old `slot_inherits` array is now ignored.
     let legacy_enchant_re = Regex::new(r"enchant_id=(\d+)").unwrap();
     let legacy_gem_re = Regex::new(r"gem_id=([\d/]+)").unwrap();
 
@@ -119,8 +110,8 @@ pub(super) fn generate_droptimizer_input(
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
-        // `slot_inherits` is intentionally ignored; kept in the type for
-        // backwards-compatible API requests but no longer authoritative.
+        // `slot_inherits` is intentionally ignored (kept in the type for API
+        // back-compat, no longer authoritative).
         let mut slots = class_data::inv_type_to_slots(inv_type, &spec);
 
         if has_two_hand_equipped && !(spec == "fury" && inv_type == 17) {
@@ -142,16 +133,10 @@ pub(super) fn generate_droptimizer_input(
         }
 
         for slot in &slots {
-            // Validate the gear set this combo would produce against the same
-            // unique-equipped + item-limit-category rules Top Gear enforces.
-            // Two checks fall out:
-            //   - Same item_id in both paired slots (rings/trinkets) → drop
-            //     in the unequipped slot would duplicate the equipped copy.
-            //   - A bonus-id item-limit category exceeded → e.g. "max 1 of
-            //     this trinket type" hit because the equipped slot we're
-            //     *not* replacing already holds one. The combo for the slot
-            //     that holds the conflicting copy still emits — that's the
-            //     "would replacing this slot be better" sim.
+            // Enforce the same unique-equipped + item-limit-category rules as Top
+            // Gear: skip a drop that would duplicate the equipped copy of a paired
+            // slot or exceed a bonus-id limit category. The conflicting slot still
+            // emits its own "would replacing this slot be better" combo.
             if !drop_combo_is_valid(&equipped_gear, slot, item_id, &bonus_ids, inv_type, &spec) {
                 continue;
             }
@@ -160,9 +145,7 @@ pub(super) fn generate_droptimizer_input(
             let mut applied_enchant: u64 = 0;
             let mut applied_gem: u64 = 0;
 
-            // Derive enchant + gem inheritance from the equipped item in the
-            // target slot. The browser used to compute this and send it as
-            // `slot_inherits`; that responsibility now lives entirely here.
+            // Derive enchant + gem inheritance from the equipped item in the slot.
             if let Some(equipped) = equipped_gear.get(*slot) {
                 if let Some(caps) = legacy_enchant_re.captures(equipped) {
                     if let Ok(eid) = caps[1].parse::<u64>() {
@@ -172,16 +155,10 @@ pub(super) fn generate_droptimizer_input(
                         }
                     }
                 }
-                // Only inherit a gem when the DROP item actually has a socket.
-                // The equipped item may have a socket-adding bonus (e.g. neck/
-                // ring sockets, or socket-added wrist/head/waist crafted items)
-                // that the drop does not — copying the equipped gem onto a
-                // socketless drop simulates gear that can't exist.
-                //
-                // Sockets in current-expansion data come exclusively from
-                // bonus IDs, so empty bonus_ids ⇒ 0 sockets without needing
-                // to hit the bonus DB (also keeps unit tests that don't load
-                // game data working).
+                // Only inherit a gem when the DROP item itself has a socket —
+                // copying the equipped gem onto a socketless drop simulates gear
+                // that can't exist. Sockets come exclusively from bonus IDs, so
+                // empty bonus_ids ⇒ 0 sockets (no DB hit; keeps no-game-data tests green).
                 let drop_sockets = if bonus_ids.is_empty() {
                     0
                 } else {
@@ -191,8 +168,7 @@ pub(super) fn generate_droptimizer_input(
                 };
                 if drop_sockets > 0 {
                     if let Some(caps) = legacy_gem_re.captures(equipped) {
-                        // Inherit the first equipped gem id. Multi-gem drops
-                        // are rare in the Drop Finder flow; Top Gear / Enchant
+                        // Inherit only the first equipped gem id; Top Gear / Enchant
                         // Gem handle full multi-socket coverage.
                         if let Some(first) = caps[1].split('/').next() {
                             if let Ok(gid) = first.parse::<u64>() {
@@ -316,10 +292,8 @@ off_hand=,id=201\n";
 
     #[test]
     fn drop_inherits_gem_from_equipped_slot_when_drop_has_socket() {
-        // Gem inheritance moved from frontend slot_inherits to backend
-        // derivation. Equipped neck has a gem; the drop also has a socket
-        // (via bonus 13534, +1 socket per fixture data), so the drop should
-        // pick up that gem id without any per-drop `slot_inherits`.
+        // Equipped neck has a gem; drop has a socket (bonus 13534 = +1), so the
+        // drop inherits that gem id.
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nneck=,id=100,gem_id=213453\n";
         let drops = vec![drop(999, 2, vec![13534])]; // inv_type 2 = neck
@@ -334,10 +308,8 @@ off_hand=,id=201\n";
 
     #[test]
     fn drop_does_not_inherit_gem_when_drop_has_no_socket() {
-        // The equipped wrist has a socket-added bonus (e.g. crafted/embellished
-        // wrist) and carries a gem. A plain non-crafted wrist drop has no
-        // sockets — copying the equipped gem onto it would simulate gear that
-        // can't exist. Inheritance must be gated on the *drop's* socket count.
+        // Equipped wrist has a socket+gem; a plain wrist drop has no socket, so
+        // inheritance (gated on the drop's socket count) must not apply.
         let profile = "mage=test\nspec=frost\nwrist=,id=100,gem_id=213453\n";
         let drops = vec![drop(999, 9, vec![])]; // inv_type 9 = wrist, no sockets
         let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
@@ -355,10 +327,8 @@ off_hand=,id=201\n";
 
     #[test]
     fn drop_ignores_slot_inherits_field_in_request() {
-        // The frontend used to send a precomputed `slot_inherits` array. That
-        // field is now ignored — backend derives from equipped. A request
-        // that still includes it should be tolerated but treated as if
-        // absent (no override of the equipped-derived values).
+        // A request still carrying the legacy `slot_inherits` array must be
+        // tolerated and ignored (backend derives inheritance from equipped).
         let profile = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7777\n";
         let drops = vec![json!({
             "item_id": 999,
@@ -424,10 +394,8 @@ main_hand=,id=200\n";
 
     #[test]
     fn ring_drop_same_as_equipped_only_emits_replacement_combo() {
-        // Equipped finger1 = item 500. Drop is another copy of item 500.
-        // Putting it in finger2 would mean wearing two of the same ring
-        // (unique-equipped violation). Only the finger1-replacement combo
-        // should be emitted.
+        // Drop is a copy of equipped finger1 (500); putting it in finger2 violates
+        // unique-equipped, so only the finger1 replacement combo emits.
         let profile = "mage=test\nspec=frost\nfinger1=,id=500\nfinger2=,id=101\n";
         let drops = vec![drop(500, 11, vec![])];
         let (input, count, _) = generate_droptimizer_input(profile, &drops);
@@ -503,9 +471,8 @@ main_hand=,id=200\n";
 
     #[test]
     fn ring_drop_inherits_per_target_finger() {
-        // Each finger slot inherits from *its own* equipped item, not from a
-        // shared payload. finger1 has enchant+gem; finger2 has neither.
-        // Drop has bonus 13534 = +1 socket, so gem inheritance is allowed.
+        // Each finger inherits from its OWN equipped item: finger1 has enchant+gem,
+        // finger2 has neither. Drop has bonus 13534 (+1 socket) so gem inherits.
         crate::test_support::ensure_game_data_loaded();
         let profile = "\
 mage=test\n\

@@ -1,6 +1,4 @@
-/**
- * Talent tree rules engine — pure functions for validating and computing talent state.
- */
+/** Talent tree rules engine — pure functions for validating and computing talent state. */
 
 import type { NodeSelection } from './talentDecode';
 import type { TalentNode, TalentTreeData } from './useTalentTree';
@@ -32,35 +30,30 @@ export function canSelectNode(
   const node = nodeMap.get(nodeId);
   if (!node) return false;
 
-  // Already at max ranks
   const sel = selections.get(nodeId);
-  if (sel && sel.ranks >= node.maxRanks) return false;
+  if (sel && sel.ranks >= node.maxRanks) return false; // at max ranks
 
   // Free/entry nodes are always selectable
   if (node.freeNode || node.entryNode) return true;
 
-  // Check point budget
   const section = getSectionNodes(node, tree);
   const budget = getSectionBudget(node, tree);
   if (budget > 0 && getPointsSpent(selections, section) >= budget) return false;
 
-  // Check prev prerequisites — at least one prev node must be selected
-  // (WoW uses "any of prev" for unlocking, not "all of prev")
+  // WoW unlocks on "any of prev", not "all of prev"
   if (node.prev.length > 0) {
     const anyPrevSelected = node.prev.some((prevId) => selections.has(prevId));
     if (!anyPrevSelected) return false;
   }
 
-  // Check reqPoints threshold
   if (node.reqPoints) {
     const spent = getPointsSpent(selections, section);
     if (spent < node.reqPoints) return false;
   }
 
-  // Check requiresNode
   if (node.requiresNode && !selections.has(node.requiresNode)) return false;
 
-  // Hero node: check subtree is active
+  // hero node requires its subtree to be active
   if (node.subTreeId) {
     const activeSubTree = getActiveSubTreeId(selections, tree);
     if (activeSubTree !== node.subTreeId) return false;
@@ -83,23 +76,22 @@ export function canDeselectNode(
   // Free nodes can't be deselected
   if (node.freeNode) return false;
 
-  // Check if any downstream node depends on this one
+  // block if removing the last selected prev of a still-selected downstream node
   for (const nextId of node.next) {
     if (!selections.has(nextId)) continue;
     const nextNode = nodeMap.get(nextId);
     if (!nextNode) continue;
-    // Would this be the last selected prev for the next node?
     const otherPrevSelected = nextNode.prev.filter((p) => p !== nodeId && selections.has(p));
     if (otherPrevSelected.length === 0) return false;
   }
 
-  // Check if any node has requiresNode pointing to this one
+  // block if a selected node has requiresNode pointing here
   const allNodes = [...tree.classNodes, ...tree.specNodes, ...tree.heroNodes];
   for (const n of allNodes) {
     if (n.requiresNode === nodeId && selections.has(n.id)) return false;
   }
 
-  // Check if removing would break reqPoints for any selected node
+  // block if removing would drop a selected node below its reqPoints
   const sel = selections.get(nodeId);
   if (sel) {
     const section = getSectionNodes(node, tree);
@@ -129,7 +121,7 @@ export function toggleNode(
   const sel = next.get(nodeId);
 
   if (!sel) {
-    // Not selected — try to add
+    // not selected — try to add
     if (!canSelectNode(nodeId, selections, tree, nodeMap)) return selections;
 
     const isChoice = node.type === 'choice' && node.entries.length > 1;
@@ -138,11 +130,11 @@ export function toggleNode(
       choiceIndex: isChoice ? 0 : -1,
     });
   } else if (sel.ranks < node.maxRanks && !node.freeNode) {
-    // Has room for more ranks
+    // room for more ranks
     if (!canSelectNode(nodeId, next, tree, nodeMap)) return selections;
     next.set(nodeId, { ...sel, ranks: sel.ranks + 1 });
   } else {
-    // At max — deselect
+    // at max — deselect
     if (!canDeselectNode(nodeId, selections, tree, nodeMap)) return selections;
     next.delete(nodeId);
   }

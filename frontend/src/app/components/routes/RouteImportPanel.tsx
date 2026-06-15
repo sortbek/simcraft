@@ -28,9 +28,9 @@ const SourceTag = ({ label, color }: { label: string; color: string }) => (
   </span>
 );
 
-/** One smart field: an MDT export string (starts with `!`) is decoded and saved
- *  level-agnostically as its mdt_string; a keystone.guru SimC block
- *  (`fight_style=DungeonRoute`) is saved verbatim with a best-effort dungeon. */
+/** One smart field: an MDT string (`!`) is decoded and saved level-agnostically as
+ *  mdt_string; a keystone.guru SimC block (`fight_style=DungeonRoute`) is saved
+ *  verbatim with a best-effort dungeon. */
 export default function RouteImportPanel({
   dungeons,
   onSaved,

@@ -260,11 +260,8 @@ mod tests {
     #[test]
     fn armor_class_filter_drops_disallowed_subclass() {
         ensure_game_data_loaded();
-        // 250004 is a shoulder item from the user's profile (likely cloth/leather for rogue).
-        // For a mage (cloth = subclass 1), a leather shoulder alt should be filtered.
-        // Use a plate shoulder item ID for the alt — pick item 250007 (rogue hands? user's data).
-        // To avoid relying on specific subclass mapping in test, just verify the call
-        // doesn't drop the equipped (which has the `is_equipped: true` exemption).
+        // Verify the equipped item survives the filter via its `is_equipped`
+        // exemption, without depending on a specific subclass mapping.
         let profile = "mage=Test\n";
         let equipped = make(151336, "head", true, vec![]); // a cloth head from user's data
         let mut items_by_slot = HashMap::new();

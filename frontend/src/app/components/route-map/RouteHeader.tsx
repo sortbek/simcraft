@@ -100,7 +100,6 @@ export default function RouteHeader({
           <span style={{ width: 1, height: 22, background: T.border }} />
         </>
       )}
-      {/* KeyChip */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: T.text, whiteSpace: 'nowrap' }}>
           {dungeonName}
@@ -145,9 +144,8 @@ export default function RouteHeader({
 
       {routes && routes.length > 0 && onSwitch && (
         <select
-          // Fall back to the placeholder when the active route isn't among the
-          // options (e.g. a since-deleted or cross-dungeon deep-link) so the
-          // controlled value always matches a rendered option.
+          // Fall back to the placeholder when the active route isn't an option
+          // (deleted/cross-dungeon link) so the controlled value always matches one.
           value={routes.some((r) => r.id === currentRouteId) ? currentRouteId! : ''}
           onChange={(e) => {
             const r = routes.find((x) => x.id === e.target.value);

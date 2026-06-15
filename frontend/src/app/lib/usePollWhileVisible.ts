@@ -2,11 +2,10 @@ import { useEffect, useRef } from 'react';
 import type React from 'react';
 
 /**
- * Run `poll` immediately, then repeatedly, but only while the tab is visible.
+ * Run `poll` immediately then repeatedly, only while the tab is visible.
  * `poll` returns the delay (ms) until the next run, or null/undefined to STOP
- * the loop (e.g. terminal state). When the tab is hidden the loop stops
- * rescheduling; on `visibilitychange` back to visible it fires `poll` again.
- * `enabled=false` disables it. `deps` restart the loop.
+ * (e.g. terminal state). Hidden tab stops rescheduling; on visibilitychange
+ * back to visible it fires again. `enabled=false` disables; `deps` restart it.
  */
 export function usePollWhileVisible(
   poll: () => Promise<number | null | undefined> | number | null | undefined,

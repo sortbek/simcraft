@@ -9,22 +9,20 @@ export interface CloudEstimate {
   available_credits: number | null;
   affordable: boolean;
   ceiling: number;
-  /** True only when combos ≥ TRIAGE_THRESHOLD: the job streams via the chunk
-   * orchestrator. Below the threshold a cloud run is a single eager Simmit job,
-   * so the chunked credit/chunk estimate doesn't describe it. */
+  /** True only when combos ≥ TRIAGE_THRESHOLD (job streams via chunk orchestrator).
+   * Below it a cloud run is one eager Simmit job, so the chunk estimate doesn't apply. */
   would_stream: boolean;
   error?: string;
 }
 
 /**
- * Debounced cloud-estimate POST. Mirrors {@link useComboCount}'s
- * debounce/AbortController discipline. `enabled` gates the request (when false,
- * clears the estimate). `buildBody` returns the request payload (or null to skip).
- * `computeChoice` selects which provider keys to attach as `X-Provider-*-Key`
- * headers (the estimate fetches the user's available credits from that provider).
+ * Debounced cloud-estimate POST, mirroring {@link useComboCount}'s
+ * debounce/AbortController discipline. `enabled` gates the request, `buildBody`
+ * returns the payload (or null to skip), `computeChoice` picks the provider keys
+ * sent as `X-Provider-*-Key` headers (used to fetch that provider's credits).
  *
- * NOTE: the effect re-runs on `deps` only. Any value feeding `enabled` (or read
- * by `buildBody`) MUST be included in `deps`, or the request won't re-fire.
+ * NOTE: the effect re-runs on `deps` only. Any value feeding `enabled` or read
+ * by `buildBody` MUST be in `deps`, or the request won't re-fire.
  */
 export function useCloudEstimate(
   endpoint: string,

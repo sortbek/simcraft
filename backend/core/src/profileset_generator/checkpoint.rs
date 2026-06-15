@@ -14,10 +14,9 @@ pub enum CheckpointPhase {
     Triage(TriageCheckpoint),
     Staged(StagedCheckpoint),
     LocalStage(LocalStageCheckpoint),
-    /// Cloud-streaming (Simmit) phase: the high-level chunk cursor. The
-    /// per-chunk source of truth lives in the `cloud_chunks` table; this blob
-    /// only carries what's needed to deterministically regenerate the
-    /// not-yet-submitted chunks.
+    /// Cloud-streaming (Simmit) chunk cursor. Per-chunk truth lives in
+    /// `cloud_chunks`; this blob only carries what's needed to deterministically
+    /// regenerate the not-yet-submitted chunks.
     CloudStreaming(CloudStreamingCheckpoint),
 }
 
@@ -48,13 +47,10 @@ pub struct TriageCheckpoint {
     pub avg_bytes_per_profileset: usize,
 }
 
-/// Staged-phase resume data: which stage to run next and which combos to feed it.
-///
-/// Intermediate stages run in profileset batches. A mid-stage pause records the
-/// next batch index and the accumulated profileset results from completed
-/// batches, so resume can continue without re-running them. `next_batch_idx ==
-/// 0` and `batch_results` empty means the stage starts fresh — which is the
-/// only state writable for a stage boundary checkpoint.
+/// Staged-phase resume data: which stage to run next and which combos feed it.
+/// A mid-stage pause records the next batch index + accumulated results from
+/// completed batches so resume skips them. `next_batch_idx == 0` + empty
+/// `batch_results` = fresh stage (the only state a stage-boundary checkpoint writes).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StagedCheckpoint {
     /// 0-based index of the next pipeline stage (Probe=0, Coarse=1, ..., Final=last).
@@ -108,12 +104,10 @@ pub struct CloudStreamingCheckpoint {
     pub chunk_size: usize,
     /// Estimated total chunk count; drives the progress reporter.
     pub total_chunks_estimate: usize,
-    /// The `ProfilesetIterator::next_name_idx` at the chunk boundary. Persisting
-    /// this fixes a resume name-collision bug: constructing a new iterator + seek
-    /// always resets next_name_idx to 1, causing resumed chunks to re-emit
-    /// "Combo 1", "Combo 2", … and collide with names from earlier chunks.
-    /// Older checkpoints without this field default to 1 (safe: only a fresh
-    /// cloud run would ever resume without it, and it won't have prior chunks).
+    /// `ProfilesetIterator::next_name_idx` at the chunk boundary. Without it, a
+    /// new iterator + seek resets to 1 and resumed chunks re-emit "Combo 1"… ,
+    /// colliding with earlier chunks. Defaults to 1 (safe: only a fresh run lacks
+    /// it, and that has no prior chunks).
     #[serde(default = "default_next_name_idx")]
     pub next_name_idx: usize,
 }
@@ -249,9 +243,8 @@ mod tests {
         }
     }
 
-    /// Old checkpoints written before mid-stage batching shouldn't fail to
-    /// deserialize. The on-disk shape is `{"phase": {"phase":"staged", ...},
-    /// "constants": ...}` because CheckpointPhase uses internal tagging.
+    /// Pre-mid-stage-batching checkpoints must still deserialize. On-disk shape
+    /// is `{"phase":{"phase":"staged",...},"constants":...}` (internal tagging).
     #[test]
     fn legacy_staged_checkpoint_deserializes_with_defaults() {
         let constants_json = serde_json::to_string(&TriageConstants::default()).unwrap();
@@ -324,10 +317,8 @@ mod tests {
         }
     }
 
-    /// Old cloud-streaming checkpoints written before `next_name_idx` was added
-    /// should deserialize without error, defaulting to 1 (which is safe: only a
-    /// fresh cloud run could lack the field, and it won't have prior chunks whose
-    /// names could collide).
+    /// Pre-`next_name_idx` cloud-streaming checkpoints must deserialize,
+    /// defaulting to 1 (safe: only a fresh run lacks it, with no prior chunks).
     #[test]
     fn legacy_cloud_streaming_checkpoint_deserializes_with_default_next_name_idx() {
         let constants_json = serde_json::to_string(&TriageConstants::default()).unwrap();

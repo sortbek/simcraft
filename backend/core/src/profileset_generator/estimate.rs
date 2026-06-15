@@ -1,11 +1,9 @@
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
-/// Upper-bound estimate of the profileset count for a Top Gear request,
-/// computed in O(axes) time without enumerating any combos. The result
-/// is conservative: filters (unique-equipped, vault, weapon, catalyst,
-/// item-limit, baseline) only reduce the actual count, so this is safe
-/// to use as a gate for "is this job large enough to need Triage?".
+/// Conservative O(axes) upper-bound on the profileset count (no enumeration).
+/// Filters (unique-equipped, vault, weapon, catalyst, item-limit, baseline) only
+/// reduce the real count, so it's safe as a "needs Triage?" gate.
 pub fn estimate_top_gear_combo_count(
     items_by_slot: &HashMap<String, Vec<Value>>,
     selected_items: &HashMap<String, Vec<String>>,

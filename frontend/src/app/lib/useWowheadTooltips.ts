@@ -6,9 +6,8 @@ declare global {
   }
 }
 
-/** Produces a stable cache-busting key from the three info maps. When the key
- * changes, `useWowheadTooltips` fires a refreshLinks() call so newly-loaded
- * item/enchant/gem anchors pick up their tooltips. */
+/** Stable key from the three info maps; when it changes, useWowheadTooltips
+ * fires refreshLinks() so newly-loaded item/enchant/gem anchors get tooltips. */
 export function wowheadKeyFor(maps: {
   item: Record<number, unknown>;
   enchant: Record<number, unknown>;
@@ -34,10 +33,9 @@ export function useWowheadTooltips(deps: unknown[] = []) {
       return false;
     }
 
-    // Debounce: deps often change in a burst (e.g. item-info streaming in one
-    // entry at a time). refreshLinks() scans the whole DOM, so firing it per
-    // change pegs the main thread on large results. Coalesce the burst into a
-    // single refresh once deps settle.
+    // Debounce: deps change in bursts (item-info streams one entry at a time) and
+    // refreshLinks() scans the whole DOM, so per-change firing pegs the main thread
+    // on large results. Coalesce the burst into one refresh once deps settle.
     const debounce = setTimeout(() => {
       if (cancelled || refresh()) return;
       // Script not loaded yet — retry until it is (up to 5s).

@@ -21,8 +21,8 @@ interface SimContextType {
   hasInput: boolean;
   fightStyle: string;
   setFightStyle: (v: string) => void;
-  /** `fightStyle === 'DungeonRoute'` — the mode the route control and the controls
-   *  a route overrides are gated on. Derived; exposed so consumers don't re-derive. */
+  /** `fightStyle === 'DungeonRoute'` — gates the route control and the controls a
+   *  route overrides. Derived; exposed so consumers don't re-derive. */
   isDungeonRoute: boolean;
   threads: number;
   setThreads: (v: number) => void;
@@ -38,13 +38,13 @@ interface SimContextType {
   setIterations: (v: number) => void;
   customApl: string;
   setCustomApl: (v: string) => void;
-  /** The active dungeon route, held as data and materialized to SimC at sim
-   *  time (see useSimSubmit). `null` when no route is loaded. */
+  /** Active dungeon route, held as data and materialized to SimC at sim time
+   *  (see useSimSubmit). `null` when no route is loaded. */
   activeRoute: ActiveRoute | null;
-  /** Load a route as the active route. Owns the coupled state: persists it,
-   *  clears any queued scenarios (which can't coexist with a forced route), and
-   *  sets the fight style (DungeonRoute, except a legacy `footer` snippet which
-   *  may not be one). Use this instead of poking the pieces individually. */
+  /** Load a route as active. Owns the coupled state: persists it, clears queued
+   *  scenarios (can't coexist with a forced route), and sets the fight style
+   *  (DungeonRoute, except a legacy `footer` snippet). Use instead of poking the
+   *  pieces individually. */
   activateRoute: (route: ActiveRoute) => void;
   /** Unload the active route and restore the default fight style. */
   clearRoute: () => void;
@@ -162,11 +162,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
       }
       _setIterations(readStoredPositiveInt('simhammer_iterations', 100000));
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
-      // Active route survives a reload (it's the live sim input, not just config).
-      // Read through the never-throw helper so a corrupt value yields null instead
-      // of aborting the restores that follow it in this shared try block. fightStyle
-      // isn't persisted, so re-assert the route ⇒ DungeonRoute invariant the UI
-      // gates on (footer snippets keep the default style — they aren't routes).
+      // Active route survives reload (it's live sim input). Never-throw helper so a
+      // corrupt value yields null instead of aborting the other restores. fightStyle
+      // isn't persisted, so re-assert route ⇒ DungeonRoute (footer snippets aren't routes).
       const restoredRoute = readSessionJson<ActiveRoute | null>('simhammer_active_route', null);
       _setActiveRoute(restoredRoute);
       if (restoredRoute && restoredRoute.kind !== 'footer') _setFightStyle('DungeonRoute');
@@ -288,9 +286,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Exposed fight-style setter. A loaded route only applies in Dungeon Route mode,
-  // so switching to any other style discards it — keeping "route ⇒ DungeonRoute" a
-  // single invariant (with activateRoute/clearRoute) instead of each drawer
-  // re-implementing the coupling.
+  // so switching to any other style discards it — keeping "route ⇒ DungeonRoute" one
+  // invariant (with activateRoute/clearRoute) instead of each drawer re-coupling it.
   const setFightStyle = useCallback(
     (v: string) => {
       _setFightStyle(v);
@@ -302,12 +299,11 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const activateRoute = useCallback(
     (route: ActiveRoute) => {
       persistActiveRoute(route);
-      // Scenarios sweep fight styles, but the route's own fight_style=DungeonRoute
-      // overrides them at sim time — so they'd silently all run the same route.
+      // Scenarios sweep fight styles, but the route's fight_style=DungeonRoute would
+      // override them at sim time — so they'd all silently run the same route.
       setScenarios([]);
-      // A footer snippet may be any SimC (not necessarily a DungeonRoute), so leave
-      // the fight style at the default for it; real route kinds force DungeonRoute.
-      // Raw setter: switching style here must not discard the route we just set.
+      // Footer snippets may be any SimC, so keep the default style for them; real route
+      // kinds force DungeonRoute. Raw setter: don't discard the route we just set.
       _setFightStyle(route.kind === 'footer' ? 'Patchwerk' : 'DungeonRoute');
     },
     [persistActiveRoute]

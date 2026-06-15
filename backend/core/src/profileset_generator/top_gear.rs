@@ -14,13 +14,10 @@ use crate::types::class_data::{self};
 /// Build a [`ProfilesetIteratorConfig`] for both the streaming/triage path and
 /// the eager Top Gear generator (single pipeline).
 ///
-/// When `items_by_slot` lacks an entry for a slot that appears in the equipped
-/// gear parsed from `base_profile`, a minimal synthetic item is injected for
-/// that slot so gem/enchant deltas can be applied to the equipped item. This
-/// mirrors production behaviour (where `items_by_slot` always carries the
-/// equipped item) and lets gem-only / enchant-only scenarios work when tests
-/// pass an empty `items_by_slot` with a `base_profile` carrying the equipped
-/// item directly.
+/// Slots present in `base_profile`'s equipped gear but absent from
+/// `items_by_slot` get a minimal synthetic item injected so gem/enchant deltas
+/// can still apply. Mirrors production (where `items_by_slot` carries the
+/// equipped item) and lets gem/enchant-only tests pass an empty `items_by_slot`.
 pub(crate) fn build_iterator_config(
     base_profile: &str,
     items_by_slot: &HashMap<String, Vec<Value>>,
@@ -40,31 +37,24 @@ pub(crate) fn build_iterator_config(
 
     let (_, equipped_gear, _, spec) = parse_base_profile(base_profile);
 
-    // Build slot_item_lists from the provided items_by_slot (same as before).
     let mut slot_item_lists: HashMap<String, Vec<Arc<Value>>> =
         build_slot_candidates(base_profile, items_by_slot, selected_items)
             .into_iter()
             .map(|(k, v)| (k, v.into_iter().map(Arc::new).collect()))
             .collect();
 
-    // Inject equipped slots that are missing from slot_item_lists. This happens
-    // in gem/enchant-only scenarios where the caller passes an empty
-    // `items_by_slot` and relies on the base_profile's gear lines for the
-    // equipped items. Without this injection the iterator has no slot to apply
-    // gem/enchant deltas to and would emit nothing.
+    // Inject equipped slots missing from slot_item_lists (gem/enchant-only
+    // scenarios with empty items_by_slot). Without this the iterator has no slot
+    // to apply deltas to and emits nothing.
     for (slot, simc_str) in &equipped_gear {
         if slot_item_lists.contains_key(slot) {
-            continue; // already populated — do not duplicate
+            continue;
         }
-        // Build a minimal synthetic item Value from the simc string. The
-        // iterator only needs: `simc_string`, `is_equipped`, `item_id`,
-        // `sockets` (for gem apply), `enchant_id`, `gem_id`, and `origin`.
         let item_id = extract_item_id(simc_str);
         let enchant_id = extract_enchant_id(simc_str);
         let gem_id = extract_gem_id(simc_str);
-        // Use the game-data socket count when items_by_slot provides it for
-        // this slot, otherwise derive from the simc string (bonus-id +
-        // existing gem count). This mirrors the eager path's fallback logic.
+        // Prefer the game-data socket count from items_by_slot; else derive from
+        // the simc string (bonus-id + existing gems), matching the eager fallback.
         let sockets = items_by_slot
             .get(slot)
             .and_then(|items| {
@@ -93,7 +83,7 @@ pub(crate) fn build_iterator_config(
         slot_item_lists.insert(slot.clone(), vec![synthetic]);
     }
 
-    // Find varying slots (> 1 item), sorted for determinism
+    // Varying slots (> 1 item), sorted for determinism.
     let mut varying_slots: Vec<String> = slot_item_lists
         .iter()
         .filter(|(_, items)| items.len() > 1)
@@ -101,7 +91,7 @@ pub(crate) fn build_iterator_config(
         .collect();
     varying_slots.sort();
 
-    // Build enchant axes (same logic as the original eager path)
+    // Enchant axes.
     let mut enchant_axes: Vec<EnchantAxis> = Vec::new();
     for (slot, ids) in enchant_selections {
         if ids.is_empty() {
@@ -134,7 +124,7 @@ pub(crate) fn build_iterator_config(
     }
     enchant_axes.sort_by(|a, b| a.slot.cmp(&b.slot));
 
-    // Build (slot, socket_count) tuples — same logic as the original eager path.
+    // Build (slot, socket_count) tuples.
     let gem_combos: Vec<crate::profileset_generator::gem_combos::GemCombo> =
         if !gem_options.is_empty() {
             let mut gem_slots: Vec<(String, usize)> = Vec::new();
@@ -251,10 +241,8 @@ pub fn generate_top_gear_input(
     )
 }
 
-/// Count-only variant: builds the iterator config and counts the candidates.
-/// Uses the O(axes) analytic upper-bound only for the limit gate, then walks
-/// the full iterator for the exact count. This is a fast-path compared to
-/// running the full emit pipeline.
+/// Count-only variant. Gates on the O(axes) analytic upper-bound, then walks the
+/// full iterator for the exact count — cheaper than the full emit pipeline.
 pub fn count_top_gear_combos_with_talents(
     base_profile: &str,
     items_by_slot: &HashMap<String, Vec<Value>>,
@@ -360,9 +348,8 @@ pub fn generate_top_gear_input_with_talents(
         &spec,
     ));
 
-    // Build slot_item_lists for paired display slots (finger/trinket baseline
-    // metadata). Use build_slot_candidates so the same equipped-item resolution
-    // as the iterator sees applies here too.
+    // Paired display slots (finger/trinket baseline metadata) via the same
+    // build_slot_candidates resolution the iterator uses.
     let slot_item_lists_raw = build_slot_candidates(base_profile, items_by_slot, selected_items);
 
     // Baseline metadata for "Currently Equipped" / "Currently Equipped ({talent})"
@@ -411,8 +398,7 @@ pub fn generate_top_gear_input_with_talents(
         catalyst_charges,
     );
 
-    // Check if the iterator would emit nothing (same early-exit as before).
-    // Construct fresh to peek — the cfg is Clone.
+    // Early-exit if the iterator would emit nothing. Peek with a fresh clone.
     {
         let peek_iter = super::iterator::ProfilesetIterator::new(cfg.clone());
         if peek_iter.count() == 0

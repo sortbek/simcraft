@@ -1,10 +1,8 @@
 /**
- * Sim-mode presentation maps shared across the frontend.
- *
- * Wire values come from the backend `SimMode::as_wire`. Keep this in sync
- * with `backend/core/src/models.rs::SimMode`. Three History view components
- * used to inline their own copy of these maps, which silently dropped
- * Crest Upgrades / Enchant-Gem / Stat Weights entries.
+ * Sim-mode presentation maps shared across the frontend. Wire values come from
+ * the backend `SimMode::as_wire`; keep in sync with
+ * `backend/core/src/models.rs::SimMode`. Centralized because inlined copies in
+ * History views silently dropped Crest Upgrades / Enchant-Gem / Stat Weights.
  */
 
 type Translator = (key: string, params?: Record<string, string | number>) => string;
@@ -37,8 +35,8 @@ export function getSimTypeColorClass(simType: string): string {
   return COLOR_CLASSES[simType] ?? DEFAULT_COLOR;
 }
 
-/** Sim modes that render via the gear-comparison result shape (rows of
- *  combos ranked vs a base). Mirrors `SimMode::result_kind() == GearComparison`
- *  in `backend/core/src/models.rs`. Used as a legacy fallback for results
- *  persisted before `result_kind` started shipping in the payload. */
+/** Sim modes rendering via the gear-comparison result shape (combos ranked vs a
+ *  base). Mirrors `SimMode::result_kind() == GearComparison` in
+ *  `backend/core/src/models.rs`. Legacy fallback for results persisted before
+ *  `result_kind` shipped in the payload. */
 export const GEAR_COMPARISON_SIM_TYPES = ['top_gear', 'droptimizer', 'upgrade_compare'] as const;

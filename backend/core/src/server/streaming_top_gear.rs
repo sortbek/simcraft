@@ -16,10 +16,9 @@ use crate::simc_runner;
 pub(super) struct StreamingTopGearStart {
     pub req: web::Json<TopGearRequest>,
     pub repo: web::Data<JobRepo>,
-    /// The local SimC binary registry. Resolved to a concrete binary path only
-    /// on the LOCAL streaming branch (after the cloud-vs-local fork) so a
-    /// cloud-only deploy with no local SimC installed can still run a streaming
-    /// Top Gear via the cloud orchestrator (which never touches a local binary).
+    /// Local SimC binary registry, resolved to a path only on the LOCAL branch
+    /// (after the cloud/local fork) so a cloud-only deploy with no local SimC can
+    /// still run streaming Top Gear via the cloud orchestrator.
     pub simc_bins: Arc<SimcBinaries>,
     pub log_buffer: web::Data<Arc<LogBuffer>>,
     pub base_profile: String,
@@ -29,10 +28,9 @@ pub(super) struct StreamingTopGearStart {
     pub catalyst_charges: Option<u32>,
     pub max_combinations: Option<usize>,
     pub estimate: u64,
-    /// Exact combo count computed once in `create_top_gear_sim` by
-    /// `count_top_gear_combos_with_talents`. Threaded into the cloud path so
-    /// `start_cloud_streaming` can use it directly for credit reservation and
-    /// the `CloudProgress` denominator without re-counting.
+    /// Exact combo count computed once in `create_top_gear_sim`. Threaded into the
+    /// cloud path for credit reservation and the `CloudProgress` denominator without
+    /// re-counting.
     pub exact_combos: u64,
     pub provider_id: String,
     /// The resolved compute provider for this request. Local ⇒ existing triage
@@ -54,31 +52,20 @@ pub(super) fn use_cloud_streaming(provider: &Arc<dyn crate::compute::SimcProvide
     provider.capabilities().cloud_streaming && provider.id() != "local"
 }
 
-/// Full streaming triage path.
-///
-/// Creates a streamed job, inserts it, then spawns the background triage and
-/// staged pipeline. HTTP handlers should stay thin and delegate here once they
-/// have decided that a Top Gear request needs streaming.
+/// Full streaming triage path: create + insert a streamed job, then spawn the
+/// background triage and staged pipeline. HTTP handlers delegate here once they've
+/// decided a Top Gear request needs streaming.
 pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStart) -> HttpResponse {
-    // For a dungeon route, the route block (fight_style=DungeonRoute + enemies +
-    // raid_events) lives in custom_apl. Both streaming paths — the local triage
-    // below AND the cloud orchestrator — build their SimC inputs directly from
-    // base_profile, so inject the route here, before the cloud/local fork, so both
-    // carry the route's enemies and pull events. Without it SimC aborts with
-    // "DungeonRoute fight style requires at least one pull event with pull=1".
-    // The iterator config derives only from gear/talents/spec, which
-    // parse_base_profile extracts independently of these non-gear route lines, so
-    // appending them does not change combo generation.
+    // Inject the dungeon-route block (custom_apl) into base_profile before the
+    // cloud/local fork so both streaming paths carry its enemies + pull events;
+    // without it SimC aborts with "requires at least one pull event with pull=1".
     let route_apl = sanitize_custom_simc(&start.req.options.custom_apl);
     if simc_runner::is_dungeon_route_input(&route_apl) {
         start.base_profile = format!("{}\n{}", start.base_profile, route_apl);
     }
 
-    // ── Provider branch ──────────────────────────────────────────────────────
-    // A cloud-streaming-capable remote (resolved by `pick_provider` for an
-    // explicit cloud + streaming-sized request) runs through the chunk
-    // orchestrator on the remote (e.g. Simmit). Everything else (local) takes
-    // the existing local triage path below, unchanged.
+    // Provider branch: a cloud-streaming-capable remote runs the chunk orchestrator
+    // (e.g. Simmit); everything else (local) takes the local triage path below.
     if use_cloud_streaming(&start.provider) {
         return super::cloud_streaming::start_cloud_streaming(start).await;
     }
@@ -103,9 +90,8 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
         local_provider: _local_provider,
     } = start;
 
-    // Resolve the local SimC binary ONLY here, on the local branch — the cloud
-    // branch above returned already and never needs a local binary. A bad branch
-    // on a genuine local run still surfaces as a 400 to the user.
+    // Resolve the local binary only on this (local) branch; the cloud branch
+    // returned above. A bad branch on a genuine local run surfaces as a 400.
     let simc = match simc_bins.resolve(&req.options.simc_branch) {
         Ok(path) => path,
         Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
@@ -189,13 +175,10 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
     let repo_for_queue_wait = repo_for_task.clone();
     let jid_for_queue_wait = job_id_task.clone();
     tokio::spawn(async move {
-        // Streaming Top Gear shares the local sim queue with eager local jobs.
-        // Hold a permit for the duration of TRIAGE so we don't fight a Quick Sim
-        // for the CPU. The permit is then released before the staged handoff (the
-        // provider re-acquires it for the staged phase — see the `drop(permit)` on
-        // the Completed arm below). This opens a brief queue gap at the
-        // triage→staged boundary, accepted to avoid deadlocking the single-permit
-        // queue; the two phases are no longer one contiguous reservation.
+        // Hold the shared local-queue permit for TRIAGE only, then release before
+        // the staged handoff so the provider can re-acquire it (single-permit queue
+        // → holding it across both phases would deadlock). Accepts a brief queue gap
+        // at the triage→staged boundary.
         let permit = if let Ok(p) = queue_for_task.clone().try_acquire_owned() {
             p
         } else {
@@ -222,9 +205,8 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
             }
         };
 
-        // Flip status to Running so the UI shows the Pause affordance and the
-        // pause endpoint accepts requests during Triage. Without this the job
-        // sits at Pending throughout triage and pause is unreachable.
+        // Flip to Running so the UI shows Pause and the pause endpoint accepts
+        // requests during Triage; otherwise the job sits Pending and pause is unreachable.
         if let Err(e) = repo_for_task
             .update_status(&job_id_task, crate::models::JobStatus::Running)
             .await

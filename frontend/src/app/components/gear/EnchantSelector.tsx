@@ -64,13 +64,11 @@ export default function EnchantSelector({
   const { t } = useLanguage();
   const [enchantOptions, setItemOptions] = useState<Record<string, ItemOption[]>>({});
 
-  // Slots that have equipped items and can be enchanted
   const enchantableSlots = useMemo(
     () => ENCHANT_SLOT_ORDER.filter((s) => equippedSlots[s]),
     [equippedSlots]
   );
 
-  // Fetch enchant options per slot
   useEffect(() => {
     if (enchantableSlots.length === 0) return;
     const fetches = enchantableSlots.map(async (slot) => {
@@ -94,7 +92,7 @@ export default function EnchantSelector({
     });
   }, [enchantableSlots]);
 
-  // Filter to rank 2 only, then sort alphabetically
+  // Rank 2 only, then sort alphabetically
   const sortedEnchants = useMemo(() => {
     const result: Record<string, ItemOption[]> = {};
     for (const slot of enchantableSlots) {
@@ -125,7 +123,6 @@ export default function EnchantSelector({
       count={selectedCount}
       storageKey="simhammer_topgear_enchants_open"
     >
-      {/* Per-slot enchant cards */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {enchantSlots.map((slot) => {
           const equippedId = equippedSlots[slot]?.enchant_id ?? 0;
@@ -175,7 +172,6 @@ export default function EnchantSelector({
                 <div className="!my-1.5 border-t border-outline-variant/20" />
               )}
 
-              {/* Candidate enchants */}
               {candidates.map((e) => {
                 const isSelected = enchantSelections[slot]?.has(e.id) ?? false;
                 return (

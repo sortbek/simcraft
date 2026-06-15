@@ -39,7 +39,7 @@ const GEM_COLOR_CLASS: Record<string, string> = {
 
 function gemDetails(g: GemOption): { text: string; color?: string }[] {
   const parts: { text: string; color?: string }[] = [];
-  // For diamonds (quality 4), use displayName which includes the special effect
+  // Diamonds (quality 4): displayName carries the special effect
   if ((g.quality ?? 0) >= 4 && g.displayName) {
     parts.push({ text: g.displayName });
   } else if (g.stats && g.stats.length > 0) {
@@ -66,7 +66,6 @@ export default function GemSelector({
   const { t } = useLanguage();
   const [gemOptions, setGemOptions] = useState<GemOption[]>([]);
 
-  // Slots that have sockets (gems apply to all socketed slots)
   const socketedSlots = useMemo(
     () =>
       Object.entries(equippedSlots)
@@ -76,7 +75,6 @@ export default function GemSelector({
   );
   const hasSocketedSlots = socketedSlots.length > 0;
 
-  // Fetch gem options
   useEffect(() => {
     if (!hasSocketedSlots) return;
     fetch(`${API_URL}/api/gems?expansion=11`)
@@ -85,13 +83,13 @@ export default function GemSelector({
       .catch(() => setGemOptions([]));
   }, [hasSocketedSlots]);
 
-  // Separate diamonds (quality 4, crafted rank 2) from regular gems
+  // Diamonds = quality 4, crafted rank 2 (separate from regular gems)
   const diamonds = useMemo(
     () => gemOptions.filter((g) => g.craftingQuality === 2 && (g.quality ?? 0) === 4),
     [gemOptions]
   );
 
-  // Group regular gems by color: rank 2 crafted, quality 3 (Flawless rare)
+  // Regular gems grouped by color: rank 2 crafted, quality 3 (Flawless rare)
   const gemGroups = useMemo(() => {
     const filtered = gemOptions.filter((g) => g.craftingQuality === 2 && (g.quality ?? 0) === 3);
     const groups: Record<string, GemOption[]> = {};
@@ -130,7 +128,6 @@ export default function GemSelector({
       storageKey={storageKey}
     >
       <div className="space-y-4">
-        {/* Replace-gems toggle + select all */}
         <div className="flex items-center justify-end gap-3">
           {hasAnyGemSelected && (
             <div className="group flex items-center gap-2">
@@ -157,7 +154,6 @@ export default function GemSelector({
           </button>
         </div>
 
-        {/* Diamond toggles bar */}
         {diamonds.length > 0 && diamonds.some((d) => d.itemId && gemSelections.has(d.itemId)) && (
           <div className="flex items-center gap-4 px-1">
             <div className="group flex items-center gap-2">
@@ -189,7 +185,6 @@ export default function GemSelector({
 
         {/* All gems in one grid — diamonds + colored groups */}
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {/* Diamonds card */}
           {diamonds.length > 0 && (
             <div className="card space-y-1 p-3.5">
               <div className="mb-2">

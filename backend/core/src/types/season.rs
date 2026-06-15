@@ -1,6 +1,5 @@
-//! Typed season configuration — loaded from season-config.json.
-//!
-//! When a new WoW season drops, update the JSON file. No code changes needed.
+//! Typed season configuration, loaded from season-config.json.
+//! A new season is just a JSON edit — no code changes needed.
 
 use serde::{Deserialize, Serialize};
 

@@ -1,7 +1,6 @@
 /**
- * Frontend route literals. Use the constants here instead of inline string
- * paths so renames and "what pages exist" stay grep-able. Keep paths in sync
- * with the Next.js `app/` directory layout.
+ * Frontend route literals. Use these instead of inline path strings so renames
+ * stay grep-able. Keep in sync with the Next.js `app/` directory layout.
  */
 export const ROUTES = {
   quickSim: '/quick-sim',
@@ -17,10 +16,9 @@ export const ROUTES = {
   history: '/history',
 } as const;
 
-/** sessionStorage key the routes manager uses to hand a route to the `/route`
- *  map viewer: a serialized `ActiveRoute` (`mdt` or `pulls` variant). Lives here
- *  because Next.js page files may not have extra exports (breaks the `next
- *  build` page type check). */
+/** sessionStorage key the routes manager uses to hand a serialized `ActiveRoute`
+ *  to the `/route` map viewer. Lives here because Next.js page files may not have
+ *  extra exports (breaks the `next build` page type check). */
 export const MDT_ROUTE_SESSION_KEY = 'simhammer_mdt_route';
 
 /** Result page for a single sim run. */

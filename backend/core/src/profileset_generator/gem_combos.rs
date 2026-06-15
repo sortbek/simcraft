@@ -9,8 +9,7 @@ pub type GemCombo = HashMap<String, Vec<u64>>;
 
 pub struct GemCombosBuilder<'a> {
     pub gem_options: &'a [u64],
-    /// Slot name + socket count for that slot. Multi-socket items contribute
-    /// counts greater than 1 — `gen_color_combos` then emits per-slot
+    /// (slot, socket count). Counts > 1 make `gen_color_combos` emit per-slot
     /// multisets of that size.
     pub gem_slots: &'a [(String, usize)],
     pub diamond_ids: &'a [u64],
@@ -29,9 +28,8 @@ fn multisets<T: Clone>(items: &[T], k: usize) -> Vec<Vec<T>> {
     }
     let mut result = Vec::new();
     for (i, item) in items.iter().enumerate() {
-        // Repetition allowed → restart slice at `i` (not `i+1`) so the same
-        // item can be picked again, while the index-based recursion still
-        // pins the *order* and prevents emitting both `A,B` and `B,A`.
+        // Slice from `i` (not `i+1`) allows repetition; index-based recursion
+        // pins order so we never emit both `A,B` and `B,A`.
         for mut sub in multisets(&items[i..], k - 1) {
             sub.insert(0, item.clone());
             result.push(sub);
@@ -86,8 +84,7 @@ fn gen_color_combos(slots: &[(String, usize)], gems: &[u64], max_colors: bool) -
                     }
                 }
                 // Collapse permutation-equivalent partials each step so the
-                // accumulator can't balloon into the full cross-slot product
-                // before the final dedup (see non-max_colors branch below).
+                // accumulator stays polynomial (see non-max_colors branch).
                 current = dedupe_gem_assignments(next, 0);
             }
             result.extend(current);
@@ -107,12 +104,10 @@ fn gen_color_combos(slots: &[(String, usize)], gems: &[u64], max_colors: bool) -
                     next.push(c);
                 }
             }
-            // Dedup the partial accumulator after every slot. The final dedup
-            // collapses on the flat sorted gem list across all slots; two
-            // partials with the same flat multiset can only extend to the same
-            // final set, so collapsing here is loss-free and keeps the
-            // accumulator polynomial instead of letting the full cross-slot
-            // product (gems^slots) materialize first.
+            // Dedup the partial accumulator after each slot. Dedup keys on the
+            // flat sorted gem list, so two partials with the same flat multiset
+            // extend identically — collapsing here is loss-free and keeps the
+            // accumulator polynomial instead of materializing gems^slots first.
             result = dedupe_gem_assignments(next, 0);
         }
         result
@@ -133,10 +128,8 @@ fn dedupe_gem_assignments(combos: Vec<GemCombo>, max_diamonds: usize) -> Vec<Gem
             continue;
         }
 
-        // Gems are character-wide stats — placing a diamond in head vs neck
-        // (or A,B vs B,A in a 2-socket item) yields identical DPS. Dedup on
-        // the flat sorted gem list across all slots so we don't waste sim
-        // budget on permutation duplicates.
+        // Gems are character-wide — a gem in head vs neck (or A,B vs B,A) is the
+        // same DPS. Dedup on the flat sorted gem list to skip permutation dupes.
         let mut key: Vec<u64> = combo
             .values()
             .flat_map(|gids| gids.iter().copied())
@@ -150,10 +143,8 @@ fn dedupe_gem_assignments(combos: Vec<GemCombo>, max_diamonds: usize) -> Vec<Gem
     result
 }
 
-/// Materialize the full Vec of gem assignments. Each entry maps slot →
-/// `Vec<gem_id>` of length equal to that slot's socket count. Used by the
-/// eager path (below-threshold jobs) and by the streaming iterator's
-/// resolver.
+/// Materialize the full Vec of gem assignments (slot → `Vec<gem_id>` sized to
+/// the slot's socket count). Used by the eager path and the iterator's resolver.
 pub fn enumerate_all(b: &GemCombosBuilder) -> Vec<GemCombo> {
     let gems = b.gem_options;
     let gem_slots = b.gem_slots;
@@ -204,10 +195,9 @@ fn build_diamond_placements(
             .collect();
         let other_combos = gen_color_combos(&remaining, gems, max_colors);
 
-        // Fill remaining sockets in the diamond slot with a multiset of
-        // colored gems. Length is one less than the slot's socket count.
-        // With no colored gems left, the diamond alone is still a valid
-        // placement — the empty filler truncates to a single gem at apply time.
+        // Fill the diamond slot's remaining sockets (count-1) with a colored-gem
+        // multiset. With none left, the lone diamond is still valid — the empty
+        // filler truncates to a single gem at apply time.
         let other_socket_count = d_socket_count.saturating_sub(1);
         let same_slot_fillers: Vec<Vec<u64>> = if other_socket_count == 0 || gems.is_empty() {
             vec![vec![]]
@@ -285,11 +275,9 @@ mod tests {
 
     #[test]
     fn cross_slot_dedup_matches_multiset_count() {
-        // 5 single-socket slots, 5 gems. The naive cross-slot product is
-        // 5^5 = 3125 intermediate combos; gems are character-wide so the
-        // deduped result is the number of size-5 multisets of 5 gems =
-        // C(5+5-1, 5) = C(9,5) = 126. This invariant must hold regardless
-        // of whether dedup happens incrementally or at the end.
+        // 5 single-socket slots, 5 gems: naive product is 5^5=3125, but gems are
+        // character-wide so the deduped count is size-5 multisets of 5 = C(9,5)=126
+        // (must hold whether dedup is incremental or final).
         ensure_game_data_loaded();
         let slots: Vec<(String, usize)> = ["head", "neck", "wrist", "hands", "waist"]
             .iter()

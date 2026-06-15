@@ -287,7 +287,6 @@ fn download_simc(branch_dir: &PathBuf, tag: &str, asset_url: &str) -> Result<(),
         }
     }
 
-    // Write version
     std::fs::write(branch_dir.join(".version"), tag)
         .map_err(|e| format!("Failed to write version: {}", e))?;
 

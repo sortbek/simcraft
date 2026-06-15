@@ -78,8 +78,8 @@ impl ComboMetadataRepo {
         Ok(())
     }
 
-    /// Query a single combo row by name. Used when result parsing needs the
-    /// metadata for a specific surviving profileset.
+    /// A single combo row by name — used when result parsing needs metadata for
+    /// a specific surviving profileset.
     pub async fn get_by_name(
         &self,
         job_id: &str,
@@ -155,9 +155,8 @@ impl ComboMetadataRepo {
             .collect())
     }
 
-    /// Query specific survivor rows by combo_id, ordered by combo_id. Used by
-    /// streamed handoff/resume to avoid loading every survivor profileset when
-    /// staged pruning has already reduced the active set.
+    /// Survivor rows for specific combo_ids, ordered. Lets streamed handoff/resume
+    /// skip loading every survivor profileset once staged pruning has cut the set.
     pub async fn list_for_combo_ids(
         &self,
         job_id: &str,

@@ -1,5 +1,5 @@
-/* Icons ported from the Claude Design handoff (route-shared.jsx) so the viewer
- * matches the mock. 14x14 viewBox, stroke = currentColor. */
+/* Icons ported from the design handoff (route-shared.jsx) to match the mock.
+ * 14x14 viewBox, stroke = currentColor. */
 import type { CSSProperties } from 'react';
 
 interface IconProps {

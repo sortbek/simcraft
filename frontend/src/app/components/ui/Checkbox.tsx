@@ -22,12 +22,8 @@ const SIZE: Record<NonNullable<CheckboxProps['size']>, string> = {
 };
 
 /**
- * Accessible checkbox. Previously hand-rolled (input.sr-only + styled div, or a
- * bare button with an SVG) in 4+ places with no role/aria. This primitive adds
- * role="checkbox" + aria-checked + keyboard activation.
- *
- * When no `onChange` is provided (presentational, e.g. inside a parent button),
- * renders as a `div` to avoid invalid nested-button HTML.
+ * Accessible checkbox with role="checkbox" + aria-checked + keyboard activation.
+ * Without `onChange` (presentational, e.g. inside a parent button) renders a `div` to avoid nested-button invalid HTML.
  */
 export default function Checkbox({
   checked,
@@ -77,7 +73,6 @@ export default function Checkbox({
     'aria-label': aria['aria-label'],
   };
 
-  // Presentational mode: render as div to avoid nested-button invalid HTML.
   if (!onChange) {
     return (
       <div {...sharedAria} className={sharedClass}>

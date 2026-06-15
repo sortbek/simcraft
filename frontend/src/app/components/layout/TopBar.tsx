@@ -95,7 +95,7 @@ export default function TopBar() {
       } catch {}
     }
     window.addEventListener('storage', onStorage);
-    // Also poll on focus (storage event doesn't fire same-tab)
+    // Poll on focus too: storage event doesn't fire same-tab
     function onFocusCheck() {
       try {
         setClipboardSync(localStorage.getItem('simhammer_clipboard_sync') === 'true');
@@ -140,7 +140,6 @@ export default function TopBar() {
       className="desktop-drag sticky top-0 z-50 flex h-14 items-center justify-between bg-[#131313]/80 px-6 shadow-2xl shadow-black/40 backdrop-blur-xl"
     >
       <div className="desktop-no-drag relative flex items-center gap-1.5">
-        {/* Character info + saved chars dropdown */}
         <button
           onClick={() => {
             if (characters.length > 0) {
@@ -207,7 +206,6 @@ export default function TopBar() {
           </span>
         </button>
 
-        {/* Checksum warning */}
         {checksumWarning && (
           <span
             className="flex items-center gap-1 rounded bg-amber-400/10 px-2 py-1 text-[11px] font-medium text-amber-400"
@@ -229,7 +227,6 @@ export default function TopBar() {
           </span>
         )}
 
-        {/* Saved characters dropdown */}
         {showChars && characters.length > 0 && (
           <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-outline-variant/20 bg-surface-container-high shadow-2xl shadow-black/40">
             <div className="max-h-72 space-y-0.5 overflow-y-auto p-2">
@@ -286,7 +283,6 @@ export default function TopBar() {
         <WindowControls />
       </div>
 
-      {/* Clipboard sync notification */}
       {clipboardNotice && (
         <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-lg border border-primary/20 bg-[#0e0e0e]/95 px-4 py-2 shadow-xl backdrop-blur-xl">
           <p className="whitespace-nowrap text-xs font-medium text-primary">{clipboardNotice}</p>

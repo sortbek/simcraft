@@ -8,8 +8,7 @@ import { IBoss, IPlus, IMinus } from './routeIcons';
 import { ModeBanner } from './RouteOverlays';
 import type { RouteEditor } from './useRouteEditor';
 
-// MDT composites maps as a 15x10 grid of 128px tiles -> 1920x1280 native image.
-// Mob coordinates are in MDT's 840x560 base space; plot at (x*S, -y*S).
+// MDT maps composite to a 1920x1280 image; mob coords are in 840x560 base space, plotted at (x*S, -y*S).
 const MAP_W = 1920;
 const MAP_H = 1280;
 const SCALE_X = MAP_W / 840;

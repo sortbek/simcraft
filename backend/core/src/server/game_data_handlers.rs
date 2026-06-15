@@ -281,10 +281,9 @@ pub(super) async fn get_talent_tree(path: web::Path<u64>) -> HttpResponse {
         None => return HttpResponse::NotFound().json(json!({"detail": "Talent tree not found"})),
     };
 
-    // Build fullNodeMaxRanks by combining all specs of the same class.
-    // The fullNodeOrder covers ALL nodes across all specs, but each spec's
-    // node arrays only include its own subset. The decoder needs maxRanks
-    // for every node in fullNodeOrder to correctly parse the bit stream.
+    // Build fullNodeMaxRanks across all specs of the class: fullNodeOrder spans
+    // every spec's nodes but each spec lists only its own subset, and the decoder
+    // needs maxRanks for every node in fullNodeOrder to parse the bit stream.
     let mut max_ranks: HashMap<u64, u64> = HashMap::new();
     for (key, nodes_key) in [
         ("classNodes", "classNodes"),

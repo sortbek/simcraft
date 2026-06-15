@@ -241,10 +241,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             "/api/system-stats",
             web::get().to(system_handlers::system_stats),
         )
-        // Server-side persisted provider keys are desktop-only. Web stores keys
-        // in localStorage and sends them per-request via X-Provider-<id>-Key so
-        // the server never holds them. Exposing these on web would let an
-        // anonymous caller plant a key that the server attaches to all sims.
+        // Server-side persisted provider keys are desktop-only: web sends keys
+        // per-request via X-Provider-<id>-Key so the server never holds them.
+        // Exposing these on web would let an anonymous caller plant a key the
+        // server then attaches to all sims.
         .route(
             "/api/settings/provider/{id}",
             web::post().to(provider_handlers::save_provider_key),

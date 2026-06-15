@@ -329,10 +329,9 @@ pub async fn start_server(
         )
     };
 
-    // Crash recovery: any job stuck in Running on boot was driven by a task that
-    // died with the previous backend. Demote per spec §5:
-    //   - request_json non-NULL → Paused (resumable)
-    //   - request_json NULL    → Failed  (predates pause/resume infrastructure)
+    // Crash recovery (spec §5): a job stuck Running on boot lost its driver task.
+    // Demote — request_json non-NULL → Paused (resumable); NULL → Failed (predates
+    // pause/resume).
     if let Some(pool) = job_repo.pool() {
         let _ = sqlx::query(
             "UPDATE jobs SET status = 'paused' \
@@ -378,15 +377,12 @@ pub async fn start_server(
         .connect_timeout(std::time::Duration::from_secs(10))
         .build()
         .expect("reqwest client");
-    // Pool is Some on web (sqlx-backed JobRepo) and None on desktop (memory
-    // backend). LocalSimcProvider threads it into run_simc_staged for
-    // pause-resume checkpoint persistence.
+    // Pool is Some on web (sqlx JobRepo), None on desktop (memory); LocalSimcProvider
+    // threads it into run_simc_staged for pause-resume checkpoints.
     //
-    // local_sim_queue: 1-permit semaphore shared by LocalSimcProvider and the
-    // streaming Top Gear pipeline. Local sims acquire/release around their
-    // execution so they serialize instead of fighting over CPU. Remote
-    // providers (Simmit) don't touch the queue — they have their own
-    // server-side queueing.
+    // local_sim_queue: 1-permit semaphore shared by LocalSimcProvider and streaming
+    // Top Gear so local sims serialize instead of fighting for CPU. Remote providers
+    // (Simmit) don't use it — they queue server-side.
     let local_sim_queue = crate::compute::local::new_local_sim_queue();
     let local_queue_data = web::Data::new(local_sim_queue.clone());
     let provider_registry =

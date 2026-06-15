@@ -118,10 +118,8 @@ pub(super) async fn create_sim(
     }
     // Quick Sim has no combo_metadata, so no table write needed.
 
-    // display_input IS the final, ready-to-execute simc input — the same text
-    // we stored on the Job and the same text we hand to the provider. Mark
-    // `prebuilt` so simc_runner skips its internal rebuild and SimmitProvider
-    // submits as-is.
+    // `display_input` is the final ready-to-execute text (stored on the Job, handed
+    // to the provider); `prebuilt` below makes simc_runner skip its rebuild.
     let provider_input = display_input;
 
     let repo_clone = repo.get_ref().clone();
@@ -138,10 +136,9 @@ pub(super) async fn create_sim(
     let provider_for_task = provider.clone();
 
     tokio::spawn(async move {
-        // update_status honors the terminal-state invariant: if the job was
-        // cancelled between create and spawn, this is a no-op. The token
-        // below gives the provider a cooperative cancel signal at subprocess
-        // launch so we don't burn cycles on a sim the user already aborted.
+        // update_status honors the terminal-state invariant: a no-op if the job was
+        // cancelled between create and spawn. The token below gives the provider a
+        // cooperative cancel signal at launch.
         if let Err(e) = repo_clone
             .update_status(&job_id_clone, JobStatus::Running)
             .await
@@ -158,8 +155,7 @@ pub(super) async fn create_sim(
             crate::cancel::CancelToken::new(repo_clone.clone(), job_id_clone.clone());
         let logs_cb = logs.clone();
         let jid_cb = jid_logs.clone();
-        // Cloud providers (Simmit) stream progress through this callback; local
-        // SimC for Quick Sim doesn't emit per-iteration progress, so the
+        // Cloud (Simmit) streams progress here; local Quick Sim emits none, so the
         // hardcoded "Simulating · 20%" above stays the floor.
         let progress_repo = repo_clone.clone();
         let progress_jid = job_id_clone.clone();
@@ -175,9 +171,8 @@ pub(super) async fn create_sim(
                 });
             }),
             on_stage_complete: std::sync::Arc::new(|_summary: &str| {
-                // Quick Sim never emits stage_complete; only staged profileset
-                // workloads use this. Cloud providers (Simmit) also no-op since
-                // server-side multistage doesn't expose per-stage boundaries.
+                // No-op: only staged profileset workloads emit stage_complete; Quick
+                // Sim and server-side multistage (Simmit) don't.
             }),
             on_log: std::sync::Arc::new(move |line: &str| {
                 logs_cb.push_line(&jid_cb, line.to_string())
@@ -230,11 +225,10 @@ fn profileset_overrides_to_direct(profileset_simc: &str) -> String {
         .join("\n")
 }
 
-/// Re-run a single Top Gear result row as a high-precision Quick Sim. Takes
-/// the source job's `base_profile` from `request_json`, the row's gear/talents
-/// from `combo_metadata.profileset_simc`, and applies the overrides directly
-/// to the base actor. Returns the new job_id; the caller navigates to its
-/// result page.
+/// Re-run a single Top Gear result row as a high-precision Quick Sim: source
+/// `base_profile` (from `request_json`) + the row's gear/talents (from
+/// `combo_metadata.profileset_simc`) applied directly to the base actor. Returns
+/// the new job_id.
 pub(super) async fn sim_row(
     path: web::Path<String>,
     req: web::Json<SimRowRequest>,
@@ -329,9 +323,8 @@ pub(super) async fn sim_row(
     );
 
     let fight_style = source.fight_style.clone();
-    // Inherit the simc branch from the source job — if the parent ran on
-    // a PTR / custom / dev build, the verify needs the same binary to be
-    // comparable. Falls back to the default branch when no override.
+    // Inherit the source job's simc branch so the verify uses the same binary
+    // (PTR/custom/dev build) and stays comparable; default branch when unset.
     let simc_branch = envelope
         .payload
         .get("options")
@@ -339,10 +332,8 @@ pub(super) async fn sim_row(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    // Fixed Quick Sim precision: 0.05% target_error, matching the
-    // /quick-sim default. The point of the verify button is to nail down the
-    // row's true DPS, so we always go to full Quick Sim precision regardless
-    // of what the parent Top Gear job used.
+    // Fixed full Quick Sim precision (0.05% target_error, the /quick-sim default)
+    // to nail down the row's true DPS regardless of the parent Top Gear settings.
     let target_error = 0.05_f64;
     let iterations: u32 = 100_000;
     let options = json!({

@@ -3,10 +3,9 @@
 import { memo } from 'react';
 import { T } from '../route-map/routeTheme';
 
-/** Route-card thumbnail. When the route's real `shape` (pull centroids) is known
- *  it draws the actual route — dots in pull order joined by a path, fitted to the
- *  card. Otherwise (SimC/footer routes, or a shape not computed yet) it falls back
- *  to a deterministic decorative scatter keyed off the route id. */
+/** Route-card thumbnail. With a real `shape` (pull centroids) it draws the actual
+ *  route fitted to the card; otherwise falls back to a deterministic scatter keyed
+ *  off the route id. */
 const DOT_COLORS = [
   '#3f8fd0',
   '#5fbf6a',
@@ -34,8 +33,8 @@ export interface ShapePoint {
   boss: boolean;
 }
 
-/** Fit real centroids to the card: scale each axis so the route's bounding box
- *  fills the thumbnail with a small margin (degenerate axes center at 0.5). */
+/** Fit centroids to the card: scale each axis so the bounding box fills the
+ *  thumbnail with a small margin (degenerate axes center at 0.5). */
 function fitShape(shape: ShapePoint[]): Dot[] {
   const xs = shape.map((p) => p.x);
   const ys = shape.map((p) => p.y);
@@ -158,6 +157,6 @@ function RouteMiniMap({
   );
 }
 
-// Props are stable primitives (seed/count from the row's useMemo), so memoizing
-// skips the seeded-scatter recompute on every row hover and stepper click.
+// Props are stable primitives, so memoizing skips the seeded-scatter recompute
+// on every row hover and stepper click.
 export default memo(RouteMiniMap);

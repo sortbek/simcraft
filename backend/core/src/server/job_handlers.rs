@@ -9,11 +9,9 @@ use crate::models::{JobStatus, SimcInputMode};
 use crate::simc_runner;
 use std::sync::Arc;
 
-/// Whether a Simmit job should advertise pause/resume, given the chunk count.
-/// `None` = the chunk-count read FAILED (transient). On an unknown count we
-/// advertise Pause: showing Pause on a single-chunk job (a no-op press) is less
-/// bad than HIDING Pause on a real multi-chunk job. `Some(1)` cannot pause;
-/// `Some(>1)` can.
+/// Whether a Simmit job advertises pause/resume, given the chunk count.
+/// `None` = read failed (transient) → advertise Pause (a no-op press beats hiding
+/// it on a real multi-chunk job). `Some(1)` can't pause; `Some(>1)` can.
 fn simmit_pause_capability(chunk_count: Option<i64>) -> bool {
     match chunk_count {
         None => true,
@@ -299,14 +297,11 @@ pub(super) async fn resume_sim(
         }
     };
 
-    // Build the per-request provider auth EXACTLY as submit does
-    // (`resolve_provider_for_request`): merge server-side ProviderSettings with
-    // the request's `X-Provider-<id>-Key` headers into a ProviderAvailability,
-    // then resolve the auth for THIS job's provider. A web BYO-key caller's key
-    // arrives only on this request; threading it lets a cloud-streaming run
-    // resume instead of being stuck paused. Best-effort: if settings can't load
-    // or the job is gone, fall through with no per-request auth and let
-    // resume_job surface the real error.
+    // Build per-request provider auth exactly as submit does: merge ProviderSettings
+    // with the request's `X-Provider-<id>-Key` headers, then resolve auth for this
+    // job's provider. A web BYO-key arrives only on this request, so threading it lets
+    // a cloud-streaming run resume instead of staying paused. Best-effort: on load
+    // failure / missing job, fall through with no auth and let resume_job surface it.
     let request_auth = match crate::compute::ProviderSettings::load(
         settings_repo.get_ref(),
         &registry.remote_ids(),
@@ -354,9 +349,8 @@ pub(super) async fn resume_sim(
     }
 }
 
-/// Fetch the streamed-mode profileset preview for a job — survivor count plus the
-/// first 50 generated profilesets. Shared by `get_sim_input` (text body) and
-/// `get_sim_input_preview` (JSON body); `None` when the repo isn't SQLite-backed.
+/// Survivor count + first 50 profilesets for a streamed job; `None` if the repo
+/// isn't SQLite-backed. Shared by `get_sim_input` and `get_sim_input_preview`.
 async fn streamed_profileset_preview(repo: &JobRepo, job_id: &str) -> Option<(i64, Vec<String>)> {
     let pool = repo.pool()?;
     let metadata_repo = ComboMetadataRepo::new(pool.clone());
@@ -386,12 +380,9 @@ pub(super) async fn get_sim_input(
         }
     };
 
-    // Streamed sims never store the full input (it's generated in batches during
-    // the run), so there is no single "raw input" string. Rather than return a
-    // machine-only error here — which the plain "raw input" links surface to the
-    // user as JSON — assemble a readable preview: base profile + the first N
-    // profilesets, with a note explaining the truncation. The structured preview
-    // for the in-app panel still lives at /input/preview.
+    // Streamed sims don't store the full input, so return a readable text preview
+    // (base profile + first N profilesets) instead of a JSON error. The structured
+    // preview for the in-app panel lives at /input/preview.
     match job.simc_input_mode {
         SimcInputMode::Inline => HttpResponse::Ok()
             .content_type("text/plain; charset=utf-8")

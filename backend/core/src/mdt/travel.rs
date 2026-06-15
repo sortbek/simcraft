@@ -7,38 +7,30 @@ use super::model::{MdtLine, MdtPull, MdtRoute};
 /// On-foot movement speed (yards/second), from keystone.guru's config.
 const MOVE_SPEED_YPS: f64 = 7.0;
 
-/// World-yard scale used when a dungeon's UiMap has no calibrated `yards_per_unit`
-/// (its mapID resolves to a parent/zone map, so DBC bounds can't be trusted). The
-/// mean of the calibrated current-season maps (~0.85). Gives ballpark per-pull
-/// delays — approximate in absolute magnitude but correct in *relative* pattern,
-/// which is far better for the DPS sim than zeroing all delays (zero delays chain
-/// every pull back-to-back, starving cooldown/resource recovery between packs).
-/// Hand-derived from `mdt_map_geometry.json`; re-check it when that file is
-/// regenerated for a new season so it stays the mean of the current scales.
+/// Fallback world-yard scale when a dungeon's UiMap has no calibrated
+/// `yards_per_unit` (mapID resolves to a parent/zone map, untrustworthy DBC
+/// bounds). Mean of calibrated current-season maps (~0.85): absolute magnitude is
+/// approximate but the *relative* pattern is right, far better for the sim than
+/// zero delays (which chain pulls back-to-back, starving cooldown recovery).
+/// Hand-derived from `mdt_map_geometry.json`; re-check when that's regenerated.
 const DEFAULT_YARDS_PER_UNIT: f64 = 0.85;
 
-/// Returns one delay (seconds, rounded) per pull in `route.pulls`, in order
-/// (aligned by index — callers index by the pull's position). Pull 1 is measured
-/// from the dungeon entrance; each subsequent pull is measured from the previous
-/// resolvable centroid. When the route carries a drawn polyline, travel follows
-/// the path (arc-length between consecutive pull projections); otherwise it is a
-/// straight-line centroid estimate. Empty or fully-unresolved pulls get delay `0`
-/// and do not advance the reference position. Coordinates are converted to world
-/// yards per-axis (`x·yards_per_unit_x`, `y·yards_per_unit_y` — each axis falling
-/// back to the legacy isotropic scale, then [`DEFAULT_YARDS_PER_UNIT`]) and the
-/// delay is the yard distance ÷ 7 yd/s.
-/// A drawn line is treated as a real traversal path (rather than a partial
-/// annotation scribble) only when the route's projection onto it spans at least
-/// this fraction of the straight-line tour. A genuine route line's projected
-/// length is comparable to — or longer than, because it winds — the straight
-/// tour; a short scribble collapses most pull projections onto the same point,
-/// so its projected length is near zero.
+/// One delay (seconds, rounded) per pull in `route.pulls`, index-aligned. Pull 1
+/// is measured from the entrance, later pulls from the previous resolvable
+/// centroid. With a drawn polyline, travel follows the path (arc-length between
+/// pull projections); otherwise a straight-line centroid estimate. Empty/
+/// unresolved pulls get `0` and don't advance the reference. Coords convert to
+/// yards per-axis (each axis: `yards_per_unit_{x,y}`, else legacy isotropic, else
+/// [`DEFAULT_YARDS_PER_UNIT`]); delay = yards ÷ 7 yd/s.
+/// Accept a drawn line as a real path (not a scribble annotation) only when the
+/// route's projection onto it spans this fraction of the straight tour: a real
+/// route line winds so its projection is comparable/longer, while a scribble
+/// collapses most projections onto one point (near-zero length).
 const PATH_COVERAGE: f64 = 0.5;
 
 pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
-    // Resolve a per-axis scale: the explicit per-axis value, else the legacy
-    // isotropic value, else a typical default. Every dungeon has a physical scale,
-    // so a missing calibration approximates rather than zeroing the whole route.
+    // Per-axis scale: explicit per-axis, else legacy isotropic, else default —
+    // a missing calibration approximates rather than zeroing the whole route.
     let resolve = |axis: Option<f64>| {
         axis.or(dungeon.yards_per_unit)
             .filter(|s| *s > 0.0)
@@ -46,8 +38,8 @@ pub fn calculate_delays(route: &MdtRoute, dungeon: &Dungeon) -> Vec<i64> {
     };
     let sx = resolve(dungeon.yards_per_unit_x);
     let sy = resolve(dungeon.yards_per_unit_y);
-    // Convert MDT coordinates to world yards up front, so all distance math runs in
-    // yards and each axis scales independently (handles non-1.5:1 floors).
+    // Convert to world yards up front so all distance math is in yards and each
+    // axis scales independently (handles non-1.5:1 floors).
     let to_yd = |(x, y): (f64, f64)| (x * sx, y * sy);
 
     let centroids: Vec<Option<(f64, f64)>> = route

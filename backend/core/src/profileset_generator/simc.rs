@@ -160,10 +160,9 @@ mod tests {
 
     #[test]
     fn simc_socket_count_uses_max_of_bonus_and_existing_gems() {
-        // Regression: a neck with bonus 13668 (+1 socket) plus two equipped
-        // gems (`gem_id=A/B`) actually has 2 sockets — the base item has an
-        // inherent socket and the bonus adds another. Trusting just the bonus
-        // count made Top Gear overwrite the second gem with a single new one.
+        // Regression: a neck with bonus 13668 (+1 socket) + 2 equipped gems has 2
+        // sockets (inherent + bonus). Trusting only the bonus count made Top Gear
+        // overwrite the second gem.
         ensure_game_data_loaded();
         assert_eq!(
             simc_socket_count(",id=250247,gem_id=240908/240908,bonus_id=13668"),
