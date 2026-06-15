@@ -9,6 +9,7 @@ use super::game_data_handlers;
 use super::job_handlers;
 use super::mdt_handlers;
 use super::provider_handlers;
+use super::roster_handlers;
 use super::route_handlers;
 use super::sim_handlers;
 use super::system_handlers;
@@ -233,6 +234,27 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/talent-builds/{id}",
             web::delete().to(character_handlers::delete_talent_build),
+        )
+        .route("/api/rosters", web::get().to(roster_handlers::list_rosters))
+        .route(
+            "/api/rosters",
+            web::post().to(roster_handlers::create_roster),
+        )
+        .route(
+            "/api/rosters/{id}",
+            web::delete().to(roster_handlers::delete_roster),
+        )
+        .route(
+            "/api/rosters/{id}/members",
+            web::get().to(roster_handlers::list_members),
+        )
+        .route(
+            "/api/rosters/{id}/members/{member_id}",
+            web::delete().to(roster_handlers::delete_member),
+        )
+        .route(
+            "/api/rosters/{id}/import",
+            web::post().to(roster_handlers::import_members),
         );
 
     #[cfg(feature = "desktop")]
