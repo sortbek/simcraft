@@ -11,7 +11,7 @@ export function useSpellIcons(spellIds: number[]) {
     const missing = ids.filter((id) => id > 0 && !iconCache.has(id));
     if (missing.length === 0) {
       setIcons((prev) => {
-        // Only update if there are new entries the component doesn't have yet
+        // Only update if the cache has entries this component doesn't yet
         const needsUpdate = ids.some((id) => id > 0 && iconCache.has(id) && !prev.has(id));
         return needsUpdate || prev.size === 0 ? new Map(iconCache) : prev;
       });

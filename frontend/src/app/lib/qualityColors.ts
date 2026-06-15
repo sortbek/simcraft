@@ -1,7 +1,6 @@
 /**
- * Single source of truth for WoW item-quality colors. Previously defined three
- * times (useItemInfo.ts hex, loot/types.ts Tailwind classes, ItemTable.ts hex
- * border) which had already drifted. Those sites now re-export from here.
+ * Single source of truth for WoW item-quality colors (was defined three times,
+ * had drifted; those sites now re-export from here).
  *
  * Quality keys: 0 Poor · 1 Common · 2 Uncommon · 3 Rare · 4 Epic ·
  * 5 Legendary · 6 Artifact · 7 Heirloom.
@@ -34,8 +33,7 @@ export function qualityHex(quality: number): string {
   return QUALITY_HEX[quality] ?? '#ffffff';
 }
 
-/** Border-color hex used by the loot item icons. Mirrors the legacy
- *  ItemTable switch (default = Poor grey, not white). */
+/** Border-color hex for loot item icons. Default = Poor grey, not white. */
 export function qualityBorderColor(quality: number): string {
   return QUALITY_HEX[quality] ?? QUALITY_HEX[0];
 }

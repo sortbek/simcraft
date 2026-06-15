@@ -111,8 +111,8 @@ export function buildBestGearSet(
     }
   }
 
-  // Multi-socket items emit one `type:gem` entry per socket; collect them
-  // per slot so consumers can render every gem, not just the last assigned.
+  // Multi-socket items emit one `type:gem` per socket; collect per slot so consumers
+  // render every gem, not just the last assigned.
   const gemsBySlot: Record<string, number[]> = {};
   for (const item of selectedResult.items) {
     if (item.type === 'gem' && item.gem_id && item.slot && gearSet[item.slot]) {
@@ -123,8 +123,8 @@ export function buildBestGearSet(
     gearSet[slot] = { ...gearSet[slot], gem_id: gemIds[0], gem_ids: gemIds };
   }
 
-  // Enchant overrides: combos emit a `type:enchant` delta per changed slot.
-  // Apply them like gems so the overview reflects the selected row's enchant.
+  // Enchant overrides: combos emit a `type:enchant` delta per changed slot; apply like gems
+  // so the overview reflects the selected row's enchant.
   for (const item of selectedResult.items) {
     if (item.type === 'enchant' && item.enchant_id && item.slot && gearSet[item.slot]) {
       gearSet[item.slot] = { ...gearSet[item.slot], enchant_id: item.enchant_id };

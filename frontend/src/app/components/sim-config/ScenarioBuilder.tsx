@@ -23,10 +23,8 @@ export default function ScenarioBuilder() {
 
   if (!loaded || maxScenarios === 0) return null;
 
-  // Scenarios can't coexist with a route: Dungeon Route mode forces
-  // fight_style=DungeonRoute, and a loaded route (incl. a footer route under
-  // Patchwerk) is applied to every run — useSimSubmit ignores queued scenarios in
-  // both cases, so hide the builder to match.
+  // Scenarios can't coexist with a route: a loaded route (incl. footer on Patchwerk)
+  // applies to every run, so useSimSubmit ignores queued scenarios — hide to match.
   if (isDungeonRoute || activeRoute) return null;
 
   return (

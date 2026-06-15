@@ -1,8 +1,6 @@
-/* Design tokens for the M+ Route screens. Mapped to the app's own palette
- * (tailwind.config.ts: primary/gold #f2bf4e, warm dark surfaces, warm-grey
- * text + outlines) so the route pages match the rest of SimHammer rather than
- * the standalone design mock's cooler/oranger tones. Pull-marker colors below
- * stay as-is — they're semantic, not chrome. */
+/* Design tokens for the M+ Route screens, mapped to the app's own palette
+ * (tailwind.config.ts) so the pages match SimHammer, not the cooler design mock.
+ * Pull-marker colors below stay as-is — semantic, not chrome. */
 export const T = {
   bg: '#131313', // background
   panel: '#201f1f', // surface-container (cards/panels)
@@ -24,9 +22,8 @@ export const T = {
   picked: '#5fbfff', // selection highlight (semantic)
 } as const;
 
-/** Route-source identity colors — the dot next to a route's source label on
- *  cards and the format tags in the import panel. Keyed by RouteKind (see
- *  routes-model). One owner so the card dot and the import tag never disagree. */
+/** Route-source identity colors, keyed by RouteKind (see routes-model). One
+ *  owner so the card dot and the import tag never disagree. */
 export const SOURCE_COLORS: Record<string, string> = {
   pulls: '#5fbf6a', // Built
   simc: '#c95fd6', // keystone.guru

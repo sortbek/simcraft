@@ -9,22 +9,18 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-/// Local sims share one SimC binary on one machine, so they must run
-/// sequentially or each one starves the others of CPU. The shared semaphore
-/// has exactly one permit: hold it while a sim is running, release on drop.
-///
-/// Streaming Top Gear acquires from the same semaphore at the top of its
-/// pipeline so triage + handoff are serialized with eager sims too.
+/// Local sims share one SimC binary, so they must run sequentially or starve
+/// each other of CPU. One-permit semaphore: hold while running, release on drop.
+/// Streaming Top Gear acquires the same permit so its triage + handoff serialize
+/// against eager sims too.
 pub type LocalSimQueue = Arc<Semaphore>;
 
 pub fn new_local_sim_queue() -> LocalSimQueue {
     Arc::new(Semaphore::new(1))
 }
 
-/// Wait for the next available permit on the local sim queue, polling the
-/// cancel token every 500ms so a queued job can be aborted before it ever
-/// runs. Callers that want to surface a "Queued" status to the user should
-/// emit it before invoking this — the helper is silent.
+/// Wait for the next permit, polling the cancel token every 500ms so a queued
+/// job can be aborted before it runs. Silent — callers emit any "Queued" status.
 pub(crate) async fn await_local_queue_permit(
     queue: &LocalSimQueue,
     cancel: Option<&CancelToken>,
@@ -199,17 +195,15 @@ mod tests {
             .clone()
             .try_acquire_owned()
             .expect("first permit available");
-        // Second try-acquire fails while first is held.
         assert!(q.clone().try_acquire_owned().is_err());
         drop(p1);
-        // After drop, second can acquire.
         assert!(q.clone().try_acquire_owned().is_ok());
     }
 
     #[tokio::test]
     async fn staged_permit_transfer_serializes_against_new_acquire() {
-        // Models Task 1: a transferred/held permit must keep a second waiter
-        // out until it is dropped (mirrors what the provider path guarantees).
+        // A transferred/held permit must keep a second waiter out until dropped
+        // (mirrors what the provider path guarantees).
         let q = new_local_sim_queue();
         let held = q
             .clone()
@@ -231,10 +225,8 @@ mod tests {
 
     #[tokio::test]
     async fn permit_blocks_then_releases_for_next_staged_run() {
-        // Models Task C: routing staged runs through run_with_profilesets means
-        // exactly one permit gates them. While held, a second waiter blocks;
-        // after drop, it proceeds. (run_with_profilesets acquires/holds/drops
-        // this same permit internally.)
+        // Routing staged runs through run_with_profilesets means exactly one
+        // permit gates them: held → second waiter blocks; dropped → it proceeds.
         let q = new_local_sim_queue();
         let held = q
             .clone()

@@ -158,9 +158,8 @@ pub fn default_local_topgear_plan(options: &Value) -> StagePipelinePlan {
         } else {
             CandidateSource::PreviousStageSurvivors
         };
-        // Pruning stages keep a generous working window; the last pruning stage
-        // is capped to the final single-run ceiling by `clamp_last_pruning_hard_max`
-        // in `run_stage_pipeline`, so it needs no special case here.
+        // Pruning stages keep a generous window; the last one is capped to the
+        // final ceiling by `clamp_last_pruning_hard_max`, so no special case here.
         let survivor_cap = if is_final {
             FINAL_SINGLE_RUN_CEILING
         } else {

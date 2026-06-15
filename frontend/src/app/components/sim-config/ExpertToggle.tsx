@@ -50,8 +50,8 @@ export default function ExpertToggle({
   expertSetters: Record<ExpertTabKey, (v: string) => void>;
   activeTabInfo: (typeof EXPERT_TABS)[number];
   children?: React.ReactNode;
-  /** When true, skip the collapsible toggle and render the panel directly —
-   *  used when this lives in its own dedicated tab rather than inline. */
+  /** Skip the collapsible toggle and render the panel directly — used when this
+   *  lives in its own dedicated tab rather than inline. */
   embedded?: boolean;
 }) {
   const { t } = useLanguage();

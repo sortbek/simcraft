@@ -13,10 +13,8 @@ export function classifyRoute(r: SavedRoute): RouteKind {
   return 'footer';
 }
 
-/** Route kinds that are level-agnostic dungeon routes: they carry map data and
- *  the key-level / HP-share knobs (`mdt`, `pulls`). `simc`/`footer` are baked
- *  SimC snippets with neither. The single source for this predicate — callers
- *  should use it instead of re-spelling the kind check (or its negation). */
+/** True for route kinds carrying map data + key-level/HP-share knobs (`mdt`, `pulls`);
+ *  `simc`/`footer` are baked snippets with neither. Single source for this predicate. */
 export function routeUsesLevelKnobs(kind: RouteKind): boolean {
   return kind === 'mdt' || kind === 'pulls';
 }
@@ -46,10 +44,8 @@ export function routeToActiveRoute(r: SavedRoute): ActiveRoute | null {
   }
 }
 
-/** Pull/enemy counts for a route card, derived where free — built routes from
- *  their pull JSON, KSG routes by parsing the SimC — and left null for MDT
- *  imports (which would need a decode). The source label/color come from the
- *  route's `kind` (see classifyRoute), not from here. */
+/** Pull/enemy counts for a route card, derived where free — built routes from pull JSON,
+ *  KSG routes by parsing SimC — and null for MDT imports (which would need a decode). */
 export function routeStats(r: SavedRoute): {
   pulls: number | null;
   enemies: number | null;
@@ -112,10 +108,8 @@ export interface RouteGroup {
   routes: SavedRoute[];
 }
 
-/** Group saved routes by dungeon for a list/picker: known-dungeon groups first,
- *  in `dungeons` order, then unknown-dungeon routes under a final `otherLabel`
- *  group. A route's dungeon is its stored `dungeon_idx` (set on import + build),
- *  matched against the dungeon list. */
+/** Group saved routes by dungeon for a list/picker: known dungeons first (in `dungeons`
+ *  order), then unknown routes under `otherLabel`. Matches on the stored `dungeon_idx`. */
 export function groupRoutesByDungeon(
   routes: SavedRoute[],
   dungeons: DungeonSummary[],

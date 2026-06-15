@@ -45,11 +45,9 @@ impl AceTable {
         })
     }
 
-    /// Integer-keyed entries, sorted ascending by key. Used to read sequence
-    /// tables (`pulls`, clone-index lists) and the enemy entries within a pull.
-    ///
-    /// AceSerializer stores whole numbers via the float path, so integral
-    /// `Float` keys count as integer keys too.
+    /// Integer-keyed entries, sorted ascending. Reads sequence tables (`pulls`,
+    /// clone lists). AceSerializer stores whole numbers via the float path, so
+    /// integral `Float` keys count as integer keys too.
     pub fn int_entries(&self) -> Vec<(i64, &AceValue)> {
         let mut out: Vec<(i64, &AceValue)> = self
             .pairs
@@ -64,9 +62,8 @@ impl AceTable {
         out
     }
 
-    /// Integer-keyed entries in original (serialized) order. Used where MDT's
-    /// `pairs()` order is significant — the SimC export lists a pull's enemies in
-    /// this order, not sorted.
+    /// Integer-keyed entries in serialized order. Used where MDT's `pairs()`
+    /// order matters — the SimC export lists a pull's enemies unsorted.
     pub fn int_entries_ordered(&self) -> Vec<(i64, &AceValue)> {
         self.pairs
             .iter()
@@ -120,9 +117,8 @@ fn tokenize(input: &str) -> Result<Vec<(u8, &str)>, String> {
             return Err("truncated control token".into());
         }
         let ctl = bytes[i + 1];
-        // Control chars are ASCII; a non-ASCII byte here means `start` (i+2) could
-        // fall inside a multi-byte char, panicking the `input[start..j]` slice
-        // below. Reject crafted input instead of crashing the handler.
+        // Control chars are ASCII; a non-ASCII ctl byte could put `start` (i+2)
+        // mid-multibyte-char, panicking the slice below — reject, don't crash.
         if !ctl.is_ascii() {
             return Err(format!("non-ASCII control byte at {}", i + 1));
         }

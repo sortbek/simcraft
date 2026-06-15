@@ -49,10 +49,9 @@ export interface DropItem {
 }
 
 /**
- * Drop item shape sent to the backend in the droptimizer request payload.
- * Extends `DropItem` with the resolved upgrade fields. Inheritance (enchant
- * and gem) is no longer in the payload — the backend derives it from the
- * equipped profile, so the browser doesn't compute simulation semantics.
+ * Droptimizer request payload shape: `DropItem` plus resolved upgrade fields. Inheritance
+ * (enchant/gem) is omitted — the backend derives it from the equipped profile, so the browser
+ * doesn't compute simulation semantics.
  */
 export interface DropItemPayload extends DropItem {
   ilevel: number;

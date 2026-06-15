@@ -14,12 +14,9 @@ interface CollapsibleSectionProps {
   children: ReactNode;
 }
 
-/**
- * A page section with a sticky, clickable header that expands/collapses its body.
- * Matches the app's section-header language (uppercase, full-bleed sticky bar) used
- * by the gear item selector, with a rotating chevron and an optional count badge
- * shown while collapsed. Optionally persists open/closed state via `storageKey`.
- */
+/** Page section with a sticky, clickable header that expands/collapses its body.
+ *  Matches the gear item selector's section-header language (uppercase, full-bleed
+ *  sticky bar). Optionally persists open/closed state via `storageKey`. */
 export default function CollapsibleSection({
   title,
   subtitle,

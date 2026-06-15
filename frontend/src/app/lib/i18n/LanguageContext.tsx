@@ -51,12 +51,10 @@ interface LanguageContextValue {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Start from the server-rendered default (English) so the first client render
-  // matches the static export's markup. Reading the persisted locale during the
-  // initial render causes a hydration mismatch (e.g. the LanguageSelector label
-  // renders "English" on the server but "Deutsch" on the client), which forces
-  // React into a client-render fallback that strips the script-set `data-desktop`
-  // attribute on <html> — hiding the `.desktop-only-flex` window controls.
+  // Start from the server default (English) so the first client render matches the
+  // static export. Reading the persisted locale during initial render causes a
+  // hydration mismatch that forces a client-render fallback, stripping the
+  // script-set `data-desktop` attr on <html> and hiding the window controls.
   const [locale, setLocaleState] = useState<Locale>('en_US');
   const [translations, setTranslations] = useState<Translations>(en_US);
 

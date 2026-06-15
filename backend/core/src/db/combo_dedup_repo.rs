@@ -1,18 +1,16 @@
 use sqlx::{AnyPool, Row};
 use std::collections::HashSet;
 
-/// Per-job dedup-key storage backing the streaming Triage path.
-/// Operations are designed to run inside short transactions; callers
-/// must NOT hold a transaction across simc subprocess invocation
-/// (see the transaction lifecycle notes in the streaming design).
+/// Per-job dedup-key storage backing the streaming Triage path. Ops run inside
+/// short transactions; callers must NOT hold a transaction across a simc
+/// subprocess invocation (see the streaming design's transaction lifecycle).
 #[derive(Clone)]
 pub struct ComboDedupRepo {
     pool: AnyPool,
 }
 
-/// Conservative chunk size for IN-clauses. SQLite's
-/// SQLITE_LIMIT_VARIABLE_NUMBER is historically 999, so 500 leaves
-/// margin and works on every supported version.
+/// IN-clause chunk size. SQLite's SQLITE_LIMIT_VARIABLE_NUMBER is historically
+/// 999, so 500 leaves margin and works on every supported version.
 const IN_CHUNK_SIZE: usize = 500;
 const INSERT_CHUNK_SIZE: usize = 400;
 
@@ -21,13 +19,10 @@ impl ComboDedupRepo {
         Self { pool }
     }
 
-    /// Return the subset of `keys` that already exist for this job.
-    /// Used as the pre-INSERT snapshot — anything not returned here
-    /// will be a new key after INSERT ... ON CONFLICT DO NOTHING.
-    ///
-    /// MUST be called inside the same transaction as `insert_chunked`
-    /// to be exact under concurrent jobs. Callers pass `&mut *tx`
-    /// where `tx: sqlx::Transaction<'_, sqlx::Any>`.
+    /// The subset of `keys` already present for this job — the pre-INSERT
+    /// snapshot, so anything not returned becomes new after INSERT ... ON CONFLICT
+    /// DO NOTHING. MUST share `insert_chunked`'s transaction to be exact under
+    /// concurrent jobs. Callers pass `&mut *tx` (`Transaction<'_, sqlx::Any>`).
     pub async fn snapshot_existing(
         &self,
         executor: &mut sqlx::AnyConnection,
@@ -55,10 +50,8 @@ impl ComboDedupRepo {
         Ok(found)
     }
 
-    /// Chunked INSERT ... ON CONFLICT DO NOTHING. Safe to call with
-    /// keys that may already exist; duplicates are silently skipped.
-    ///
-    /// Callers pass `&mut *tx` where `tx: sqlx::Transaction<'_, sqlx::Any>`.
+    /// Chunked INSERT ... ON CONFLICT DO NOTHING — safe with already-existing
+    /// keys (duplicates silently skipped). Callers pass `&mut *tx`.
     pub async fn insert_chunked(
         &self,
         executor: &mut sqlx::AnyConnection,

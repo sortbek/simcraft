@@ -352,7 +352,6 @@
   "route.manager.count": "{routes} Routen · {dungeons} Dungeons",
   "route.manager.subtitle": "Importiere, organisiere und simme deine Dungeon-Routen — und öffne sie auf der Karte.",
   "route.manager.empty": "Noch keine Routen — füge oben einen Importstring ein, um loszulegen.",
-  "route.manager.disclaimer": "SimHammer ist ein Hobbyprojekt, das mit Kaffee, Klebeband und Gebeten an die RNG-Götter zusammengehalten wird. Bugs sind keine Features — aber sie simnern vielleicht höher als dein Gear. Nicht verbunden mit Blizzard, Raidbots oder irgendjemandem, der weiß, was er tut.",
   "route.group.other": "Sonstiges",
   "route.import.label": "Route importieren",
   "route.import.placeholder": "MDT-Exportstring oder keystone.guru SimC hier einfügen…",

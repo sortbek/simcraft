@@ -56,8 +56,7 @@ export default function RoutePage() {
   };
   // Browse a dungeon's map + enemies without an imported route (no pulls).
   const loadOverview = (idx: number) => run(getDungeonOverview(idx, getRouteSimParams()), true);
-  // Render a saved built route (dungeon + pull assignment) by serializing it at
-  // the chosen level (same path used to sim it).
+  // Render a saved built route by serializing it at the chosen level (same path used to sim it).
   const loadPulls = (dungeonIdx: number, pulls: CloneRef[][]) =>
     run(serializeRoute(dungeonIdx, pulls, getRouteSimParams()), true);
 

@@ -135,6 +135,25 @@ head=,id=100\n";
     }
 
     #[test]
+    fn route_lines_do_not_affect_gear_or_talents() {
+        // An appended DungeonRoute block must parse as non-gear, or combo
+        // generation (which derives only from gear/talents/spec) would differ
+        // with vs without the route.
+        let clean = "mage=test\nlevel=80\nhead=,id=100\ntalents=ABC\nspec=fire";
+        let routed = "mage=test\nlevel=80\nhead=,id=100\ntalents=ABC\nspec=fire\n\
+fight_style=DungeonRoute\nenemy=\"Dayshade\"\nenemy_health=999999\n\
+keystone_level=10\nsingle_actor_batch=1\nmax_time=600\n\
+raid_events+=/pull,pull=1,enemies=\"x_1\":100";
+        let (_, gear_a, tal_a, spec_a) = parse_base_profile(clean);
+        let (non_gear_b, gear_b, tal_b, spec_b) = parse_base_profile(routed);
+        assert_eq!(gear_a, gear_b, "gear unaffected by route lines");
+        assert_eq!(tal_a, tal_b, "talents unaffected by route lines");
+        assert_eq!(spec_a, spec_b, "spec unaffected by route lines");
+        assert!(non_gear_b.iter().any(|l| l == "fight_style=DungeonRoute"));
+        assert!(non_gear_b.iter().any(|l| l.starts_with("raid_events+=/pull")));
+    }
+
+    #[test]
     fn skips_empty_lines() {
         let profile = "\
 mage=test\n\

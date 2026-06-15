@@ -31,10 +31,8 @@ function groupByBatch(sims: JobOverviewSummary[]): HistoryEntry[] {
   return entries;
 }
 
-/** History-style row used in the All view. `trailing` is rendered to the
- * right of the timestamp — either the delete X for terminal rows or the
- * Pause/Resume/Cancel cluster for active ones. Keeping the slot inline
- * (rather than stacking a second row) keeps row heights uniform. */
+/** History-style row for the All view. `trailing` (delete X or action cluster)
+ * is rendered inline beside the timestamp to keep row heights uniform. */
 function HistoryRow({ job, trailing }: { job: JobOverviewSummary; trailing: ReactNode }) {
   const router = useRouter();
   const { t } = useLanguage();

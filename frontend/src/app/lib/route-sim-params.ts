@@ -1,11 +1,9 @@
 import { readStoredPositiveInt } from './storage';
 
-/** Parameters for materializing a DungeonRoute into a SimC string. These belong
- *  to the route-generation concern (not the general sim config): the keystone
- *  level the enemy health scales to, and the player's share of enemy HP — the
- *  fraction the simmed actor must kill. They're persisted so the choice carries
- *  across importing and loading saved routes. Defaults match keystone.guru
- *  (level 10, hp 27 — "your % of the group's damage"). */
+/** Params for materializing a DungeonRoute into SimC: keystone level the enemy
+ *  health scales to, and the player's share of enemy HP (fraction the actor must
+ *  kill). Persisted so the choice carries across importing/loading saved routes.
+ *  Defaults match keystone.guru (level 10, hp 27 = "your % of group damage"). */
 const LEVEL_KEY = 'simhammer_route_keystone_level';
 const HP_KEY = 'simhammer_route_hp_percent';
 

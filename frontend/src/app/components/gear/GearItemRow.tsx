@@ -1,7 +1,4 @@
-/**
- * Shared gear item row used across Top Gear, Upgrade Compare, and other pages.
- * Renders an item with icon, quality-colored name, detail parts, and optional checkbox.
- */
+/** Shared gear item row (Top Gear, Upgrade Compare, etc.): icon, quality-colored name, detail parts, optional checkbox. */
 /* eslint-disable @next/next/no-img-element */
 
 import { cn } from '../../lib/cn';
@@ -75,7 +72,6 @@ export default function GearItemRow({
 
   const content = (
     <>
-      {/* Checkbox or equipped indicator */}
       {selectable ? (
         <Checkbox checked={!!checked} onChange={onToggle} aria-label={name} />
       ) : equipped ? (
@@ -92,7 +88,6 @@ export default function GearItemRow({
         </div>
       ) : null}
 
-      {/* Item icon */}
       <a
         href={href}
         data-wowhead={wowheadData}
@@ -114,7 +109,6 @@ export default function GearItemRow({
         />
       </a>
 
-      {/* Name + details */}
       <div className="min-w-0 flex-1">
         <a
           href={href}
@@ -139,7 +133,6 @@ export default function GearItemRow({
         )}
       </div>
 
-      {/* Right side: children + ilvl */}
       {children}
       {ilevel != null && ilevel > 0 && (
         <span className="shrink-0 font-mono text-xs tabular-nums text-muted">{ilevel}</span>
@@ -147,7 +140,6 @@ export default function GearItemRow({
     </>
   );
 
-  // Row styling
   const baseClass = 'flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors';
 
   if (selectable) {

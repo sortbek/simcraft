@@ -62,7 +62,7 @@ export default function ItemTable({
 
   const totalItems = Object.values(drops).reduce((n, items) => n + items.length, 0);
 
-  // Check if dungeon grouping is meaningful (multiple instance names present)
+  // Dungeon grouping is only meaningful with multiple instance names
   const hasMultipleDungeons = useMemo(() => {
     const names = new Set<string>();
     for (const items of Object.values(drops)) {
@@ -86,7 +86,7 @@ export default function ItemTable({
 
   const embellishmentsFull = equippedEmbellishments + selectedEmbellished >= 2;
 
-  // Map item_id → slot name (from the drops keys)
+  // item_id → slot name, keyed off the drops map
   const itemSlotMap = useMemo(() => {
     const map = new Map<number, string>();
     for (const [slot, items] of Object.entries(drops)) {
@@ -116,7 +116,6 @@ export default function ItemTable({
         .filter(([, items]) => items.length > 0);
     }
 
-    // Group by dungeon
     const byDungeon = new Map<string, DropItem[]>();
     for (const items of Object.values(drops)) {
       for (const item of items) {
@@ -146,7 +145,6 @@ export default function ItemTable({
     groupedItems.every(([, items]) => items.every((item) => selected.has(item.item_id)));
   return (
     <div className="overflow-hidden rounded-xl border border-outline-variant/5 bg-surface-container shadow-2xl">
-      {/* Header */}
       <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="font-headline text-base font-black uppercase tracking-tight text-on-surface">
@@ -228,7 +226,6 @@ export default function ItemTable({
         </div>
       </div>
 
-      {/* Table Header */}
       <div className="grid grid-cols-12 border-b border-outline-variant/5 bg-surface-container-low px-4 py-2">
         <div className="col-span-5 flex items-center gap-4">
           <Checkbox
@@ -252,11 +249,9 @@ export default function ItemTable({
         </div>
       </div>
 
-      {/* Item Rows */}
       <div className="divide-y divide-outline-variant/5">
         {groupedItems.map(([slot, items]) => (
           <div key={slot}>
-            {/* Slot group header */}
             <div className="bg-surface-container-low/50 px-4 py-1.5">
               <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40">
                 {slot} ({items.length})
@@ -290,7 +285,6 @@ export default function ItemTable({
                       : 'cursor-pointer hover:bg-surface-container-high/40'
                   }`}
                 >
-                  {/* Checkbox + Icon + Name */}
                   <div className="col-span-5 flex items-center gap-3">
                     <Checkbox
                       variant="primary"
@@ -350,14 +344,12 @@ export default function ItemTable({
                     </div>
                   </div>
 
-                  {/* Slot */}
                   <div className="col-span-5 text-center">
                     <span className="rounded bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase text-on-surface-variant">
                       {itemSlotMap.get(item.item_id) ?? slot}
                     </span>
                   </div>
 
-                  {/* Level */}
                   <div className="col-span-2 text-center">
                     <span className="font-headline text-xs font-black tabular-nums text-on-surface">
                       {resolved.ilvl}

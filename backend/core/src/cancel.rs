@@ -1,10 +1,8 @@
 //! Cooperative cancellation for staged sim jobs.
 //!
-//! A `CancelToken` lets long-running tasks check whether their job has been
-//! cancelled, without holding a strong reference to anything async-runtime
-//! specific. The token reads the DB-backed status (the source of truth) so
-//! cancellation works across stage boundaries even when no simc subprocess
-//! is currently registered in `RUNNING_PROCESSES`.
+//! A `CancelToken` reads the DB-backed status (the source of truth) so
+//! long-running tasks can check for cancellation across stage boundaries even
+//! when no simc subprocess is currently registered in `RUNNING_PROCESSES`.
 
 use crate::db::JobRepo;
 use crate::models::JobStatus;
@@ -26,10 +24,8 @@ impl CancelToken {
     /// True if the job has been cancelled. Errors are treated as "not cancelled"
     /// so a transient DB hiccup never falsely aborts execution.
     pub async fn is_cancelled(&self) -> bool {
-        // `get` reads the full row; that's fine for a once-per-stage check.
-        // If this ever becomes hot enough to matter we can add a slim
-        // `get_status_summary` back; today the staged loop is the only caller
-        // and per-stage cost is dwarfed by the simc subprocess.
+        // `get` reads the full row, but this is a once-per-stage check whose
+        // cost is dwarfed by the simc subprocess, so a slim query isn't worth it.
         match self.repo.get(&self.job_id).await {
             Ok(Some(j)) => j.status == JobStatus::Cancelled,
             _ => false,

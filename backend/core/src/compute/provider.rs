@@ -17,16 +17,14 @@ pub struct ProviderCaps {
     pub pause: bool,
     pub streaming_logs: bool,
     pub server_side_multistage: bool,
-    /// Coarse routing/menu flag: can this provider run a streaming-sized job
-    /// via the cloud-chunking orchestrator? `false` for local (local uses the
-    /// triage path). Per-RUN pause/cancel come from `effective_capabilities`,
-    /// not this static flag.
+    /// Coarse routing flag: can this provider run a streaming-sized job via the
+    /// cloud-chunking orchestrator? `false` for local (uses triage). Per-RUN
+    /// pause/cancel come from `effective_capabilities`, not this static flag.
     pub cloud_streaming: bool,
 }
 
 /// Callbacks passed through the `SimcProvider` trait. Arc-wrapped so providers
-/// can clone them into the multiple sub-tasks `run_simc_staged` requires
-/// (`on_log` needs `Clone`; we make the others Clone too for symmetry).
+/// can clone them into the multiple sub-tasks `run_simc_staged` requires.
 pub struct RunCtx<'a> {
     pub job_id: &'a str,
     pub on_progress: Arc<dyn Fn(u8, &str, &str) + Send + Sync + 'a>,
@@ -50,9 +48,8 @@ pub struct StagedExecutionContext {
 #[derive(Debug)]
 pub enum RunError {
     Cancelled,
-    /// User-requested pause hit a checkpoint (local-staged only). Caller
-    /// must NOT write an error message — `simc_runner` already set the job
-    /// status to `Paused` before returning.
+    /// User-requested pause hit a checkpoint (local-staged only). Caller must
+    /// NOT write an error message — `simc_runner` already set status to `Paused`.
     Paused,
     Other(String),
 }
@@ -133,13 +130,10 @@ pub trait SimcProvider: Send + Sync {
         Ok(ProviderUsage::default())
     }
 
-    /// Submit ONE chunk of profilesets and return the provider's remote job id
-    /// immediately (before it runs), so the cloud-streaming orchestrator can
-    /// persist it to `cloud_chunks.remote_job_id` for resume re-polling. Pair
-    /// with [`poll_and_fetch_chunk`](Self::poll_and_fetch_chunk).
-    ///
-    /// Default: the provider does not support cloud chunk streaming. Providers
-    /// that drive the cloud-streaming orchestrator (e.g. Simmit) override this.
+    /// Submit ONE chunk and return the remote job id immediately (before it
+    /// runs), so the orchestrator can persist it to `cloud_chunks.remote_job_id`
+    /// for resume re-polling. Pair with [`poll_and_fetch_chunk`](Self::poll_and_fetch_chunk).
+    /// Default errors; cloud-streaming providers (e.g. Simmit) override.
     async fn submit_chunk_for_id(
         &self,
         _auth: &ProviderAuth,
@@ -152,12 +146,9 @@ pub trait SimcProvider: Send + Sync {
         ))
     }
 
-    /// Poll an already-submitted remote chunk to terminal and fetch its result,
-    /// adapted to the SimC-shaped [`SimcOutput`]. Used both for the live submit
-    /// path and for resume re-polling.
-    ///
-    /// Default: the provider does not support cloud chunk streaming. Providers
-    /// that drive the cloud-streaming orchestrator (e.g. Simmit) override this.
+    /// Poll an already-submitted remote chunk to terminal and fetch its result
+    /// as [`SimcOutput`]. Used for both live submit and resume re-polling.
+    /// Default errors; cloud-streaming providers (e.g. Simmit) override.
     async fn poll_and_fetch_chunk(
         &self,
         _ctx: RunCtx<'_>,
@@ -177,7 +168,7 @@ pub struct CredentialTest {
 
 /// Per-account runtime/concurrency limits, from `GET /v1/simc/usage`. The
 /// orchestrator uses `max_active_jobs` to bound in-flight chunk submissions and
-/// `max_runtime_seconds` to inform the chunk ceiling / estimate.
+/// `max_runtime_seconds` for the chunk ceiling / estimate.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ProviderUsage {
     pub max_runtime_seconds: Option<u32>,

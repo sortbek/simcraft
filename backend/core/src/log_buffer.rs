@@ -1,10 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
-// Per-job ring-buffer cap. Sized to comfortably hold the log output of a
-// long Triage sim (50-100 batches × ~10 lines/batch ≈ 500-1000 lines) plus
-// the Staged pipeline output, with headroom for users who leave the page
-// and return mid-sim. ~2000 × ~100 bytes ≈ 200 KB per active job.
+// Per-job ring-buffer cap. Holds a long Triage sim's output (~500-1000 lines)
+// plus the Staged pipeline, with headroom. ~2000 × ~100 bytes ≈ 200 KB per job.
 const MAX_LINES_PER_JOB: usize = 2000;
 
 struct JobLog {
@@ -65,9 +63,8 @@ impl LogBuffer {
             return (Vec::new(), log.next_index);
         }
 
-        // Calculate how many lines to skip from the front of the deque.
-        // `after` is the cursor (last index the client has seen).
-        // Lines in the deque cover indices [first_index, next_index).
+        // `after` is the cursor (last index the client saw); the deque covers
+        // [first_index, next_index). Skip past lines already seen.
         let start = after.saturating_sub(log.first_index);
 
         let lines: Vec<String> = log.lines.iter().skip(start).cloned().collect();

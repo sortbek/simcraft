@@ -52,7 +52,7 @@ export default function TalentTree({
   bare,
   vertical,
 }: TalentTreeProps) {
-  // In edit mode, freeze the initial talent string so prop changes don't re-decode
+  // In edit mode, freeze the initial string so prop changes don't re-decode
   const initialTalentRef = useRef(talentString);
   useEffect(() => {
     if (!editable) initialTalentRef.current = talentString;
@@ -72,17 +72,15 @@ export default function TalentTree({
   const resolvedSpecId = specIdProp ?? header?.specId ?? null;
   const tree = useTalentTree(resolvedSpecId);
 
-  // Decode selections from the (stable) talent string.
-  // fullNodeOrder covers ALL nodes across all specs of the class.
-  // fullNodeMaxRanks (from the backend) provides maxRanks for every node
-  // including nodes from other specs. Without it, bit positions misalign
-  // because the decoder can't determine the correct bit width for each node.
+  // Decode selections from the stable string. fullNodeOrder/fullNodeMaxRanks
+  // cover ALL specs of the class; without them bit positions misalign because
+  // the decoder can't determine each node's bit width.
   const decodedFromString = useMemo(() => {
     if (!header || !tree) return null;
     const orderedIds = tree.fullNodeOrder;
     if (!orderedIds) return null;
 
-    // Use backend-provided maxRanks (covers all specs), fall back to local nodes
+    // Prefer backend maxRanks (covers all specs); fall back to local nodes
     const localNodes = [
       ...tree.classNodes,
       ...tree.specNodes,
@@ -95,9 +93,8 @@ export default function TalentTree({
     );
     const decoded = decodeNodes(header.bits, header.offset, orderedIds, maxRanks);
 
-    // Auto-grant freeNode talents that the game grants implicitly.
-    // Some export strings omit free entry nodes — grant ALL of them
-    // (including both hero subtree entries, matching Raidbots behavior).
+    // Some export strings omit implicit free entry nodes — grant ALL of them
+    // (including both hero subtree entries) to match Raidbots behavior.
     for (const node of [...tree.classNodes, ...tree.specNodes, ...tree.heroNodes]) {
       if (node.freeNode && !decoded.has(node.id)) {
         decoded.set(node.id, { ranks: node.maxRanks, choiceIndex: -1 });
@@ -132,7 +129,7 @@ export default function TalentTree({
     return new Map(allNodes.map((n) => [n.id, n]));
   }, [tree]);
 
-  // Track a pending emit — encode and notify parent after render, not during
+  // Encode and notify parent after render, not during it
   const pendingEmit = useRef<Map<number, NodeSelection> | null>(null);
   useEffect(() => {
     if (!pendingEmit.current || !tree || !resolvedSpecId || !onTalentStringChange) return;
@@ -355,7 +352,6 @@ function TreeSection({
         preserveAspectRatio="xMidYMid meet"
         onContextMenu={editable ? (e) => e.preventDefault() : undefined}
       >
-        {/* Connections */}
         {nodes.map((node) =>
           node.next
             .filter((targetId) => sectionNodeIds.has(targetId))
@@ -379,7 +375,6 @@ function TreeSection({
               );
             })
         )}
-        {/* Nodes */}
         {nodes.map((node) => {
           const sel = selections.get(node.id);
           const selectable =
@@ -432,7 +427,7 @@ function TalentNodeSvg({
   const isChoice = node.type === 'choice' && node.entries.length > 1;
   const isInteractable = editable && (selectable || isSelected);
 
-  // For choice nodes, pick the selected entry; otherwise use first
+  // Choice nodes: use the selected entry; otherwise the first
   let entry = node.entries[0];
   if (
     isChoice &&

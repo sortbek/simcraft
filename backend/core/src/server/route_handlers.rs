@@ -5,11 +5,10 @@ use super::mdt_handlers::{flatten_pulls, CloneRef};
 use crate::db::{route_repo::CreateRouteRequest, RouteRepo};
 use crate::mdt;
 
-/// Compute the thumbnail shape (normalized pull centroids, JSON) for a route, or
-/// `None` when no geometry is derivable (a keystone.guru SimC paste, a legacy
-/// footer, or a decode that resolves no clones). Best-effort: never fails a
-/// save/list. Prefers the built pull assignment (matches how the route classifies
-/// + sims) and falls back to decoding the MDT string.
+/// Thumbnail shape (normalized pull centroids, JSON), or `None` when no geometry
+/// is derivable (SimC paste, legacy footer, no resolved clones). Best-effort.
+/// Prefers the built pull assignment (matches how the route sims), else decodes
+/// the MDT string.
 fn route_shape(
     db: &mdt::DungeonDb,
     mdt_string: &str,
@@ -32,10 +31,9 @@ fn route_shape(
     serde_json::to_string(&shape).ok()
 }
 
-/// The `shape` value to persist: the computed thumbnail, or an empty-array
-/// sentinel (`"[]"`) when no geometry is derivable — so a row without a shape
-/// isn't re-decoded on every later list. The frontend treats `[]` the same as a
-/// missing shape (falls back to a seeded thumbnail).
+/// `shape` value to persist: the thumbnail, or an empty-array sentinel (`"[]"`)
+/// when no geometry is derivable, so the row isn't re-decoded on every later list.
+/// The frontend treats `[]` as missing (falls back to a seeded thumbnail).
 fn shape_to_store(
     db: &mdt::DungeonDb,
     mdt_string: &str,
@@ -52,10 +50,9 @@ pub(super) async fn list_routes(repo: web::Data<RouteRepo>) -> HttpResponse {
             return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
         }
     };
-    // Backfill thumbnails for rows saved before shapes existed. Computed once and
-    // persisted per row — including an empty-array sentinel for rows with no
-    // derivable geometry, so they aren't re-decoded on later lists. Skipped until
-    // the MDT db is loaded, so a transient miss isn't persisted as "no shape".
+    // Backfill thumbnails for rows saved before shapes existed: compute + persist
+    // once per row (sentinel for no-geometry rows so they aren't re-decoded later).
+    // Skipped until the MDT db loads, so a transient miss isn't persisted as "no shape".
     if let Some(db) = mdt::enemy_db::global() {
         for r in routes.iter_mut() {
             if r.shape.is_none() {

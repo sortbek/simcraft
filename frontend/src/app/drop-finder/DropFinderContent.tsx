@@ -569,9 +569,8 @@ export default function DropFinderContent() {
             upgradeLevel,
             upgradeTracks
           );
-          // No `slot_inherits` in the submission payload — the backend
-          // derives enchant/gem inheritance from the equipped profile so
-          // the frontend isn't computing simulation semantics.
+          // No `slot_inherits` here: backend derives enchant/gem inheritance
+          // from the equipped profile, keeping sim semantics off the frontend.
           dropItems.push({
             ...item,
             ilevel: resolved.ilvl,

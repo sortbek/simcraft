@@ -79,10 +79,9 @@ pub fn overview(
     generate::generate(&route, db, opts)
 }
 
-/// Re-serialize an edited pull assignment — clone `(enemy_idx, clone_idx)`
-/// references grouped per pull — into a SimC `DungeonRoute` with travel-time
-/// delays. Used to save/sim routes built or edited on the map (no MDT string).
-/// No drawn line is involved, so delays use the straight-line estimate.
+/// Re-serialize an edited pull assignment (clone `(enemy_idx, clone_idx)` refs
+/// grouped per pull) into a SimC `DungeonRoute`. For routes built/edited on the
+/// map (no MDT string): no drawn line, so delays use the straight-line estimate.
 pub fn serialize(
     dungeon_idx: i64,
     pulls: Vec<Vec<(i64, i64)>>,
@@ -391,7 +390,12 @@ mod tests {
         let out = convert(SKYREACH_ROUTE, &load_skyreach_db(), &opts).unwrap();
 
         assert!(out.simc.starts_with("fight_style=DungeonRoute"));
-        assert!(out.simc.contains("override.bloodlust=0"));
+        // Raid buffs are no longer hardcoded in the route block — they are applied
+        // from the user's sim settings by build_full_simc_input (see bug #1 fix).
+        assert!(
+            !out.simc.contains("override."),
+            "route block must not hardcode raid-buff overrides"
+        );
         assert!(out.simc.contains("single_actor_batch=1"));
         assert!(out.simc.contains("max_time=1680"));
         assert!(out

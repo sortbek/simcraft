@@ -1,11 +1,10 @@
 /**
- * Streamed Top Gear Triage batch-size choices. The label tradeoff is between
- * pause responsiveness (small batches = pause honored sooner) and throughput
- * (large batches = fewer simc invocations + lower retention overhead).
+ * Streamed Top Gear Triage batch-size choices. Tradeoff: small batches = pause
+ * honored sooner; large batches = fewer simc invocations + lower retention overhead.
  *
- * Keep `maxOption` in sync with the backend's `MAX_USER_BATCH_PROFILESETS`
- * constant in `backend/core/src/profileset_generator/triage.rs`. The
- * backend clamps to that bound, so requesting more is silently truncated.
+ * Keep the max option in sync with the backend's `MAX_USER_BATCH_PROFILESETS` in
+ * `backend/core/src/profileset_generator/triage.rs` — the backend clamps to that
+ * bound, so requesting more is silently truncated.
  */
 
 export interface TriageBatchOption {

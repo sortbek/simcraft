@@ -45,12 +45,10 @@ export default function RouteViewer({
   const doSave = async (name: string) => {
     setModal(false);
     try {
-      // An unedited MDT import is saved as its string alone, so it stays an "MDT"
-      // route and re-sims through decode (preserving the drawn-line travel delays
-      // and title the string carries). Once the pull assignment is edited — or the
-      // route was built from a dungeon overview (no string) — save it level-
-      // agnostically as dungeon + pull clone-refs; the SimC is then regenerated at
-      // the chosen keystone level on load.
+      // Unedited MDT import: save the string alone so it stays "MDT" and re-sims via
+      // decode (preserving the string's travel delays + title). Once pulls are edited
+      // (or there's no string), save level-agnostically as dungeon + pull clone-refs;
+      // SimC is regenerated at the chosen keystone level on load.
       const dirty = editor.assignment.some((p, i) => p !== conv.map.enemies[i].pull);
       const isUneditedMdt = mdtString.trim().startsWith('!') && !dirty;
       if (isUneditedMdt) {

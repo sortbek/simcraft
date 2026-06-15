@@ -341,9 +341,8 @@ pub(super) async fn get_upgrade_compare_prepare(req: web::Json<serde_json::Value
 pub(super) async fn get_upgrade_compare_combo_count(
     req: web::Json<UpgradeCompareRequest>,
 ) -> HttpResponse {
-    // Apply both talent AND spec override, matching every other sim handler.
-    // Without the spec_override pass, a cross-spec talent build would sim
-    // the wrong profile silently.
+    // Apply both talent AND spec override (like every sim handler); without the
+    // spec_override pass a cross-spec talent build would silently sim the wrong profile.
     let simc_input = preprocess_simc_input(
         &req.simc_input,
         &req.options.talents,

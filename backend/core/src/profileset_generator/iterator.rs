@@ -1,14 +1,8 @@
 //! Streaming `ProfilesetIterator` over the full Top Gear product space.
+//! Yields one [`ProfilesetCandidate`] at a time with O(axes) memory; the eager
+//! generator in `top_gear.rs` is untouched.
 //!
-//! Produces one [`ProfilesetCandidate`] at a time with O(axes) memory.
-//! The existing eager generator in `top_gear.rs` is untouched.
-//!
-//! ## Axis layout (cursor indices)
-//!
-//! `cursor[0..varying_slots.len()]`           — gear choice per varying slot
-//! `cursor[gear..]..gear+enchant_axes.len()]`  — enchant option per axis
-//! `cursor[gear+enchant]`                      — gem combo index
-//! `cursor[gear+enchant+1]`                    — talent build index
+//! Cursor axis layout: `[gear per varying slot][enchant per axis][gem combo][talent build]`.
 
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -35,17 +29,16 @@ pub struct ProfilesetCandidate {
     pub identity_key: String,
 }
 
-/// One enchant variation axis: a slot and its candidate enchant IDs.
-/// `options[0]` must be the currently-equipped enchant ID (0 if unenchanted).
+/// One enchant variation axis. `options[0]` must be the equipped enchant ID
+/// (0 if unenchanted) so axis index 0 never emits an override.
 #[derive(Debug, Clone)]
 pub struct EnchantAxis {
     pub slot: String,
     pub options: Vec<u64>,
 }
 
-/// Wrapper around a pre-built gem combo list. Each entry maps slot →
-/// `Vec<gem_id>` of length equal to the slot's socket count (1 for
-/// single-socket items, 2+ for crafted/socketed necks etc.).
+/// Pre-built gem combo list. Each entry maps slot → `Vec<gem_id>` sized to the
+/// slot's socket count (1 single-socket, 2+ for crafted/socketed necks etc.).
 #[derive(Clone)]
 pub struct GemCombosResolver {
     inner: Vec<GemCombo>,
@@ -82,10 +75,10 @@ pub struct ProfilesetIteratorConfig {
     pub gem_combos_resolver: GemCombosResolver,
     /// Item IDs known to carry a socket.
     pub socketed_item_ids: HashSet<u64>,
-    /// `(name, talent_string)` pairs. Empty → treated as a single pass with no talent override.
+    /// `(name, talent_string)` pairs. Empty → single pass with no talent override.
     pub talent_builds: Vec<(String, String)>,
-    /// Catalyst budget for the streaming gear-validator. `None` = the request
-    /// doesn't deal in catalyst (mirrors the eager path's `GearSetContext`).
+    /// Catalyst budget for the gear-validator. `None` = request has no catalyst
+    /// (mirrors the eager path's `GearSetContext`).
     pub max_catalyst_charges: Option<u32>,
 }
 
@@ -184,36 +177,29 @@ impl ProfilesetIterator {
         &self.cursor
     }
 
-    /// The next global profileset name index (`Combo {n}`). Monotonic across the
-    /// whole iterator. Cloud-streaming checkpoints persist this so a resumed run
-    /// continues the global naming instead of re-emitting "Combo 1" and colliding
-    /// with earlier chunks.
+    /// Next global `Combo {n}` index, monotonic across the iterator. Checkpoints
+    /// persist this so a resumed run keeps global naming instead of re-emitting
+    /// "Combo 1" and colliding with earlier chunks.
     pub fn next_name_idx(&self) -> usize {
         self.next_name_idx
     }
 
-    /// Restore the global `Combo {n}` name counter after a [`seek`]. `seek`
-    /// (re)positions the cursor but leaves `next_name_idx` at its post-`new`
-    /// value (1), so a resumed run MUST call this with the checkpointed
-    /// `next_name_idx` or it would re-emit "Combo 1, Combo 2, …" and collide
-    /// with the names already produced by earlier (completed) chunks.
+    /// Restore the `Combo {n}` counter after a [`seek`] (which repositions the
+    /// cursor but leaves `next_name_idx` at 1). A resumed run MUST call this with
+    /// the checkpointed value to avoid re-emitting names already produced.
     ///
     /// [`seek`]: Self::seek
     pub fn set_next_name_idx(&mut self, next_name_idx: usize) {
         self.next_name_idx = next_name_idx;
     }
 
-    /// Count the number of positions that `evaluate` would emit (i.e. that would
-    /// become profilesets) without building simc strings, identity keys, or
-    /// metadata. Walks the same cursor space and uses the same advance order as
-    /// the `Iterator` impl so the count is always identical to `self.count()`.
+    /// Count positions `evaluate` would emit, without building simc/keys/metadata.
+    /// Uses the same cursor space and advance order as the `Iterator` impl so the
+    /// count always matches `self.count()`.
     pub fn count_emitted(&self) -> usize {
         let n_axes = self.axis_sizes.len();
-        // Single degenerate position when there are no axes (n_axes == 0):
-        // the iterator yields at most one item (the `done` flag is checked by
-        // the real iterator's `next`). With zero axes the cursor is empty and
-        // `evaluate` receives an empty slice — this is the same path the real
-        // iterator takes, so we mirror it exactly.
+        // Zero axes: mirror the real iterator's single degenerate position —
+        // evaluate gets an empty slice and yields at most one item.
         if n_axes == 0 {
             return if self.evaluate(&[]).is_some() { 1 } else { 0 };
         }
@@ -239,12 +225,10 @@ impl ProfilesetIterator {
         }
     }
 
-    /// Evaluate the emission decision for the current cursor: build the gear set,
-    /// normalize, validate constraints, detect baseline, resolve enchants/gems/talent,
-    /// and apply the baseline-skip. Returns `Some(Eval)` for positions that emit a
-    /// profileset, `None` for positions that are skipped. Both the full path
-    /// (`build_candidate`) and the count-only path (`count_emitted`) share this
-    /// decision so the two paths can never diverge.
+    /// Emission decision for one cursor: build/normalize/validate gear, detect
+    /// baseline, resolve enchants/gems/talent, apply baseline-skip. `Some` emits,
+    /// `None` skips. Shared by `build_candidate` and `count_emitted` so they can
+    /// never diverge.
     fn evaluate(&self, cursor: &[usize]) -> Option<Eval> {
         // ── 1. Build gear set ────────────────────────────────────────────────
         let mut gear_set: HashMap<String, Arc<Value>> = HashMap::new();
@@ -328,23 +312,14 @@ impl ProfilesetIterator {
             .cloned()
             .unwrap_or_else(|| ("".to_string(), "".to_string()));
 
-        // Skip combos that reproduce the baseline actor byte-for-byte. The base
-        // case is all-equipped gear with no overrides. But a gem-only combo on
-        // baseline gear whose effective gems EQUAL the already-socketed gems is
-        // also baseline-identical (e.g. replace_gems=true and the user re-picked
-        // an already-equipped gem): `set_gem_ids` with the same gem is a no-op,
-        // so it would waste a sim slot on a zero-delta duplicate of the baseline.
-        // (Enchant overrides always differ from equipped — axis index 0 is the
-        // equipped enchant and never emits an override — so a non-empty enchant
-        // map always changes something.)
-        //
-        // Also skip baseline + talent_idx=0 when there are no other effective
-        // deltas. In the eager wrapper the base actor is emitted separately as
-        // "### Combo 1" using the FIRST talent; a profileset of
-        // (baseline gear, first talent, no enchant override, no gem delta) would
-        // duplicate it byte-for-byte. In the streaming path the base_profile
-        // already carries the first talent, so the same deduplication applies.
-        // talent_idx>0 is never the base actor regardless of deltas.
+        // Skip combos that reproduce the baseline actor byte-for-byte. Baseline =
+        // all-equipped gear, no overrides. A gem-only combo whose effective gems
+        // EQUAL the already-socketed gems is also baseline-identical (set_gem_ids
+        // is a no-op, e.g. replace_gems re-picked the equipped gem). Enchant
+        // overrides always differ (axis index 0 emits no override), so a non-empty
+        // enchant map always changes something. talent_idx==0 with no other delta
+        // duplicates the separately-emitted base actor (eager "### Combo 1" / the
+        // streaming base_profile's first talent); talent_idx>0 is never baseline.
         let gems_match_equipped = eff_gems.iter().all(|(slot, gids)| {
             let equipped_gems = gear_set
                 .get(slot)
@@ -418,11 +393,10 @@ impl ProfilesetIterator {
                 };
                 let item_sockets =
                     item.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
-                // apply_item_gems uses item_sockets from game data as authoritative:
-                // items with sockets:0 are never gemmed, regardless of socketed_item_ids.
-                // replace_gems=true here because eff_gems is already filtered upstream
-                // (socketless items and replace_gems=false already-gemmed items are excluded
-                // during gem_slots construction in build_iterator_config).
+                // item_sockets (game data) is authoritative: sockets:0 is never gemmed.
+                // replace_gems=true is safe — eff_gems is already filtered upstream in
+                // build_iterator_config (socketless + replace_gems=false already-gemmed
+                // items excluded during gem_slots construction).
                 let with_gem = super::emit::apply_item_gems(
                     &with_enchant,
                     item_sockets,
@@ -434,8 +408,8 @@ impl ProfilesetIterator {
             })
             .collect();
 
-        // Talent spec for spec= override line (streaming doesn't vary specs but
-        // keep the call consistent with the eager path).
+        // Talent spec for the spec= override line (streaming doesn't vary specs,
+        // but kept consistent with the eager path).
         let talent_spec_name: Option<&str> = if talent_string.is_empty() {
             None
         } else {
@@ -461,15 +435,12 @@ impl ProfilesetIterator {
             None
         };
 
-        // ── Paired display slots (rings + trinkets) ──────────────────────────
-        // The eager always includes BOTH slots of a pair (finger1+finger2,
-        // trinket1+trinket2) in gear-swap metadata so the frontend can show
-        // the "kept" ring alongside the swapped one. We replicate this here.
+        // Paired display slots: eager includes BOTH slots of a pair in gear-swap
+        // metadata so the frontend shows the "kept" ring/trinket beside the swap.
         let paired_display_slots = ["finger1", "finger2", "trinket1", "trinket2"];
 
-        // ── Helper: equipped simc string for a slot ──────────────────────────
-        // Used for `simc_has_socket` checks that mirror the eager's socketed-set
-        // logic for gem-only and enchant-only baseline metadata.
+        // Equipped simc string for a slot — for the simc_has_socket checks that
+        // mirror the eager's socketed-set logic on baseline metadata.
         let equipped_simc_for = |slot: &str| -> Option<String> {
             self.cfg
                 .slot_item_lists
@@ -486,11 +457,8 @@ impl ProfilesetIterator {
                 .map(str::to_string)
         };
 
-        // ── Helper: build gem entries filtered by simc_has_socket ───────────
-        // Mirrors the eager's `build_gem_meta(gc, Some(&socketed))` where
-        // `socketed` is derived from `simc_has_socket` on equipped simc strings
-        // (possibly with an enchant already applied). Returns empty when no
-        // equipped simc has a socket indicator.
+        // Gem entries filtered by simc_has_socket on the (possibly enchant-applied)
+        // equipped simc — mirrors the eager's `build_gem_meta(gc, Some(&socketed))`.
         let gem_entries_simc_filtered =
             |enchant_overrides: &HashMap<String, u64>| -> Vec<serde_json::Value> {
                 if self.cfg.gem_combos_resolver.is_empty() {
@@ -522,36 +490,19 @@ impl ProfilesetIterator {
                 entries
             };
 
-        // ── Build metadata matching the eager's per-combo-type logic ─────────
-        //
-        // The eager emits metadata via three distinct code paths; the iterator
-        // must replicate each one exactly:
-        //
-        //   Case A — gem-only baseline (is_baseline, talent_idx==0, no enchants):
-        //     eager: build_gem_meta filtered by simc_has_socket → often []
-        //
-        //   Case B — enchant-only/enchant+gem baseline (is_baseline, talent_idx==0, enchants):
-        //     eager: enchant entries + gem entries (simc_has_socket filtered) + talent tags
-        //            built inline — NO off_hand synthetic
-        //
-        //   Case C — is_equipped_with_new_talent (is_baseline, talent_idx>0):
-        //     eager: build_combo_metadata with paired display slots (is_kept=true)
-        //            + enchant entries + gem entries + talent_info + off_hand synthetic
-        //
-        //   Case D — gear swap (!is_baseline, any talent_idx):
-        //     eager: build_combo_metadata with paired display slots (correct is_kept)
-        //            + non-paired non-equipped items + enchant entries + gem entries
-        //            + talent_info + off_hand synthetic
-        //
+        // Replicate the eager's four metadata paths exactly:
+        //   A gem-only baseline (talent_idx==0, no enchants): gem entries (socket-filtered), no off_hand synthetic.
+        //   B enchant(+gem) baseline (talent_idx==0): enchant + socket-filtered gem entries + talent tags inline, no off_hand synthetic.
+        //   C is_baseline + talent_idx>0: build_combo_metadata, paired slots is_kept=true, + enchant/gem/talent + off_hand synthetic.
+        //   D gear swap (!is_baseline): build_combo_metadata, paired + non-paired swapped items + enchant/gem/talent + off_hand synthetic.
         let include_off_hand_synthetic = !gear_set.contains_key("off_hand");
 
         let meta_items: Vec<serde_json::Value> = if is_baseline && talent_idx == 0 {
             if effective_enchants_map.is_empty() {
-                // Case A: gem-only baseline. Mirror eager's simc_has_socket filter.
+                // Case A: gem-only baseline.
                 gem_entries_simc_filtered(&HashMap::new())
             } else {
-                // Case B: enchant-only/enchant+gem baseline.
-                // Build enchant entries, then gem entries filtered by simc_has_socket.
+                // Case B: enchant(+gem) baseline — enchant entries then socket-filtered gems.
                 let mut items: Vec<serde_json::Value> = effective_enchants_map
                     .iter()
                     .map(|(slot, &eid)| super::emit::build_enchant_entry(slot, eid))
@@ -563,15 +514,14 @@ impl ProfilesetIterator {
                         item["talent_spec"] = serde_json::json!(ts);
                     }
                 }
-                // No off_hand synthetic for this case (eager builds inline, not via
-                // build_combo_metadata).
+                // No off_hand synthetic here (eager builds inline, not via build_combo_metadata).
                 items
             }
         } else {
-            // Case C (is_baseline && talent_idx > 0) or Case D (!is_baseline).
-            // Build gear_item_rows in the same order as the eager.
+            // Case C (is_baseline, talent_idx>0) or Case D (!is_baseline).
+            // gear_item_rows in eager order.
             let gear_item_rows: Vec<(String, bool, &Value)> = if is_baseline {
-                // Case C: is_equipped_with_new_talent — paired display slots only, is_kept=true.
+                // Case C: is_equipped_with_new_talent — paired slots only, is_kept=true.
                 paired_display_slots
                     .iter()
                     .filter_map(|slot| {
@@ -584,10 +534,9 @@ impl ProfilesetIterator {
                     })
                     .collect()
             } else {
-                // Case D: gear swap. Paired display slots first (with is_kept), then
+                // Case D: gear swap — paired slots first (with is_kept), then
                 // non-paired non-equipped items.
                 let mut rows: Vec<(String, bool, &Value)> = Vec::new();
-                // Paired display slots first.
                 for slot in &paired_display_slots {
                     let slot = slot.to_string();
                     if let Some(item) = gear_set.get(&slot) {
@@ -616,19 +565,16 @@ impl ProfilesetIterator {
                 rows
             };
 
-            // Enchant entries: all overrides, including for gear-swap slots.
-            // The eager emits the enchant entry separately even when the slot is
-            // also swapped; we mirror that (no filter by swap status).
+            // All enchant overrides, including for swapped slots — eager emits the
+            // enchant entry separately even when the slot is also swapped.
             let enchant_entries: Vec<serde_json::Value> = effective_enchants_map
                 .iter()
                 .map(|(slot, &eid)| super::emit::build_enchant_entry(slot, eid))
                 .collect();
 
-            // Gem entries (one per socket per slot) for the non-baseline cases.
-            // The eager uses build_gem_meta with a socketed set derived from
-            // simc_has_socket on the gear-set's simc strings (after enchant apply).
-            // For gear-swap combos the simc_has_socket check is on the GEAR item's
-            // simc string (which may differ from the equipped item). Mirror that:
+            // Gem entries (one per socket per slot). socket check is on the equipped
+            // simc for Case C, but on the GEAR item's simc for Case D swaps (it may
+            // differ from equipped) — mirrors the eager's build_gem_meta socketed set.
             let gem_entries: Vec<serde_json::Value> = {
                 if self.cfg.gem_combos_resolver.is_empty() {
                     Vec::new()
@@ -641,7 +587,6 @@ impl ProfilesetIterator {
                         .unwrap_or_default();
                     let mut entries = Vec::new();
                     for (slot, gids) in &combo {
-                        // Mirror eager's socketed-set filter for this path.
                         let simc = if is_baseline {
                             // Case C: equipped simc (possibly enchant-modified).
                             match equipped_simc_for(slot) {
@@ -872,9 +817,8 @@ mod tests {
     #[test]
     fn baseline_gem_equal_to_equipped_is_not_emitted() {
         crate::test_support::ensure_game_data_loaded();
-        // Equipped head already has gem 5001; the gem axis re-assigns the SAME
-        // gem 5001 (e.g. replace_gems=true, user re-picked the equipped gem).
-        // `set_gem_ids` would be a no-op → byte-identical to baseline → must skip.
+        // Re-assigning the equipped gem (5001) is a set_gem_ids no-op → byte-identical
+        // to baseline → must skip.
         let same = gem_only_iter(5001, 5001);
         assert!(
             same.is_empty(),
@@ -890,14 +834,9 @@ mod tests {
 
     #[test]
     fn swapped_slot_gear_row_carries_static_fields_enchant_entry_is_separate() {
-        // Replaces the old "swapped_slot_gear_row_carries_override_enchant_and_gem" test.
-        // After the eager-shape refactor the iterator no longer writes the enchant/gem
-        // override values into the gear row — it mirrors the eager generator which:
-        //   • keeps the gear row's enchant_id/gem_id from the STATIC item JSON (both 0
-        //     here because the alt item has no static enchant or gem), and
-        //   • emits the enchant override as a SEPARATE {type:"enchant"} delta entry.
-        // Gem entries are absent because the alt item's simc_string (",id=200") has no
-        // socket-adding bonus → simc_has_socket returns false.
+        // Eager shape: gear row keeps STATIC enchant_id/gem_id (both 0 for the alt
+        // item) and the enchant override is a SEPARATE {type:"enchant"} entry. No gem
+        // entries — alt simc ",id=200" has no socket bonus, so simc_has_socket is false.
         crate::test_support::ensure_game_data_loaded();
 
         // head: equipped 100 (gemless) + alt 200 (socketed). The alt is the swap.
@@ -1007,9 +946,8 @@ mod tests {
 
     #[test]
     fn set_next_name_idx_continues_naming_after_seek() {
-        // seek resets the cursor but leaves next_name_idx at 1; a resumed run
-        // restores the global counter so emitted names continue (no collision
-        // with names earlier chunks already produced).
+        // seek leaves next_name_idx at 1; restoring it lets a resumed run continue
+        // the global naming without colliding with earlier chunks.
         let cfg = make_cfg();
         let mut iter = ProfilesetIterator::new(cfg);
         assert!(iter.seek(vec![0, 0, 0]));
@@ -1075,8 +1013,7 @@ mod tests {
         );
     }
 
-    /// Shape-parity test (Task D2): after convergence, streaming metadata must
-    /// match the eager metadata shape for a single gear-swap combo.
+    /// Streaming metadata must match the eager shape for a single gear-swap combo.
     #[test]
     fn streaming_metadata_matches_eager_shape_for_single_swap() {
         // make_cfg() has head: equipped 100 + alt 200, no gems/enchants/talents.

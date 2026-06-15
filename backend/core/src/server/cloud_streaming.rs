@@ -1,10 +1,9 @@
 //! Cloud-streaming orchestrator for streaming-sized Top Gear on Simmit.
 //!
-//! Streams the existing `ProfilesetIterator` into bounded chunks, submits each
-//! to Simmit (server-side multistage), accumulates per-chunk SimC-JSON results,
-//! checkpoints chunk state for crash/pause recovery, and finalizes through the
-//! existing gear-comparison parser. Parallel to `server/streaming_top_gear.rs`
-//! (which owns the LOCAL triage path). See the B2 design spec.
+//! Streams the `ProfilesetIterator` into bounded chunks, submits each to Simmit
+//! (server-side multistage), accumulates per-chunk SimC-JSON, checkpoints for
+//! crash/pause recovery, and finalizes through the gear-comparison parser.
+//! Parallel to `server/streaming_top_gear.rs` (the LOCAL triage path). See B2 spec.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -18,20 +17,18 @@ use crate::db::cloud_chunks_repo::ChunkResultEnvelope;
 use crate::db::{CloudChunksRepo, JobRepo};
 use crate::profileset_generator::iterator::{ProfilesetIterator, ProfilesetIteratorConfig};
 
-/// Per-job profileset ceiling for one Simmit chunk. The effective limit is "the
-/// job completes within `limits.maxRuntimeSeconds`", which is EMPIRICAL — there
-/// is no documented Simmit max-profileset/payload cap. Start conservative and
-/// tune against real runs (see spec Risk #1). Treat as tunable, not load-bearing
-/// correctness.
+/// Per-job profileset ceiling for one Simmit chunk. Effective limit is EMPIRICAL
+/// ("job completes within `limits.maxRuntimeSeconds`"); no documented Simmit cap.
+/// Tunable, not load-bearing for correctness (see spec Risk #1).
 pub const REMOTE_MAX_PROFILESETS_PER_JOB: usize = 2_000;
 
 /// Max concurrent in-flight Simmit chunk submissions. The effective bound is
 /// `min(CONFIG_MAX_INFLIGHT, usage.limits.maxActiveJobs)`. Conservative default.
 pub const CONFIG_MAX_INFLIGHT: usize = 4;
 
-/// Folds per-chunk Simmit results into one SimC-shaped JSON document compatible
-/// with `result_parser::parse_gear_comparison_result`. Small: one base actor +
-/// N profileset result rows + a summed credits block — never N full JSON docs.
+/// Folds per-chunk Simmit results into one SimC-shaped JSON doc for
+/// `result_parser::parse_gear_comparison_result`. Small: one base actor + N
+/// profileset rows + summed credits — never N full JSON docs.
 #[derive(Debug, Default)]
 pub struct ChunkAccumulator {
     base_player: Option<Value>,
@@ -46,8 +43,7 @@ impl ChunkAccumulator {
 
     /// Fold one chunk's envelope. `base_player` is taken from the FIRST chunk
     /// that carries one (chunk 0). Profileset rows are concatenated in arrival
-    /// order; the final `parse_gear_comparison_result` re-sorts by DPS, so order
-    /// here is irrelevant to the ranking.
+    /// order; finalize re-sorts by DPS, so order here doesn't affect ranking.
     pub fn add_envelope(&mut self, env: ChunkResultEnvelope, credits: u64) {
         if self.base_player.is_none() {
             if let Some(bp) = env.base_player {
@@ -58,9 +54,8 @@ impl ChunkAccumulator {
         self.credits_consumed = self.credits_consumed.saturating_add(credits);
     }
 
-    /// Extract a chunk's envelope from a raw adapted Simmit `SimcOutput.json`
-    /// (the `simmit_result_to_simc_output` / artifact shape). `include_base`
-    /// should be true ONLY for chunk 0.
+    /// Extract a chunk's envelope from an adapted Simmit `SimcOutput.json`.
+    /// `include_base` should be true ONLY for chunk 0.
     pub fn envelope_from_simc_json(json: &Value, include_base: bool) -> ChunkResultEnvelope {
         let sim = json.get("sim");
         let profilesets = sim
@@ -113,8 +108,8 @@ impl ChunkAccumulator {
 
 // ── Chunk-runner abstraction (the Simmit-mock boundary) ──────────────────────
 
-/// One chunk's submission payload, handed to the [`ChunkRunner`]. The runner is
-/// the ONLY place that talks to Simmit (or, in tests, a fake) — the rest of the
+/// One chunk's submission payload for the [`ChunkRunner`]. The runner is the
+/// ONLY place that talks to Simmit (or a test fake) — the rest of the
 /// orchestrator is HTTP-free and unit-testable.
 #[derive(Debug, Clone)]
 pub struct ChunkRequest {
@@ -122,82 +117,72 @@ pub struct ChunkRequest {
     pub job_id: String,
     /// `"# Base Actor\n<base>\n<profileset lines>"`.
     pub simc_input: String,
-    /// Read by the fake test runners (assertions); the production Simmit runner
-    /// submits by `simc_input` text, so this is informational on that path.
+    /// Used by fake test runners; the production runner submits by `simc_input`
+    /// text, so this is informational on that path.
     #[allow(dead_code)]
     pub profileset_count: usize,
 }
 
-/// Async boundary the orchestrator submits chunks through. Returns the adapted
-/// **SimC-shaped JSON** for the chunk so the orchestrator stays Simmit-agnostic
-/// and the [`ChunkAccumulator`] helpers consume it directly. In production this
-/// wraps `SimmitProvider::submit_chunk_for_id` + `poll_and_fetch_chunk` (and
-/// records `remote_job_id` to `cloud_chunks`); in tests it returns canned JSON.
-///
-/// `futures::future::BoxFuture` is NOT a workspace dependency, so this spells out
-/// the boxed future directly with `Pin<Box<dyn Future + Send>>`.
+/// Async boundary chunks are submitted through. Returns adapted **SimC-shaped
+/// JSON** so the orchestrator stays Simmit-agnostic and [`ChunkAccumulator`]
+/// consumes it directly. Production wraps `submit_chunk_for_id` +
+/// `poll_and_fetch_chunk` (recording `remote_job_id` to `cloud_chunks`); tests
+/// return canned JSON. Spelled out as `Pin<Box<dyn Future + Send>>` because
+/// `futures::future::BoxFuture` is not a workspace dependency.
 pub type ChunkRunner = Arc<
     dyn Fn(ChunkRequest) -> Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>>
         + Send
         + Sync,
 >;
 
-/// Submit-time affordability re-check. The FE `cloud-estimate` is advisory; the
-/// orchestrator re-validates authoritatively BEFORE the first chunk submits.
-/// Injected (like [`ChunkRunner`]) so the orchestrator core stays HTTP-free and
-/// unit-testable with a fake — production wraps `provider.test_credential` +
-/// `get_usage`. Returns the account's currently-available credits:
-/// `Ok(Some(n))` to gate against `est_credits_needed`, `Ok(None)` when the
-/// provider reports no credit concept / unknown limit (treated as affordable),
-/// `Err` on a fetch failure (treated as fatal — we cannot confirm affordability).
+/// Submit-time affordability re-check (FE `cloud-estimate` is advisory; the
+/// orchestrator re-validates authoritatively BEFORE the first chunk submits).
+/// Injected like [`ChunkRunner`] to keep the core HTTP-free/testable; production
+/// wraps `test_credential`. Returns available credits: `Ok(Some(n))` gates
+/// against `est_credits_needed`; `Ok(None)` = no credit concept / unknown limit
+/// (affordable); `Err` = fetch failure, fatal (cannot confirm affordability).
 pub type AffordabilityCheck = Arc<
     dyn Fn() -> Pin<Box<dyn Future<Output = Result<Option<u64>, String>> + Send>> + Send + Sync,
 >;
 
 // ── Chunk generation ─────────────────────────────────────────────────────────
 
-/// One generated chunk: the combined simc input + the per-combo metadata rows
-/// (to persist to `ComboMetadataRepo`, exactly as local triage does) + the
-/// profileset count. The checkpoint reads the iterator cursor directly via
-/// `it.cursor()` at the generation boundary, so this struct carries no cursor.
+/// One generated chunk: combined simc input + per-combo metadata rows (persisted
+/// to `ComboMetadataRepo` like local triage) + count. No cursor — the checkpoint
+/// reads `it.cursor()` directly at the generation boundary.
 pub struct GeneratedChunk {
-    /// The individual `profileset."Combo N"+=...` lines for this chunk, in
-    /// generation order. Kept so a `timed_out`/errored chunk can be SPLIT into
-    /// smaller sub-chunks (same lines, same names, same `target_error`) on retry
-    /// without re-running the iterator or rewriting any combo-metadata rows.
+    /// `profileset."Combo N"+=...` lines, in generation order. Kept so a failed
+    /// chunk can be SPLIT into sub-chunks (same lines/names/`target_error`) on
+    /// retry without re-running the iterator or rewriting combo-metadata rows.
     pub profileset_lines: Vec<String>,
     /// `(combo_name, metadata_json)` pairs, ordered, for `combo_metadata`.
     pub metadata: Vec<(String, String)>,
     pub profileset_count: usize,
-    /// The global `Combo N` index of this chunk's FIRST emitted profileset
-    /// (`it.next_name_idx()` captured before the iterator advanced). The chunk
-    /// covers the contiguous range `[first_name_idx, first_name_idx + profileset_count)`,
-    /// persisted as `cloud_chunks.first_combo_name_idx` so resume can prove
-    /// coverage.
+    /// Global `Combo N` index of this chunk's FIRST profileset (`next_name_idx()`
+    /// before advancing). Covers `[first_name_idx, first_name_idx + count)`,
+    /// persisted as `cloud_chunks.first_combo_name_idx` so resume proves coverage.
     pub first_name_idx: usize,
-    /// `true` when the iterator yielded `None` before hitting `ceiling` — i.e.
-    /// the whole product space fit in this chunk (the single-chunk fast path).
+    /// `true` when the iterator yielded `None` before hitting `ceiling` — the
+    /// whole product space fit in this chunk (single-chunk fast path).
     pub exhausted: bool,
 }
 
-/// Pull up to `ceiling` candidates from the iterator into one chunk. Drops the
-/// in-memory lines into the returned strings; peak memory = one chunk.
+/// Pull up to `ceiling` candidates from the iterator into one chunk; peak memory
+/// = one chunk.
 ///
-/// Profileset NAMES are GLOBAL across the iterator (`Combo 1, Combo 2, …` never
-/// reset per chunk), so merged `sim.profilesets.results` never collides and the
-/// metadata join stays stable. `next()` already skips the baseline + illegal
-/// sets, so `profileset_count` counts REAL emitted profilesets and `cursor()`
-/// after the loop is the resume point.
+/// Profileset NAMES are GLOBAL (`Combo 1, 2, …` never reset per chunk), so the
+/// merged `sim.profilesets.results` never collides and the metadata join stays
+/// stable. `next()` skips the baseline + illegal sets, so `profileset_count`
+/// counts REAL emitted profilesets and `cursor()` after the loop is the resume point.
 pub fn build_chunk(
     it: &mut ProfilesetIterator,
-    // The base actor is recombined per (sub-)chunk at submit time via
+    // Base actor is recombined per (sub-)chunk at submit time via
     // `combine_chunk_input`, so generation only needs the profileset lines.
     _base_profile: &str,
     ceiling: usize,
 ) -> GeneratedChunk {
-    // Capture the global name index BEFORE pulling any candidate: this chunk's
-    // first emitted profileset is `Combo {first_name_idx}`. Names are contiguous
-    // (next_name_idx increments once per emitted candidate), so the chunk covers
+    // Capture the name index BEFORE pulling: first profileset is
+    // `Combo {first_name_idx}`. Names are contiguous, so the chunk covers
     // `[first_name_idx, first_name_idx + count)`.
     let first_name_idx = it.next_name_idx();
     let mut lines: Vec<String> = Vec::new();
@@ -214,8 +199,8 @@ pub fn build_chunk(
                     serde_json::to_string(&c.metadata).unwrap_or_else(|_| "[]".into()),
                 ));
                 count += 1;
-                // If we just filled the chunk, the stream may still have more;
-                // the caller's next build_chunk detects true end-of-stream.
+                // Filled the chunk: stream may still have more; the next
+                // build_chunk detects true end-of-stream.
                 if count >= ceiling {
                     exhausted = false;
                 }
@@ -251,28 +236,22 @@ async fn run_build_chunk_blocking(
     .expect("build_chunk task panicked")
 }
 
-/// Assemble a chunk's COMPLETE submitted simc input: the base actor + its
-/// profileset lines, run through `build_simc_input_from_options` so the
-/// `# Simulation Options` section (target_error, iterations, fight_style,
-/// desired_targets, max_time, consumables, …) is present — exactly like every
-/// other Simmit submission (quick sim / eager profilesets / local staged
-/// handoff). Submitting WITHOUT this section fails on Simmit: chunks go up with
-/// `multiStage:true`, which needs a `target_error` to tune toward, so a bare
-/// `# Base Actor` + profilesets is rejected regardless of chunk size.
-///
-/// Single source of truth for the chunk wire format, shared by `build_chunk` and
-/// the retry sub-chunk splitter so a split sub-chunk is byte-for-byte the same
-/// shape as a freshly generated chunk.
+/// Assemble a chunk's COMPLETE submitted simc input: base actor + profileset
+/// lines through `build_simc_input_from_options` so the `# Simulation Options`
+/// section is present. Chunks go up with `multiStage:true`, which needs a
+/// `target_error` to tune toward, so a bare `# Base Actor` + profilesets is
+/// rejected by Simmit regardless of size. Single source of truth for the chunk
+/// wire format, shared with the retry splitter so a split sub-chunk is
+/// byte-for-byte identical to a freshly generated chunk.
 pub fn combine_chunk_input(base_profile: &str, lines: &[String], options: &Value) -> String {
     let combined = format!("# Base Actor\n{}\n{}", base_profile, lines.join("\n"));
     crate::simc_runner::build_simc_input_from_options(&combined, options)
 }
 
-/// In-flight concurrency bound K from the account's `max_active_jobs` and the
-/// config ceiling. A `0` account limit (quota exhausted/suspended) has NO
-/// capacity and must reject the run up front — returning `Err(())` so the
-/// caller can fail cleanly rather than silently clamping to 1 and submitting a
-/// chunk Simmit will reject per-chunk.
+/// In-flight bound K from `max_active_jobs` and the config ceiling. A `0` limit
+/// (quota exhausted/suspended) has NO capacity and returns `Err(())` so the
+/// caller fails cleanly rather than clamping to 1 and submitting a chunk Simmit
+/// would reject.
 fn inflight_bound(account_max_active: usize, config_max: usize) -> Result<usize, ()> {
     if account_max_active == 0 {
         return Err(());
@@ -285,27 +264,24 @@ fn inflight_bound(account_max_active: usize, config_max: usize) -> Result<usize,
 /// Outcome of running ONE logical chunk through the runner with a single round
 /// of split-retry on failure.
 enum ChunkOutcome {
-    /// One or more `(execution_chunk_idx, adapted_json)` results to fold. A
-    /// retried chunk yields its sub-chunks' results; an un-retried chunk yields
-    /// one. The accumulator merges by profileset NAME, so which `cloud_chunks`
-    /// row produced a row is irrelevant to the ranking.
+    /// `(execution_chunk_idx, adapted_json)` results to fold — one per (sub-)chunk.
+    /// The accumulator merges by profileset NAME, so which `cloud_chunks` row
+    /// produced a row is irrelevant to the ranking.
     Done(Vec<(usize, Value)>),
-    /// A clean terminal abort (Paused / Cancelled) — status already set
-    /// elsewhere; the orchestrator must stop without writing an error.
+    /// Clean terminal abort (Paused / Cancelled); status already set elsewhere,
+    /// so stop without writing an error.
     Terminal,
     /// The chunk (and its retry, if any) failed; the message names the chunk.
     Failed(String),
 }
 
-/// Run ONE logical chunk through `runner`, retrying ONCE on an errored/timed_out
-/// chunk by SPLITTING it into two smaller sub-chunks at the SAME `target_error`
-/// (the lines carry no target_error; nothing is loosened) — NEVER by degrading
-/// precision. Sub-chunks keep the original `Combo N` names (the lines are moved
-/// verbatim), so the merge join and the existing `combo_metadata` rows stay
-/// stable; each sub-chunk only gets its OWN `cloud_chunks` execution row,
-/// allocated at the tail via `next_chunk_idx`. A sub-chunk that still fails
-/// (including the minimal 1-profileset floor that cannot split) fails the whole
-/// sim cleanly, naming the original chunk.
+/// Run ONE logical chunk through `runner`, retrying ONCE on failure by SPLITTING
+/// into two sub-chunks at the SAME `target_error` — never by degrading precision.
+/// Sub-chunks keep the original `Combo N` names (lines moved verbatim) so the
+/// merge join and `combo_metadata` stay stable; each gets its OWN tail
+/// `cloud_chunks` row via `next_chunk_idx`. A sub-chunk that still fails
+/// (including the 1-profileset floor that cannot split) fails the whole sim,
+/// naming the original chunk.
 #[allow(clippy::too_many_arguments)]
 async fn run_chunk_with_retry(
     runner: &ChunkRunner,
@@ -329,12 +305,11 @@ async fn run_chunk_with_retry(
         Ok(json) => ChunkOutcome::Done(vec![(chunk_idx, json)]),
         Err(RunError::Paused) | Err(RunError::Cancelled) => ChunkOutcome::Terminal,
         Err(RunError::Other(e)) => {
-            // First failure: flip the original chunk's row to failed and try a
-            // single split-retry round.
+            // First failure: mark the row failed and try one split-retry round.
             let _ = cloud_repo.mark_failed(job_id, chunk_idx as i64).await;
 
-            // A minimal chunk cannot be split smaller → fail naming the chunk AND
-            // surfacing the underlying Simmit error (never swallow the cause).
+            // A minimal chunk cannot split → fail naming the chunk, surfacing the
+            // underlying Simmit error (never swallow the cause).
             if profileset_lines.len() <= 1 {
                 return ChunkOutcome::Failed(format!(
                     "Cloud chunk {chunk_idx} failed at minimal size (cannot split \
@@ -348,9 +323,8 @@ async fn run_chunk_with_retry(
 
             use std::sync::atomic::Ordering;
             let mut results: Vec<(usize, Value)> = Vec::new();
-            // Cumulative name offset within the parent's contiguous range: the
-            // first half starts at the parent's first name idx; the second starts
-            // `mid` names later (each half is a contiguous sub-range).
+            // Cumulative offset within the parent's contiguous range: first half
+            // starts at the parent's first idx, second `mid` names later.
             let mut name_offset = 0usize;
             for half in halves {
                 if half.is_empty() {
@@ -358,8 +332,7 @@ async fn run_chunk_with_retry(
                 }
                 let sub_first_name_idx = parent_first_name_idx + name_offset;
                 name_offset += half.len();
-                // Allocate this sub-chunk's OWN execution row at the tail, linked
-                // to the parent and carrying its sub-range start.
+                // Own tail execution row, linked to the parent with its sub-range start.
                 let sub_idx = next_chunk_idx.fetch_add(1, Ordering::SeqCst);
                 if cloud_repo
                     .insert_pending_with_lineage(
@@ -394,9 +367,9 @@ async fn run_chunk_with_retry(
                     }
                     Err(RunError::Other(e)) => {
                         let _ = cloud_repo.mark_failed(job_id, sub_idx as i64).await;
-                        // One retry round only — a sub-chunk failure is terminal.
-                        // Surface the underlying Simmit error so a size-independent
-                        // failure (bad input, rate limit, auth) is diagnosable.
+                        // One retry round only — sub-chunk failure is terminal.
+                        // Surface the Simmit error so a size-independent failure
+                        // (bad input, rate limit, auth) is diagnosable.
                         return ChunkOutcome::Failed(format!(
                             "Cloud chunk {chunk_idx} still failed after splitting into \
                              smaller sub-chunks at the same target_error. Simmit error: {e}"
@@ -411,56 +384,49 @@ async fn run_chunk_with_retry(
 
 // ── Orchestration core (single-chunk fast path) ──────────────────────────────
 
-/// The testable orchestration core. Holds injected dependencies so the chunking,
-/// submission, accumulation, and finalize logic is driven without HTTP or
-/// `tokio::spawn`. Task 7 implements the SINGLE-CHUNK fast path; Task 8 extends
-/// `execute` to multi-chunk bounded concurrency.
+/// The testable orchestration core. Holds injected dependencies so chunking,
+/// submission, accumulation, and finalize run without HTTP or `tokio::spawn`.
 pub struct CloudStreamingRun {
     pub repo: JobRepo,
-    /// Pool backing `cloud_chunks` + `combo_metadata` (the streaming path
-    /// requires SQLite storage, like local triage).
+    /// Pool backing `cloud_chunks` + `combo_metadata` (streaming requires SQLite
+    /// storage, like local triage).
     pub pool: sqlx::AnyPool,
     pub iter_cfg: ProfilesetIteratorConfig,
     pub base_profile: String,
-    /// The request's sim options (`SimOptions::to_json()`). Injected into every
-    /// chunk's input via `build_simc_input_from_options` so each chunk carries
-    /// `target_error`/`iterations`/`fight_style`/… like every working Simmit path.
+    /// Request sim options (`SimOptions::to_json()`), injected into every chunk via
+    /// `build_simc_input_from_options` so each carries `target_error`/`iterations`/…
     pub options: Value,
     pub job_id: String,
     /// Wire sim-type string ("top_gear"), stamped into the parsed result.
     pub sim_type: String,
     /// Profilesets-per-chunk ceiling for this run.
     pub ceiling: usize,
-    /// Per-account `usage.max_active_jobs` (from `get_usage`), if known. The
-    /// in-flight concurrency bound is `min(CONFIG_MAX_INFLIGHT, this)`. `None`
-    /// (unknown limit) falls back to `CONFIG_MAX_INFLIGHT`.
+    /// Per-account `usage.max_active_jobs`, if known. In-flight bound is
+    /// `min(CONFIG_MAX_INFLIGHT, this)`; `None` (unknown) → `CONFIG_MAX_INFLIGHT`.
     pub max_active_jobs: Option<usize>,
-    /// Cooperative cancellation token (DB-backed status is the source of truth).
-    /// Checked at every chunk boundary; also propagated into each runner via the
-    /// production chunk-runner so an in-flight Simmit job is aborted. `None`
-    /// disables cancellation (tests that don't exercise it).
+    /// Cooperative cancel token (DB-backed status is source of truth). Checked at
+    /// every chunk boundary and propagated into each runner to abort in-flight
+    /// Simmit jobs. `None` disables cancellation (tests).
     pub cancel: Option<CancelToken>,
-    /// Submit-time affordability gate. Run BEFORE the first chunk is submitted.
-    /// `None` skips the gate (the estimate path already approved, or tests).
+    /// Submit-time affordability gate, run BEFORE the first chunk submits. `None`
+    /// skips it (estimate path already approved, or tests).
     pub affordability: Option<AffordabilityCheck>,
-    /// The reservation estimate (credits) this run needs, computed by the caller
-    /// via `cloud_estimate::est_credits` on the known combo count. Compared
-    /// against the value [`AffordabilityCheck`] returns. `0` ⇒ no gate.
+    /// Reservation estimate (credits) this run needs, from
+    /// `cloud_estimate::est_credits`. Compared against [`AffordabilityCheck`].
+    /// `0` ⇒ no gate.
     pub est_credits_needed: u64,
 }
 
 impl CloudStreamingRun {
     /// Drive the run to a terminal state.
     ///
-    /// Chunk GENERATION is sequential (one `&mut` iterator cursor); chunk
-    /// SUBMISSION/COMPLETION is concurrent, bounded to
-    /// `K = min(CONFIG_MAX_INFLIGHT, max_active_jobs)` in-flight runners via a
-    /// [`tokio::task::JoinSet`]. The pattern is: generate chunk N → persist its
-    /// metadata + `cloud_chunks` row → checkpoint the GENERATION cursor → spawn
-    /// its runner (blocking generation while ≥ K are in flight) → as runners
-    /// complete (in any order) fold into the [`ChunkAccumulator`]. When the
-    /// whole product space fits in one chunk this collapses to the single-chunk
-    /// fast path (no spawning).
+    /// GENERATION is sequential (one `&mut` iterator cursor); SUBMISSION is
+    /// concurrent, bounded to `K = min(CONFIG_MAX_INFLIGHT, max_active_jobs)` via a
+    /// [`tokio::task::JoinSet`]. Pattern: generate chunk N → persist metadata +
+    /// `cloud_chunks` row → checkpoint the cursor → spawn its runner (blocking
+    /// generation while ≥ K in flight) → fold completions into the
+    /// [`ChunkAccumulator`] in any order. A whole product space that fits in one
+    /// chunk collapses to the single-chunk fast path (no spawning).
     pub async fn execute(self, runner: ChunkRunner) {
         let cloud_repo = CloudChunksRepo::new(self.pool.clone());
 
@@ -469,17 +435,15 @@ impl CloudStreamingRun {
         if self.is_cancelled().await {
             return;
         }
-        // Authoritative affordability re-validation. The FE estimate is advisory;
-        // if the account can no longer cover the reservation, FAIL cleanly with
-        // ZERO chunks submitted (no metadata, no cloud_chunks rows).
+        // Authoritative affordability re-validation: if the account can no longer
+        // cover the reservation, FAIL cleanly with ZERO chunks submitted.
         if let Err(msg) = self.check_affordable().await {
             let _ = self.repo.set_error(&self.job_id, &msg).await;
             return;
         }
-        // A known `max_active_jobs == 0` (quota exhausted / account suspended)
-        // has no concurrent-job capacity: reject up front rather than clamp to 1
-        // and submit a chunk Simmit would reject per-chunk. An unknown limit
-        // (`None`) is best-effort and falls back to the config ceiling.
+        // Known `max_active_jobs == 0` (quota exhausted / suspended): no capacity,
+        // reject up front rather than clamp to 1 and submit a rejected chunk. An
+        // unknown limit (`None`) is best-effort, falling back to the config ceiling.
         if self.max_active_jobs == Some(0) {
             let _ = self
                 .repo
@@ -519,9 +483,9 @@ impl CloudStreamingRun {
         self.run_multi_chunk(&cloud_repo, it, first, runner).await;
     }
 
-    /// The "whole set fits in one chunk" path: one submission, accumulate,
-    /// finalize. `reports_merged` stays false UNLESS a retry split the chunk into
-    /// sub-chunks (then there's no single authoritative report).
+    /// "Whole set fits in one chunk": one submission, accumulate, finalize.
+    /// `reports_merged` stays false UNLESS a retry split the chunk into sub-chunks
+    /// (then there's no single authoritative report).
     async fn run_single_chunk(
         &self,
         cloud_repo: &CloudChunksRepo,
@@ -559,13 +523,12 @@ impl CloudStreamingRun {
             return;
         }
 
-        // The production runner records `remote_job_id` itself before returning;
-        // the fake runner exposes none, so mark_submitted carries an empty id.
+        // Production runner records `remote_job_id` itself; the fake exposes none,
+        // so mark_submitted carries an empty id here.
         let now = chrono::Utc::now().to_rfc3339();
         let _ = cloud_repo.mark_submitted(&self.job_id, 0, "", &now).await;
 
-        // Retry-by-subchunk: a `next_chunk_idx` allocator that starts past this
-        // chunk so any split sub-chunks get fresh tail execution rows.
+        // Allocator starts past this chunk so any split sub-chunks get fresh tail rows.
         let next_idx = std::sync::atomic::AtomicUsize::new(1);
         let outcome = run_chunk_with_retry(
             &runner,
@@ -592,8 +555,8 @@ impl CloudStreamingRun {
 
         let mut acc = ChunkAccumulator::new();
         for (i, (idx, chunk_json)) in results.iter().enumerate() {
-            // Take the base actor from the FIRST result only (chunk 0 or, if it
-            // split, its first sub-chunk — both carry the same base actor).
+            // Base actor from the FIRST result only (chunk 0 or, if split, its
+            // first sub-chunk — both carry the same base actor).
             let include_base = i == 0;
             let mut envelope = ChunkAccumulator::envelope_from_simc_json(chunk_json, include_base);
             let credits = ChunkAccumulator::credits_from_simc_json(chunk_json);
@@ -608,9 +571,9 @@ impl CloudStreamingRun {
         // A retry that split the chunk yields >1 result ⇒ no single report.
         let multi_chunk = results.len() > 1;
         let mut merged = acc.into_merged_simc_json();
-        // Carry the run options so the parser reads real target_error /
-        // desired_targets / max_time instead of its zero defaults — the bare
-        // merge omits `sim.options`, which left target_error showing 0.0%.
+        // Carry run options so the parser reads real target_error/desired_targets/
+        // max_time, not its zero defaults — the bare merge omits `sim.options`,
+        // which left target_error showing 0.0%.
         merged["sim"]["options"] = self.options.clone();
         finalize_cloud_result(
             &self.repo,
@@ -623,9 +586,8 @@ impl CloudStreamingRun {
         .await;
     }
 
-    /// The multi-chunk path: sequential generation interleaved with bounded
-    /// concurrent submission. `first` is the already-generated chunk 0 (which the
-    /// caller confirmed is NOT the last chunk).
+    /// Multi-chunk path: sequential generation interleaved with bounded concurrent
+    /// submission. `first` is the already-generated chunk 0 (confirmed NOT last).
     async fn run_multi_chunk(
         &self,
         cloud_repo: &CloudChunksRepo,
@@ -648,22 +610,18 @@ impl CloudStreamingRun {
         .await;
     }
 
-    /// The shared chunked submit/merge loop, used by BOTH the fresh multi-chunk
-    /// path and `resume_cloud_streaming`. The caller pre-seeds:
-    /// - `acc`: an accumulator already folded with any completed/re-polled chunks
-    ///   (empty for a fresh run),
-    /// - `start_chunk_idx`: the next `cloud_chunks.chunk_idx` to allocate (0 fresh;
-    ///   the checkpoint's `next_chunk_idx` on resume),
-    /// - `combo_id_base`: the running `combo_metadata.combo_id` offset so ids stay
-    ///   globally unique across already-persisted chunks,
-    /// - `pending`: an optional already-generated first chunk (fresh run only; on
-    ///   resume this is `None` and generation pulls straight from the sought
-    ///   iterator).
+    /// Shared chunked submit/merge loop, used by BOTH the fresh multi-chunk path
+    /// and `resume_cloud_streaming`. Caller pre-seeds:
+    /// - `acc`: accumulator already folded with completed/re-polled chunks (empty fresh),
+    /// - `start_chunk_idx`: next `cloud_chunks.chunk_idx` to allocate (0 fresh; the
+    ///   checkpoint's `next_chunk_idx` on resume),
+    /// - `combo_id_base`: running `combo_metadata.combo_id` offset, kept globally
+    ///   unique across already-persisted chunks,
+    /// - `pending`: already-generated first chunk (fresh only; `None` on resume).
     ///
-    /// The iterator MUST already be positioned (fresh: `new`; resume: `new` +
-    /// `seek` + `set_next_name_idx`) so generation continues with non-colliding
-    /// `Combo N` names. Concurrency, retry, cancel, pause, checkpoint and finalize
-    /// are identical on both paths — there is no parallel orchestration copy.
+    /// The iterator MUST already be positioned so generation continues with
+    /// non-colliding `Combo N` names. Concurrency, retry, cancel, pause, checkpoint
+    /// and finalize are identical on both paths — no parallel orchestration copy.
     #[allow(clippy::too_many_arguments)]
     async fn run_chunk_loop(
         &self,
@@ -674,24 +632,23 @@ impl CloudStreamingRun {
         start_chunk_idx: usize,
         start_combo_id_base: i64,
         first: Option<GeneratedChunk>,
-        // `true` on the RESUME path: before finalizing Done, recompute provable
-        // coverage over the reconciled `cloud_chunks` rows and REFUSE to finalize
-        // (leave the job Paused + resumable) if any emitted combo range is still
-        // uncovered. The fresh path passes `false` — its generation covers the
-        // whole space by construction and a hard failure already errors.
+        // `true` on RESUME: before finalizing Done, recompute provable coverage
+        // over the reconciled rows and REFUSE to finalize (leave Paused +
+        // resumable) if any emitted combo range is still uncovered. Fresh path
+        // passes `false` — its generation covers the whole space by construction.
         resume_guard: bool,
     ) {
-        // K = min(CONFIG_MAX_INFLIGHT, max_active_jobs). Unknown limit → config.
-        // A `0` limit is rejected up front in `execute` before this loop runs, so
-        // `inflight_bound`'s `Err` is treated defensively as the config fallback.
+        // K = min(CONFIG_MAX_INFLIGHT, max_active_jobs); unknown → config. A `0`
+        // limit is rejected in `execute` before this loop, so `inflight_bound`'s
+        // `Err` is treated defensively as the config fallback.
         let k = self
             .max_active_jobs
             .map(|m| inflight_bound(m, CONFIG_MAX_INFLIGHT).unwrap_or(CONFIG_MAX_INFLIGHT))
             .unwrap_or(CONFIG_MAX_INFLIGHT);
 
         let mut acc = seed_acc;
-        // Each task returns its ORIGINAL chunk_idx + the retry outcome (which may
-        // carry several sub-chunk results). Out-of-order completion is fine — the
+        // Each task returns its ORIGINAL chunk_idx + outcome (which may carry
+        // several sub-chunk results). Out-of-order completion is fine — the
         // accumulator merges by profileset name.
         let mut join: tokio::task::JoinSet<(usize, ChunkOutcome)> = tokio::task::JoinSet::new();
 
@@ -700,31 +657,28 @@ impl CloudStreamingRun {
         // resume this starts past the already-persisted chunks.
         let next_chunk_idx = Arc::new(std::sync::atomic::AtomicUsize::new(start_chunk_idx));
         use std::sync::atomic::Ordering;
-        // Running count of combos written across chunks, so combo_metadata.combo_id
-        // stays globally unique (the table PK is `(job_id, combo_id)`).
+        // Running combo count across chunks, keeping combo_metadata.combo_id
+        // globally unique (PK is `(job_id, combo_id)`).
         let mut combo_id_base: i64 = start_combo_id_base;
         let mut pending: Option<GeneratedChunk> = first;
-        // True once the iterator has yielded its final chunk (the partial tail).
+        // True once the iterator has yielded its final (partial tail) chunk.
         let mut generation_done = false;
-        // Set when a pause was honored at a chunk boundary — finalize is skipped.
+        // Set when a pause was honored at a boundary — finalize is skipped.
         let mut paused = false;
 
         loop {
-            // ── 0. Cancel / pause at the chunk boundary (only meaningful with
-            // chunk_count > 1, which this path always is). ───────────────────
+            // ── 0. Cancel / pause at the chunk boundary. ─────────────────────
             if self.is_cancelled().await {
                 // Stop submitting; abort in-flight runners (they also observe
-                // ctx.cancel via the production runner). Terminal Cancelled status
-                // is already set — set_error/update_status no-op on it.
+                // ctx.cancel). Terminal Cancelled status already set — writes no-op.
                 join.shutdown().await;
                 return;
             }
             if !generation_done {
                 let next_idx = next_chunk_idx.load(Ordering::SeqCst);
                 if self.check_and_honor_pause(&it, next_idx).await {
-                    // Stop generating new chunks but DRAIN the in-flight ones so
-                    // their completed results are checkpointed (not re-billed on
-                    // resume).
+                    // Stop generating but DRAIN in-flight chunks so their results
+                    // are checkpointed (not re-billed on resume).
                     generation_done = true;
                     paused = true;
                 }
@@ -743,8 +697,8 @@ impl CloudStreamingRun {
                     }
                 };
 
-                // A generated chunk with zero profilesets means the iterator was
-                // exhausted exactly on the previous boundary: stop generating.
+                // Zero profilesets ⇒ iterator exhausted on the previous boundary:
+                // stop generating.
                 if chunk.profileset_count == 0 {
                     generation_done = true;
                     break;
@@ -752,9 +706,8 @@ impl CloudStreamingRun {
 
                 let chunk_idx = next_chunk_idx.fetch_add(1, Ordering::SeqCst);
 
-                // Persist this chunk's combo metadata + cloud_chunks row BEFORE
-                // submission (crash-recovery oracle). combo_id_base keeps ids
-                // unique across chunks.
+                // Persist combo metadata + cloud_chunks row BEFORE submission
+                // (crash-recovery oracle). combo_id_base keeps ids unique.
                 super::helpers::write_combo_metadata_table_raw_offset(
                     &self.repo,
                     &self.job_id,
@@ -782,12 +735,10 @@ impl CloudStreamingRun {
                     return;
                 }
 
-                // Checkpoint the GENERATION cursor at this boundary: the cursor
-                // AFTER this chunk so resume regenerates only un-generated chunks.
-                // Store the shared allocator's CURRENT value (not a `chunk_idx + 1`
-                // literal) so the checkpoint reflects any tail indices a concurrent
-                // retry-split already claimed — keeping it consistent with the
-                // pause-path checkpoint, which also loads the atomic.
+                // Checkpoint the cursor AFTER this chunk so resume regenerates only
+                // un-generated chunks. Store the allocator's CURRENT value (not
+                // `chunk_idx + 1`) so it reflects tail indices a concurrent
+                // retry-split already claimed, matching the pause-path checkpoint.
                 let next_idx_cp = next_chunk_idx.load(Ordering::SeqCst);
                 self.write_checkpoint(&it, next_idx_cp, chunk.exhausted)
                     .await;
@@ -823,7 +774,7 @@ impl CloudStreamingRun {
                     (chunk_idx, outcome)
                 });
 
-                // The chunk that just reported `exhausted` is the final one.
+                // The chunk that reported `exhausted` is the final one.
                 if chunk.exhausted {
                     generation_done = true;
                 }
@@ -839,7 +790,7 @@ impl CloudStreamingRun {
                 let (orig_idx, outcome) = match joined {
                     Ok(pair) => pair,
                     Err(join_err) => {
-                        // A spawned task panicked/aborted: fail the job cleanly.
+                        // Spawned task panicked/aborted: fail the job cleanly.
                         let _ = self
                             .repo
                             .set_error(&self.job_id, &format!("Chunk task failed: {join_err}"))
@@ -851,7 +802,7 @@ impl CloudStreamingRun {
                 match outcome {
                     ChunkOutcome::Done(results) => {
                         for (i, (exec_idx, json)) in results.iter().enumerate() {
-                            // Base actor comes from chunk 0's FIRST result only.
+                            // Base actor from chunk 0's FIRST result only.
                             let include_base = orig_idx == 0 && i == 0;
                             let mut envelope =
                                 ChunkAccumulator::envelope_from_simc_json(json, include_base);
@@ -883,20 +834,18 @@ impl CloudStreamingRun {
             }
         }
 
-        // A pause was honored at a boundary: leave the job Paused, do NOT finalize
-        // (resume continues from the checkpointed next_chunk_idx).
+        // Pause honored at a boundary: leave Paused, do NOT finalize (resume
+        // continues from the checkpointed next_chunk_idx).
         if paused {
             return;
         }
 
         // ── 3b. Completeness guard (RESUME only). ────────────────────────────
-        // With every chunk regenerated/re-polled/re-submitted, re-derive provable
-        // coverage over the persisted rows. The full emitted space is `[1, total+1)`
-        // where `total = next_name_idx - 1` (names are 1-based and the iterator has
-        // now emitted every candidate). If a range is STILL uncovered (e.g. a
-        // pre-cursor chunk whose re-submit silently dropped, or a remote that never
-        // recovered), DO NOT finalize Done — leave the job Paused + resumable with a
-        // diagnostic so the user can resume again, never silently dropping combos.
+        // Re-derive provable coverage over the persisted rows. The emitted space
+        // is `[1, total+1)` with `total = next_name_idx - 1` (1-based, iterator now
+        // exhausted). If a range is STILL uncovered (a re-submit silently dropped,
+        // or a remote never recovered), DO NOT finalize Done — leave Paused +
+        // resumable with a diagnostic, never silently dropping combos.
         if resume_guard {
             let total = it.next_name_idx().saturating_sub(1) as i64;
             match cloud_repo.list_for_job(&self.job_id).await {
@@ -914,8 +863,7 @@ impl CloudStreamingRun {
                             .update_status(&self.job_id, crate::models::JobStatus::Paused)
                             .await;
                         // Write only the stage/detail diagnostic — preserve the
-                        // existing `progress_pct` (most chunks completed) so the
-                        // resumable job doesn't rewind its bar to 0%.
+                        // existing `progress_pct` so the bar doesn't rewind to 0%.
                         let pct = self
                             .repo
                             .get(&self.job_id)
@@ -933,7 +881,7 @@ impl CloudStreamingRun {
                 }
                 Err(e) => {
                     // Could not verify coverage → fail clean rather than finalize a
-                    // possibly-incomplete result as Done.
+                    // possibly-incomplete result.
                     let _ = self
                         .repo
                         .set_error(
@@ -948,8 +896,7 @@ impl CloudStreamingRun {
 
         // ── 4. Finalize the merged multi-chunk result. ──────────────────────
         let mut merged = acc.into_merged_simc_json();
-        // Carry the run options (target_error / desired_targets / max_time) into
-        // the merged doc so the parser reads real values, not its zero defaults.
+        // Carry run options so the parser reads real values, not zero defaults.
         merged["sim"]["options"] = self.options.clone();
         finalize_cloud_result(
             &self.repo,
@@ -962,16 +909,14 @@ impl CloudStreamingRun {
         .await;
     }
 
-    /// Honor a pending pause request at a chunk boundary: if `pause_requested`,
-    /// clear the flag, write the cloud-streaming checkpoint at the current cursor,
-    /// flip status to `Paused`, and return `true` (caller stops generating). The
-    /// checkpoint mirrors `run_simc_staged::write_staged_checkpoint_and_check_pause`.
+    /// Honor a pending pause at a chunk boundary: clear `pause_requested`, write
+    /// the checkpoint at the current cursor, flip status to `Paused`, return `true`
+    /// (caller stops generating). Mirrors `run_simc_staged`'s staged pause check.
     async fn check_and_honor_pause(&self, it: &ProfilesetIterator, next_chunk_idx: usize) -> bool {
         match self.repo.get_pause_requested(&self.job_id).await {
             Ok(true) => {
                 let _ = self.repo.set_pause_requested(&self.job_id, false).await;
-                // Checkpoint at the CURRENT generation cursor; `next_chunk_idx` is
-                // the index of the next chunk resume should generate.
+                // `next_chunk_idx` is the next chunk resume should generate.
                 self.write_checkpoint(it, next_chunk_idx, false).await;
                 let _ = self
                     .repo
@@ -983,8 +928,8 @@ impl CloudStreamingRun {
         }
     }
 
-    /// True if the job has been cancelled (DB-backed status is the source of
-    /// truth). `None` token ⇒ never cancelled. Mirrors `run_simc_staged`.
+    /// True if the job is cancelled (DB-backed status is source of truth). `None`
+    /// token ⇒ never cancelled. Mirrors `run_simc_staged`.
     async fn is_cancelled(&self) -> bool {
         match self.cancel.as_ref() {
             Some(tok) => tok.is_cancelled().await,
@@ -992,10 +937,10 @@ impl CloudStreamingRun {
         }
     }
 
-    /// Submit-time affordability gate. `Ok(())` means proceed; `Err(msg)` means
-    /// fail the job cleanly with no chunks submitted. No gate (`None` check or
-    /// `est_credits_needed == 0`) always proceeds. A fetch error is fatal — we
-    /// must not start billing a job we cannot confirm the user can afford.
+    /// Submit-time affordability gate. `Ok(())` proceeds; `Err(msg)` fails cleanly
+    /// with no chunks submitted. No gate (`None` or `est_credits_needed == 0`)
+    /// proceeds. A fetch error is fatal — never start billing a job we can't
+    /// confirm the user affords.
     async fn check_affordable(&self) -> Result<(), String> {
         let Some(check) = self.affordability.as_ref() else {
             return Ok(());
@@ -1004,7 +949,7 @@ impl CloudStreamingRun {
             return Ok(());
         }
         match check().await {
-            // Provider reports a credit balance: hard-gate the reservation.
+            // Known balance: hard-gate the reservation.
             Ok(Some(available)) if available < self.est_credits_needed => Err(format!(
                 "Insufficient credits at submit: need ~{} but only {} available \
                  (the estimate was affordable a moment ago).",
@@ -1012,15 +957,14 @@ impl CloudStreamingRun {
             )),
             // Affordable, or no credit concept / unknown limit → proceed.
             Ok(_) => Ok(()),
-            // Could not confirm affordability → fail clean rather than risk a bill.
+            // Could not confirm → fail clean rather than risk a bill.
             Err(e) => Err(format!("Could not verify credits at submit: {e}")),
         }
     }
 
-    /// Persist the cloud-streaming checkpoint at a chunk boundary. `next_chunk_idx`
-    /// is the index of the next chunk to generate; the cursor is the iterator's
-    /// position AFTER the just-generated chunk. `final_chunk` marks that the
-    /// iterator is exhausted (resume has nothing left to generate).
+    /// Persist the checkpoint at a chunk boundary. `next_chunk_idx` is the next
+    /// chunk to generate; the cursor is the iterator AFTER the just-generated
+    /// chunk. `final_chunk` marks the iterator exhausted (nothing left to resume).
     async fn write_checkpoint(
         &self,
         it: &ProfilesetIterator,
@@ -1049,16 +993,12 @@ impl CloudStreamingRun {
 }
 
 /// Finalize the MERGED cloud result through the gear-comparison parser. Mirrors
-/// `helpers::finalize_gear_comparison_result` but consumes the pre-merged JSON
-/// (not a single `SimcOutput`). There is no single `simc_input` for the cloud
-/// path, so realm extraction reads the `base_profile` (it carries the actor
-/// line).
+/// `helpers::finalize_gear_comparison_result` but consumes pre-merged JSON. No
+/// single `simc_input` on the cloud path, so realm extraction reads `base_profile`.
 ///
-/// For a MULTI-CHUNK run (`multi_chunk == true`) there is no single authoritative
-/// HTML/text report, so we stamp `reports_merged: false` into the parsed result
-/// (the UI hides/disables the report view) and clear the report files
-/// (`set_report_files(None, None)`); `raw_json` is the merged SimC doc. A
-/// single-chunk run leaves reports normal.
+/// A MULTI-CHUNK run has no single authoritative HTML/text report, so it stamps
+/// `reports_merged: false` (UI hides the report view) and clears the report files;
+/// `raw_json` is the merged doc. Single-chunk leaves reports normal.
 pub async fn finalize_cloud_result(
     repo: &JobRepo,
     job_id: &str,
@@ -1102,13 +1042,12 @@ pub async fn finalize_cloud_result(
 
 // ── Fresh-run HTTP wrapper (the live cloud streaming entry point) ─────────────
 
-/// HTTP-facing entry point for a streaming-sized Top Gear that resolved to a
-/// cloud-streaming-capable remote (e.g. Simmit). Mirrors the LOCAL path in
-/// `streaming_top_gear::start_streaming_top_gear_job` (build iterator config,
-/// validate the batch, create + insert the streamed Job with the same
-/// request_json envelope) but spawns [`CloudStreamingRun::execute`] with the
-/// PRODUCTION chunk runner instead of local triage. Returns the same
-/// `{ id, status: "pending", created_at, estimate }` shape.
+/// HTTP entry point for a streaming-sized Top Gear that resolved to a
+/// cloud-capable remote. Mirrors the LOCAL `start_streaming_top_gear_job`
+/// (build iterator config, validate batch, create + insert the streamed Job with
+/// the same request_json envelope) but spawns [`CloudStreamingRun::execute`] with
+/// the PRODUCTION chunk runner. Returns
+/// `{ id, status: "pending", created_at, estimate }`.
 pub(super) async fn start_cloud_streaming(
     start: super::streaming_top_gear::StreamingTopGearStart,
 ) -> actix_web::HttpResponse {
@@ -1136,10 +1075,9 @@ pub(super) async fn start_cloud_streaming(
         local_provider: _local_provider,
     } = start;
 
-    // The chunk submit/fetch methods are on the `SimcProvider` trait now (with
-    // default "unsupported" impls), so the orchestrator drives the provider
-    // through `Arc<dyn SimcProvider>` directly — no downcast. A provider that
-    // doesn't override them fails at the first chunk submission, not here.
+    // Chunk submit/fetch are `SimcProvider` trait methods (default "unsupported"),
+    // so the orchestrator drives `Arc<dyn SimcProvider>` directly — no downcast. A
+    // provider that doesn't override them fails at the first chunk submit, not here.
 
     // ── Build the iterator config exactly as the local triage path does. ──────
     let gem_opts = profileset_generator::GemEnchantOptions {
@@ -1221,16 +1159,13 @@ pub(super) async fn start_cloud_streaming(
     }
 
     // ── Affordability gate: re-validate the estimate authoritatively at submit. ─
-    // `est_credits` from the exact combo count (passed from `create_top_gear_sim`,
-    // already computed once) + ceiling + target_error. The check closure fetches
-    // the account's available credits via the provider's credential endpoint
-    // (reusing the Task 6 `cloud_estimate` math). `None` auth / no-credits-concept
-    // → `Ok(None)` (treated as affordable inside the gate).
+    // `est_credits` from the exact combo count + ceiling + target_error; the check
+    // closure fetches available credits via the provider's credential endpoint.
+    // `None` auth / no-credits-concept → `Ok(None)` (affordable).
     let ceiling = REMOTE_MAX_PROFILESETS_PER_JOB;
-    // `exact_combos` was computed once in `create_top_gear_sim` via
-    // `count_top_gear_combos_with_talents`. Using it directly avoids a second
-    // O(total) count here and ensures the credit gate and progress denominator
-    // match the figure `cloud_estimate` showed the user.
+    // Reuse `exact_combos` (already counted in `create_top_gear_sim`) to avoid a
+    // second O(total) count and to keep the credit gate + progress denominator
+    // matching the figure `cloud_estimate` showed the user.
     let est_credits_needed =
         super::cloud_estimate::est_credits(exact_combos, ceiling, target_error);
     let affordability: Option<AffordabilityCheck> = {
@@ -1253,8 +1188,8 @@ pub(super) async fn start_cloud_streaming(
         }))
     };
 
-    // ── In-flight concurrency bound from the account's usage limits (best
-    // effort; an error / unknown limit falls back to CONFIG_MAX_INFLIGHT). ─────
+    // ── In-flight bound from the account's usage limits (best effort; error /
+    // unknown limit falls back to CONFIG_MAX_INFLIGHT). ───────────────────────
     let max_active_jobs = provider
         .get_usage(&provider_auth)
         .await
@@ -1265,12 +1200,10 @@ pub(super) async fn start_cloud_streaming(
     // ── Production chunk runner + cancel token; spawn the orchestrator. ───────
     let cloud_repo = CloudChunksRepo::new(pool.clone());
     let cancel = Some(CancelToken::new(repo.get_ref().clone(), job_id.clone()));
-    // Run-scoped job-level progress bar: weights each chunk's live percent
-    // against `exact_combos` (the exact deduped count, same figure used for
-    // credits). For gem-heavy jobs the O(axes) upper-bound `estimate` is huge
-    // relative to what the iterator emits, which would peg the bar near 0% for
-    // the whole run. The exact count equals the iterator's emitted total, so the
-    // bar reaches 100%. No extra Simmit calls.
+    // Job-level progress bar weights each chunk's live percent against
+    // `exact_combos` (the deduped count, == iterator's emitted total). The O(axes)
+    // upper-bound `estimate` is huge for gem-heavy jobs and would peg the bar near
+    // 0%; exact count lets it reach 100%. No extra Simmit calls.
     let progress = CloudProgress::new(
         repo.get_ref().clone(),
         job_id.clone(),
@@ -1318,16 +1251,14 @@ pub(super) async fn start_cloud_streaming(
 
 // ── Job-level progress aggregation ───────────────────────────────────────────
 
-/// Run-scoped, job-level progress aggregator for the cloud-streaming path.
+/// Run-scoped, job-level progress aggregator for the cloud path.
 ///
 /// The loading page renders ONE percent per job, but a streamed run is many
-/// concurrent Simmit chunk jobs. Each chunk already reports its own `0..=100`
-/// fraction on every status poll the runner makes (`poll_to_terminal` →
-/// `on_progress`); we weight those by chunk size against the known total combo
-/// count to produce a single job percent. A finished chunk banks its full
-/// weight; a failed chunk drops its live weight (a retry re-adds it under a
-/// fresh `chunk_idx`), so a split never double-counts. NO extra Simmit calls —
-/// this piggybacks on the polls the runner already does.
+/// concurrent chunk jobs. Each chunk reports its own `0..=100` fraction on every
+/// poll (`on_progress`); we weight those by chunk size against the total combo
+/// count for a single job percent. A finished chunk banks full weight; a failed
+/// chunk drops its live weight (a retry re-adds it under a fresh `chunk_idx`), so
+/// a split never double-counts. NO extra Simmit calls — piggybacks on the runner's polls.
 pub struct CloudProgress {
     repo: JobRepo,
     job_id: String,
@@ -1339,12 +1270,10 @@ pub struct CloudProgress {
 struct ProgressInner {
     /// Combos in chunks that finished successfully (full weight, monotonic).
     completed_combos: usize,
-    /// `chunk_idx` → (live fraction `0..=1`, chunk size in combos) for in-flight
-    /// chunks.
+    /// `chunk_idx` → (live fraction `0..=1`, size in combos) for in-flight chunks.
     inflight: std::collections::HashMap<usize, (f32, usize)>,
-    /// Last job percent pushed to the DB. Throttles writes (≤ 100 total) and
-    /// keeps the bar monotonic — a cloud fraction can momentarily dip (e.g. the
-    /// queued-floor of 5% giving way to a real 0% once a worker starts).
+    /// Last percent pushed to the DB. Throttles writes (≤ 100) and keeps the bar
+    /// monotonic — a cloud fraction can dip (queued-floor 5% → real 0% on worker start).
     last_pct: u8,
 }
 
@@ -1408,16 +1337,12 @@ type ProgressCb = Arc<dyn Fn(u8, &str, &str) + Send + Sync>;
 
 // ── Production chunk-runner (the live Simmit path) ────────────────────────────
 
-/// Build the PRODUCTION [`ChunkRunner`] that talks to live Simmit. Each invocation:
-/// `submit_chunk_for_id` (records `cloud_chunks.remote_job_id` immediately so a
-/// crash mid-poll leaves a re-pollable `submitted` row) → `poll_and_fetch_chunk`
-/// → returns the adapted SimC-shaped `.json`. Cancel/log/progress are wired into a
-/// per-chunk [`RunCtx`]. Used by BOTH the fresh run (Task 12) and resume.
-///
-/// `provider` is any `SimcProvider` whose `submit_chunk_for_id`/
-/// `poll_and_fetch_chunk` trait methods are implemented (the default impls
-/// return an "unsupported" error). Driven through the trait object — no
-/// downcast.
+/// Build the PRODUCTION [`ChunkRunner`] that talks to live Simmit. Each call:
+/// `submit_chunk_for_id` (records `remote_job_id` immediately so a crash mid-poll
+/// leaves a re-pollable `submitted` row) → `poll_and_fetch_chunk` → adapted SimC
+/// `.json`. Cancel/log/progress wired into a per-chunk [`RunCtx`]. Used by both
+/// the fresh run and resume. Driven through the `SimcProvider` trait object — no
+/// downcast (a provider not overriding the chunk methods errors "unsupported").
 pub fn build_production_chunk_runner(
     provider: Arc<dyn crate::compute::SimcProvider>,
     cloud_repo: CloudChunksRepo,
@@ -1435,12 +1360,10 @@ pub fn build_production_chunk_runner(
             let chunk_idx = req.chunk_idx;
             let count = req.profileset_count;
 
-            // 1. Submit and capture the remote job id BEFORE it runs, so a crash
-            // mid-poll leaves a `submitted` cloud_chunks row that resume re-polls.
-            // Unique idempotency key per chunk — Simmit rejects key reuse (409),
-            // and every chunk (incl. retry sub-chunks, which get fresh chunk_idx)
-            // is a distinct submission. `chunk_idx` is unique per job by the
-            // `cloud_chunks` PK, so this never collides within a run or on resume.
+            // 1. Submit + capture the remote id BEFORE it runs, so a crash mid-poll
+            // leaves a `submitted` row resume re-polls. Idempotency key is unique
+            // per chunk (Simmit rejects reuse with 409); `chunk_idx` is unique per
+            // job by the `cloud_chunks` PK, so it never collides on run or resume.
             let idem_key = format!("{}-c{}", req.job_id, req.chunk_idx);
             let remote_id = provider
                 .submit_chunk_for_id(&auth, &req.job_id, &idem_key, &req.simc_input)
@@ -1450,10 +1373,10 @@ pub fn build_production_chunk_runner(
                 .mark_submitted(&req.job_id, req.chunk_idx as i64, &remote_id, &now)
                 .await;
 
-            // 2. Poll to terminal + fetch. A per-chunk RunCtx carries cancel and,
-            // when a run-scoped aggregator is present, fans this chunk's live
-            // percent (delivered on every poll) into the job-level bar keyed by
-            // THIS chunk's idx — so concurrent chunks weight independently.
+            // 2. Poll to terminal + fetch. The per-chunk RunCtx carries cancel and,
+            // when an aggregator is present, fans this chunk's live percent into
+            // the job-level bar keyed by THIS chunk's idx (concurrent chunks weight
+            // independently).
             let on_progress: ProgressCb = match &progress {
                 Some(p) => {
                     let p = p.clone();
@@ -1470,9 +1393,8 @@ pub fn build_production_chunk_runner(
                 auth: auth.clone(),
             };
             let result = provider.poll_and_fetch_chunk(ctx, &remote_id).await;
-            // Bank this chunk's full weight on success; drop its live weight on
-            // failure so a retry-split re-adds the work under fresh idxs without
-            // double-counting.
+            // Bank full weight on success; drop live weight on failure so a
+            // retry-split re-adds the work under fresh idxs without double-counting.
             if let Some(p) = &progress {
                 match &result {
                     Ok(_) => p.complete(chunk_idx, count),
@@ -1488,21 +1410,18 @@ pub fn build_production_chunk_runner(
 
 use crate::db::cloud_chunks_repo::CloudChunkRow;
 
-/// The provable coverage analysis over a job's `cloud_chunks` rows, built from
-/// `first_combo_name_idx` + `profileset_count` + `status` + `parent_chunk_idx`.
+/// Provable coverage over a job's `cloud_chunks` rows, from `first_combo_name_idx`
+/// + `profileset_count` + `status` + `parent_chunk_idx`.
 ///
-/// Names are 1-BASED (`Combo 1` is the first emitted candidate), so the full
-/// emitted space is `[1, total + 1)` where `total` is the number of emitted
-/// combos. Each row covers `[first, first + count)`. Coverage is decided by the
-/// UNION of *completed* rows' ranges — never by count-matching (two equal-count
-/// chunks can cover different combos).
+/// Names are 1-BASED, so the emitted space is `[1, total + 1)`. Each row covers
+/// `[first, first + count)`. Coverage is the UNION of *completed* rows' ranges —
+/// never count-matching (two equal-count chunks can cover different combos).
 #[derive(Debug, Clone)]
 struct CoverageReport {
-    /// Completed-row ranges do NOT exactly tile `[1, total + 1)`.
+    /// Ranges of `[1, total + 1)` NOT tiled by completed rows.
     uncovered: Vec<(i64, i64)>,
-    /// `chunk_idx` of each `failed` row whose `[first, first + count)` range is
-    /// FULLY covered by completed rows (its completed children tiled it). Such a
-    /// parent is terminal: it must NOT be re-run (no PK collision, combos once).
+    /// `chunk_idx` of each `failed` row whose range is FULLY covered by completed
+    /// rows (its children tiled it): terminal, must NOT be re-run (combos once).
     superseded_failed: std::collections::HashSet<i64>,
 }
 
@@ -1553,10 +1472,10 @@ fn subtract_covered(lo: i64, hi: i64, covered: &[(i64, i64)]) -> Vec<(i64, i64)>
     gaps
 }
 
-/// The completed range of a row, when it carries a provable combo-name range.
-/// A completed row with no `first_combo_name_idx` (legacy, pre-0014) returns
-/// `None` and contributes NOTHING to coverage — the guard then conservatively
-/// keeps the job resumable rather than finalizing Done on unproven coverage.
+/// A row's completed range, when it carries a provable combo-name range. A
+/// completed row with no `first_combo_name_idx` (legacy, pre-0014) returns `None`
+/// and contributes NOTHING — the guard then keeps the job resumable rather than
+/// finalizing Done on unproven coverage.
 fn completed_range(row: &CloudChunkRow) -> Option<(i64, i64)> {
     if row.status != "completed" {
         return None;
@@ -1574,17 +1493,16 @@ fn coverage_report(rows: &[CloudChunkRow], total_combos: i64) -> CoverageReport 
     // Union of all completed rows' ranges (children + standalone alike).
     let covered = merge_intervals(rows.iter().filter_map(completed_range).collect());
 
-    // Emitted names are 1-based: `[1, total_combos + 1)`. Saturating add keeps the
-    // supersession-only call (which passes `i64::MAX` for an unbounded total)
-    // overflow-safe.
+    // 1-based `[1, total_combos + 1)`. Saturating add keeps the supersession-only
+    // call (which passes `i64::MAX` for an unbounded total) overflow-safe.
     let uncovered = if total_combos <= 0 {
         Vec::new()
     } else {
         subtract_covered(1, total_combos.saturating_add(1), &covered)
     };
 
-    // A failed row is superseded iff its own range is fully inside the completed
-    // union (i.e. completed rows — typically its retry children — tiled it).
+    // A failed row is superseded iff its range is fully inside the completed union
+    // (its retry children tiled it).
     let mut superseded_failed = std::collections::HashSet::new();
     for row in rows {
         if row.status != "failed" {
@@ -1607,32 +1525,21 @@ fn coverage_report(rows: &[CloudChunkRow], total_combos: i64) -> CoverageReport 
 
 // ── Resume ───────────────────────────────────────────────────────────────────
 
-/// Resume a paused/crashed cloud-streaming run via a from-start deterministic
-/// walk (NOT a seek — do not re-introduce one). Mirrors `resume_triage`/
-/// `resume_staged` in that it reads the `CloudStreaming` checkpoint + the
-/// `cloud_chunks` rows, but rebuilds the iterator from `new()` and re-walks the
-/// whole emitted space from the origin. Cloud chunk generation is dedup-free and
-/// a pure function of the cursor, so the walk reproduces byte-identical chunk
-/// boundaries and `Combo N` names. For every regenerated chunk it: folds
-/// `completed` rows into the accumulator (NEVER re-billed); re-polls BOTH
-/// `submitted`-with-live-remote AND `failed`-with-live-remote chunks via their
-/// `remote_job_id`; and RE-SUBMITS any uncovered chunk (`failed`-not-superseded /
-/// `pending` / lost) on its own row — it never resets a chunk to `pending`. A
-/// DB-provable supersession check skips a `failed` retry parent whose range its
-/// completed children already tiled. It then continues the SAME chunked
-/// submit/merge loop for the never-generated tail. Before finalizing Done a
-/// completeness guard re-derives provable coverage over `[1, total+1)`; if any
-/// range is still uncovered the job is left Paused + resumable (never silently
-/// dropping combos), otherwise the merged result is finalized.
+/// Resume a paused/crashed run via a from-start deterministic walk (NOT a seek —
+/// do not re-introduce one). Cloud generation is dedup-free and a pure function of
+/// the cursor, so re-walking from `new()` reproduces byte-identical chunk
+/// boundaries + `Combo N` names. Per regenerated chunk: fold `completed` rows
+/// (NEVER re-billed); re-poll BOTH `submitted`- and `failed`-with-live-remote via
+/// `remote_job_id`; RE-SUBMIT any uncovered chunk on its own row (never reset to
+/// `pending`). A DB-provable supersession check skips a `failed` parent its
+/// completed children already tiled. Then continues the SAME submit/merge loop for
+/// the never-generated tail; the completeness guard leaves the job Paused +
+/// resumable if any range stays uncovered (never silently dropping combos).
 ///
-/// Auth: on resume there are no request headers, so the Simmit key must come from
-/// server-side settings (`provider.simmit.api_key`). Desktop stores it; web works
-/// only if the key is in Settings. Without it, resume FAILS CLEAN — it never fakes
-/// a run it cannot bill.
-/// Resolve the bearer used to bill a cloud-streaming resume, mirroring submit's
-/// header→auth precedence: a per-request `BearerToken` (web BYO key) WINS;
-/// otherwise the server-side Settings key; `None` when neither is present (caller
-/// fails clean). Pure so the precedence is unit-tested without touching HTTP/DB.
+/// Resolve the bearer to bill a resume, mirroring submit's precedence: a
+/// per-request `BearerToken` (web BYO key) WINS, else the server-side Settings
+/// key, else `None` (caller fails clean — never fake a run we cannot bill). Pure
+/// so the precedence is unit-tested without HTTP/DB.
 fn resolve_resume_auth(
     request_auth: &crate::compute::ProviderAuth,
     settings_key: Option<&str>,
@@ -1658,19 +1565,16 @@ pub async fn resume_cloud_streaming(
     } else {
         job.provider_id.as_str()
     };
-    // The chunk submit/fetch methods are on the `SimcProvider` trait, so the
-    // resume runner/re-poll closures drive the provider through the trait object
-    // directly — no downcast. A provider that doesn't override them surfaces an
-    // "unsupported" error at the first chunk re-poll/submit.
+    // Chunk submit/fetch are `SimcProvider` trait methods, so the resume
+    // runner/re-poll closures drive the trait object directly — no downcast (a
+    // provider not overriding them errors "unsupported" at the first re-poll/submit).
     let provider = inputs
         .registry
         .get(provider_id)
         .ok_or_else(|| format!("cloud resume: provider '{provider_id}' is not registered"))?;
 
-    // Auth precedence: a per-request bearer (web BYO key, threaded from the
-    // resume request's `X-Provider-<id>-Key` headers exactly as submit builds it)
-    // WINS; otherwise fall back to the server-side Settings key (desktop, or web
-    // with the key saved in Settings). FAIL CLEAN only when NEITHER is available —
+    // Auth precedence: per-request bearer (web BYO key from `X-Provider-<id>-Key`)
+    // WINS; else the server-side Settings key. FAIL CLEAN when NEITHER exists —
     // never fake a run we cannot bill.
     let settings = crate::compute::ProviderSettings::load(
         &inputs.settings_repo,
@@ -1687,9 +1591,8 @@ pub async fn resume_cloud_streaming(
 
     let cloud_repo = CloudChunksRepo::new(inputs.pool.clone());
 
-    // Production chunk-runner (live Simmit) for the remaining chunks. Resume does
-    // not drive the job-level progress bar yet (it would need to seed completed
-    // weight from the reloaded chunks) — pass `None` to keep current behavior.
+    // Production chunk-runner for the remaining chunks. Resume doesn't drive the
+    // job-level progress bar yet (would need to seed completed weight) — pass `None`.
     let cancel = Some(CancelToken::new(inputs.repo.clone(), job_id.to_string()));
     let runner = build_production_chunk_runner(
         provider.clone(),
@@ -1699,8 +1602,7 @@ pub async fn resume_cloud_streaming(
         None,
     );
 
-    // Production re-poll: poll an in-flight chunk's `remote_job_id` to terminal +
-    // fetch via the provider's trait methods.
+    // Production re-poll: poll an in-flight chunk's `remote_job_id` to terminal + fetch.
     let repoll: RepollFn = {
         let provider = provider.clone();
         let auth = auth.clone();
@@ -1726,9 +1628,8 @@ pub async fn resume_cloud_streaming(
         })
     };
 
-    // Spawn the continuation so the HTTP resume handler returns promptly, mirroring
-    // resume_triage/resume_staged. Any clean failure inside (e.g. an invalid stored
-    // cursor) is written to the job's error.
+    // Spawn the continuation so the HTTP handler returns promptly (mirrors
+    // resume_triage/resume_staged). Any clean failure inside is written to the job error.
     let repo = inputs.repo.clone();
     let pool = inputs.pool.clone();
     let request_json = request_json.to_string();
@@ -1760,24 +1661,21 @@ pub async fn resume_cloud_streaming(
     Ok(())
 }
 
-/// In-flight chunk re-poll boundary (the Simmit-mock seam for resume). Given a
-/// chunk's `remote_job_id`, polls to terminal + returns the adapted SimC JSON.
-/// Production wraps `SimmitProvider::poll_and_fetch_chunk`; tests inject a fake.
+/// In-flight chunk re-poll boundary (the Simmit-mock seam for resume): given a
+/// `remote_job_id`, polls to terminal + returns adapted SimC JSON. Production wraps
+/// `poll_and_fetch_chunk`; tests inject a fake.
 pub type RepollFn = Arc<
     dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<Value, RunError>> + Send>> + Send + Sync,
 >;
 
-/// The HTTP-free resume core, reused by the production path and TDD'd against
-/// fakes. Rebuilds the iterator from `new()` (NOT a seek) and walks the emitted
-/// space from the origin: regenerates every generated (parent=None) chunk in
-/// emission order, folding `completed` rows into the accumulator (never
-/// re-billed), re-polling BOTH `submitted`- and `failed`-with-live-remote chunks
-/// through `repoll`, and re-submitting uncovered chunks via `runner` on their own
-/// row (a DB-provable supersession check skips `failed` retry parents already
-/// tiled by their completed children). It then continues the SAME `run_chunk_loop`
-/// for the never-generated tail, whose completeness guard keeps the job Paused +
-/// resumable if any range stays uncovered. The `runner`/`repoll` are injected so
-/// no live Simmit HTTP happens in tests.
+/// HTTP-free resume core, reused by production and TDD'd against fakes. Rebuilds
+/// the iterator from `new()` (NOT a seek) and walks from the origin: regenerates
+/// each generated (parent=None) chunk in emission order, folding `completed` rows
+/// (never re-billed), re-polling both `submitted`- and `failed`-with-live-remote
+/// via `repoll`, re-submitting uncovered chunks on their own row (a supersession
+/// check skips `failed` parents tiled by completed children). Then continues the
+/// SAME `run_chunk_loop` for the tail, whose guard keeps the job Paused + resumable
+/// if any range stays uncovered. `runner`/`repoll` injected so no live HTTP in tests.
 #[allow(clippy::too_many_arguments)]
 async fn resume_cloud_streaming_inner(
     job_id: &str,
@@ -1804,19 +1702,16 @@ async fn resume_cloud_streaming_inner(
         .await
         .map_err(|e| format!("cloud resume: failed to list chunks: {e}"))?;
 
-    // Provable supersession: a `failed` retry parent whose range is fully covered
-    // by completed rows (its children tiled it) is TERMINAL — never re-run it. This
-    // is independent of the total combo count, so it can be computed up front; the
-    // completeness guard recomputes against the real total after the tail loop.
+    // Provable supersession: a `failed` parent fully covered by completed rows is
+    // TERMINAL — never re-run. Independent of the total combo count, so computed up
+    // front; the completeness guard recomputes against the real total after the tail.
     let coverage = coverage_report(&rows, i64::MAX);
 
     // ── 2. Rebuild the iterator FROM START + the run inputs. ─────────────────
-    // Cloud chunk generation is dedup-free and a pure function of the iterator
-    // cursor, so walking from `new()` reproduces byte-identical chunk boundaries
-    // and `Combo N` names. We never `seek` to the checkpoint cursor: that forward
-    // skip is exactly what dropped pre-cursor failed/lost chunks. `new()` leaves
-    // the cursor at the origin and `next_name_idx = 1` (Combo 1 first), matching a
-    // fresh run.
+    // Generation is pure in the cursor, so walking from `new()` reproduces
+    // byte-identical chunk boundaries + names. We never `seek` to the checkpoint
+    // cursor: that forward skip is exactly what dropped pre-cursor failed/lost
+    // chunks. `new()` leaves the cursor at the origin, `next_name_idx = 1`.
     let iter_cfg =
         crate::profileset_generator::iterator_from_request::build_iterator_from_request_json(
             request_json,
@@ -1829,9 +1724,8 @@ async fn resume_cloud_streaming_inner(
         .and_then(|v| v.as_str())
         .ok_or_else(|| "request_json missing base_profile".to_string())?
         .to_string();
-    // The request envelope persists the sim options (start_cloud_streaming writes
-    // `"options"`); resumed chunks must carry them through build_simc_input_from_options
-    // exactly like the fresh path, or the resumed chunk submits a malformed input.
+    // The envelope persists the sim options; resumed chunks must carry them
+    // through build_simc_input_from_options or they submit a malformed input.
     let options = payload
         .get("options")
         .cloned()
@@ -1848,9 +1742,9 @@ async fn resume_cloud_streaming_inner(
         .await
         .map_err(|e| format!("Failed to set Running status: {e}"))?;
 
-    // Shared tail allocator for any re-submit split sub-chunks: seed PAST the max
-    // existing row so a re-submit's retry-split never collides on the
-    // `(job_id, chunk_idx)` PK. `run_chunk_loop` reuses this seed for tail chunks.
+    // Shared tail allocator for re-submit split sub-chunks: seed PAST the max
+    // existing row so a retry-split never collides on the `(job_id, chunk_idx)` PK.
+    // `run_chunk_loop` reuses this seed for tail chunks.
     let max_existing_next = rows
         .iter()
         .map(|r| r.chunk_idx + 1)
@@ -1862,13 +1756,12 @@ async fn resume_cloud_streaming_inner(
 
     let mut acc = ChunkAccumulator::new();
 
-    // The GENERATED chunks (parent=None) are the ones the iterator reproduces, one
-    // `build_chunk` call each. Retry children (parent=Some) live at tail indices
-    // and are NOT regenerated (their parent is skipped as superseded; the children
-    // are folded in step 5). Walk the generated rows in EMISSION order — by
-    // `first_combo_name_idx` (their chunk_idx may be non-contiguous when retry
-    // splits claimed interleaved tail indices), so each `build_chunk` lines up with
-    // the row whose range it reproduces.
+    // GENERATED chunks (parent=None) are the ones the iterator reproduces, one
+    // `build_chunk` each. Retry children (parent=Some) live at tail indices, are
+    // NOT regenerated (parent skipped as superseded; children folded in step 5).
+    // Walk in EMISSION order by `first_combo_name_idx` (chunk_idx may be
+    // non-contiguous when retry splits claimed interleaved tail indices) so each
+    // `build_chunk` lines up with the row whose range it reproduces.
     let mut generated_rows: Vec<&CloudChunkRow> = rows
         .iter()
         .filter(|r| r.parent_chunk_idx.is_none())
@@ -1878,14 +1771,13 @@ async fn resume_cloud_streaming_inner(
     // ── 4. From-start walk over generated chunks. ────────────────────────────
     for row in &generated_rows {
         let row = *row;
-        // Regenerate this chunk from the iterator (advances the cursor + names).
-        // Run on a blocking thread so the CPU-bound iterator walk does not stall
-        // the async executor while awaiting chunk results.
+        // Regenerate this chunk (advances the cursor + names) on a blocking thread
+        // so the CPU-bound walk doesn't stall the async executor.
         let (it_back, chunk) = run_build_chunk_blocking(it, base_profile.clone(), ceiling).await;
         it = it_back;
         if chunk.profileset_count == 0 {
-            // The iterator ran dry before reproducing all recorded generated chunks
-            // — the stored chunk_size/request no longer reproduces the space.
+            // Iterator ran dry before reproducing all recorded generated chunks —
+            // the stored chunk_size/request no longer reproduces the space.
             return Err(format!(
                 "cloud resume: iterator exhausted before reproducing generated \
                  chunk {} (range start {:?})",
@@ -1909,8 +1801,8 @@ async fn resume_cloud_streaming_inner(
 
         match status {
             "completed" => {
-                // Fold the stored envelope (incl. its persisted credits — already
-                // billed, never re-submitted). Discard the regenerated lines.
+                // Fold the stored envelope (incl. persisted credits — already
+                // billed). Discard the regenerated lines.
                 if let Some(env) = row
                     .results_json
                     .as_deref()
@@ -1969,11 +1861,11 @@ async fn resume_cloud_streaming_inner(
             "failed" => {
                 if coverage.superseded_failed.contains(&chunk_idx) {
                     // DB-provably superseded by completed children (folded in step
-                    // 5) → terminal, never re-run (no PK collision, combos once).
+                    // 5) → terminal, never re-run (combos once).
                 } else if let Some(remote_id) = live_remote {
-                    // A failed chunk that still has a live remote job: re-poll it
-                    // (Bug B — the old resume only re-polled `submitted`). Recover
-                    // it if terminal; re-submit if the remote is truly gone.
+                    // Failed but still has a live remote: re-poll (Bug B — old
+                    // resume only re-polled `submitted`). Recover if terminal;
+                    // re-submit if the remote is truly gone.
                     match repoll(remote_id.to_string()).await {
                         Ok(json) => {
                             fold_repolled(&cloud_repo, job_id, chunk_idx, &json, &mut acc).await
@@ -2038,9 +1930,8 @@ async fn resume_cloud_streaming_inner(
     }
 
     // ── 5. Fold completed retry-child rows (parent=Some). ────────────────────
-    // Their combos were NOT regenerated above (the iterator only re-walks generated
-    // chunks); their parent is skipped as superseded, so folding them here makes
-    // each combo appear exactly once.
+    // Not regenerated above (iterator only re-walks generated chunks); their parent
+    // is skipped as superseded, so folding them here makes each combo appear once.
     for row in rows.iter().filter(|r| r.parent_chunk_idx.is_some()) {
         if row.status != "completed" {
             continue;
@@ -2056,11 +1947,10 @@ async fn resume_cloud_streaming_inner(
     }
 
     // ── 6. Continue forward for any NEVER-generated tail chunks + finalize. ──
-    // The iterator is now positioned exactly after the last recorded generated
-    // chunk; `next_name_idx` continued monotonically through the walk, so tail
-    // chunks keep the global `Combo N` naming without colliding. `run_chunk_loop`
-    // (the same loop the fresh path uses) generates the tail, and — with the
-    // resume guard — refuses to finalize Done if any range is still uncovered.
+    // The iterator now sits just after the last recorded generated chunk and
+    // `next_name_idx` continued monotonically, so tail chunks keep non-colliding
+    // `Combo N` names. `run_chunk_loop` (the fresh path's loop) generates the tail;
+    // with the resume guard it refuses to finalize Done if any range stays uncovered.
     let meta_repo = crate::db::ComboMetadataRepo::new(pool.clone());
     let combo_id_base = meta_repo
         .count_for_job(job_id)
@@ -2096,10 +1986,10 @@ async fn resume_cloud_streaming_inner(
     Ok(())
 }
 
-/// Fold a re-polled chunk's terminal Simmit JSON: extract its envelope (adopting
-/// the base actor only when the accumulator still lacks one — the Top Gear base
-/// is invariant across chunks), persist `mark_completed`, and fold it. Used by
-/// the resume walk for both `submitted` and live-`failed` chunks.
+/// Fold a re-polled chunk's terminal Simmit JSON: extract the envelope (adopting
+/// the base actor only when the accumulator lacks one — the base is invariant
+/// across chunks), `mark_completed`, fold. Used for `submitted` and live-`failed`
+/// chunks on resume.
 async fn fold_repolled(
     cloud_repo: &CloudChunksRepo,
     job_id: &str,
@@ -2119,10 +2009,9 @@ async fn fold_repolled(
 }
 
 /// Re-submit ONE regenerated chunk on its OWN `chunk_idx` (reusing its existing
-/// `cloud_chunks` row + combo_metadata) through the same split-retry path the
-/// fresh run uses. On success folds + marks the row completed; on a hard failure
-/// sets the job error. Returns `Some(result)` when the resume must STOP (a clean
-/// terminal abort or a hard failure), `None` to continue the walk.
+/// row + combo_metadata) through the fresh run's split-retry path. Folds + marks
+/// completed on success. Returns `Some(result)` when resume must STOP (clean
+/// terminal abort or hard failure), `None` to continue the walk.
 #[allow(clippy::too_many_arguments)]
 async fn resume_resubmit_chunk(
     runner: &ChunkRunner,
@@ -2135,7 +2024,7 @@ async fn resume_resubmit_chunk(
     tail_alloc: &std::sync::atomic::AtomicUsize,
     acc: &mut ChunkAccumulator,
 ) -> Option<Result<(), String>> {
-    // Re-mark the row submitted so a crash mid-re-submit leaves a re-pollable row.
+    // Re-mark submitted so a crash mid-re-submit leaves a re-pollable row.
     let now = chrono::Utc::now().to_rfc3339();
     let _ = cloud_repo.mark_submitted(job_id, chunk_idx, "", &now).await;
 
@@ -2170,9 +2059,8 @@ async fn resume_resubmit_chunk(
         }
         // Clean terminal abort (Paused/Cancelled): stop, state already set.
         ChunkOutcome::Terminal => Some(Ok(())),
-        // Hard failure → propagate as a terminal Error (the resume wrapper writes
-        // it to the job). Matches fresh-path semantics: a hard submit failure is
-        // non-retryable and correctly NOT resumable.
+        // Hard failure → propagate as terminal Error (resume wrapper writes it).
+        // Matches fresh-path: a hard submit failure is non-retryable, NOT resumable.
         ChunkOutcome::Failed(msg) => Some(Err(msg)),
     }
 }

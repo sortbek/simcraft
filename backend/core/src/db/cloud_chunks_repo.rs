@@ -6,11 +6,10 @@ pub struct CloudChunksRepo {
     pool: AnyPool,
 }
 
-/// The explicit envelope stored in `cloud_chunks.results_json` for a completed
-/// chunk. `profilesets` is this chunk's adapted `sim.profilesets.results`
-/// array; `base_player` is the base-actor `sim.players[0]` ONLY for chunk 0
-/// (`None` otherwise). One column, one schema, no positional ambiguity — lets
-/// resume merge a finished chunk without re-billing it.
+/// Envelope stored in `cloud_chunks.results_json` for a completed chunk.
+/// `profilesets` is this chunk's adapted `sim.profilesets.results`; `base_player`
+/// is `sim.players[0]` ONLY for chunk 0 (`None` otherwise). One schema, no
+/// positional ambiguity — lets resume merge a finished chunk without re-billing.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChunkResultEnvelope {
     pub profilesets: Vec<serde_json::Value>,
@@ -32,9 +31,8 @@ pub struct CloudChunkRow {
     /// `None` = a normally-generated chunk; `Some(parent_idx)` = a retry sub-chunk
     /// split from `parent_idx`.
     pub parent_chunk_idx: Option<i64>,
-    /// First global `Combo N` index this chunk covers; the chunk spans the
-    /// contiguous range `[first_combo_name_idx, first_combo_name_idx + profileset_count)`.
-    /// `None` on legacy rows written before this column existed.
+    /// First global `Combo N` index this chunk covers; it spans the contiguous
+    /// range `[first_combo_name_idx, + profileset_count)`. `None` on legacy rows.
     pub first_combo_name_idx: Option<i64>,
 }
 
@@ -43,10 +41,9 @@ impl CloudChunksRepo {
         Self { pool }
     }
 
-    /// Insert a `pending` chunk row at generation time, before submission,
-    /// recording its lineage (`parent_chunk_idx`) and combo-name range start
-    /// (`first_combo_name_idx`). The chunk covers the contiguous global combo
-    /// range `[first_combo_name_idx, first_combo_name_idx + profileset_count)`.
+    /// Insert a `pending` chunk row at generation time (before submission),
+    /// recording its lineage (`parent_chunk_idx`) and combo-range start
+    /// (`first_combo_name_idx`, spanning `+ profileset_count`).
     pub async fn insert_pending_with_lineage(
         &self,
         job_id: &str,

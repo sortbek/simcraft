@@ -30,13 +30,10 @@ pub fn chunk_count(combos: u64, ceiling: usize) -> u64 {
     combos.div_ceil(ceiling as u64)
 }
 
-/// Conservative per-chunk runtime model (seconds on 32 vCPU). DELIBERATELY an
-/// over-estimate; calibrate against real runs (spec Open Question). Model:
-/// `base + per_profileset × profilesets`, scaled up as target_error tightens.
-///
-/// NOTE: this is a guess, not a measured constant. It exists to give the user a
-/// ballpark and to gate obviously-unaffordable jobs. It is NOT used for billing
-/// — Simmit bills actual runtime. Marked as tunable.
+/// Conservative per-chunk runtime model (seconds on 32 vCPU), deliberately an
+/// over-estimate: `base + per_profileset × profilesets`, scaled up as target_error
+/// tightens. A tunable guess for the user ballpark + affordability gate only — NOT
+/// billing (Simmit bills actual runtime). Calibrate against real runs (spec Open Question).
 pub fn est_chunk_runtime_seconds(profilesets: u64, target_error: f64) -> u64 {
     let base: f64 = 30.0;
     let per_ps: f64 = 0.05; // ~50ms/profileset on 32 vCPU at te=0.1 (conservative)
@@ -219,10 +216,9 @@ pub(super) async fn cloud_estimate_top_gear(
         "available_credits": available_credits,
         "affordable": affordable,
         "ceiling": ceiling,
-        // True iff this workload takes the chunked cloud-streaming path (combos ≥
-        // the triage threshold). Below it, an explicit cloud run is a single eager
-        // Simmit job, so the chunk/credit model here doesn't describe it — the FE
-        // gates the chunked estimate display on this flag.
+        // True iff this takes the chunked cloud-streaming path (combos ≥ triage
+        // threshold). Below it an explicit cloud run is a single eager Simmit job that
+        // the chunk/credit model doesn't describe, so the FE gates the estimate on this.
         "would_stream": combos >= crate::profileset_generator::triage::TRIAGE_THRESHOLD,
     }))
 }

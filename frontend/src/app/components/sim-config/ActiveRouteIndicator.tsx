@@ -76,11 +76,9 @@ const Stepper = ({
   </div>
 );
 
-/** Route control for the sim config, shown only in Dungeon Route fight style.
- *  A custom dropdown (styled to match FightStyleSelector) picks/switches the
- *  active saved route; the keystone level + HP share steppers (which drive the
- *  route's SimC at sim time) and a clear button sit beside it. Routes can also
- *  be loaded from the /routes manager. */
+/** Route control for the sim config: a FightStyleSelector-styled dropdown picks the
+ *  active saved route, with keystone-level + HP-share steppers (which drive the route's
+ *  SimC at sim time) and a clear button beside it. Routes also load from /routes. */
 export default function ActiveRouteIndicator() {
   const { t } = useLanguage();
   const { isDungeonRoute, activeRoute, activateRoute, clearRoute } = useSimContext();
@@ -89,12 +87,11 @@ export default function ActiveRouteIndicator() {
   const [open, setOpen] = useState(false);
   const [params, setParams] = useState<RouteSimParams>(getRouteSimParams);
 
-  // Shown in Dungeon Route mode (to pick a route) or whenever a route is loaded —
-  // including a legacy footer route, which keeps Patchwerk — so an active route is
-  // always visible and clearable.
+  // Shown in Dungeon Route mode or whenever a route is loaded (incl. a legacy footer
+  // route on Patchwerk), so an active route is always visible and clearable.
   const show = isDungeonRoute || activeRoute != null;
 
-  // Only fetch the lists the picker needs when the control is actually shown.
+  // Only fetch the picker's lists when the control is actually shown.
   useEffect(() => {
     if (!show) return;
     let alive = true;

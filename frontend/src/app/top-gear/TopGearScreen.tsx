@@ -351,19 +351,16 @@ export default function TopGearScreen() {
     { enabled: true, debounceMs: 0, tooManyMessage: t('validation.tooManyCombinations') }
   );
 
-  // Cloud-streaming preflight: when a remote (non-local) provider is selected,
-  // fetch an advisory credit/chunk estimate. Advisory only — submit is hard-gated
-  // server-side, so this never blocks submission.
+  // Cloud-streaming preflight for remote providers: advisory credit/chunk
+  // estimate only — submit is hard-gated server-side, so this never blocks it.
   const isCloudCompute = compute !== 'auto' && compute !== 'local';
   const { estimate: cloudEstimate } = useCloudEstimate(
     '/api/top-gear/cloud-estimate',
     () => {
       const body = buildComboBody();
       if (body === null) return null;
-      // Mirror EXACTLY what a single submit config POSTs (see useSimSubmit): the
-      // page payload, the shared SimContext options, and the base fight params
-      // (added per-scenario in submit). target_error etc. must match so the
-      // backend's credit estimate matches the eventual run.
+      // Must mirror EXACTLY what submit POSTs (see useSimSubmit) — page payload,
+      // shared SimContext options, base fight params — so the credit estimate matches the run.
       return {
         ...body,
         ...sharedSimPayload,

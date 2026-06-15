@@ -43,13 +43,12 @@ pub struct Dungeon {
     pub entrance: Option<MapPoint>,
     #[serde(default)]
     pub sublevel_links: Vec<SublevelLink>,
-    /// Legacy isotropic scale: MDT map units → in-game world yards. Used when the
-    /// per-axis pair below is absent (i.e. a 1.5:1 floor, where both axes match).
+    /// Legacy isotropic scale (MDT units → world yards). Used when the per-axis
+    /// pair below is absent (a 1.5:1 floor, where both axes match).
     #[serde(default)]
     pub yards_per_unit: Option<f64>,
-    /// Per-axis world-yard scale (MDT units → yards): `yards_per_unit_x = extentX/840`,
-    /// `yards_per_unit_y = extentY/560`. Lets non-1.5:1 floors convert correctly.
-    /// Each axis falls back to `yards_per_unit`, then to a default, when absent.
+    /// Per-axis scale (`x = extentX/840`, `y = extentY/560`) so non-1.5:1 floors
+    /// convert correctly. Each axis falls back to `yards_per_unit`, then default.
     #[serde(default)]
     pub yards_per_unit_x: Option<f64>,
     #[serde(default)]
@@ -143,9 +142,9 @@ impl DungeonDb {
     }
 }
 
-/// Load `mdt_dungeons.json` from the data directory into the process-wide
-/// database. The file is optional — if it is absent the database stays empty
-/// and conversions report the dungeon as unknown rather than failing startup.
+/// Load `mdt_dungeons.json` into the process-wide database. The file is optional:
+/// if absent, the DB stays empty and conversions report the dungeon as unknown
+/// rather than failing startup.
 pub fn load(data_dir: &Path) -> Result<(), String> {
     let path = data_dir.join("mdt_dungeons.json");
     let db = match std::fs::read_to_string(&path) {

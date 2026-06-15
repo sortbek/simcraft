@@ -12,9 +12,8 @@ interface Props {
   compact?: boolean;
 }
 
-/** Pause / Resume / Cancel cluster for an active job. Shared between the
- * Active table and the All-view history row so the two surfaces stay in
- * sync when affordances change. */
+/** Pause/Resume/Cancel cluster for an active job, shared by the Active table
+ * and the All-view history row so both surfaces stay in sync. */
 export function JobActionButtons({
   job,
   busy,

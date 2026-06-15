@@ -13,8 +13,8 @@ interface ConfigFooterBarProps {
   submitting: boolean;
   buttonLabel: string;
   disabled?: boolean;
-  /** Show an inline stat-weights opt-in toggle. Quick Sim only — staged flows
-   * (Top Gear, Drop Finder) compute scale factors per-actor which is too expensive. */
+  /** Inline stat-weights opt-in toggle. Quick Sim only — staged flows compute
+   * scale factors per-actor, which is too expensive. */
   showStatWeightsToggle?: boolean;
   compute: ComputeChoice;
   onComputeChange: (v: ComputeChoice) => void;

@@ -13,8 +13,7 @@ import { fetchActiveJobs, type JobStatus, type JobOverviewSummary } from './api'
 
 const POLL_INTERVAL_MS = 2500;
 
-/** Job statuses that belong in the Active view and expose management actions.
- * Paused is dormant but still incomplete, so it stays visible there. */
+/** Statuses shown in the Active view. Paused is dormant but still incomplete, so it stays. */
 export const ACTIVE_STATUSES: readonly JobStatus[] = ['pending', 'running', 'paused'];
 const ACTIVE_STATUS_SET: ReadonlySet<JobStatus> = new Set(ACTIVE_STATUSES);
 const RUNNING_STATUS_SET: ReadonlySet<JobStatus> = new Set(['pending', 'running']);
@@ -33,9 +32,8 @@ interface UseActiveSimsResult {
   setPauseRequested: (jobId: string, requested: boolean) => void;
 }
 
-/** Compare two summaries for the fields the UI actually rerenders on.
- * Returns true if they're effectively identical, so the polling loop can skip
- * the setState and avoid a 2.5s re-render cascade across every page. */
+/** Equal on the fields the UI rerenders on, so polling can skip setState and
+ * avoid a 2.5s re-render cascade across every page. */
 function summariesEqual(a: JobOverviewSummary, b: JobOverviewSummary): boolean {
   return (
     a.id === b.id &&
@@ -62,8 +60,7 @@ function usePolledActiveSims(): UseActiveSimsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
-  // poll lives in a ref so `refresh` outside the effect can fire it. Defined
-  // once on mount inside the effect — never reassigned per render.
+  // poll lives in a ref so `refresh` outside the effect can fire it.
   const pollRef = useRef<() => Promise<void>>(async () => undefined);
 
   useEffect(() => {
@@ -147,8 +144,7 @@ export function ActiveSimsProvider({ children }: { children: ReactNode }) {
 
 /**
  * Read the shared active-sims snapshot. Must be called inside an
- * `ActiveSimsProvider`. The `/sims` page and the header indicator both
- * call this; they share one polling loop instead of running their own.
+ * `ActiveSimsProvider`. `/sims` and the header indicator share one polling loop.
  */
 export function useActiveSims(): UseActiveSimsResult {
   const ctx = useContext(ActiveSimsContext);

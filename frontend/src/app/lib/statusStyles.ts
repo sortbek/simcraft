@@ -1,9 +1,6 @@
-/**
- * Semantic status styling for gear rows. Centralizes the vault/loot/catalyst/
- * voidForge color families that GearItemRow previously inlined as a 5-way
- * nested ternary (icon ring + row background, ×2 for checked/unchecked).
- * Values are the exact Tailwind classes already in use — no visual change.
- */
+/** Semantic status styling for gear rows: vault/loot/catalyst/voidForge color
+ *  families (icon ring + row background, checked/unchecked). Exact Tailwind classes
+ *  already in use — no visual change. */
 export type GearStatus = 'vault' | 'loot' | 'catalyst' | 'voidForge';
 
 interface GearStatusStyle {

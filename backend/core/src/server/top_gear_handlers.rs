@@ -102,11 +102,9 @@ pub(super) async fn create_top_gear_sim(
         max_colors: req.max_colors,
     };
 
-    // ── Path decision ────────────────────────────────────────────────────────
-    // Count the exact combo count once: used for the zero-guard, the
-    // streaming-vs-eager routing decision, and (on the streaming path) the
-    // credit reservation + progress denominator. `Err` (TooMany) falls through
-    // to the eager path, which re-counts and surfaces the same error to the user.
+    // Exact combo count, counted once: drives the zero-guard, streaming-vs-eager
+    // routing, and (streaming) credit reservation + progress denominator. Err
+    // (TooMany) falls through to the eager path, which re-counts and re-surfaces it.
     let exact_combos: u64 = match profileset_generator::count_top_gear_combos_with_talents(
         &base_profile,
         &items_by_slot,
@@ -124,18 +122,16 @@ pub(super) async fn create_top_gear_sim(
             }));
         }
         Ok(n) => n as u64,
-        // TooMany: fall through to the eager path, which re-counts and returns the
-        // same error. We do NOT early-return here so the user-facing error message
-        // and behavior remain identical to the pre-refactor state.
+        // TooMany: don't early-return; fall through to the eager path so the
+        // user-facing error stays identical. (0 here means Err.)
         Err(_) => 0,
     };
-    // Route on the exact count. `exact_combos == 0` means Err(TooMany) above;
-    // routing it as non-streaming sends it to the eager path which handles it.
+    // Route on the exact count; `exact_combos == 0` (Err/TooMany) routes non-streaming
+    // to the eager path, which handles it.
     let use_streaming_path = exact_combos >= TRIAGE_THRESHOLD;
 
-    // O(axes) upper-bound estimate: kept only for the WorkloadEstimate passed to
-    // `resolve_provider_for_request` (provider selection heuristic) and the
-    // `estimate` field in the streaming response envelope. Not used for routing.
+    // O(axes) upper-bound estimate: only for the provider-selection heuristic and
+    // the streaming response's `estimate` field. Not used for routing.
     let estimate = profileset_generator::estimate_top_gear_combo_count(
         &items_by_slot,
         &req.selected_items,
@@ -145,9 +141,8 @@ pub(super) async fn create_top_gear_sim(
         talent_builds.len().max(1),
     );
 
-    // For the WorkloadEstimate combo_count heuristic: use the exact count when
-    // available (non-zero), fall back to `estimate` for the TooMany case
-    // (exact_combos == 0 means Err was returned and the eager path handles it).
+    // WorkloadEstimate combo_count: prefer the exact count, fall back to `estimate`
+    // for the TooMany case (exact_combos == 0).
     let workload_combo_count = if exact_combos > 0 {
         exact_combos as usize
     } else {
@@ -172,10 +167,8 @@ pub(super) async fn create_top_gear_sim(
     let provider_id_str = provider.id().to_string();
 
     if use_streaming_path {
-        // Don't resolve a local SimC binary here — that happens inside
-        // `start_streaming_top_gear_job` only on the local branch, after the
-        // cloud-vs-local fork. A cloud-only deploy with no local SimC installed
-        // must still be able to run a streaming Top Gear via the cloud provider.
+        // Don't resolve a local binary here; `start_streaming_top_gear_job` does it
+        // only on the local branch, so a cloud-only deploy with no local SimC still works.
         return super::streaming_top_gear::start_streaming_top_gear_job(
             super::streaming_top_gear::StreamingTopGearStart {
                 req,

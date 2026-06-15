@@ -1,14 +1,9 @@
 /**
- * Decode WoW talent export strings (base64 bit-packed binary format).
- *
- * Format reference: Blizzard_ClassTalentImportExport.lua
- * - Base64 alphabet: A-Za-z0-9+/ (standard), 6 bits per char, LSB-first
- * - Header: version (8 bits), specId (16 bits), treeHash (128 bits)
- * - Per node (all nodes sorted by ascending id):
- *   1 bit: isSelected
- *   If selected: 1 bit: isPurchased
- *   If purchased: 1 bit: isPartiallyRanked -> if yes: 6 bits ranksPurchased
- *   If purchased: 1 bit: isChoiceNode -> if yes: 2 bits choiceEntryIndex
+ * Decode WoW talent export strings (base64 bit-packed). Format reference:
+ * Blizzard_ClassTalentImportExport.lua. Base64 A-Za-z0-9+/, 6 bits/char, LSB-first.
+ * Header: version(8) + specId(16) + treeHash(128). Then per node (sorted by ascending id):
+ * isSelected(1); if selected isPurchased(1); if purchased isPartiallyRanked(1)->ranks(6),
+ * isChoiceNode(1)->choiceEntryIndex(2).
  */
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -62,20 +57,18 @@ export function decodeHeader(
   let specId: number;
   [specId, pos] = readBits(bits, pos, 16);
 
-  // Skip 128-bit tree hash
-  pos += 128;
+  pos += 128; // skip 128-bit tree hash
 
   return { version, specId, bits, offset: pos };
 }
 
 /**
  * Decode per-node selections from the bit stream.
- *
- * @param bits - The full bit array from decodeHeader
- * @param offset - Bit position after the header (from decodeHeader)
- * @param sortedNodeIds - All node IDs sorted ascending (classNodes + specNodes + heroNodes)
- * @param nodeMaxRanks - Map of nodeId -> maxRanks for each node
- * @returns Map of nodeId -> NodeSelection (only for selected nodes)
+ * @param bits - full bit array from decodeHeader
+ * @param offset - bit position after the header
+ * @param sortedNodeIds - all node IDs sorted ascending (class + spec + hero)
+ * @param nodeMaxRanks - nodeId -> maxRanks
+ * @returns nodeId -> NodeSelection (selected nodes only)
  */
 export function decodeNodes(
   bits: boolean[],
@@ -96,12 +89,11 @@ export function decodeNodes(
     let isPurchased: number;
     [isPurchased, pos] = readBits(bits, pos, 1);
     if (!isPurchased) {
-      // Node is selected but not purchased (granted/free node)
+      // selected but not purchased = granted/free node
       selections.set(nodeId, { ranks: nodeMaxRanks.get(nodeId) ?? 1, choiceIndex: -1 });
       continue;
     }
 
-    // Purchased node
     let ranks = nodeMaxRanks.get(nodeId) ?? 1;
 
     let isPartiallyRanked: number;

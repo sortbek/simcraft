@@ -19,11 +19,9 @@ pub(super) struct GearSetContext<'a> {
     pub max_catalyst_charges: Option<u32>,
 }
 
-/// Single entry point every profileset generator must call before emitting a
-/// candidate gear set. Aggregates the unique-equipped, item-limit-category,
-/// vault, weapon-pairing, and catalyst constraints so adding a new constraint
-/// (or tightening an existing one) is a single-edit change — generators don't
-/// re-implement validation per feature. See `feedback_gear_validation_unified`.
+/// Single funnel every generator must call before emitting a gear set. Aggregates
+/// unique-equipped, item-limit, vault, weapon-pairing, and catalyst checks so a
+/// new constraint is a one-edit change. See `feedback_gear_validation_unified`.
 pub(super) fn is_legal_gear_set<V: Borrow<Value>>(
     gear_set: &HashMap<String, V>,
     ctx: &GearSetContext<'_>,
@@ -310,8 +308,7 @@ mod tests {
     fn weapon_constraint_2h_with_zero_off_hand_passes() {
         ensure_game_data_loaded();
         let mut gs = HashMap::new();
-        // 237837 is a one-hand in the user's report — pick a known 2H from DB.
-        // For an isolated unit test, use the empty-off-hand path:
+        // Exercises the empty-off-hand (id=0) path, which always passes.
         gs.insert("main_hand".to_string(), item(237837));
         gs.insert("off_hand".to_string(), item(0));
         assert!(validate_weapon_constraint(&gs, "arms"));

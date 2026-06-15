@@ -70,12 +70,8 @@ export interface GearComparisonResult extends CommonResultFields {
 
 export type SimResult = QuickSimResult | GearComparisonResult;
 
-/**
- * Type guard: narrows a SimResult to GearComparisonResult. Primary discriminant
- * is `result_kind`; the `type`-based check is a legacy fallback for results
- * persisted before `result_kind` started shipping (mirrors the old inline logic
- * in SimResultClient). Returns `r is GearComparisonResult` for typed access.
- */
+/** Type guard narrowing to GearComparisonResult. Discriminant is `result_kind`; the
+ *  `type`-based check is a legacy fallback for results persisted before `result_kind` shipped. */
 export function isGearComparisonResult(r: SimResult): r is GearComparisonResult {
   return (
     r.result_kind === 'gear_comparison' ||

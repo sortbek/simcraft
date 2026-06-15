@@ -1,12 +1,5 @@
-/**
- * Safe wrappers around `localStorage` / `sessionStorage` reads that always
- * return a value (no exceptions, no nulls). Each helper centralises one
- * fallback policy that previously was repeated inline in components.
- *
- * Writes are intentionally not wrapped — every setter we have is followed
- * by a single `localStorage.setItem` inside a `try {}` block, which is
- * already terse enough.
- */
+/** Safe `localStorage`/`sessionStorage` read wrappers that always return a value
+ *  (no exceptions, no nulls). Writes are intentionally not wrapped. */
 
 /** JSON-decode a stored value; return `fallback` on missing/invalid JSON. */
 export function readStoredJson<T>(key: string, fallback: T): T {
@@ -28,9 +21,8 @@ export function readSessionJson<T>(key: string, fallback: T): T {
   }
 }
 
-/** Read a positive integer; return `fallback` if missing or unparseable.
- * Zero is treated as "not set" — callers wanting `0` to be a real value should
- * implement their own parse. */
+/** Read a positive integer; return `fallback` if missing/unparseable. Zero is treated
+ *  as "not set" — callers needing `0` as a real value must parse it themselves. */
 export function readStoredPositiveInt(key: string, fallback: number): number {
   const v = localStorage.getItem(key);
   if (v == null) return fallback;

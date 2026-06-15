@@ -751,8 +751,7 @@ pub fn tier_set_bonus_id() -> u64 {
     TIER_SET_BONUS_ID
 }
 
-/// Get the catalyst currency ID for the current season (e.g. 3378).
-/// Get the current season ID (highest seasonId found in upgrade bonuses).
+/// Current season ID (highest seasonId found in upgrade bonuses).
 pub fn current_season_id() -> u64 {
     CURRENT_SEASON_ID.get().copied().unwrap_or(0)
 }

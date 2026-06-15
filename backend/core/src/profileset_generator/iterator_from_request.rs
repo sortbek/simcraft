@@ -1,10 +1,6 @@
-//! Reconstruct a ProfilesetIteratorConfig from a stored normalized
-//! `request_json` envelope. Used by Phase 2 resume to rebuild the exact
-//! same iterator the original sim was using.
-//!
-//! Only `sim_type = "top_gear"` is supported in Phase 2. Other sim types
-//! either don't use the streaming iterator (Inline mode) or don't have a
-//! resumable workflow.
+//! Reconstruct a ProfilesetIteratorConfig from a stored `request_json` envelope
+//! so resume rebuilds the exact iterator the original sim used. Only
+//! `sim_type = "top_gear"` is supported (others aren't streaming/resumable).
 
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -104,17 +100,14 @@ pub fn build_iterator_from_request_json(json: &str) -> Result<ProfilesetIterator
         })
         .unwrap_or_default();
 
-    // Catalyst budget is stored in the streaming envelope under "catalyst_charges"
-    // (written by streaming_top_gear.rs). `None` is preserved when the original
-    // request had no catalyst budget so the resumed job is identical.
+    // Catalyst budget under "catalyst_charges" (written by streaming_top_gear.rs).
+    // `None` is preserved so the resumed job is identical.
     let catalyst_charges: Option<u32> = payload
         .get("catalyst_charges")
         .and_then(|v| v.as_u64())
         .map(|n| n as u32);
 
-    // Delegate to the shared builder in top_gear.rs.
-    // build_iterator_config takes a GemEnchantOptions struct (not flat args), so
-    // we construct one here — Option A: match the existing signature unchanged.
+    // Delegate to the shared builder in top_gear.rs (takes a GemEnchantOptions struct).
     let gem_opts = GemEnchantOptions {
         enchant_selections: Some(&enchant_selections),
         gem_options: &gem_options,

@@ -1,10 +1,9 @@
 //! Calibration harness for the Triage stage.
 //!
-//! Reads a captured Top Gear scenario JSON (a `NormalizedRequest` envelope —
-//! exactly the shape stored in `jobs.request_json`), runs Triage across a
-//! 3-axis grid (profilesets_per_batch, iterations, cutoff_multiplier), measures
-//! per-grid-point wall time and survivor-recall vs a reference baseline,
-//! writes the results to a companion JSON file.
+//! Reads a captured Top Gear scenario JSON (a `NormalizedRequest` envelope, as
+//! stored in `jobs.request_json`), runs Triage across a 3-axis grid
+//! (profilesets_per_batch × iterations × cutoff_multiplier), measures per-point
+//! wall time and survivor-recall vs a baseline, and writes a companion JSON.
 //!
 //! Usage:
 //!   simhammer-calibration <scenario.json> [--baseline <baseline.json>] \
@@ -28,8 +27,8 @@ use simhammer_core::profileset_generator::{
 #[derive(Parser, Debug)]
 #[command(name = "simhammer-calibration")]
 struct Args {
-    /// Path to a captured Top Gear scenario JSON (a NormalizedRequest envelope
-    /// — copy this from `jobs.request_json` for a streamed-mode Top Gear sim).
+    /// Captured Top Gear scenario JSON (a NormalizedRequest envelope — copy
+    /// from `jobs.request_json` for a streamed-mode Top Gear sim).
     scenario: PathBuf,
 
     /// Optional baseline JSON with the reference top-N ranked profilesets for
@@ -45,7 +44,7 @@ struct Args {
     #[arg(long)]
     out: Option<PathBuf>,
 
-    /// Comma-separated Triage batch sizes, in profilesets per SimC invocation.
+    /// Comma-separated Triage batch sizes (profilesets per SimC invocation).
     /// Each value pins min/max count for a direct overhead comparison.
     #[arg(long, value_delimiter = ',', default_value = "100,250,500,1000")]
     batch_profilesets: Vec<usize>,
@@ -64,12 +63,10 @@ struct GridPoint {
     total_batches: usize,
     total_candidates: usize,
     total_accepted: usize,
-    /// Number of baseline top-N combos missing from this grid point's survivors.
-    /// `Some(0)` = perfect recall; `None` = no baseline supplied.
-    /// Note: matches by combo_name. Streaming and eager iterators assign names
-    /// in their own order, so identical combos may have different names across
-    /// runs — for true content-based matching, the baseline export needs to
-    /// include the profileset_simc content per combo. v1 limitation.
+    /// Baseline top-N combos missing from this point's survivors. `Some(0)` =
+    /// perfect recall; `None` = no baseline. Matches by combo_name, which
+    /// streaming/eager iterators assign in their own order — identical combos
+    /// may differ across runs. Content-based matching is a v1 limitation.
     winner_loss_count: Option<usize>,
     notes: String,
 }
@@ -81,8 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scenario_text = std::fs::read_to_string(&args.scenario)?;
     println!("Loaded scenario: {}", args.scenario.display());
 
-    // Parse the envelope once to pull out fight_style / target_error / base_profile.
-    // build_iterator_from_request_json validates the rest of the payload shape.
+    // Parse the envelope for fight_style / base_profile; the rest of the payload
+    // shape is validated by build_iterator_from_request_json.
     let envelope: serde_json::Value = serde_json::from_str(&scenario_text)?;
     let payload = envelope
         .get("payload")
@@ -108,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let baseline_top: Option<Vec<String>> = if let Some(p) = &args.baseline {
         let text = std::fs::read_to_string(p)?;
         let baseline: serde_json::Value = serde_json::from_str(&text)?;
-        // Accept either `top_10` (legacy README) or `top` (forward-compat).
+        // Accept `top_10` (legacy README) or `top` (forward-compat).
         baseline
             .get("top_10")
             .or_else(|| baseline.get("top"))
@@ -204,8 +201,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Run a single grid point against a fresh in-memory SQLite DB. Each grid point
-/// gets its own pool + job_id so survivors don't leak across points.
+/// Run a single grid point against a fresh in-memory SQLite DB — its own pool +
+/// job_id so survivors don't leak across points.
 #[allow(clippy::too_many_arguments)]
 async fn run_one_grid_point(
     scenario_json: &str,
@@ -222,8 +219,8 @@ async fn run_one_grid_point(
 ) -> Result<GridPoint, String> {
     let job_id = format!("calibration-{}", grid_idx);
 
-    // Fresh DB per grid point — keeps combo_metadata isolated and avoids
-    // cross-point pollution in combo_dedup / triage_batches as well.
+    // Fresh DB per grid point — isolates combo_metadata / combo_dedup /
+    // triage_batches against cross-point pollution.
     let db = Database::connect("sqlite::memory:")
         .await
         .map_err(|e| format!("Failed to open in-memory SQLite: {}", e))?;

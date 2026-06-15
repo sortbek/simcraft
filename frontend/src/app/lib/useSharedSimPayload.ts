@@ -4,16 +4,13 @@ import { decodeHeader } from './talentDecode';
 import { SPEC_ID_TO_NAME } from './types';
 
 /**
- * Single source of truth for the SimContext-derived options that both the real
- * submit (see {@link useSimSubmit}) and the cloud-estimate preflight must send,
- * so the backend's `req.options` (a flattened `SimOptions`) is populated
- * identically in both paths.
+ * Single source of truth for SimContext-derived options shared by the real
+ * submit ({@link useSimSubmit}) and the cloud-estimate preflight, so the
+ * backend's flattened `req.options` is populated identically in both paths.
  *
- * Returns everything `sharedPayload` in useSimSubmit adds on top of the page
- * payload, EXCLUDING the submit-only `batch_id` (estimates are never batched)
- * and the per-config fight scenario fields (`fight_style` / `desired_targets` /
- * `max_time`), which submit adds per-scenario and the estimate adds from the
- * SimContext base fight params.
+ * Excludes the submit-only `batch_id` (estimates are never batched) and the
+ * per-config fight scenario fields (`fight_style`/`desired_targets`/`max_time`),
+ * which submit adds per-scenario and the estimate adds from SimContext base params.
  */
 export function useSharedSimPayload(): Record<string, unknown> {
   const {
@@ -36,7 +33,7 @@ export function useSharedSimPayload(): Record<string, unknown> {
     triageMaxBatchProfilesets,
   } = useSimContext();
 
-  // Derive spec from selected talent string so the backend can override spec= in the SimC input
+  // Derive spec from talent string so the backend can override spec= in SimC input
   const specOverride = useMemo(() => {
     if (!selectedTalent) return '';
     try {

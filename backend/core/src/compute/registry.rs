@@ -6,17 +6,16 @@ use secrecy::SecretString;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Workload size + whether the handler is about to take its streaming-only path.
-/// Routing consumes this; the handler computes it once.
+/// Workload size + whether the handler will take its streaming-only path.
+/// Computed once by the handler; consumed by routing.
 #[derive(Debug, Clone, Copy)]
 pub struct WorkloadEstimate {
     pub combo_count: usize,
     pub would_use_streaming_path: bool,
 }
 
-/// In-memory snapshot of provider readiness for one request. Built by the
-/// handler from `ProviderSettings` (desktop server-side keys) and request
-/// headers (web per-request keys).
+/// Per-request snapshot of provider readiness, built from `ProviderSettings`
+/// (desktop server-side keys) and request headers (web per-request keys).
 pub struct ProviderAvailability {
     pub(crate) ready: std::collections::HashSet<&'static str>,
     pub(crate) remote_order: Vec<&'static str>,
@@ -80,21 +79,16 @@ impl ProviderAvailability {
     }
 }
 
-/// Decides which provider id should run this request.
-///
-/// Order of precedence:
+/// Decides which provider id runs this request. Precedence:
 ///   1. Explicit Local → always succeeds.
-///   2. Explicit remote → 400 if unknown/unconfigured; if streaming-sized,
-///      returns the provider only if it is cloud-streaming-capable (B2 path),
-///      otherwise errors with StreamingTooLargeForRemote.
-///   3. Auto/absent + streaming-sized → Local (quiet fallback; never silently
-///      start a cloud bill).
+///   2. Explicit remote → error if unknown/unconfigured; if streaming-sized,
+///      OK only when cloud-streaming-capable (B2), else StreamingTooLargeForRemote.
+///   3. Auto/absent + streaming-sized → Local (never silently start a cloud bill).
 ///   4. Auto/absent → smart_default.
 ///
-/// `cloud_streaming_ids` is the subset of `known_remote_ids` whose providers
-/// report `capabilities().cloud_streaming == true`. Callers that hold a
-/// `ProviderRegistry` compute this set from the registry; tests pass it
-/// directly. Must not be empty when cloud routing is expected to succeed.
+/// `cloud_streaming_ids` is the subset of `known_remote_ids` with
+/// `capabilities().cloud_streaming == true`. Must not be empty when cloud
+/// routing is expected to succeed.
 pub fn pick_provider(
     sim_type: &str,
     requested: Option<&str>,
@@ -120,8 +114,8 @@ pub fn pick_provider(
             } else if !avail.is_ready(canonical) {
                 Err(ProviderError::UnconfiguredProvider(canonical.to_string()))
             } else if est.would_use_streaming_path {
-                // B2: a cloud-streaming-capable provider handles the large job
-                // via the chunk orchestrator. Otherwise it's still too large.
+                // B2: cloud-streaming-capable provider handles the large job via
+                // the chunk orchestrator; otherwise it's still too large.
                 if cloud_streaming_ids.contains(&canonical) {
                     Ok(canonical)
                 } else {
@@ -132,8 +126,7 @@ pub fn pick_provider(
             }
         }
         _ => Ok(if est.would_use_streaming_path {
-            // Auto/absent + streaming-sized: stay local. Never silently start
-            // a cloud bill.
+            // Auto/absent + streaming-sized: stay local; never silently bill cloud.
             "local"
         } else {
             smart_default(sim_type, avail, est)
@@ -163,8 +156,8 @@ pub struct ProviderSettings {
 }
 
 impl ProviderSettings {
-    /// One async call per sim-create. Reads provider.<id>.api_key and
-    /// provider.<id>.enabled for every remote provider id in the registry.
+    /// Reads provider.<id>.api_key and provider.<id>.enabled for every remote
+    /// provider id. One async call per sim-create.
     pub async fn load(
         repo: &SettingsRepo,
         remote_ids: &[&'static str],
@@ -418,9 +411,8 @@ mod tests {
 
     #[test]
     fn explicit_simmit_configured_streaming_returns_simmit_when_cloud_capable() {
-        // Explicit cloud-streaming-capable remote + streaming-sized job → returns
-        // that provider (not StreamingTooLargeForRemote). The B2 orchestrator
-        // takes over from here.
+        // Explicit cloud-capable remote + streaming-sized → returns it (not
+        // StreamingTooLargeForRemote); the B2 orchestrator takes over.
         let r = pick_provider(
             "top_gear",
             Some("simmit"),
@@ -434,8 +426,7 @@ mod tests {
 
     #[test]
     fn auto_streaming_still_falls_back_to_local_even_when_cloud_capable() {
-        // Auto + streaming-sized must never silently start a cloud bill, even
-        // when a cloud-streaming-capable provider is configured.
+        // Auto + streaming-sized must never silently start a cloud bill.
         let r = pick_provider(
             "top_gear",
             Some("auto"),

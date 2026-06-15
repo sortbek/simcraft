@@ -1,21 +1,15 @@
-// API URL detection: in Electron, the backend serves the frontend on the
-// same origin, so window.location.origin always points at the right backend
-// (matters when the Electron main process falls back to an ephemeral port
-// because 17384 was already in use — see desktop/src/main/backend.js).
+// In Electron the backend serves the frontend on the same origin, so
+// window.location.origin tracks an ephemeral-port fallback (see
+// desktop/src/main/backend.js).
 export const API_URL =
   typeof window !== 'undefined' && window.electronAPI
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_API_URL ?? '');
 
-/** Build provider key headers from localStorage, scoped by the user's
- *  Compute selection so we don't leak unrelated provider keys to the backend.
- *
- *  - `"local"`: no remote keys ever sent.
- *  - `"auto"` / `undefined`: all configured remote keys (backend chooses).
- *  - specific remote id (`"simmit"`, ...): just that one key.
- *
- *  Scans `simhammer.provider.<id>.api_key` so adding a new remote provider
- *  needs zero changes here. */
+/** Build provider key headers from localStorage, scoped by Compute selection so
+ *  we don't leak unrelated keys: `"local"` sends none; `"auto"`/undefined sends
+ *  all; a specific remote id sends only that one. Scans
+ *  `simhammer.provider.<id>.api_key` so new providers need no change here. */
 export function providerKeyHeaders(computeChoice?: string): Record<string, string> {
   if (typeof window === 'undefined') return {};
   if (computeChoice === 'local') return {};
@@ -45,14 +39,12 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
   return res.json();
 }
 
-/** Prefix a path with the resolved API base. Centralizes the `${API_URL}${path}`
- *  pattern so call sites stop hand-concatenating. */
+/** Prefix a path with the resolved API base. */
 export function apiUrl(path: string): string {
   return `${API_URL}${path}`;
 }
 
-/** POST a JSON body and parse a JSON response, with the shared `fetchJson`
- *  error handling (throws `Error(detail || 'Server error N')` on non-ok). */
+/** POST a JSON body and parse a JSON response via shared `fetchJson` error handling. */
 export function postJson<T>(
   path: string,
   body: unknown,
@@ -89,10 +81,8 @@ export async function pauseSim(jobId: string): Promise<void> {
   await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/pause`, { method: 'POST' });
 }
 
-/** Resume a paused sim. Delegates to backend resume_job which dispatches by phase.
- *  Attaches all configured provider keys (resume doesn't know the user's original
- *  compute choice, so 'auto' sends every key — same behavior the submit path uses)
- *  so a BYO-key web user can resume a cloud run. */
+/** Resume a paused sim. Sends all configured provider keys ('auto') since resume
+ *  doesn't know the original compute choice, so a BYO-key web user can resume a cloud run. */
 export async function resumeSim(jobId: string): Promise<void> {
   await fetchJson<unknown>(`${API_URL}/api/sim/${jobId}/resume`, {
     method: 'POST',
@@ -101,8 +91,8 @@ export async function resumeSim(jobId: string): Promise<void> {
 }
 
 /** Re-run a single Top Gear result row as a high-precision Quick Sim.
- * `sourceJobId` is the parent Top Gear job; `comboId` is the integer
- * from the row's "Combo N" name. Returns the new sim's job_id. */
+ * `sourceJobId` is the parent Top Gear job; `comboId` is the integer from the
+ * row's "Combo N" name. Returns the new sim's job_id. */
 export async function simRow(sourceJobId: string, comboId: number): Promise<string> {
   const data = await fetchJson<{ id: string }>(`${API_URL}/api/sim/${sourceJobId}/sim-row`, {
     method: 'POST',
@@ -201,10 +191,8 @@ export interface DungeonSummary {
   name: string;
 }
 
-/** List the current-season dungeons available to browse on the route map.
- *  Cached per session — the set is static within a running backend, and several
- *  screens fetch it independently. The failed promise is not cached, so a later
- *  call retries. */
+/** List current-season dungeons for the route map. Cached per session (static
+ *  within a running backend); a failed promise is not cached so a later call retries. */
 let dungeonsCache: Promise<DungeonSummary[]> | undefined;
 export function listDungeons(): Promise<DungeonSummary[]> {
   if (!dungeonsCache) {
@@ -293,9 +281,8 @@ export async function fetchAllJobs(opts?: {
   return fetchJson<JobOverviewSummary[]>(`${API_URL}/api/jobs?${params}`);
 }
 
-/** Delete a terminal-state job (Done/Failed/Cancelled). Active jobs must
- * be cancelled first. Also removes per-job rows in combo_metadata,
- * combo_dedup, and triage_batches. */
+/** Delete a terminal-state job (Done/Failed/Cancelled); active jobs must be cancelled
+ * first. Also removes per-job rows in combo_metadata, combo_dedup, and triage_batches. */
 export async function deleteJob(jobId: string): Promise<void> {
   await fetchJson<unknown>(`${API_URL}/api/jobs/${jobId}`, { method: 'DELETE' });
 }

@@ -396,7 +396,6 @@
   "validation.allScenariosFailed": "All scenario submissions failed",
   "route.mdtImportLabel": "MDT import string",
   "route.manager.count": "{routes} routes · {dungeons} dungeons",
-  "route.manager.disclaimer": "SimHammer is a pet project held together by coffee, duct tape, and prayers to the RNG gods. Bugs are not features — but they might sim higher than your gear. Not affiliated with Blizzard, Raidbots, or anyone who knows what they're doing.",
   "route.import.autoDetect": "Auto-detects format",
   "route.import.detected": "Detected {fmt}",
   "route.import.fmtMdt": "MDT string",

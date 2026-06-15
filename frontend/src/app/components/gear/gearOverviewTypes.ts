@@ -6,11 +6,7 @@ export interface GearItem {
   bonus_ids?: number[];
   enchant_id?: number;
   gem_id?: number;
-  /**
-   * All gem IDs placed on this item, one per socket. Necks and crafted items
-   * can hold 2+ gems; `gem_id` alone only carries the first. Consumers that
-   * render gems should prefer `gem_ids` when present.
-   */
+  /** All gem IDs (one per socket); necks/crafted items hold 2+ but `gem_id` only carries the first, so prefer `gem_ids` when present. */
   gem_ids?: number[];
   is_kept?: boolean;
   upgrade_levels?: number;

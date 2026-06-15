@@ -1,8 +1,7 @@
 const path = require("path");
 
-// Preferred port — we try this first on startup. If it's held (e.g. by an
-// orphan backend from a previous crash) we fall back to an OS-chosen
-// ephemeral port. See findFreePort() in backend.js.
+// Preferred port tried first on startup; falls back to an OS-chosen ephemeral
+// port if held (e.g. orphan backend from a crash). See findFreePort() in backend.js.
 const DEFAULT_BACKEND_PORT = 17384;
 
 function createAppConfig(app) {

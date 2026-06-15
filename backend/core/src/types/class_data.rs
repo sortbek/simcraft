@@ -1,6 +1,5 @@
 //! Single source of truth for all WoW class, spec, and gear slot constants.
-//!
-//! Every module in the codebase imports from here. Nothing else defines these.
+//! Every module imports from here; nothing else defines these.
 
 use regex::Regex;
 
@@ -93,12 +92,12 @@ pub fn inventory_type_display_slot(inv_type: u64) -> &'static str {
 
 // ---- Class & Spec Data Table ----
 //
-// All class/spec metadata lives here. The lookup functions below derive from
-// this single table instead of maintaining parallel match blocks.
+// All class/spec metadata lives in one table; the lookup functions derive from
+// it instead of maintaining parallel match blocks.
 
-/// Primary attribute for a spec — drives drop filtering (e.g. a hunter spec
-/// with `PrimaryStat::Agility` rejects Strength-stat trinkets and weapons).
-/// Sourced from SimC's `convert_hybrid_stat` in `engine/class_modules/*.cpp`.
+/// Primary attribute for a spec — drives drop filtering (e.g. an Agility spec
+/// rejects Strength-stat trinkets/weapons). Sourced from SimC's
+/// `convert_hybrid_stat` in `engine/class_modules/*.cpp`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum PrimaryStat {
     Strength,
@@ -177,8 +176,7 @@ static CLASSES: &[ClassDef] = &[
             SpecDef {
                 name: "holy",
                 id: 65,
-                // Paladin can equip 1H Axe (0) and 2H Axe (1) class-wide;
-                // they were missing here alongside the other 2H types.
+                // Paladins can equip 1H Axe (0) and 2H Axe (1) class-wide.
                 weapon_subclasses: &[0, 1, 4, 5, 6, 7, 8],
                 can_dual_wield: false,
                 can_use_shield: true,
@@ -233,8 +231,8 @@ static CLASSES: &[ClassDef] = &[
             SpecDef {
                 name: "survival",
                 id: 255,
-                // Hunter melee proficiencies: 2H Axe, Polearm, 2H Sword, Staff,
-                // Fist, Dagger. 2H Mace (5) removed — hunters cannot equip it.
+                // Hunter melee: 2H Axe, Polearm, 2H Sword, Staff, Fist, Dagger.
+                // No 2H Mace (5) — hunters cannot equip it.
                 weapon_subclasses: &[1, 6, 8, 10, 13, 15],
                 can_dual_wield: false,
                 can_use_shield: false,
@@ -481,8 +479,7 @@ static CLASSES: &[ClassDef] = &[
             SpecDef {
                 name: "windwalker",
                 id: 269,
-                // WW can also wield Polearm (6) and Staff (10) — matches
-                // Brewmaster's list (monks share these proficiencies).
+                // WW shares monk proficiencies: also Polearm (6) and Staff (10).
                 weapon_subclasses: &[0, 4, 6, 7, 10, 13],
                 can_dual_wield: true,
                 can_use_shield: false,
@@ -527,8 +524,8 @@ static CLASSES: &[ClassDef] = &[
             SpecDef {
                 name: "restoration",
                 id: 105,
-                // Polearm (6) is a druid class proficiency — the other three
-                // druid specs include it; Resto was missing it.
+                // Polearm (6) is a druid class proficiency (the other three
+                // specs include it).
                 weapon_subclasses: &[4, 5, 6, 10, 13, 15],
                 can_dual_wield: false,
                 can_use_shield: false,
@@ -626,17 +623,16 @@ pub fn class_allowed_weapons(class_name: &str) -> Option<&'static [u64]> {
     find_class(class_name).map(|c| c.weapons)
 }
 
-/// Per-spec weapon eligibility. Returns the full `SpecDef` which includes
-/// `weapon_subclasses`, `can_use_shield`, `can_use_offhand`, and more.
+/// Per-spec weapon eligibility — returns the full `SpecDef`
+/// (`weapon_subclasses`, `can_use_shield`, `can_use_offhand`, ...).
 pub fn spec_weapon_profile(class_name: &str, spec: &str) -> Option<&'static SpecDef> {
     let class = find_class(class_name)?;
     class.specs.iter().find(|s| s.name == spec)
 }
 
-/// Decode an item's `stats` array into the set of primary stats it can
-/// satisfy. Returns `None` when the item has no primary-stat entries at all
-/// (callers should treat that as "allow" — most effect-only trinkets fall in
-/// this bucket).
+/// Decode an item's `stats` array into the primary stats it can satisfy.
+/// `None` = no primary-stat entries; callers treat that as "allow" (most
+/// effect-only trinkets fall here).
 ///
 /// Blizzard ItemModType IDs:
 ///   3=Agility, 4=Strength, 5=Intellect
@@ -756,9 +752,6 @@ pub fn spec_id_to_name(spec_id: u64) -> Option<&'static str> {
 /// Map a SimC class name to its WoW numeric class ID.
 pub fn class_wow_id(class_name: &str) -> Option<u64> {
     let n = class_name.to_lowercase();
-    // WoW class IDs: warrior=1, paladin=2, hunter=3, rogue=4, priest=5,
-    // death_knight=6, shaman=7, mage=8, warlock=9, monk=10, druid=11,
-    // demon_hunter=12, evoker=13
     const WOW_IDS: &[(&str, u64)] = &[
         ("warrior", 1),
         ("paladin", 2),
@@ -1015,8 +1008,7 @@ mod tests {
 
     #[test]
     fn holy_paladin_includes_axes() {
-        // Paladins can equip 1H and 2H Axes class-wide. The Holy spec list was
-        // missing both even though it included the other 2H weapon types.
+        // Paladins can equip 1H and 2H Axes class-wide.
         let p = spec_weapon_profile("paladin", "holy").unwrap();
         assert!(
             p.weapon_subclasses.contains(&0),
@@ -1040,8 +1032,7 @@ mod tests {
 
     #[test]
     fn mistweaver_includes_one_hand_axe() {
-        // Monks can equip 1H Axes class-wide; Mistweaver was missing it
-        // (Brewmaster and Windwalker had it).
+        // Monks can equip 1H Axes class-wide.
         let p = spec_weapon_profile("monk", "mistweaver").unwrap();
         assert!(
             p.weapon_subclasses.contains(&0),
@@ -1076,8 +1067,7 @@ mod tests {
 
     #[test]
     fn enhancement_shaman_excludes_two_hand_and_staff() {
-        // Enhancement is locked to 1H dual-wield in retail — no 2H spec talent
-        // currently exists. Staff and 2H weapons are correctly excluded.
+        // Enhancement is locked to 1H dual-wield in retail — no 2H/Staff.
         let p = spec_weapon_profile("shaman", "enhancement").unwrap();
         assert!(
             !p.weapon_subclasses.contains(&1),

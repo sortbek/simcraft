@@ -124,9 +124,9 @@ export function useProviderReady(id: string): boolean {
   return !!(meta?.server_configured || localKey);
 }
 
-/** Remote providers (id !== 'local') that are READY — server-configured (desktop)
- *  or holding a localStorage key (web). Used to decide whether the compute picker
- *  is worth showing at all. Recomputes when a provider key is added/removed. */
+/** Ready remote providers (id !== 'local'): server-configured (desktop) or holding
+ *  a localStorage key (web). Decides whether to show the compute picker.
+ *  Recomputes when a provider key is added/removed. */
 export function useReadyRemoteProviders(): ProviderMeta[] {
   const all = useProviders();
   const [keyTick, setKeyTick] = useState(0);

@@ -3,11 +3,9 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Inputs needed to compute an identity_key for one profileset candidate.
-/// The key reflects the EFFECTIVE profileset behavior, not the cursor —
-/// see spec §2 formal definition. Gems are a `Vec<u64>` per slot so
-/// multi-socket items distinguish `gem_id=A/B` from `gem_id=B/A` no further
-/// than `gen_color_combos` already did (the Vec gets sorted before hashing).
+/// Inputs for one candidate's identity_key. The key reflects EFFECTIVE
+/// profileset behavior, not the cursor (spec §2). Per-slot gems are sorted
+/// before hashing so `gem_id=A/B` and `B/A` collapse to one identity.
 pub struct IdentityInput<'a> {
     pub spec: &'a str,
     pub gear_set: &'a HashMap<String, Arc<Value>>,
@@ -60,10 +58,9 @@ pub fn compute_identity_key(input: &IdentityInput) -> String {
         hasher.update(b"\n");
     }
 
-    // Effective gems: sorted by slot, with each slot's gem list sorted so
-    // `gem_id=A/B` and `gem_id=B/A` hash to the same key. The combo generator
-    // already collapses these but the canonical-form requirement spans the
-    // wider pipeline (resume points, identity dedup).
+    // Effective gems: sorted by slot, each slot's list sorted so `gem_id=A/B`
+    // and `B/A` hash equal (canonical form is needed across resume + dedup, not
+    // just the combo generator).
     let mut gem_slots: Vec<&String> = input.effective_gems.keys().collect();
     gem_slots.sort();
     hasher.update(b"gems:\n");
@@ -85,21 +82,15 @@ pub fn compute_identity_key(input: &IdentityInput) -> String {
     hasher.update(input.talent_string.as_bytes());
 
     let digest = hasher.finalize();
-    // 16 bytes of the 32-byte digest = 32 hex chars. Sufficient for per-job uniqueness
-    // at billion-combo scale (collision probability < 2^-64 per pair).
+    // 16 of 32 digest bytes = 32 hex chars; collision prob < 2^-64 per pair,
+    // ample at billion-combo scale.
     hex::encode(&digest[..16])
 }
 
-/// Filter a nominal gem assignment down to slots that ACTUALLY have sockets,
-/// given the chosen items. Inputs:
-/// - gear_set: chosen items per slot
-/// - nominal_gems: gem_id list per slot from the cursor
-/// - socketed_item_ids: set of item_ids known to have sockets (or to be socketable
-///   via a crafted-socket bonus)
-///
-/// Per slot, the returned gem list is truncated to the *actual* socket count
-/// the chosen item has — so a 2-multiset assigned to a slot that ended up with
-/// a 1-socket alt emits a single gem and the second is discarded silently.
+/// Filter a nominal gem assignment to slots whose CHOSEN item actually has
+/// sockets (inherent or via a crafted-socket bonus in `socketed_item_ids`), and
+/// truncate each list to that item's socket count — so a 2-multiset on a slot
+/// that resolved to a 1-socket alt keeps one gem and drops the rest.
 pub fn effective_gems(
     gear_set: &HashMap<String, Arc<Value>>,
     nominal_gems: &HashMap<String, Vec<u64>>,
@@ -251,9 +242,8 @@ mod tests {
 
     #[test]
     fn multi_socket_gem_orderings_hash_to_same_key() {
-        // A 2-socket neck with `gem_id=A/B` must hash identically to
-        // `gem_id=B/A` — the SimC behavior is the same, so dedup needs to
-        // collapse the two cursor positions onto a single identity.
+        // `gem_id=A/B` and `B/A` are the same SimC actor → dedup must collapse
+        // them to one identity.
         let mut gear = HashMap::new();
         gear.insert("neck".to_string(), arc_item(700, 2));
         let no_enchants: HashMap<String, u64> = HashMap::new();
@@ -278,9 +268,8 @@ mod tests {
 
     #[test]
     fn effective_gems_truncates_to_item_socket_count() {
-        // Nominal 2-multiset assigned to a slot, but the chosen item only
-        // has 1 socket. effective_gems must drop the second gem so identity
-        // matches a 1-socket assignment.
+        // 2-multiset on a 1-socket item → second gem dropped so identity matches
+        // a 1-socket assignment.
         let mut gear = HashMap::new();
         gear.insert("neck".to_string(), arc_item(100, 1));
         let nominal = HashMap::from_iter([("neck".to_string(), vec![10u64, 20u64])]);

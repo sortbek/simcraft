@@ -15,8 +15,8 @@ interface RunButtonProps {
   /** target id -> disable reason; absent = enabled.
    *  e.g. { simmit: 'too large for cloud' } (page-owned) or generic 'configure in Settings'. */
   targetDisabledReasons?: Record<string, string>;
-  /** Optional second line under the main label (e.g. a cloud cost estimate).
-   *  The caller owns the content and styling; the button only renders it. */
+  /** Optional second line under the main label (e.g. cloud cost estimate). Caller
+   *  owns content and styling; the button only renders it. */
   subLabel?: ReactNode;
 }
 
@@ -55,10 +55,9 @@ export default function RunButton({
     };
   }, [open]);
 
-  // Self-heal a stale/unavailable selection. A persisted `compute` (localStorage)
-  // can name a remote that is no longer configured, or one the page marks disabled.
-  // Coerce it back to "auto" so the primary action — and the collapsed plain button
-  // — never submit a target the menu would show disabled or a stale cloud choice.
+  // Self-heal a stale/unavailable selection: a persisted `compute` can name a remote
+  // no longer configured or one the page disabled. Coerce back to "auto" so neither the
+  // primary action nor the collapsed button submits a disabled/stale target.
   const selectedRemoteUnavailable =
     value !== 'auto' &&
     value !== 'local' &&
@@ -66,8 +65,7 @@ export default function RunButton({
   useEffect(() => {
     if (providers === null) return; // wait for providers to load before coercing
     if (selectedRemoteUnavailable) onChange('auto');
-    // onChange is a per-render setter (unstable identity); gate on the primitives
-    // that actually determine availability.
+    // onChange is an unstable per-render setter; gate on the availability primitives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providers, value, selectedRemoteUnavailable]);
 
@@ -81,11 +79,9 @@ export default function RunButton({
     </>
   );
 
-  // Synchronous guard complementing the self-heal effect above: the primary
-  // action is disabled while the selected remote is unavailable (a stale
-  // persisted choice pending coercion to auto), so neither the collapsed plain
-  // button nor the split primary button can submit a stale/disabled target in
-  // the render before the effect fires.
+  // Synchronous guard complementing the self-heal effect: disable the primary action
+  // while the selected remote is unavailable (stale choice pending coercion to auto),
+  // so no button submits a stale/disabled target in the render before the effect fires.
   const runDisabled = disabled || submitting || selectedRemoteUnavailable;
 
   // No usable remote → no real choice → plain Run button (collapse rule).

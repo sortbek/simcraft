@@ -13,8 +13,7 @@ export interface TopGearResult {
   talent_build?: string;
   talent_spec?: string;
   delta: number;
-  /** 95% CI half-width as a percent of the mean DPS. Combos pruned at
-   * earlier (rougher) stages carry the looser precision of that stage. */
+  /** 95% CI half-width as % of mean DPS; combos pruned at rougher stages carry that stage's looser precision. */
   precision_pct?: number;
 }
 
@@ -32,11 +31,9 @@ export interface TopGearResultsProps {
   targetError?: number;
   elapsedTime?: number;
   backLink?: ReactNode;
-  /** Source job id — enables the per-row "Sim" verify button. Omit on
-   * historical/imported result views where re-running isn't applicable. */
+  /** Source job id — enables the per-row "Sim" verify button. Omit on historical/imported views where re-running isn't applicable. */
   sourceJobId?: string;
-  /** Whether the source job ran in streamed mode (a precondition for the
-   * sim-row endpoint). The button is hidden when this is false. */
+  /** Whether the source job ran streamed (precondition for the sim-row endpoint); button is hidden when false. */
   sourceIsStreamed?: boolean;
 }
 

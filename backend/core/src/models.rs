@@ -52,10 +52,9 @@ impl SimMode {
         }
     }
 
-    /// Whether this mode emits a gear-comparison payload (top-level `base_dps`
-    /// + per-combo `results`) or a single-actor payload (top-level `dps`).
-    ///   Lets summary/extractor code branch on intent rather than re-detecting
-    ///   from the JSON shape.
+    /// Whether this mode emits a gear-comparison payload (`base_dps` + per-combo
+    /// `results`) or single-actor (`dps`). Lets callers branch on intent rather
+    /// than re-detecting from the JSON shape.
     pub fn result_kind(self) -> ResultKind {
         match self {
             SimMode::Quick | SimMode::StatWeights => ResultKind::SingleActor,
@@ -215,14 +214,10 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
         region: None,
     };
 
-    // Extract DPS, player name, class from parsed result.
-    //
-    // Two payload shapes are supported:
-    //   - Single-actor (Quick Sim, Stat Weights): top-level `dps`.
-    //   - Gear comparison (Top Gear, Drop Finder, Crest Upgrades):
-    //     top-level `base_dps` + a `results` array of `{name, dps, ...}`. The
-    //     history "best DPS" should be the highest DPS the sim found —
-    //     baseline or any improved combo — so we take the max.
+    // Two payload shapes: single-actor (Quick/Stat Weights) has top-level `dps`;
+    // gear-comparison (Top Gear/Drop Finder/Crest) has `base_dps` + a `results`
+    // array. For the latter, history's "best DPS" is the max over baseline and
+    // every combo.
     if let Some(json_str) = result_json {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
             summary.player_name = v
