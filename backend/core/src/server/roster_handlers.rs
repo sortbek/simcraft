@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::db::RosterRepo;
+use crate::db::{RosterMember, RosterRepo};
 use crate::roster::armory_client::{ArmoryClient, ArmoryError, HttpArmoryClient};
 use crate::roster::armory_to_simc::armory_to_simc;
 use crate::roster::member_list::parse_member_list;
@@ -83,7 +83,7 @@ pub(super) async fn run_import(
     roster_id: &str,
     region: &str,
     text: &str,
-) -> Result<Vec<crate::db::roster_repo::RosterMember>, sqlx::Error> {
+) -> Result<Vec<RosterMember>, sqlx::Error> {
     for (name, realm) in parse_member_list(text) {
         match client.fetch(region, &realm, &name).await {
             Ok(data) => {
@@ -179,6 +179,26 @@ mod tests {
             .unwrap();
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].armory_status, "not_found");
+        assert!(members[0].source_simc.is_empty());
+    }
+
+    struct MockHttpError;
+    #[async_trait::async_trait]
+    impl ArmoryClient for MockHttpError {
+        async fn fetch(&self, _r: &str, _realm: &str, _n: &str) -> Result<ArmoryData, ArmoryError> {
+            Err(ArmoryError::Http("boom".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn import_http_error_marks_member_armory_failed() {
+        let repo = RosterRepo::new_memory();
+        let roster = repo.create("T", "eu").await.unwrap();
+        let members = run_import(&MockHttpError, &repo, &roster.id, "eu", "Thrall-Draenor")
+            .await
+            .unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].armory_status, "armory_failed");
         assert!(members[0].source_simc.is_empty());
     }
 }
