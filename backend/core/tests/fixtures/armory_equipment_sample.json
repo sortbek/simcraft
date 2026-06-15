@@ -1,0 +1,25 @@
+{
+  "equipped_items": [
+    {
+      "item": { "id": 212018 },
+      "slot": { "type": "HEAD", "name": "Head" },
+      "bonus_list": [10421, 9633, 8902],
+      "level": { "value": 639 },
+      "enchantments": [
+        { "enchantment_id": 7340, "enchantment_slot": { "id": 0, "type": "PERMANENT" } }
+      ],
+      "sockets": [ { "item": { "id": 213743 } } ]
+    },
+    {
+      "item": { "id": 219308 },
+      "slot": { "type": "TRINKET_1", "name": "Trinket 1" },
+      "bonus_list": [10421],
+      "level": { "value": 639 }
+    },
+    {
+      "item": { "id": 99999 },
+      "slot": { "type": "SHIRT", "name": "Shirt" },
+      "level": { "value": 1 }
+    }
+  ]
+}
