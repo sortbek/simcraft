@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSimContext } from '../sim-config/SimContext';
 import { deleteSavedRoute, type SavedRoute } from '../../lib/saved-routes';
@@ -218,6 +218,13 @@ export default function RouteRow({
   const [err, setErr] = useState('');
   const [key, setKey] = useState(() => getRouteSimParams().keystoneLevel);
   const [hp, setHp] = useState(() => getRouteSimParams().hpPercent);
+  // Re-render once a minute so the "updated Xm ago" label stays current on its
+  // own — previously it only refreshed when a hover toggled `h`.
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNowTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const onSim = () => {
     const ar = routeToActiveRoute(route);

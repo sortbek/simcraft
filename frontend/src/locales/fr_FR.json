@@ -352,7 +352,6 @@
   "route.manager.count": "{routes} routes · {dungeons} donjons",
   "route.manager.subtitle": "Importez, organisez et simulez vos routes de donjon — puis ouvrez-les sur la carte.",
   "route.manager.empty": "Aucune route pour l'instant — collez une chaîne d'import ci-dessus pour commencer.",
-  "route.manager.disclaimer": "SimHammer est un projet perso tenu ensemble avec du café, du scotch et des prières aux dieux du RNG. Les bugs ne sont pas des features — mais ils simulent peut-être mieux que votre stuff. Non affilié à Blizzard, Raidbots, ni à quiconque sait ce qu'il fait.",
   "route.group.other": "Autre",
   "route.import.label": "Importer une route",
   "route.import.placeholder": "Collez une chaîne d'export MDT ou un SimC keystone.guru ici…",

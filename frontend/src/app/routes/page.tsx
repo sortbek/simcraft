@@ -110,22 +110,6 @@ export default function RoutesManagerPage() {
             <div style={{ fontSize: 13, color: T.text2 }}>{t('route.manager.empty')}</div>
           </div>
         )}
-
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '56px 40px 40px',
-            maxWidth: 560,
-            margin: '0 auto',
-          }}
-        >
-          <p style={{ fontSize: 11.5, lineHeight: 1.7, color: T.dim }}>
-            {t('route.manager.disclaimer')}
-          </p>
-          <p style={{ fontSize: 10.5, color: T.faint, marginTop: 14, letterSpacing: '0.08em' }}>
-            v4.0.0
-          </p>
-        </div>
       </div>
     </div>
   );

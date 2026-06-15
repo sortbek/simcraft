@@ -352,7 +352,6 @@
   "route.manager.count": "{routes} percorsi · {dungeons} dungeon",
   "route.manager.subtitle": "Importa, organizza e sim i tuoi percorsi — poi aprili sulla mappa.",
   "route.manager.empty": "Nessun percorso ancora — incolla una stringa di import qui sopra per iniziare.",
-  "route.manager.disclaimer": "SimHammer è un progetto amatoriale tenuto insieme da caffè, nastro adesivo e preghiere agli dèi del RNG. I bug non sono feature — ma potrebbero simare più alto del tuo gear. Non affiliato con Blizzard, Raidbots, o chiunque sappia quello che sta facendo.",
   "route.group.other": "Altro",
   "route.import.label": "Importa percorso",
   "route.import.placeholder": "Incolla qui una stringa MDT o un SimC di keystone.guru…",

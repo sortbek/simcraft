@@ -352,7 +352,6 @@
   "route.manager.count": "{routes} маршрутов · {dungeons} подземелий",
   "route.manager.subtitle": "Импортируйте, организуйте и симулируйте маршруты подземелий — затем откройте любой на карте.",
   "route.manager.empty": "Маршрутов пока нет — вставьте строку импорта выше, чтобы начать.",
-  "route.manager.disclaimer": "SimHammer — это пет-проект, который держится на кофе, скотче и молитвах богам RNG. Баги — это не фичи, но они могут симаться выше вашего шмота. Не связан с Blizzard, Raidbots и вообще кем-либо, кто знает, что делает.",
   "route.group.other": "Прочее",
   "route.import.label": "Импорт маршрута",
   "route.import.placeholder": "Вставьте строку экспорта MDT или SimC с keystone.guru…",

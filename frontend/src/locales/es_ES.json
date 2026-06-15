@@ -352,7 +352,6 @@
   "route.manager.count": "{routes} rutas · {dungeons} mazmorras",
   "route.manager.subtitle": "Importa, organiza y simula tus rutas de mazmorra — y ábrelas en el mapa cuando quieras.",
   "route.manager.empty": "Sin rutas aún — pega una cadena de importación arriba para empezar.",
-  "route.manager.disclaimer": "SimHammer es un proyecto personal que se mantiene unido con café, cinta adhesiva y plegarias a los dioses del RNG. Los bugs no son features — aunque puede que simmen más alto que tu equipo. Sin afiliación con Blizzard, Raidbots ni nadie que sepa lo que hace.",
   "route.group.other": "Otros",
   "route.import.label": "Importar ruta",
   "route.import.placeholder": "Pega aquí una cadena de exportación MDT o un SimC de keystone.guru…",
