@@ -100,6 +100,13 @@ pub(super) fn inject_expert_fields(simc_input: &str, options: &SimOptions) -> St
     let post_combos = sanitize_custom_simc(&options.simc_post_combos);
     let footer = sanitize_custom_simc(&options.simc_footer);
 
+    // A dungeon-route custom_apl ends with `enemy=` / `raid_events` declarations.
+    // Injected before the combo gear lines (where ordinary custom_apl goes), that
+    // gear binds to the enemy actor and SimC aborts with
+    // "Enemy '…': Item '…' Slot '…': Invalid type". Route APL is therefore
+    // appended at the very end instead — after the player and all profilesets.
+    let custom_apl_is_route = crate::simc_runner::is_dungeon_route_input(&custom_apl);
+
     let all_empty = header.trim().is_empty()
         && base_player.trim().is_empty()
         && custom_apl.trim().is_empty()
@@ -175,7 +182,7 @@ pub(super) fn inject_expert_fields(simc_input: &str, options: &SimOptions) -> St
                 result.push(base_player.clone());
                 result.push(String::new());
             }
-            if !custom_apl.trim().is_empty() {
+            if !custom_apl.trim().is_empty() && !custom_apl_is_route {
                 result.push("# Custom APL".to_string());
                 result.push(custom_apl.clone());
                 result.push(String::new());
@@ -232,6 +239,14 @@ pub(super) fn inject_expert_fields(simc_input: &str, options: &SimOptions) -> St
         result.push(String::new());
         result.push("# Footer".to_string());
         result.push(footer);
+    }
+
+    // Dungeon route block last of all: its `enemy=` declarations must follow the
+    // player's gear and every profileset (see `custom_apl_is_route` above).
+    if custom_apl_is_route {
+        result.push(String::new());
+        result.push("# Dungeon Route".to_string());
+        result.push(custom_apl);
     }
 
     result.join("\n")
@@ -971,5 +986,37 @@ mod tests {
         assert!(!eager_branch_reject(false, false));
         // Cloud provider + resolves → allow.
         assert!(!eager_branch_reject(false, true));
+    }
+
+    #[test]
+    fn dungeon_route_custom_apl_is_appended_after_gear_not_before_combos() {
+        use super::inject_expert_fields;
+        use crate::server::types::SimOptions;
+        use serde_json::json;
+
+        // A route block ends with the enemy actor + pull events. If it were
+        // injected before "### Combo 1" (where ordinary custom_apl goes), the gear
+        // emitted under "### Combo 1" would bind to the enemy actor and SimC would
+        // abort with "Enemy '…': Item '…' Slot '…': Invalid type".
+        let route = "fight_style=DungeonRoute\n\
+            enemy=\"Dayshade\"\n\
+            raid_events+=/pull,pull=1,enemies=\"x_1\":100";
+        let options: SimOptions = serde_json::from_value(json!({ "custom_apl": route })).unwrap();
+
+        let input = "# Base Actor\nhunter=\"T\"\n### Combo 1\nhead=,id=1\nhands=,id=2\n\n\
+            profileset.\"Combo 2\"+=head=,id=3";
+        let out = inject_expert_fields(input, &options);
+
+        let route_idx = out.find("fight_style=DungeonRoute").expect("route present");
+        let combo_idx = out.find("### Combo 1").expect("combo marker present");
+        let gear_idx = out.find("hands=,id=2").expect("equipped gear present");
+        assert!(route_idx > combo_idx, "route must come after ### Combo 1");
+        assert!(route_idx > gear_idx, "route must come after the equipped gear");
+        // Route is emitted as its own trailing block, not a pre-combo "# Custom APL".
+        assert!(out.contains("# Dungeon Route"));
+        assert!(
+            !out.contains("# Custom APL"),
+            "dungeon route must not be injected before the combos"
+        );
     }
 }

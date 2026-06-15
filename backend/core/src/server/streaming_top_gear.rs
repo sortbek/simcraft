@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use super::helpers::{finalize_local_stage_result, validate_batch};
+use super::helpers::{finalize_local_stage_result, sanitize_custom_simc, validate_batch};
 use super::request_json::NormalizedRequest;
 use super::types::TopGearRequest;
 use super::SimcBinaries;
@@ -59,7 +59,21 @@ pub(super) fn use_cloud_streaming(provider: &Arc<dyn crate::compute::SimcProvide
 /// Creates a streamed job, inserts it, then spawns the background triage and
 /// staged pipeline. HTTP handlers should stay thin and delegate here once they
 /// have decided that a Top Gear request needs streaming.
-pub(super) async fn start_streaming_top_gear_job(start: StreamingTopGearStart) -> HttpResponse {
+pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStart) -> HttpResponse {
+    // For a dungeon route, the route block (fight_style=DungeonRoute + enemies +
+    // raid_events) lives in custom_apl. Both streaming paths — the local triage
+    // below AND the cloud orchestrator — build their SimC inputs directly from
+    // base_profile, so inject the route here, before the cloud/local fork, so both
+    // carry the route's enemies and pull events. Without it SimC aborts with
+    // "DungeonRoute fight style requires at least one pull event with pull=1".
+    // The iterator config derives only from gear/talents/spec, which
+    // parse_base_profile extracts independently of these non-gear route lines, so
+    // appending them does not change combo generation.
+    let route_apl = sanitize_custom_simc(&start.req.options.custom_apl);
+    if simc_runner::is_dungeon_route_input(&route_apl) {
+        start.base_profile = format!("{}\n{}", start.base_profile, route_apl);
+    }
+
     // ── Provider branch ──────────────────────────────────────────────────────
     // A cloud-streaming-capable remote (resolved by `pick_provider` for an
     // explicit cloud + streaming-sized request) runs through the chunk
