@@ -86,8 +86,8 @@ pub(super) async fn run_import(
 ) -> Result<Vec<RosterMember>, sqlx::Error> {
     for (name, realm) in parse_member_list(text) {
         match client.fetch(region, &realm, &name).await {
-            Ok(data) => {
-                let simc = armory_to_simc(&name, &realm, &data.equipment, &data.specializations);
+            Ok(armory) => {
+                let simc = armory_to_simc(&armory);
                 let parsed = crate::addon_parser::parse_simc_input(&simc);
                 let class = parsed.character.class_name.unwrap_or_default();
                 let spec = parsed.character.spec.unwrap_or_default();
@@ -129,7 +129,6 @@ pub(super) async fn import_members(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::roster::armory_client::ArmoryData;
     use serde_json::Value;
 
     fn fixture(name: &str) -> Value {
@@ -140,18 +139,15 @@ mod tests {
     struct MockOk;
     #[async_trait::async_trait]
     impl ArmoryClient for MockOk {
-        async fn fetch(&self, _r: &str, _realm: &str, _n: &str) -> Result<ArmoryData, ArmoryError> {
-            Ok(ArmoryData {
-                equipment: fixture("armory_equipment_sample.json"),
-                specializations: fixture("armory_specializations_sample.json"),
-            })
+        async fn fetch(&self, _r: &str, _realm: &str, _n: &str) -> Result<Value, ArmoryError> {
+            Ok(fixture("armory_sample.json"))
         }
     }
 
     struct MockNotFound;
     #[async_trait::async_trait]
     impl ArmoryClient for MockNotFound {
-        async fn fetch(&self, _r: &str, _realm: &str, _n: &str) -> Result<ArmoryData, ArmoryError> {
+        async fn fetch(&self, _r: &str, _realm: &str, _n: &str) -> Result<Value, ArmoryError> {
             Err(ArmoryError::NotFound)
         }
     }
@@ -164,10 +160,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(members.len(), 1);
-        assert_eq!(members[0].class, "shaman");
-        assert_eq!(members[0].spec, "elemental");
+        assert_eq!(members[0].class, "mage");
+        assert_eq!(members[0].spec, "frost");
         assert_eq!(members[0].armory_status, "ok");
-        assert!(members[0].source_simc.contains("id=212018"));
+        assert!(members[0].source_simc.contains("id=132863"));
     }
 
     #[tokio::test]
@@ -185,7 +181,7 @@ mod tests {
     struct MockHttpError;
     #[async_trait::async_trait]
     impl ArmoryClient for MockHttpError {
-        async fn fetch(&self, _r: &str, _realm: &str, _n: &str) -> Result<ArmoryData, ArmoryError> {
+        async fn fetch(&self, _r: &str, _realm: &str, _n: &str) -> Result<Value, ArmoryError> {
             Err(ArmoryError::Http("boom".into()))
         }
     }

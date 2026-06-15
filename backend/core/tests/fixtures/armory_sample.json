@@ -1,0 +1,34 @@
+{
+    "character": {
+        "name": "shalfu",
+        "realm": "dun-modr",
+        "region": "eu"
+    },
+    "gear": {
+        "averageItemLevel": 70,
+        "items": [
+            { "slot": "HEAD", "name": "Darckli's Dragonfire Diadem", "itemLevel": 58, "quality": "Legendary", "itemId": 132863, "enchant": null, "gems": [] },
+            { "slot": "NECK", "name": "Love's Prisoner", "itemLevel": 75, "quality": "Rare", "itemId": 188476, "enchant": null, "gems": [] },
+            { "slot": "SHOULDER", "name": "Timely Tourist's Shoulderpads", "itemLevel": 79, "quality": "Epic", "itemId": 226097, "enchant": null, "gems": [] },
+            { "slot": "CHEST", "name": "Ornate Woolen Stola", "itemLevel": 78, "quality": "Rare", "itemId": 127519, "enchant": null, "gems": [] },
+            { "slot": "WAIST", "name": "Sash of the Servant", "itemLevel": 80, "quality": "Rare", "itemId": 188426, "enchant": null, "gems": [] },
+            { "slot": "LEGS", "name": "Breeches of the Caller", "itemLevel": 79, "quality": "Rare", "itemId": 188448, "enchant": null, "gems": [] },
+            { "slot": "FEET", "name": "Exquisite Spider-Silk Footwraps", "itemLevel": 75, "quality": "Rare", "itemId": 188404, "enchant": null, "gems": [] },
+            { "slot": "WRIST", "name": "Mountainsage Wristwraps", "itemLevel": 70, "quality": "Uncommon", "itemId": 173609, "enchant": null, "gems": [] },
+            { "slot": "HANDS", "name": "Gloves of Glistening Runes", "itemLevel": 79, "quality": "Rare", "itemId": 127599, "enchant": null, "gems": [] },
+            { "slot": "FINGER_1", "name": "Spiteful Signet", "itemLevel": 78, "quality": "Rare", "itemId": 188472, "enchant": null, "gems": [] },
+            { "slot": "FINGER_2", "name": "Mountainsage Band of Destruction", "itemLevel": 45, "quality": "Uncommon", "itemId": 153817, "enchant": null, "gems": [] },
+            { "slot": "TRINKET_1", "name": "Mountainsage Idol of Destruction", "itemLevel": 45, "quality": "Uncommon", "itemId": 153816, "enchant": null, "gems": [] },
+            { "slot": "TRINKET_2", "name": "Mountainsage Stone of Destruction", "itemLevel": 45, "quality": "Uncommon", "itemId": 153819, "enchant": null, "gems": [] },
+            { "slot": "BACK", "name": "Shroud of Reverberation", "itemLevel": 73, "quality": "Rare", "itemId": 127508, "enchant": null, "gems": [] },
+            { "slot": "MAIN_HAND", "name": "Wand of Shimmering Scales", "itemLevel": 79, "quality": "Rare", "itemId": 127579, "enchant": null, "gems": [] },
+            { "slot": "OFF_HAND", "name": "Tome of the Lore Keepers", "itemLevel": 76, "quality": "Rare", "itemId": 127571, "enchant": null, "gems": [] }
+        ]
+    },
+    "talents": {
+        "activeSpec": "Frost",
+        "heroTalentTree": "Spellslinger",
+        "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA"
+    },
+    "partial": false
+}

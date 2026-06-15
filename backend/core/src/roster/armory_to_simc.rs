@@ -1,12 +1,13 @@
 use crate::roster::armory_client::realm_slug;
-use crate::types::class_data::{spec_id_to_class, spec_id_to_name};
+use crate::talent_normalize::spec_id_from_loadout;
+use crate::types::class_data::{spec_id_to_class, spec_id_to_name, title_case};
 use serde_json::Value;
 
-/// Map a Blizzard equipment `slot.type` to the SimC gear slot.
+/// Map a simhammer.com armory gear `slot` to the SimC gear slot.
 ///
 /// Returns `None` for slots SimC does not model (SHIRT, TABARD) or unknown types.
-fn slot_name(blizz_type: &str) -> Option<&'static str> {
-    Some(match blizz_type {
+fn slot_name(slot: &str) -> Option<&'static str> {
+    Some(match slot {
         "HEAD" => "head",
         "NECK" => "neck",
         "SHOULDER" => "shoulder",
@@ -27,105 +28,98 @@ fn slot_name(blizz_type: &str) -> Option<&'static str> {
     })
 }
 
-/// Build a single SimC gear line for one equipped item, or `None` if it should
-/// be skipped (unmodeled slot, or missing/zero item id).
-fn item_line(item: &Value) -> Option<String> {
-    let slot = slot_name(item.get("slot")?.get("type")?.as_str()?)?;
+/// Extract an id from a JSON value that may be a bare number or an object
+/// carrying `id`/`itemId`/`enchantId`. Tolerant of both possible armory shapes.
+fn value_as_id(v: &Value) -> Option<u64> {
+    if let Some(n) = v.as_u64() {
+        return Some(n);
+    }
+    ["id", "itemId", "enchantId", "enchant_id"]
+        .iter()
+        .find_map(|k| v.get(k).and_then(|x| x.as_u64()))
+}
 
-    let id = item.get("item")?.get("id")?.as_u64()?;
+/// Build a single SimC gear line for one armory item, or `None` if it should be
+/// skipped (unmodeled slot, or missing/zero item id).
+fn item_line(item: &Value) -> Option<String> {
+    let slot = slot_name(item.get("slot")?.as_str()?)?;
+
+    let id = item.get("itemId")?.as_u64()?;
     if id == 0 {
         return None;
     }
 
     let mut tokens: Vec<String> = vec![format!("id={id}")];
 
-    // bonus_id=<a>/<b>/<c>
-    if let Some(bonus) = item.get("bonus_list").and_then(|v| v.as_array()) {
-        let ids: Vec<String> = bonus.iter().filter_map(|v| v.as_u64()).map(|v| v.to_string()).collect();
-        if !ids.is_empty() {
-            tokens.push(format!("bonus_id={}", ids.join("/")));
-        }
+    // enchant_id — armory `enchant` may be a bare id, an object, or null.
+    if let Some(enchant_id) = item.get("enchant").and_then(value_as_id) {
+        tokens.push(format!("enchant_id={enchant_id}"));
     }
 
-    // enchant_id=<int> — prefer the PERMANENT enchantment, fall back to the first.
-    if let Some(enchants) = item.get("enchantments").and_then(|v| v.as_array()) {
-        let chosen = enchants
+    // gem_id=<a>/<b> — armory `gems` is an array of ids (or objects).
+    if let Some(gems) = item.get("gems").and_then(|v| v.as_array()) {
+        let ids: Vec<String> = gems
             .iter()
-            .find(|e| {
-                e.get("enchantment_slot")
-                    .and_then(|s| s.get("type"))
-                    .and_then(|t| t.as_str())
-                    == Some("PERMANENT")
-            })
-            .or_else(|| enchants.first());
-        if let Some(enchant_id) = chosen.and_then(|e| e.get("enchantment_id")).and_then(|v| v.as_u64()) {
-            tokens.push(format!("enchant_id={enchant_id}"));
-        }
-    }
-
-    // gem_id=<a>/<b> from socket item ids.
-    if let Some(sockets) = item.get("sockets").and_then(|v| v.as_array()) {
-        let gems: Vec<String> = sockets
-            .iter()
-            .filter_map(|s| s.get("item").and_then(|i| i.get("id")).and_then(|v| v.as_u64()))
+            .filter_map(value_as_id)
             .map(|v| v.to_string())
             .collect();
-        if !gems.is_empty() {
-            tokens.push(format!("gem_id={}", gems.join("/")));
+        if !ids.is_empty() {
+            tokens.push(format!("gem_id={}", ids.join("/")));
         }
     }
 
-    // ilevel=<int>
-    if let Some(ilvl) = item.get("level").and_then(|l| l.get("value")).and_then(|v| v.as_u64()) {
+    // ilevel — given directly by the armory payload (no bonus_list to derive from).
+    if let Some(ilvl) = item.get("itemLevel").and_then(|v| v.as_u64()) {
         tokens.push(format!("ilevel={ilvl}"));
     }
 
     Some(format!("{slot}=,{}", tokens.join(",")))
 }
 
-/// Find the active talent loadout code from the specializations JSON.
-fn active_talent_code(specializations: &Value, active_id: u64) -> Option<String> {
-    let specs = specializations.get("specializations")?.as_array()?;
-    let entry = specs.iter().find(|s| {
-        s.get("specialization").and_then(|sp| sp.get("id")).and_then(|v| v.as_u64()) == Some(active_id)
-    })?;
-    let loadouts = entry.get("loadouts")?.as_array()?;
-    let loadout = loadouts
-        .iter()
-        .find(|l| l.get("is_active").and_then(|v| v.as_bool()) == Some(true))
-        .or_else(|| loadouts.first())?;
-    loadout
-        .get("talent_loadout_code")
+/// Convert the simhammer.com `/armory` payload (character + gear + talents) into
+/// a SimC profile string accepted by `addon_parser::parse_simc_input`.
+///
+/// Class and spec are derived from the spec id encoded in the talent
+/// `loadoutCode` (locale-independent); when that can't be decoded, the class and
+/// spec lines are omitted (the caller treats a missing class as a failed import).
+pub fn armory_to_simc(armory: &Value) -> String {
+    let character = armory.get("character");
+    let name = character
+        .and_then(|c| c.get("name"))
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-}
+        .unwrap_or("Character");
+    let realm = character
+        .and_then(|c| c.get("realm"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
-/// Convert proxied Blizzard equipment + specializations JSON into a SimC profile
-/// string accepted by `addon_parser::parse_simc_input`.
-pub fn armory_to_simc(name: &str, realm: &str, equipment: &Value, specializations: &Value) -> String {
-    let active_id = specializations
-        .get("active_specialization")
-        .and_then(|s| s.get("id"))
-        .and_then(|v| v.as_u64());
-
-    let class = active_id.and_then(spec_id_to_class);
-    let spec = active_id.and_then(spec_id_to_name);
+    let loadout = armory
+        .get("talents")
+        .and_then(|t| t.get("loadoutCode"))
+        .and_then(|v| v.as_str());
+    let spec_id = loadout.and_then(spec_id_from_loadout);
+    let class = spec_id.and_then(spec_id_to_class);
+    let spec = spec_id.and_then(spec_id_to_name);
 
     let mut lines: Vec<String> = Vec::new();
 
     if let Some(class) = class {
-        lines.push(format!("{class}=\"{name}\""));
+        lines.push(format!("{class}=\"{}\"", title_case(name)));
     }
     lines.push("level=80".to_string());
     lines.push(format!("server={}", realm_slug(realm)));
     if let Some(spec) = spec {
         lines.push(format!("spec={spec}"));
     }
-    if let Some(code) = active_id.and_then(|id| active_talent_code(specializations, id)) {
+    if let Some(code) = loadout {
         lines.push(format!("talents={code}"));
     }
 
-    if let Some(items) = equipment.get("equipped_items").and_then(|v| v.as_array()) {
+    if let Some(items) = armory
+        .get("gear")
+        .and_then(|g| g.get("items"))
+        .and_then(|v| v.as_array())
+    {
         for item in items {
             if let Some(line) = item_line(item) {
                 lines.push(line);
@@ -139,7 +133,7 @@ pub fn armory_to_simc(name: &str, realm: &str, equipment: &Value, specialization
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
+    use serde_json::{json, Value};
 
     fn load(name: &str) -> Value {
         let p = format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name);
@@ -148,33 +142,55 @@ mod tests {
 
     #[test]
     fn builds_simc_profile_that_reparses() {
-        let eq = load("armory_equipment_sample.json");
-        let spec = load("armory_specializations_sample.json");
-        let simc = armory_to_simc("Thrall", "Tarren Mill", &eq, &spec);
+        // Real /armory response (frost mage) captured from the live endpoint.
+        let armory = load("armory_sample.json");
+        let simc = armory_to_simc(&armory);
 
-        // emitted lines
-        assert!(simc.lines().any(|l| l.starts_with("shaman=")), "class line missing:\n{simc}");
-        assert!(simc.contains("spec=elemental"), "spec line missing:\n{simc}");
-        assert!(simc.contains("talents=CoPAEXAMPLEcode00"), "talents missing:\n{simc}");
-        assert!(simc.lines().any(|l| l.starts_with("head=")), "head line missing:\n{simc}");
-        assert!(simc.contains("id=212018"));
-        assert!(simc.contains("bonus_id=10421/9633/8902"));
-        assert!(simc.contains("enchant_id=7340"));
+        // class/spec derived from the loadout code (spec id 64 -> frost mage)
+        assert!(
+            simc.lines().any(|l| l.starts_with("mage=")),
+            "class line missing:\n{simc}"
+        );
+        assert!(simc.contains("spec=frost"), "spec line missing:\n{simc}");
+        assert!(simc.contains("talents=CAEAMhl"), "talents missing:\n{simc}");
+
+        // gear lines: direct itemId + itemLevel
+        assert!(
+            simc.lines().any(|l| l.starts_with("head=")),
+            "head line missing:\n{simc}"
+        );
+        assert!(simc.contains("id=132863"));
+        assert!(simc.contains("ilevel=58"));
         assert!(simc.lines().any(|l| l.starts_with("trinket1=")));
-        assert!(!simc.contains("shirt="), "shirt should be skipped:\n{simc}");
 
         // the existing parser must accept what we emit
         let parsed = crate::addon_parser::parse_simc_input(&simc);
-        assert_eq!(parsed.character.class_name.as_deref(), Some("shaman"));
-        assert_eq!(parsed.character.spec.as_deref(), Some("elemental"));
+        assert_eq!(parsed.character.class_name.as_deref(), Some("mage"));
+        assert_eq!(parsed.character.spec.as_deref(), Some("frost"));
         assert!(parsed.items.iter().any(|i| i.raw_slot == "head"));
         assert!(parsed.items.iter().any(|i| i.raw_slot == "trinket1"));
     }
 
     #[test]
-    fn empty_json_does_not_panic_and_omits_class_spec_items() {
-        let empty = serde_json::json!({});
-        let simc = armory_to_simc("Nobody", "Some Realm", &empty, &empty);
+    fn emits_enchant_and_gems_when_present() {
+        let armory = json!({
+            "character": { "name": "ench", "realm": "some-realm" },
+            "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" },
+            "gear": { "items": [
+                { "slot": "MAIN_HAND", "itemId": 111, "itemLevel": 600, "enchant": 7340, "gems": [213743, 213458] }
+            ]}
+        });
+        let simc = armory_to_simc(&armory);
+        assert!(simc.contains("main_hand=,id=111"), "{simc}");
+        assert!(simc.contains("enchant_id=7340"), "{simc}");
+        assert!(simc.contains("gem_id=213743/213458"), "{simc}");
+        assert!(simc.contains("ilevel=600"), "{simc}");
+    }
+
+    #[test]
+    fn empty_payload_does_not_panic_and_omits_class_spec_items() {
+        let armory = json!({});
+        let simc = armory_to_simc(&armory);
         assert!(!simc.contains("spec="), "no spec line expected:\n{simc}");
         let parsed = crate::addon_parser::parse_simc_input(&simc);
         assert_eq!(parsed.character.class_name, None);
@@ -182,11 +198,13 @@ mod tests {
     }
 
     #[test]
-    fn unknown_spec_id_omits_class_but_keeps_gear() {
-        let eq = load("armory_equipment_sample.json");
-        let spec = serde_json::json!({ "active_specialization": { "id": 999999 } });
-        let simc = armory_to_simc("Thrall", "Tarren Mill", &eq, &spec);
-        assert!(!simc.contains("spec="), "no spec line for unknown id:\n{simc}");
+    fn missing_loadout_omits_class_but_keeps_gear() {
+        let armory = json!({
+            "character": { "name": "noTalents", "realm": "r" },
+            "gear": { "items": [ { "slot": "HEAD", "itemId": 222, "itemLevel": 600 } ] }
+        });
+        let simc = armory_to_simc(&armory);
+        assert!(!simc.contains("spec="), "no spec for missing loadout:\n{simc}");
         let parsed = crate::addon_parser::parse_simc_input(&simc);
         assert_eq!(parsed.character.class_name, None);
         assert!(parsed.items.iter().any(|i| i.raw_slot == "head"));

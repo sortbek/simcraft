@@ -1,11 +1,5 @@
 use serde_json::Value;
 
-/// Raw armory JSON for one character (already proxied through simhammer.com).
-pub struct ArmoryData {
-    pub equipment: Value,
-    pub specializations: Value,
-}
-
 #[derive(Debug)]
 pub enum ArmoryError {
     NotFound,
@@ -14,7 +8,9 @@ pub enum ArmoryError {
 
 #[async_trait::async_trait]
 pub trait ArmoryClient: Send + Sync {
-    async fn fetch(&self, region: &str, realm: &str, name: &str) -> Result<ArmoryData, ArmoryError>;
+    /// Fetch the simhammer.com `/armory` payload (character + gear + talents) for
+    /// one character. The shape is SimHammer's own, not raw Blizzard JSON.
+    async fn fetch(&self, region: &str, realm: &str, name: &str) -> Result<Value, ArmoryError>;
 }
 
 /// Blizzard realm slug: lowercase, spaces/apostrophes -> hyphens.
@@ -44,7 +40,7 @@ impl HttpArmoryClient {
         }
     }
 
-    async fn get_json(&self, url: &str) -> Result<serde_json::Value, ArmoryError> {
+    async fn get_json(&self, url: &str) -> Result<Value, ArmoryError> {
         let resp = self
             .http
             .get(url)
@@ -57,7 +53,7 @@ impl HttpArmoryClient {
         if !resp.status().is_success() {
             return Err(ArmoryError::Http(format!("status {}", resp.status())));
         }
-        resp.json::<serde_json::Value>()
+        resp.json::<Value>()
             .await
             .map_err(|e| ArmoryError::Http(e.to_string()))
     }
@@ -65,21 +61,14 @@ impl HttpArmoryClient {
 
 #[async_trait::async_trait]
 impl ArmoryClient for HttpArmoryClient {
-    async fn fetch(&self, region: &str, realm: &str, name: &str) -> Result<ArmoryData, ArmoryError> {
+    async fn fetch(&self, region: &str, realm: &str, name: &str) -> Result<Value, ArmoryError> {
         let slug = realm_slug(realm);
         let name_l = name.trim().to_lowercase();
-        let url = |kind: &str| {
-            format!(
-                "{}/api/blizzard/character/{}/{}/{}/{}",
-                self.base, region, slug, name_l, kind
-            )
-        };
-        let equipment = self.get_json(&url("equipment")).await?;
-        let specializations = self.get_json(&url("specializations")).await?;
-        Ok(ArmoryData {
-            equipment,
-            specializations,
-        })
+        let url = format!(
+            "{}/api/blizzard/character/{}/{}/{}/armory",
+            self.base, region, slug, name_l
+        );
+        self.get_json(&url).await
     }
 }
 
