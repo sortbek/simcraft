@@ -7,8 +7,8 @@ import {
   getRun,
   type Roster,
   type RosterReport,
-  type ReportItem,
 } from '../../lib/rosters';
+import RosterReportView from './RosterReportView';
 
 interface Instance {
   id: number;
@@ -92,20 +92,6 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
       }
     }, 2000);
   }, [roster.id, instanceId, difficulty, stopPolling]);
-
-  // Group items by boss
-  const itemsByBoss = new Map<string, ReportItem[]>();
-  if (report) {
-    for (const item of report.items) {
-      const list = itemsByBoss.get(item.boss) ?? [];
-      list.push(item);
-      itemsByBoss.set(item.boss, list);
-    }
-  }
-
-  const memberMap = report
-    ? new Map(report.players.map((p) => [p.member_id, p.name]))
-    : new Map<string, string>();
 
   return (
     <div className="space-y-6 border-t border-outline-variant/10 pt-6">
@@ -205,64 +191,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
         </p>
       )}
 
-      {report && (
-        <div className="space-y-6">
-          {report.items.length === 0 ? (
-            <p className="py-4 text-sm text-on-surface-variant/60">No upgrades found.</p>
-          ) : (
-            Array.from(itemsByBoss.entries()).map(([boss, items]) => (
-              <div key={boss} className="space-y-3">
-                <div className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                  {boss}
-                </div>
-                <div className="space-y-2">
-                  {items.map((item) => (
-                    <div
-                      key={item.item_id}
-                      className="overflow-hidden rounded-lg border border-outline-variant/10 bg-surface-container-low"
-                    >
-                      <div className="flex items-center gap-2 border-b border-outline-variant/10 px-4 py-2">
-                        <span className="text-sm font-medium text-on-surface">{item.name}</span>
-                        <span className="rounded bg-surface-container-high px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
-                          ilvl {item.ilevel}
-                        </span>
-                        <span className="text-[11px] text-on-surface-variant/50">{item.slot}</span>
-                      </div>
-                      <div className="divide-y divide-outline-variant/10">
-                        {item.results
-                          .filter((r) => memberMap.has(r.member_id))
-                          .map((r) => {
-                            const isUpgrade = !r.is_downgrade && r.upgrade_pct > 0;
-                            return (
-                              <div
-                                key={r.member_id}
-                                className="flex items-center justify-between px-4 py-2"
-                              >
-                                <span className="text-sm text-on-surface">
-                                  {memberMap.get(r.member_id)}
-                                </span>
-                                <span
-                                  className={`text-sm font-medium tabular-nums ${
-                                    isUpgrade
-                                      ? 'text-green-400'
-                                      : 'text-on-surface-variant/50'
-                                  }`}
-                                >
-                                  {isUpgrade ? '+' : ''}
-                                  {r.upgrade_pct.toFixed(1)}%
-                                </span>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {report && <RosterReportView report={report} />}
     </div>
   );
 }
