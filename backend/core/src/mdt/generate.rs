@@ -345,19 +345,15 @@ pub fn generate(
         enemies: all_enemies,
     };
 
+    // Raid buffs are intentionally NOT hardcoded here. The route is generated at
+    // import time and stored, with no access to the user's raid-buff settings —
+    // those are applied per-sim by `simc_runner::build_full_simc_input`, which
+    // emits the chosen `override.*` lines after this block (so they win in
+    // Dungeon Route mode). Hardcoding `override.*=0` here would only be a
+    // redundant default, and `override.power_infusion` is no longer a valid SimC
+    // option (it emits an "Unknown option" warning).
     let header = format!(
         "fight_style=DungeonRoute
-override.bloodlust=0
-override.arcane_intellect=0
-override.power_word_fortitude=0
-override.mark_of_the_wild=0
-override.battle_shout=0
-override.mystic_touch=0
-override.chaos_brand=0
-override.skyfury=0
-override.hunters_mark=0
-override.power_infusion=0
-override.bleeding=0
 single_actor_batch=1
 max_time={max_time}
 enemy=\"{title}\"

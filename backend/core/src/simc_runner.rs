@@ -568,15 +568,23 @@ impl SimParams {
     }
 }
 
+/// Whether a SimC input is a dungeon route — it carries a `fight_style=DungeonRoute`
+/// line (bare or quoted) of its own. The input builders and the server's
+/// eager/streaming route injection all use this so they agree on what counts as a
+/// dungeon route.
+pub fn is_dungeon_route_input(simc_input: &str) -> bool {
+    simc_input.lines().any(|l| {
+        let t = l.trim();
+        t == "fight_style=DungeonRoute" || t == "fight_style=\"DungeonRoute\""
+    })
+}
+
 /// Build the full simc input from the options Value (convenience wrapper).
 pub fn build_simc_input_from_options(simc_input: &str, options: &Value) -> String {
     let p = SimParams::from_options(options);
     let calculate_scale_factors =
         options.get("sim_type").and_then(|v| v.as_str()) == Some("stat_weights");
-    let is_dungeon_route = simc_input.lines().any(|l| {
-        let t = l.trim();
-        t == "fight_style=DungeonRoute" || t == "fight_style=\"DungeonRoute\""
-    });
+    let is_dungeon_route = is_dungeon_route_input(simc_input);
 
     build_full_simc_input(&SimcInputBuild::new(
         simc_input,
@@ -730,31 +738,34 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
     // Scale factors
     result.push_str("scale_only=strength,intellect,agility,crit,mastery,vers,haste,weapon_dps,weapon_offhand_dps\n");
 
-    // Fight style must precede the raid buff overrides: parsing
-    // fight_style=DungeonSlice resets all override.* values to 0, so any
-    // overrides emitted before it would be silently discarded.
+    // Fight style must precede the raid buff overrides: parsing fight_style
+    // resets all override.* values to 0, so any overrides emitted before it
+    // would be silently discarded. For dungeon routes the fight_style line lives
+    // inside the route block (which also zeroes every raid buff), so we skip
+    // emitting it again here — but the overrides below still come after it.
     if !is_dungeon_route {
         result.push_str(&format!("fight_style={}\n", fight_style));
     }
 
-    // Raid buff overrides (skip for dungeon routes)
-    if !is_dungeon_route {
-        for opt in OVERRIDES {
-            let key = opt
-                .strip_prefix("override.")
-                .and_then(|s| s.split('=').next())
-                .unwrap_or("");
-            let enabled = raid_buffs
-                .and_then(|b| b.get(key))
-                .and_then(|v| v.as_u64())
-                .map(|v| v != 0)
-                .unwrap_or(true);
-            result.push_str(&format!(
-                "override.{}={}\n",
-                key,
-                if enabled { "1" } else { "0" }
-            ));
-        }
+    // Raid buff overrides (the user's per-buff toggles). Emitted at the very end,
+    // after the fight_style line — parsing fight_style zeroes all override.*, so
+    // overrides must follow it. This also lets the user's choices win over any
+    // `override.*=0` baked into a legacy saved route block (last assignment wins).
+    for opt in OVERRIDES {
+        let key = opt
+            .strip_prefix("override.")
+            .and_then(|s| s.split('=').next())
+            .unwrap_or("");
+        let enabled = raid_buffs
+            .and_then(|b| b.get(key))
+            .and_then(|v| v.as_u64())
+            .map(|v| v != 0)
+            .unwrap_or(true);
+        result.push_str(&format!(
+            "override.{}={}\n",
+            key,
+            if enabled { "1" } else { "0" }
+        ));
     }
 
     // Sim options
@@ -850,10 +861,7 @@ async fn run_simc_subprocess(
         let _ = std::fs::remove_file(&zone_id);
     }
 
-    let is_dungeon_route = simc_input.lines().any(|l| {
-        let trimmed = l.trim();
-        trimmed == "fight_style=DungeonRoute" || trimmed == "fight_style=\"DungeonRoute\""
-    });
+    let is_dungeon_route = is_dungeon_route_input(simc_input);
 
     // Build the full input file with all options inline.
     //
@@ -1899,6 +1907,34 @@ mod tests {
         assert!(triage_input.contains("target_error=2"));
         assert!(triage_input.contains("report_details=1"));
         assert!(triage_input.contains("profileset_work_threads=1"));
+    }
+
+    #[test]
+    fn dungeon_route_emits_user_raid_buff_overrides_after_fight_style() {
+        // The MDT route block sets fight_style=DungeonRoute and zeroes every raid
+        // buff. The user's per-buff toggles must be emitted *after* that block so
+        // they win (SimC honors the last assignment) — letting players enable raid
+        // buffs in Dungeon Route mode. Before this behavior the overrides were
+        // skipped entirely for dungeon routes, so the user's choices had no effect.
+        let options = json!({
+            "raid_buffs": { "bloodlust": 1, "arcane_intellect": 0 }
+        });
+        let input = "mage=\"Tester\"\n\
+            fight_style=DungeonRoute\n\
+            override.bloodlust=0\n\
+            override.arcane_intellect=0";
+        let out = build_simc_input_from_options(input, &options);
+
+        // The user's enabled buff is emitted (it would be absent under the old
+        // skip-for-dungeon behavior) and lands after the route's fight_style line.
+        assert!(out.contains("override.bloodlust=1"));
+        let fs_idx = out.find("fight_style=DungeonRoute").expect("route fight_style");
+        let user_lust = out.rfind("override.bloodlust=1").expect("user bloodlust override");
+        let user_ai = out.rfind("override.arcane_intellect=0").expect("user AI override");
+        assert!(user_lust > fs_idx, "user override must come after fight_style");
+        assert!(user_ai > fs_idx, "user override must come after fight_style");
+        // fight_style is not re-emitted for dungeon routes (it lives in the block).
+        assert_eq!(out.matches("fight_style=").count(), 1);
     }
 
     #[test]

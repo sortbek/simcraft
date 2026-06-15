@@ -391,7 +391,12 @@ mod tests {
         let out = convert(SKYREACH_ROUTE, &load_skyreach_db(), &opts).unwrap();
 
         assert!(out.simc.starts_with("fight_style=DungeonRoute"));
-        assert!(out.simc.contains("override.bloodlust=0"));
+        // Raid buffs are no longer hardcoded in the route block — they are applied
+        // from the user's sim settings by build_full_simc_input (see bug #1 fix).
+        assert!(
+            !out.simc.contains("override."),
+            "route block must not hardcode raid-buff overrides"
+        );
         assert!(out.simc.contains("single_actor_batch=1"));
         assert!(out.simc.contains("max_time=1680"));
         assert!(out
