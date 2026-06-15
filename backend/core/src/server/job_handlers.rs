@@ -354,6 +354,23 @@ pub(super) async fn resume_sim(
     }
 }
 
+/// Fetch the streamed-mode profileset preview for a job — survivor count plus the
+/// first 50 generated profilesets. Shared by `get_sim_input` (text body) and
+/// `get_sim_input_preview` (JSON body); `None` when the repo isn't SQLite-backed.
+async fn streamed_profileset_preview(repo: &JobRepo, job_id: &str) -> Option<(i64, Vec<String>)> {
+    let pool = repo.pool()?;
+    let metadata_repo = ComboMetadataRepo::new(pool.clone());
+    let survivor_count = metadata_repo.count_for_job(job_id).await.unwrap_or(0);
+    let rows = metadata_repo
+        .list_for_job(job_id, Some(50))
+        .await
+        .unwrap_or_default();
+    Some((
+        survivor_count,
+        rows.into_iter().map(|r| r.profileset_simc).collect(),
+    ))
+}
+
 pub(super) async fn get_sim_input(
     path: web::Path<String>,
     repo: web::Data<JobRepo>,
@@ -369,17 +386,38 @@ pub(super) async fn get_sim_input(
         }
     };
 
-    if matches!(job.simc_input_mode, SimcInputMode::Streamed) {
-        return HttpResponse::UnprocessableEntity().json(json!({
-            "error": "streamed_input",
-            "message": "This sim used streamed input. Use /api/sim/:id/input/preview for a preview.",
-            "preview_endpoint": format!("/api/sim/{}/input/preview", job_id),
-        }));
+    // Streamed sims never store the full input (it's generated in batches during
+    // the run), so there is no single "raw input" string. Rather than return a
+    // machine-only error here — which the plain "raw input" links surface to the
+    // user as JSON — assemble a readable preview: base profile + the first N
+    // profilesets, with a note explaining the truncation. The structured preview
+    // for the in-app panel still lives at /input/preview.
+    match job.simc_input_mode {
+        SimcInputMode::Inline => HttpResponse::Ok()
+            .content_type("text/plain; charset=utf-8")
+            .body(job.simc_input),
+        SimcInputMode::Streamed => {
+            let body = match streamed_profileset_preview(repo.get_ref(), &job_id).await {
+                Some((survivor_count, preview)) => format!(
+                    "# NOTE: This sim used streamed input. The full SimC input is generated in\n\
+                     # batches during the run and is not stored, so only a preview is available:\n\
+                     # the base profile plus the first {} of {} profilesets.\n\n\
+                     {}\n\n# Profilesets (preview)\n{}",
+                    preview.len(),
+                    survivor_count,
+                    job.simc_input,
+                    preview.join("\n"),
+                ),
+                None => format!(
+                    "# NOTE: This sim used streamed input; the full input is not stored.\n\n{}",
+                    job.simc_input
+                ),
+            };
+            HttpResponse::Ok()
+                .content_type("text/plain; charset=utf-8")
+                .body(body)
+        }
     }
-
-    HttpResponse::Ok()
-        .content_type("text/plain; charset=utf-8")
-        .body(job.simc_input)
 }
 
 pub(super) async fn get_sim_input_preview(
@@ -403,22 +441,14 @@ pub(super) async fn get_sim_input_preview(
             "input": job.simc_input,
         })),
         SimcInputMode::Streamed => {
-            let Some(pool) = repo.pool() else {
+            let Some((survivor_count, preview_profilesets)) =
+                streamed_profileset_preview(repo.get_ref(), &job_id).await
+            else {
                 return HttpResponse::InternalServerError().json(json!({
                     "error": "no_pool",
                     "message": "Streamed mode requires SQLite-backed JobRepo",
                 }));
             };
-            let metadata_repo = ComboMetadataRepo::new(pool.clone());
-            let survivor_count = metadata_repo.count_for_job(&job_id).await.unwrap_or(0);
-            let preview_rows = metadata_repo
-                .list_for_job(&job_id, Some(50))
-                .await
-                .unwrap_or_default();
-            let preview_profilesets: Vec<&str> = preview_rows
-                .iter()
-                .map(|r| r.profileset_simc.as_str())
-                .collect();
             let shown = preview_profilesets.len();
             HttpResponse::Ok().json(json!({
                 "mode": "streamed",
