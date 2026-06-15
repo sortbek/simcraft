@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Per-member identity passed in by the caller (from the roster).
+#[derive(Debug, Clone)]
 pub struct MemberMeta {
     pub member_id: String,
     pub name: String,
