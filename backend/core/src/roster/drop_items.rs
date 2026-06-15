@@ -112,6 +112,33 @@ mod tests {
     }
 
     #[test]
+    fn dungeon_info_difficulty_ilvl_and_bonus() {
+        // M+ / dungeon items carry per-difficulty data under `dungeon_info`.
+        let item = json!({
+            "item_id": 777u64,
+            "ilevel": 600u64,
+            "name": "Dungeon Ring",
+            "encounter": "Some Dungeon",
+            "inventory_type": 11u64,
+            "dungeon_info": {
+                "mythic": { "ilvl": 658u64, "bonus_id": 12345u64, "quality": 4u64 }
+            }
+        });
+        let by_slot = make_slot_map(vec![item]);
+        let result = drop_items_from_slots(&by_slot, "mythic");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].get("ilevel").and_then(|v| v.as_u64()), Some(658));
+        let bonus_ids: Vec<u64> = result[0]
+            .get("bonus_ids")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_u64())
+            .collect();
+        assert_eq!(bonus_ids, vec![12345]);
+    }
+
+    #[test]
     fn item_with_zero_item_id_is_skipped() {
         let item = json!({
             "item_id": 0u64,
