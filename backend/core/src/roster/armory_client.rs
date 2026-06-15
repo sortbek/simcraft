@@ -83,5 +83,6 @@ mod tests {
     fn slugifies_realm() {
         assert_eq!(realm_slug("Tarren Mill"), "tarren-mill");
         assert_eq!(realm_slug("Lightbringer"), "lightbringer");
+        assert_eq!(realm_slug("Quel'Thalas"), "quel-thalas");
     }
 }
