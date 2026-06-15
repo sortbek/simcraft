@@ -132,6 +132,11 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-on-surface">
                     {member.name}
+                    {member.item_level > 0 && (
+                      <span className="ml-1.5 rounded bg-surface-container-high px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+                        ilvl {member.item_level}
+                      </span>
+                    )}
                     <span className="text-on-surface-variant/60"> - {member.realm}</span>
                   </div>
                   {(member.class || member.spec) && (

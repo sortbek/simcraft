@@ -21,6 +21,7 @@ pub struct RosterMember {
     pub spec: String,
     pub source_simc: String,
     pub armory_status: String,
+    pub item_level: i64,
     pub updated_at: String,
 }
 
@@ -198,7 +199,7 @@ impl RosterRepo {
         match &self.backend {
             RosterBackend::Database(pool) => {
                 let rows = sqlx::query(
-                    "SELECT id, roster_id, name, realm, class, spec, source_simc, armory_status, updated_at
+                    "SELECT id, roster_id, name, realm, class, spec, source_simc, armory_status, item_level, updated_at
                      FROM roster_members WHERE roster_id = $1 ORDER BY name, realm",
                 )
                 .bind(roster_id)
@@ -216,6 +217,7 @@ impl RosterRepo {
                         spec: r.get("spec"),
                         source_simc: r.get("source_simc"),
                         armory_status: r.get("armory_status"),
+                        item_level: r.get("item_level"),
                         updated_at: r.get("updated_at"),
                     })
                     .collect())
@@ -245,6 +247,7 @@ impl RosterRepo {
         spec: &str,
         source_simc: &str,
         armory_status: &str,
+        item_level: i64,
     ) -> Result<RosterMember, sqlx::Error> {
         let now = chrono::Utc::now().to_rfc3339();
         match &self.backend {
@@ -261,12 +264,13 @@ impl RosterRepo {
 
                 let id = if let Some(existing) = existing_id {
                     sqlx::query(
-                        "UPDATE roster_members SET class = $1, spec = $2, source_simc = $3, armory_status = $4, updated_at = $5 WHERE id = $6",
+                        "UPDATE roster_members SET class = $1, spec = $2, source_simc = $3, armory_status = $4, item_level = $5, updated_at = $6 WHERE id = $7",
                     )
                     .bind(class)
                     .bind(spec)
                     .bind(source_simc)
                     .bind(armory_status)
+                    .bind(item_level)
                     .bind(&now)
                     .bind(&existing)
                     .execute(pool)
@@ -275,7 +279,7 @@ impl RosterRepo {
                 } else {
                     let new_id = uuid::Uuid::new_v4().to_string();
                     sqlx::query(
-                        "INSERT INTO roster_members (id, roster_id, name, realm, class, spec, source_simc, armory_status, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                        "INSERT INTO roster_members (id, roster_id, name, realm, class, spec, source_simc, armory_status, item_level, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
                     )
                     .bind(&new_id)
                     .bind(roster_id)
@@ -285,6 +289,7 @@ impl RosterRepo {
                     .bind(spec)
                     .bind(source_simc)
                     .bind(armory_status)
+                    .bind(item_level)
                     .bind(&now)
                     .execute(pool)
                     .await?;
@@ -300,6 +305,7 @@ impl RosterRepo {
                     spec: spec.to_string(),
                     source_simc: source_simc.to_string(),
                     armory_status: armory_status.to_string(),
+                    item_level,
                     updated_at: now,
                 })
             }
@@ -314,6 +320,7 @@ impl RosterRepo {
                     existing.spec = spec.to_string();
                     existing.source_simc = source_simc.to_string();
                     existing.armory_status = armory_status.to_string();
+                    existing.item_level = item_level;
                     existing.updated_at = now.clone();
                     existing.id.clone()
                 } else {
@@ -327,6 +334,7 @@ impl RosterRepo {
                         spec: spec.to_string(),
                         source_simc: source_simc.to_string(),
                         armory_status: armory_status.to_string(),
+                        item_level,
                         updated_at: now.clone(),
                     });
                     new_id
@@ -341,6 +349,7 @@ impl RosterRepo {
                     spec: spec.to_string(),
                     source_simc: source_simc.to_string(),
                     armory_status: armory_status.to_string(),
+                    item_level,
                     updated_at: now,
                 })
             }
@@ -385,18 +394,19 @@ mod tests {
     async fn upsert_member_is_idempotent_on_name_realm() {
         let repo = RosterRepo::new_memory();
         let r = repo.create("T", "eu").await.unwrap();
-        repo.upsert_member(&r.id, "Thrall", "Draenor", "shaman", "enhancement", "sim1", "ok").await.unwrap();
-        repo.upsert_member(&r.id, "Thrall", "Draenor", "shaman", "enhancement", "sim2", "ok").await.unwrap();
+        repo.upsert_member(&r.id, "Thrall", "Draenor", "shaman", "enhancement", "sim1", "ok", 480).await.unwrap();
+        repo.upsert_member(&r.id, "Thrall", "Draenor", "shaman", "enhancement", "sim2", "ok", 489).await.unwrap();
         let members = repo.list_members(&r.id).await.unwrap();
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].source_simc, "sim2");
+        assert_eq!(members[0].item_level, 489);
     }
 
     #[tokio::test]
     async fn delete_roster_removes_members() {
         let repo = RosterRepo::new_memory();
         let r = repo.create("T", "us").await.unwrap();
-        repo.upsert_member(&r.id, "A", "R", "mage", "frost", "s", "ok").await.unwrap();
+        repo.upsert_member(&r.id, "A", "R", "mage", "frost", "s", "ok", 0).await.unwrap();
         assert!(repo.delete(&r.id).await.unwrap());
         assert!(repo.list_members(&r.id).await.unwrap().is_empty());
     }

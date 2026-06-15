@@ -17,6 +17,7 @@ export interface RosterMember {
   spec: string;
   source_simc: string;
   armory_status: string;
+  item_level: number;
   updated_at: string;
 }
 

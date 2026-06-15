@@ -88,19 +88,24 @@ pub(super) async fn run_import(
         match client.fetch(region, &realm, &name).await {
             Ok(armory) => {
                 let simc = armory_to_simc(&armory);
+                let item_level = armory
+                    .get("gear")
+                    .and_then(|g| g.get("averageItemLevel"))
+                    .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
+                    .unwrap_or(0) as i64;
                 let parsed = crate::addon_parser::parse_simc_input(&simc);
                 let class = parsed.character.class_name.unwrap_or_default();
                 let spec = parsed.character.spec.unwrap_or_default();
                 let status = if class.is_empty() { "armory_failed" } else { "ok" };
-                repo.upsert_member(roster_id, &name, &realm, &class, &spec, &simc, status)
+                repo.upsert_member(roster_id, &name, &realm, &class, &spec, &simc, status, item_level)
                     .await?;
             }
             Err(ArmoryError::NotFound) => {
-                repo.upsert_member(roster_id, &name, &realm, "", "", "", "not_found")
+                repo.upsert_member(roster_id, &name, &realm, "", "", "", "not_found", 0)
                     .await?;
             }
             Err(ArmoryError::Http(_)) => {
-                repo.upsert_member(roster_id, &name, &realm, "", "", "", "armory_failed")
+                repo.upsert_member(roster_id, &name, &realm, "", "", "", "armory_failed", 0)
                     .await?;
             }
         }
@@ -163,6 +168,7 @@ mod tests {
         assert_eq!(members[0].class, "mage");
         assert_eq!(members[0].spec, "frost");
         assert_eq!(members[0].armory_status, "ok");
+        assert_eq!(members[0].item_level, 70);
         assert!(members[0].source_simc.contains("id=132863"));
     }
 
