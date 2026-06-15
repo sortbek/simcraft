@@ -68,3 +68,69 @@ export async function importMembers(id: string, text: string): Promise<RosterMem
 export async function deleteMember(rosterId: string, memberId: string): Promise<void> {
   await fetch(`${API_URL}/api/rosters/${rosterId}/members/${memberId}`, { method: 'DELETE' });
 }
+
+export interface ReportPlayer {
+  member_id: string;
+  name: string;
+  class: string;
+  spec: string;
+  base_dps: number;
+  status: string;
+}
+
+export interface ReportItemResult {
+  member_id: string;
+  dps: number;
+  upgrade_pct: number;
+  abs_gain: number;
+  is_downgrade: boolean;
+}
+
+export interface ReportItem {
+  boss: string;
+  item_id: number;
+  name: string;
+  slot: string;
+  ilevel: number;
+  results: ReportItemResult[];
+}
+
+export interface RosterReport {
+  roster_id: string;
+  instance_id: number;
+  difficulty: string;
+  players: ReportPlayer[];
+  items: ReportItem[];
+}
+
+export interface RunStatus {
+  status: string;
+  progress_pct?: number;
+  done?: number;
+  total?: number;
+  report?: RosterReport;
+}
+
+export async function startRun(
+  rosterId: string,
+  instanceId: number,
+  difficulty: string
+): Promise<{ run_id: string } | null> {
+  try {
+    return await fetchJson(`${API_URL}/api/rosters/${rosterId}/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instance_id: instanceId, difficulty }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function getRun(runId: string): Promise<RunStatus | null> {
+  try {
+    return await fetchJson(`${API_URL}/api/rosters/runs/${runId}`);
+  } catch {
+    return null;
+  }
+}

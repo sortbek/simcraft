@@ -8,6 +8,7 @@ import {
   type Roster,
 } from '../lib/rosters';
 import RosterEditor from '../components/raid-roster/RosterEditor';
+import RosterRunPanel from '../components/raid-roster/RosterRunPanel';
 
 const REGIONS = ['eu', 'us', 'kr', 'tw'] as const;
 
@@ -141,7 +142,10 @@ export default function RaidRosterPage() {
 
         <div>
           {selectedRoster ? (
-            <RosterEditor key={selectedRoster.id} roster={selectedRoster} />
+            <>
+              <RosterEditor key={selectedRoster.id} roster={selectedRoster} />
+              <RosterRunPanel key={`run-${selectedRoster.id}`} roster={selectedRoster} />
+            </>
           ) : (
             <div className="rounded-lg border border-dashed border-outline-variant/20 px-6 py-12 text-center text-sm text-on-surface-variant/60">
               Select or create a roster to manage its members.
