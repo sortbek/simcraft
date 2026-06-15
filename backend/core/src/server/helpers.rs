@@ -675,6 +675,42 @@ pub(crate) async fn submit_profileset_sim(
         return resp;
     }
 
+    let batch_id = options.batch_id.clone();
+    match insert_and_spawn_profileset_job(
+        submission, options, batch_id, provider, &avail, repo, log_buffer,
+    )
+    .await
+    {
+        Ok((job_id, created_at)) => HttpResponse::Ok().json(crate::server::types::SimResponse {
+            id: job_id,
+            status: "pending".to_string(),
+            created_at,
+        }),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
+}
+
+/// Job-creation core shared by `submit_profileset_sim` (HTTP) and batch
+/// orchestrators (e.g. `spawn_droptimizer_child`): build the `Job`, insert it,
+/// write combo metadata, spawn the profileset task. Returns `(job_id, created_at)`.
+///
+/// `batch_id` is passed explicitly (rather than read off `options`) so batch
+/// orchestrators can stamp every child with a shared run id without mutating a
+/// borrowed `SimOptions`.
+///
+/// Does NOT validate `simc_branch` — callers that need eager branch rejection
+/// (the HTTP handler) run `validate_eager_branch` first; batch orchestrators
+/// validate once before their loop.
+#[allow(clippy::too_many_arguments)]
+async fn insert_and_spawn_profileset_job(
+    submission: ProfilesetSubmission,
+    options: &crate::server::types::SimOptions,
+    batch_id: Option<String>,
+    provider: Arc<dyn crate::compute::SimcProvider>,
+    avail: &crate::compute::ProviderAvailability,
+    repo: &JobRepo,
+    log_buffer: &Arc<LogBuffer>,
+) -> Result<(String, String), sqlx::Error> {
     let provider_id_str = provider.id().to_string();
     let mut options_json = options.to_json();
     // `display_input` is the final ready-to-execute text (stored on the Job, handed
@@ -702,11 +738,9 @@ pub(crate) async fn submit_profileset_sim(
         submission.envelope_payload,
     );
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
-    job.batch_id = options.batch_id.clone();
+    job.batch_id = batch_id;
 
-    if let Err(e) = repo.insert(&job).await {
-        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
-    }
+    repo.insert(&job).await?;
 
     // Non-streamed (eager) jobs never sim-row, so no per-combo override lines are
     // persisted here (`&[]` → profileset_simc stays empty).
@@ -731,11 +765,74 @@ pub(crate) async fn submit_profileset_sim(
         },
     );
 
-    HttpResponse::Ok().json(crate::server::types::SimResponse {
-        id: job_id,
-        status: "pending".to_string(),
-        created_at,
-    })
+    Ok((job_id, created_at))
+}
+
+/// Create + spawn one droptimizer child job; returns its job id. Mirrors the
+/// droptimizer handler's submission flow but returns the id (for batch
+/// orchestration across roster members) instead of an HttpResponse.
+///
+/// The caller is responsible for resolving the provider/availability once and
+/// for any up-front `simc_branch` validation; this helper reuses the same
+/// job-creation core as `submit_profileset_sim`, so child jobs are spawned with
+/// identical auth/staged-context semantics to the HTTP path.
+// Consumed by the Phase 2 roster-run endpoint (next task); staged ahead of it.
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn spawn_droptimizer_child(
+    simc_input: &str,
+    drop_items: &[Value],
+    batch_id: &str,
+    options: &SimOptions,
+    provider: Arc<dyn crate::compute::SimcProvider>,
+    avail: &crate::compute::ProviderAvailability,
+    repo: &JobRepo,
+    log_buffer: &Arc<LogBuffer>,
+) -> Result<String, sqlx::Error> {
+    let simc_input = crate::server::handler_prep::preprocess_simc_input(
+        simc_input,
+        &options.talents,
+        &options.spec_override,
+    );
+    let parse_result = crate::addon_parser::parse_simc_input(&simc_input);
+    let base_profile = parse_result.base_profile.clone();
+
+    let (generated_input, combo_count, combo_metadata) =
+        crate::profileset_generator::generate_droptimizer_input(&base_profile, drop_items);
+
+    let generated_input = inject_expert_fields(&generated_input, options);
+
+    let envelope_payload = json!({
+        "base_profile": base_profile,
+        "drop_items": drop_items,
+        "options": options.to_json(),
+    });
+
+    let combo_metadata_serialized =
+        crate::server::handler_prep::serialize_combo_metadata_value(&combo_metadata);
+
+    let submission = ProfilesetSubmission {
+        sim_type: "droptimizer",
+        sim_mode: crate::models::SimMode::Droptimizer,
+        generated_input,
+        combo_count,
+        combo_metadata_serialized,
+        envelope_payload,
+    };
+
+    // Stamp every child with the shared run batch_id so the orchestrator can poll
+    // them collectively (overriding whatever options.batch_id may hold).
+    let (job_id, _created_at) = insert_and_spawn_profileset_job(
+        submission,
+        options,
+        Some(batch_id.to_string()),
+        provider,
+        avail,
+        repo,
+        log_buffer,
+    )
+    .await?;
+    Ok(job_id)
 }
 
 pub(crate) async fn handoff_streamed_top_gear_to_staged(
