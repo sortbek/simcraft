@@ -3,6 +3,7 @@ pub mod cloud_chunks_repo;
 pub mod combo_dedup_repo;
 pub mod combo_metadata_repo;
 pub mod job_repo;
+pub mod roster_repo;
 pub mod route_repo;
 pub mod settings_repo;
 pub mod stage_batches_repo;
@@ -14,6 +15,7 @@ pub use cloud_chunks_repo::{ChunkResultEnvelope, CloudChunkRow, CloudChunksRepo}
 pub use combo_dedup_repo::ComboDedupRepo;
 pub use combo_metadata_repo::{ComboMetadataInsert, ComboMetadataRepo, ComboMetadataRow};
 pub use job_repo::{JobRepo, JobStatusFilter, ListJobsFilter};
+pub use roster_repo::RosterRepo;
 pub use route_repo::RouteRepo;
 pub use settings_repo::SettingsRepo;
 pub use stage_batches_repo::{StageBatchRow, StageBatchesRepo, StageTotals};
