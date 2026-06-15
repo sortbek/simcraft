@@ -85,7 +85,7 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={'One per line, e.g.\nCharname-Realm\nAnother-Realm'}
+          placeholder={'One per line, e.g.\nRealm-Playername\nTarren Mill-Jaina'}
           className="h-32 w-full resize-y rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 font-mono text-[13px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
         />
         <button
