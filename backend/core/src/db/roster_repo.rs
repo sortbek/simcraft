@@ -235,6 +235,7 @@ impl RosterRepo {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_member(
         &self,
         roster_id: &str,
