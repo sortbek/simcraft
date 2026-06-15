@@ -527,7 +527,13 @@ function ItemTag({
   const icon = info?.icon || 'inv_misc_questionmark';
   const wowheadData =
     item.item_id > 0
-      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, toGemIdList(item))
+      ? getWowheadData(
+          item.bonus_ids,
+          item.ilevel,
+          item.enchant_id,
+          toGemIdList(item),
+          item.crafted_stats
+        )
       : undefined;
   const slotName = SLOT_LABELS[item.slot] || item.slot;
 

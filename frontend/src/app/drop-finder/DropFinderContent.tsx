@@ -18,6 +18,9 @@ import ItemTable from '../components/loot/ItemTable';
 import DungeonDrawer from '../components/loot/DungeonDrawer';
 import DifficultySelect from '../components/loot/DifficultySelect';
 import UpgradeSelect from '../components/loot/UpgradeSelect';
+import PreferredStatsSelect, {
+  DEFAULT_PREFERRED_STATS,
+} from '../components/loot/PreferredStatsSelect';
 import CategorySelector from '../components/loot/CategorySelector';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -261,6 +264,8 @@ export default function DropFinderContent() {
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
   const [upgradeLevel, setUpgradeLevel] = useState(0);
+  const [preferredStats, setPreferredStats] =
+    useState<[number, number]>(DEFAULT_PREFERRED_STATS);
   // Instance pool: set of instance IDs that are "checked" (multi-select)
   const [dungeonPool, setDungeonPool] = useState<Set<string>>(new Set());
   const [raidPool, setRaidPool] = useState<Set<string>>(new Set());
@@ -580,7 +585,12 @@ export default function DropFinderContent() {
         }
       }
     }
-    return { simc_input: simcInput, drop_items: dropItems, compute_provider: compute };
+    return {
+      simc_input: simcInput,
+      drop_items: dropItems,
+      compute_provider: compute,
+      ...(isCrafted ? { preferred_crafted_stats: preferredStats } : {}),
+    };
   }, [
     visibleDrops,
     selected,
@@ -590,6 +600,8 @@ export default function DropFinderContent() {
     upgradeLevel,
     upgradeTracks,
     compute,
+    isCrafted,
+    preferredStats,
   ]);
 
   const validate = useCallback(() => {
@@ -656,7 +668,7 @@ export default function DropFinderContent() {
           {/* Difficulty + upgrade level */}
           {activeDifficulties.length > 0 && (
             <div
-              className={`grid gap-4 ${currentTrackInfo && drops ? 'grid-cols-1 sm:grid-cols-2' : ''}`}
+              className={`grid gap-4 ${currentTrackInfo && drops && !isCrafted ? 'grid-cols-1 sm:grid-cols-2' : ''}`}
             >
               <div>
                 <label className="label-text">{t('dropFinder.difficulty')}</label>
@@ -678,7 +690,8 @@ export default function DropFinderContent() {
                 />
               </div>
 
-              {currentTrackInfo && drops && (
+              {/* Crafted gear has no in-game upgrade track. */}
+              {currentTrackInfo && drops && !isCrafted && (
                 <div>
                   <label className="label-text">{t('dropFinder.upgradeLevel')}</label>
                   <UpgradeSelect
@@ -688,6 +701,14 @@ export default function DropFinderContent() {
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Crafted gear: choose the two secondary stats (via missives) */}
+          {isCrafted && (
+            <div>
+              <label className="label-text">{t('dropFinder.preferredStats')}</label>
+              <PreferredStatsSelect value={preferredStats} onChange={setPreferredStats} />
             </div>
           )}
         </div>

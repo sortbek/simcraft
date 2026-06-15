@@ -688,6 +688,37 @@ pub fn drops_by_encounter() -> &'static HashMap<i64, Vec<Value>> {
     DROPS_BY_ENCOUNTER.get().expect("Game data not loaded")
 }
 
+static CRAFTED_ITEM_IDS: OnceCell<std::collections::HashSet<u64>> = OnceCell::new();
+
+/// Whether an item is from the crafted pool (season-config `poolInstanceId`).
+/// Lazily built on first use, once game data + season config are loaded.
+pub fn is_crafted_item(item_id: u64) -> bool {
+    CRAFTED_ITEM_IDS
+        .get_or_init(|| {
+            let pool_id = season_cfg()
+                .get("dungeonCategories")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .find(|c| c.get("key").and_then(|k| k.as_str()) == Some("crafted"))
+                .and_then(|c| c.get("poolInstanceId").and_then(|v| v.as_i64()));
+            let mut set = std::collections::HashSet::new();
+            if let (Some(pool_id), Some(drops)) = (pool_id, DROPS_BY_ENCOUNTER.get()) {
+                for items in drops.values() {
+                    for it in items {
+                        if it.get("_source_instance_id").and_then(|v| v.as_i64()) == Some(pool_id) {
+                            if let Some(id) = it.get("id").and_then(|v| v.as_u64()) {
+                                set.insert(id);
+                            }
+                        }
+                    }
+                }
+            }
+            set
+        })
+        .contains(&item_id)
+}
+
 pub fn talent_tree(spec_id: u64) -> Option<&'static Value> {
     TALENT_TREES.get()?.get(&spec_id)
 }
@@ -772,6 +803,18 @@ static EMPTY_SEASON_CONFIG: once_cell::sync::Lazy<Value> =
 
 pub fn season_cfg() -> &'static Value {
     SEASON_CONFIG.get().unwrap_or(&EMPTY_SEASON_CONFIG)
+}
+
+/// Secondary-stat ID (32 Crit, 49 Mastery, 36 Haste, 40 Vers) → the current
+/// season's crafted bonus ID, from season-config `crafted_secondary_stats`.
+pub fn crafted_stat_bonus_id(stat_id: u64) -> Option<u64> {
+    crafted_stat_bonus_id_from(season_cfg(), stat_id)
+}
+
+fn crafted_stat_bonus_id_from(cfg: &Value, stat_id: u64) -> Option<u64> {
+    cfg.get("crafted_secondary_stats")?
+        .get(stat_id.to_string())?
+        .as_u64()
 }
 
 /// Most common max upgrade level across all tracks.
@@ -1492,6 +1535,45 @@ mod tests {
     use super::*;
     use crate::test_support::{ensure_game_data_loaded, TestItem};
     use serde_json::json;
+
+    #[test]
+    fn crafted_stat_bonus_id_maps_via_season_config() {
+        let cfg = json!({
+            "crafted_secondary_stats": { "32": 11136, "49": 11137, "36": 11138, "40": 11139 }
+        });
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 32), Some(11136));
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 49), Some(11137));
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 36), Some(11138));
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 40), Some(11139));
+    }
+
+    #[test]
+    fn crafted_stat_bonus_id_unknown_stat_is_none() {
+        let cfg = json!({ "crafted_secondary_stats": { "32": 11136 } });
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 99), None);
+        let empty = json!({});
+        assert_eq!(crafted_stat_bonus_id_from(&empty, 32), None);
+    }
+
+    #[test]
+    fn is_crafted_item_recognizes_crafted_pool() {
+        ensure_game_data_loaded();
+        assert!(is_crafted_item(237830), "Spellbreaker's Girdle is crafted-pool");
+        assert!(!is_crafted_item(49802), "Garfrost's hammer is a normal drop");
+    }
+
+    #[test]
+    fn committed_season_config_maps_all_four_secondaries() {
+        // All four secondaries must map, else the dropdown silently drops stats.
+        let raw = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/season-config.json"));
+        let cfg: Value = serde_json::from_str(raw).expect("season-config.json parses");
+        for stat in [32u64, 49, 36, 40] {
+            assert!(
+                crafted_stat_bonus_id_from(&cfg, stat).is_some(),
+                "season-config.json missing crafted bonus ID for secondary stat {stat}"
+            );
+        }
+    }
 
     fn item(
         id: u64,

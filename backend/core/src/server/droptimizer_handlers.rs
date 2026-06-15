@@ -29,8 +29,47 @@ pub(super) async fn create_droptimizer_sim(
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let base_profile = parse_result.base_profile.clone();
 
+    let crafted_stats = match req.preferred_crafted_stats {
+        None => None,
+        Some([primary, secondary]) => {
+            match (
+                crate::item_db::crafted_stat_bonus_id(primary),
+                crate::item_db::crafted_stat_bonus_id(secondary),
+            ) {
+                (Some(a), Some(b)) => Some(profileset_generator::CraftedStats {
+                    stat_ids: [primary, secondary],
+                    bonus_ids: [a, b],
+                }),
+                // Fail loud rather than silently simming crafted items statless.
+                _ => {
+                    return HttpResponse::BadRequest().json(json!({
+                        "detail": "Unsupported crafted preferred stats for the current season."
+                    }))
+                }
+            }
+        }
+    };
+
+    // Enforce crafted-only at the trust boundary, not just via the frontend
+    // gate, so a stray request can't graft missives onto non-craftable gear.
+    if crafted_stats.is_some()
+        && !req.drop_items.iter().all(|it| {
+            it.get("item_id")
+                .and_then(|v| v.as_u64())
+                .map_or(false, crate::item_db::is_crafted_item)
+        })
+    {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "Preferred crafted stats can only be applied to crafted items."
+        }));
+    }
+
     let (generated_input, combo_count, combo_metadata) =
-        profileset_generator::generate_droptimizer_input(&base_profile, &req.drop_items);
+        profileset_generator::generate_droptimizer_input(
+            &base_profile,
+            &req.drop_items,
+            crafted_stats,
+        );
 
     if combo_count == 0 {
         return HttpResponse::BadRequest().json(json!({
