@@ -30,8 +30,16 @@ pub struct HttpArmoryClient {
 impl HttpArmoryClient {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
+        // Mirror the app's shared client timeouts so a slow/hung proxy can't
+        // stall the (sequential) import loop indefinitely.
+        let http = reqwest::Client::builder()
+            .user_agent(concat!("simhammer/", env!("CARGO_PKG_VERSION")))
+            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_default();
         Self {
-            http: reqwest::Client::new(),
+            http,
             base: "https://simhammer.com".to_string(),
         }
     }
