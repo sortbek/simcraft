@@ -143,6 +143,8 @@ export interface RunOptions {
   target_error?: number;
   iterations?: number;
   fight_style?: string;
+  upgrade_level?: number;
+  encounters?: number[];
 }
 
 export async function startRun(
