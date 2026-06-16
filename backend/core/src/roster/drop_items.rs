@@ -3,17 +3,88 @@ use crate::game_data;
 
 /// Build droptimizer `drop_items` for one character: every eligible drop in the
 /// instance at the chosen difficulty's item level + bonus id.
-pub fn build_drop_items(instance_id: i64, difficulty: &str, class: &str, spec: &str) -> Vec<Value> {
+///
+/// `upgrade_level` bumps every drop to that track level (0 = as dropped, mirroring
+/// Drop Finder's `resolveUpgrade`). `encounter_ids` restricts to selected bosses by
+/// encounter id (empty = all bosses).
+pub fn build_drop_items(
+    instance_id: i64,
+    difficulty: &str,
+    class: &str,
+    spec: &str,
+    upgrade_level: u64,
+    encounter_ids: &[i64],
+) -> Vec<Value> {
     match game_data::get_instance_drops(instance_id, Some(class), Some(spec)) {
-        Some(by_slot) => drop_items_from_slots(&by_slot, difficulty),
+        Some(by_slot) => {
+            let tracks = game_data::get_upgrade_tracks();
+            drop_items_from_slots(&by_slot, difficulty, upgrade_level, encounter_ids, &tracks)
+        }
         None => Vec::new(),
+    }
+}
+
+/// Resolve an item's (ilvl, bonus_id) at the requested `upgrade_level`, mirroring the
+/// frontend `resolveUpgrade`. `base` is the per-difficulty track info (from
+/// `difficulty_info`/`dungeon_info`); `tracks` is `get_upgrade_tracks()` output.
+fn resolve_upgrade(
+    base: Option<&Value>,
+    upgrade_level: u64,
+    tracks: &Value,
+    item: &Value,
+) -> (u64, u64) {
+    let base_ilvl = base
+        .and_then(|b| b.get("ilvl"))
+        .and_then(|v| v.as_u64())
+        .or_else(|| item.get("itemLevel").and_then(|v| v.as_u64()))
+        .or_else(|| item.get("ilevel").and_then(|v| v.as_u64()))
+        .unwrap_or(0);
+    let base_bonus = base
+        .and_then(|b| b.get("bonus_id"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    if upgrade_level == 0 {
+        return (base_ilvl, base_bonus);
+    }
+    let Some(track) = base.and_then(|b| b.get("track")).and_then(|v| v.as_str()) else {
+        return (base_ilvl, base_bonus);
+    };
+    let entry = tracks
+        .get(track)
+        .and_then(|t| t.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|e| e.get("level").and_then(|v| v.as_u64()) == Some(upgrade_level))
+        });
+    match entry {
+        Some(e) => {
+            let ilvl = e
+                .get("ilvl")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(base_ilvl);
+            let bonus = e
+                .get("bonus_id")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(base_bonus);
+            (ilvl, bonus)
+        }
+        None => (base_ilvl, base_bonus),
     }
 }
 
 /// Pure transform: map the get_instance_drops output to droptimizer drop_items at
 /// the given difficulty. Each item's ilvl/bonus come from `difficulty_info` (raids)
-/// or `dungeon_info` (M+); falls back to the item's base `ilevel` and no bonus.
-pub fn drop_items_from_slots(by_slot: &serde_json::Map<String, Value>, difficulty: &str) -> Vec<Value> {
+/// or `dungeon_info` (M+), resolved to `upgrade_level` (0 = as dropped); falls back
+/// to the item's base `ilevel` and no bonus. `encounter_ids` (empty = all) restricts
+/// output to those bosses by encounter id.
+pub fn drop_items_from_slots(
+    by_slot: &serde_json::Map<String, Value>,
+    difficulty: &str,
+    upgrade_level: u64,
+    encounter_ids: &[i64],
+    tracks: &Value,
+) -> Vec<Value> {
     let mut out = Vec::new();
     for items in by_slot.values() {
         let Some(arr) = items.as_array() else { continue };
@@ -22,23 +93,21 @@ pub fn drop_items_from_slots(by_slot: &serde_json::Map<String, Value>, difficult
             if item_id == 0 {
                 continue;
             }
-            let diff = item
+            if !encounter_ids.is_empty() {
+                let eid = item.get("encounter_id").and_then(|v| v.as_i64());
+                match eid {
+                    Some(id) if encounter_ids.contains(&id) => {}
+                    _ => continue,
+                }
+            }
+            let base = item
                 .get("difficulty_info")
                 .and_then(|d| d.get(difficulty))
                 .or_else(|| item.get("dungeon_info").and_then(|d| d.get(difficulty)));
-            let ilevel = diff
-                .and_then(|d| d.get("ilvl"))
-                .and_then(|v| v.as_u64())
-                .or_else(|| item.get("ilevel").and_then(|v| v.as_u64()))
-                .unwrap_or(0);
+            let (ilevel, bonus) = resolve_upgrade(base, upgrade_level, tracks, item);
             let mut bonus_ids: Vec<u64> = Vec::new();
-            if let Some(b) = diff
-                .and_then(|d| d.get("bonus_id"))
-                .and_then(|v| v.as_u64())
-            {
-                if b != 0 {
-                    bonus_ids.push(b);
-                }
+            if bonus != 0 {
+                bonus_ids.push(bonus);
             }
             out.push(json!({
                 "item_id": item_id,
@@ -66,6 +135,10 @@ mod tests {
         m
     }
 
+    fn empty_tracks() -> Value {
+        json!({})
+    }
+
     #[test]
     fn difficulty_info_heroic_ilvl_and_bonus() {
         let item = json!({
@@ -80,7 +153,7 @@ mod tests {
             }
         });
         let by_slot = make_slot_map(vec![item]);
-        let result = drop_items_from_slots(&by_slot, "heroic");
+        let result = drop_items_from_slots(&by_slot, "heroic", 0, &[], &empty_tracks());
         assert_eq!(result.len(), 1);
         let r = &result[0];
         assert_eq!(r.get("item_id").and_then(|v| v.as_u64()), Some(12345));
@@ -101,7 +174,7 @@ mod tests {
             "inventory_type": 1u64,
         });
         let by_slot = make_slot_map(vec![item]);
-        let result = drop_items_from_slots(&by_slot, "heroic");
+        let result = drop_items_from_slots(&by_slot, "heroic", 0, &[], &empty_tracks());
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].get("ilevel").and_then(|v| v.as_u64()), Some(580));
         let bonus_ids = result[0]
@@ -125,7 +198,7 @@ mod tests {
             }
         });
         let by_slot = make_slot_map(vec![item]);
-        let result = drop_items_from_slots(&by_slot, "mythic");
+        let result = drop_items_from_slots(&by_slot, "mythic", 0, &[], &empty_tracks());
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].get("ilevel").and_then(|v| v.as_u64()), Some(658));
         let bonus_ids: Vec<u64> = result[0]
@@ -148,8 +221,135 @@ mod tests {
             "inventory_type": 1u64,
         });
         let by_slot = make_slot_map(vec![item]);
-        let result = drop_items_from_slots(&by_slot, "heroic");
+        let result = drop_items_from_slots(&by_slot, "heroic", 0, &[], &empty_tracks());
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn upgrade_level_resolves_to_track_entry() {
+        let item = json!({
+            "item_id": 12345u64,
+            "ilevel": 639u64,
+            "name": "Test Helm",
+            "encounter": "Boss One",
+            "encounter_id": 100i64,
+            "inventory_type": 1u64,
+            "difficulty_info": {
+                "heroic": { "ilvl": 639u64, "bonus_id": 111u64, "track": "Hero", "level": 3u64, "max_level": 6u64 }
+            }
+        });
+        let tracks = json!({
+            "Hero": [
+                { "level": 3u64, "ilvl": 639u64, "bonus_id": 111u64, "max_level": 6u64 },
+                { "level": 6u64, "ilvl": 678u64, "bonus_id": 222u64, "max_level": 6u64 }
+            ]
+        });
+        let by_slot = make_slot_map(vec![item]);
+        let result = drop_items_from_slots(&by_slot, "heroic", 6, &[], &tracks);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].get("ilevel").and_then(|v| v.as_u64()), Some(678));
+        let bonus_ids: Vec<u64> = result[0]
+            .get("bonus_ids")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_u64())
+            .collect();
+        assert_eq!(bonus_ids, vec![222]);
+    }
+
+    #[test]
+    fn upgrade_level_zero_is_as_dropped() {
+        let item = json!({
+            "item_id": 12345u64,
+            "ilevel": 639u64,
+            "name": "Test Helm",
+            "encounter": "Boss One",
+            "encounter_id": 100i64,
+            "inventory_type": 1u64,
+            "difficulty_info": {
+                "heroic": { "ilvl": 639u64, "bonus_id": 111u64, "track": "Hero", "level": 3u64, "max_level": 6u64 }
+            }
+        });
+        let tracks = json!({
+            "Hero": [
+                { "level": 3u64, "ilvl": 639u64, "bonus_id": 111u64, "max_level": 6u64 },
+                { "level": 6u64, "ilvl": 678u64, "bonus_id": 222u64, "max_level": 6u64 }
+            ]
+        });
+        let by_slot = make_slot_map(vec![item]);
+        let result = drop_items_from_slots(&by_slot, "heroic", 0, &[], &tracks);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].get("ilevel").and_then(|v| v.as_u64()), Some(639));
+        let bonus_ids: Vec<u64> = result[0]
+            .get("bonus_ids")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_u64())
+            .collect();
+        assert_eq!(bonus_ids, vec![111]);
+    }
+
+    #[test]
+    fn boss_filter_keeps_only_selected() {
+        let item_a = json!({
+            "item_id": 1u64,
+            "ilevel": 600u64,
+            "name": "From Boss A",
+            "encounter": "Boss A",
+            "encounter_id": 100i64,
+            "inventory_type": 1u64,
+        });
+        let item_b = json!({
+            "item_id": 2u64,
+            "ilevel": 600u64,
+            "name": "From Boss B",
+            "encounter": "Boss B",
+            "encounter_id": 200i64,
+            "inventory_type": 1u64,
+        });
+        let by_slot = make_slot_map(vec![item_a, item_b]);
+
+        let filtered = drop_items_from_slots(&by_slot, "heroic", 0, &[200], &empty_tracks());
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].get("item_id").and_then(|v| v.as_u64()), Some(2));
+
+        let all = drop_items_from_slots(&by_slot, "heroic", 0, &[], &empty_tracks());
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn unknown_upgrade_level_falls_back_to_base() {
+        let item = json!({
+            "item_id": 12345u64,
+            "ilevel": 639u64,
+            "name": "Test Helm",
+            "encounter": "Boss One",
+            "encounter_id": 100i64,
+            "inventory_type": 1u64,
+            "difficulty_info": {
+                "heroic": { "ilvl": 639u64, "bonus_id": 111u64, "track": "Hero", "level": 3u64, "max_level": 6u64 }
+            }
+        });
+        let tracks = json!({
+            "Hero": [
+                { "level": 3u64, "ilvl": 639u64, "bonus_id": 111u64, "max_level": 6u64 },
+                { "level": 6u64, "ilvl": 678u64, "bonus_id": 222u64, "max_level": 6u64 }
+            ]
+        });
+        let by_slot = make_slot_map(vec![item]);
+        let result = drop_items_from_slots(&by_slot, "heroic", 99, &[], &tracks);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].get("ilevel").and_then(|v| v.as_u64()), Some(639));
+        let bonus_ids: Vec<u64> = result[0]
+            .get("bonus_ids")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_u64())
+            .collect();
+        assert_eq!(bonus_ids, vec![111]);
     }
 
     // ---- Integration tests (require loaded game data) ----
@@ -158,7 +358,7 @@ mod tests {
     fn builds_drop_items_for_known_instance() {
         crate::test_support::ensure_game_data_loaded();
         // 1314 = The Dreamrift (raid, current tier), heroic difficulty
-        let items = build_drop_items(1314, "heroic", "mage", "frost");
+        let items = build_drop_items(1314, "heroic", "mage", "frost", 0, &[]);
         assert!(!items.is_empty(), "expected drops for The Dreamrift (1314)");
         let first = &items[0];
         assert!(first.get("item_id").and_then(|v| v.as_u64()).unwrap() > 0);
@@ -172,6 +372,6 @@ mod tests {
     #[test]
     fn unknown_instance_returns_empty() {
         crate::test_support::ensure_game_data_loaded();
-        assert!(build_drop_items(-999999, "heroic", "mage", "frost").is_empty());
+        assert!(build_drop_items(-999999, "heroic", "mage", "frost", 0, &[]).is_empty());
     }
 }

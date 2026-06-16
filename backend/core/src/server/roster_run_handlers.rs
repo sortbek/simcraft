@@ -15,6 +15,10 @@ use crate::roster::report::{aggregate_report, MemberMeta};
 pub struct StartRunRequest {
     pub instance_id: i64,
     pub difficulty: String,
+    #[serde(default)]
+    pub upgrade_level: Option<u64>,
+    #[serde(default)]
+    pub encounters: Option<Vec<i64>>,
     #[serde(flatten)]
     pub options: SimOptions,
 }
@@ -60,7 +64,14 @@ pub(super) async fn start_run(
         .iter()
         .filter(|m| m.armory_status == "ok" && !m.source_simc.trim().is_empty())
         .filter_map(|m| {
-            let drops = build_drop_items(req.instance_id, &req.difficulty, &m.class, &m.spec);
+            let drops = build_drop_items(
+                req.instance_id,
+                &req.difficulty,
+                &m.class,
+                &m.spec,
+                req.upgrade_level.unwrap_or(0),
+                req.encounters.as_deref().unwrap_or(&[]),
+            );
             if drops.is_empty() {
                 None
             } else {

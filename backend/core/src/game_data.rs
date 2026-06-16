@@ -294,6 +294,7 @@ pub fn get_instance_drops(
                     "ilevel": item.get("itemLevel").and_then(|i| i.as_u64()).unwrap_or(0),
                     "inventory_type": inv_type,
                     "encounter": encounter_ids.get(eid).cloned().unwrap_or_default(),
+                    "encounter_id": *eid,
                     "instance_name": item_instance,
                 });
                 if !item_specs.is_empty() {
