@@ -17,6 +17,7 @@ export default function RaidRosterPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [region, setRegion] = useState<string>('eu');
+  const [tab, setTab] = useState<'manage' | 'report'>('manage');
 
   const refreshRosters = useCallback(() => {
     getRosters().then(setRosters);
@@ -25,6 +26,11 @@ export default function RaidRosterPage() {
   useEffect(() => {
     refreshRosters();
   }, [refreshRosters]);
+
+  // Start on the Manage tab whenever the selected roster changes.
+  useEffect(() => {
+    setTab('manage');
+  }, [selectedId]);
 
   const handleCreate = useCallback(
     async (e: React.FormEvent) => {
@@ -142,10 +148,35 @@ export default function RaidRosterPage() {
 
         <div>
           {selectedRoster ? (
-            <>
-              <RosterEditor key={selectedRoster.id} roster={selectedRoster} />
-              <RosterRunPanel key={`run-${selectedRoster.id}`} roster={selectedRoster} />
-            </>
+            <div className="space-y-4">
+              <div className="flex gap-1 border-b border-outline-variant/10">
+                {(
+                  [
+                    ['manage', 'Manage Roster'],
+                    ['report', 'Loot Report'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setTab(key)}
+                    className={`-mb-px border-b-2 px-4 py-2 font-headline text-xs font-bold uppercase tracking-wider transition-colors ${
+                      tab === key
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* Both stay mounted (inactive hidden) so a running sim survives tab switches. */}
+              <div className={tab === 'manage' ? '' : 'hidden'}>
+                <RosterEditor key={selectedRoster.id} roster={selectedRoster} />
+              </div>
+              <div className={tab === 'report' ? '' : 'hidden'}>
+                <RosterRunPanel key={`run-${selectedRoster.id}`} roster={selectedRoster} />
+              </div>
+            </div>
           ) : (
             <div className="rounded-lg border border-dashed border-outline-variant/20 px-6 py-12 text-center text-sm text-on-surface-variant/60">
               Select or create a roster to manage its members.
