@@ -181,7 +181,9 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
           <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
             Fight style
           </label>
-          <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
+          <div className={running ? 'pointer-events-none opacity-50' : ''}>
+            <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
+          </div>
         </div>
 
         <button
