@@ -52,6 +52,28 @@ fn drop_combo_is_valid(
     )
 }
 
+/// The player's most-used equipped gem id — their best-stat choice — used to
+/// fill every socket on a drop. `None` when they have no gems. Ties break to the
+/// smallest id for deterministic output.
+fn most_used_gem(equipped: &HashMap<String, String>, gem_re: &Regex) -> Option<u64> {
+    let mut counts: HashMap<u64, usize> = HashMap::new();
+    for line in equipped.values() {
+        if let Some(caps) = gem_re.captures(line) {
+            for g in caps[1].split('/') {
+                if let Ok(id) = g.parse::<u64>() {
+                    if id > 0 {
+                        *counts.entry(id).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+    }
+    counts
+        .into_iter()
+        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+        .map(|(id, _)| id)
+}
+
 pub(super) fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],
@@ -86,6 +108,7 @@ pub(super) fn generate_droptimizer_input(
     // old `slot_inherits` array is now ignored.
     let legacy_enchant_re = Regex::new(r"enchant_id=(\d+)").unwrap();
     let legacy_gem_re = Regex::new(r"gem_id=([\d/]+)").unwrap();
+    let best_gem = most_used_gem(&equipped_gear, &legacy_gem_re);
 
     let mut combo_idx = 2usize;
     for item in drop_items {
@@ -145,7 +168,7 @@ pub(super) fn generate_droptimizer_input(
             let mut applied_enchant: u64 = 0;
             let mut applied_gem: u64 = 0;
 
-            // Derive enchant + gem inheritance from the equipped item in the slot.
+            // Enchant: inherit from the equipped item in this slot.
             if let Some(equipped) = equipped_gear.get(*slot) {
                 if let Some(caps) = legacy_enchant_re.captures(equipped) {
                     if let Ok(eid) = caps[1].parse::<u64>() {
@@ -155,30 +178,19 @@ pub(super) fn generate_droptimizer_input(
                         }
                     }
                 }
-                // Only inherit a gem when the DROP item itself has a socket —
-                // copying the equipped gem onto a socketless drop simulates gear
-                // that can't exist. Sockets come exclusively from bonus IDs, so
-                // empty bonus_ids ⇒ 0 sockets (no DB hit; keeps no-game-data tests green).
-                let drop_sockets = if bonus_ids.is_empty() {
-                    0
-                } else {
-                    crate::item_db::resolve_bonuses(&bonus_ids)
-                        .sockets
-                        .unwrap_or(0)
-                };
-                if drop_sockets > 0 {
-                    if let Some(caps) = legacy_gem_re.captures(equipped) {
-                        // Inherit only the first equipped gem id; Top Gear / Enchant
-                        // Gem handle full multi-socket coverage.
-                        if let Some(first) = caps[1].split('/').next() {
-                            if let Ok(gid) = first.parse::<u64>() {
-                                if gid > 0 {
-                                    simc_str.push_str(&format!(",gem_id={}", gid));
-                                    applied_gem = gid;
-                                }
-                            }
-                        }
-                    }
+            }
+
+            // Gems: fill every socket on the drop with the player's most-used gem
+            // (their best-stat choice). The socket count folds the item's base
+            // sockets, bonus-granted sockets, and curated overrides. SimC applies
+            // exactly the gems we list (it does not cap to real sockets), so the
+            // count must be accurate.
+            let drop_sockets = crate::item_db::item_socket_count(item_id, &bonus_ids);
+            if drop_sockets > 0 {
+                if let Some(gem) = best_gem {
+                    let gems = vec![gem.to_string(); drop_sockets as usize].join("/");
+                    simc_str.push_str(&format!(",gem_id={}", gems));
+                    applied_gem = gem;
                 }
             }
 
@@ -470,9 +482,10 @@ main_hand=,id=200\n";
     }
 
     #[test]
-    fn ring_drop_inherits_per_target_finger() {
-        // Each finger inherits from its OWN equipped item: finger1 has enchant+gem,
-        // finger2 has neither. Drop has bonus 13534 (+1 socket) so gem inherits.
+    fn ring_drop_inherits_enchant_per_slot_and_fills_most_used_gem() {
+        // Enchants inherit per target slot (finger1 has 7000, finger2 none).
+        // Gems use the player's most-used gem (5000) and fill every socket on
+        // BOTH fingers; the drop has bonus 13534 (+1 socket).
         crate::test_support::ensure_game_data_loaded();
         let profile = "\
 mage=test\n\
@@ -484,7 +497,7 @@ finger2=,id=101\n";
         assert_eq!(count, 2);
         assert!(
             input.contains("finger1=,id=999,ilevel=600,bonus_id=13534,enchant_id=7000,gem_id=5000"),
-            "expected finger1 to inherit from equipped finger1:\n{input}"
+            "expected finger1 with inherited enchant + most-used gem:\n{input}"
         );
         let f2_line = input
             .lines()
@@ -494,6 +507,32 @@ finger2=,id=101\n";
             !f2_line.contains("enchant_id="),
             "finger2 has no equipped enchant; drop must not invent one: {f2_line}"
         );
+        assert!(
+            f2_line.contains("gem_id=5000"),
+            "finger2 should still get the player's most-used gem: {f2_line}"
+        );
+    }
+
+    #[test]
+    fn override_neck_fills_two_gems_with_most_used() {
+        // 250247 (Amulet of the Abyssal Hymn) carries a curated socket override of
+        // 2 even though the drop has only its ilvl bonus. It must be gemmed with
+        // the player's most-used gem (8888, equipped twice) in BOTH sockets.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "\
+mage=test\n\
+spec=frost\n\
+neck=,id=100,gem_id=8888\n\
+finger1=,id=101,gem_id=8888\n\
+finger2=,id=102,gem_id=7777\n";
+        let drops = vec![drop(250247, 2, vec![])]; // neck, no socket bonus on the drop
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
+        assert!(
+            input.contains("neck=,id=250247,ilevel=600,gem_id=8888/8888"),
+            "expected 2 gems (most-used 8888) on the override neck:\n{input}"
+        );
+        let combo = metadata.get("Combo 2").expect("missing combo");
+        assert_eq!(combo[0]["gem_id"], 8888);
     }
 
     #[test]
