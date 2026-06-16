@@ -677,7 +677,7 @@ pub(crate) async fn submit_profileset_sim(
 
     let batch_id = options.batch_id.clone();
     match insert_and_spawn_profileset_job(
-        submission, options, batch_id, provider, &avail, repo, log_buffer,
+        submission, options, batch_id, provider, &avail, repo, log_buffer, false,
     )
     .await
     {
@@ -710,6 +710,7 @@ async fn insert_and_spawn_profileset_job(
     avail: &crate::compute::ProviderAvailability,
     repo: &JobRepo,
     log_buffer: &Arc<LogBuffer>,
+    force_single_pass: bool,
 ) -> Result<(String, String), sqlx::Error> {
     let provider_id_str = provider.id().to_string();
     let mut options_json = options.to_json();
@@ -721,6 +722,11 @@ async fn insert_and_spawn_profileset_job(
         &options_json,
     );
     options_json["prebuilt"] = serde_json::json!(true);
+    // Roster loot reports run every combo in one pass at the user target_error
+    // (no staging). Only stamped when requested, so other sim types are unaffected.
+    if force_single_pass {
+        options_json["force_single_pass"] = serde_json::json!(true);
+    }
 
     let mut job = crate::models::Job::new_with_provider(
         display_input.clone(),
@@ -829,6 +835,7 @@ pub(crate) async fn spawn_droptimizer_child(
         avail,
         repo,
         log_buffer,
+        true, // roster loot report: run all combos in one pass at target_error (no staging)
     )
     .await?;
     Ok(job_id)
