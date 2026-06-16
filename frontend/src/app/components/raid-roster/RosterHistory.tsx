@@ -11,20 +11,12 @@ import {
 } from '../../lib/rosters';
 import type { Instance } from '../loot/types';
 import RosterReportView from './RosterReportView';
+import { StatusBadge } from './StatusBadge';
 
 interface Selected {
   run: RosterRun;
   report: RosterReport | null;
   status: string;
-}
-
-function statusBadge(status: string) {
-  let cls = 'rounded px-1.5 py-0.5 font-headline text-[10px] font-bold uppercase tracking-wider';
-  if (status === 'done') cls += ' bg-green-500/20 text-green-400';
-  else if (status === 'running') cls += ' bg-surface-container-high text-on-surface-variant';
-  else if (status === 'failed') cls += ' bg-red-500/20 text-red-400';
-  else cls += ' bg-surface-container-high text-on-surface-variant/60';
-  return <span className={cls}>{status}</span>;
 }
 
 export default function RosterHistory({ roster }: { roster: Roster }) {
@@ -145,7 +137,7 @@ export default function RosterHistory({ roster }: { roster: Roster }) {
                   {new Date(run.created_at).toLocaleString()}
                 </div>
               </div>
-              <div className="ml-3 shrink-0">{statusBadge(run.status)}</div>
+              <div className="ml-3 shrink-0"><StatusBadge status={run.status} /></div>
             </button>
           ))}
         </div>
