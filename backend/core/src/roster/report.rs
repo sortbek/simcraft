@@ -110,6 +110,13 @@ pub fn aggregate_report(
         let Some(combos) = combos else { continue };
 
         for combo in combos {
+            // Skip the "Currently Equipped" baseline — parse_gear_comparison_result
+            // pushes it into `results[]`, but its items are the player's equipped
+            // gear, not a dropped item, so it must not appear in the loot report.
+            let combo_name = combo.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if combo_name.starts_with("Currently Equipped") {
+                continue;
+            }
             let Some(item) = combo.get("items").and_then(|v| v.as_array()).and_then(|a| a.first())
             else {
                 continue;
@@ -232,6 +239,31 @@ mod tests {
             class: "mage".into(),
             spec: "frost".into(),
         }
+    }
+
+    #[test]
+    fn excludes_currently_equipped_baseline() {
+        // parse_gear_comparison_result pushes a "Currently Equipped" entry into
+        // results[]; its items are the player's equipped gear and must NOT show up
+        // as dropped loot in the report.
+        let inputs = vec![(
+            member("a", "Alice"),
+            Some(json!({
+                "base_dps": 1000.0,
+                "results": [
+                    {"name":"Currently Equipped","items":[{"item_id":999,"slot":"finger1","ilevel":289,"name":"Equipped Ring","encounter":""}],"dps":1000.0,"delta":0.0},
+                    {"name":"Combo 2","items":[{"item_id":111,"slot":"trinket1","ilevel":600,"name":"Whorl","encounter":"Ovinax"}],"dps":1048.0,"delta":48.0}
+                ]
+            })),
+        )];
+        let report = aggregate_report("r", 1, "heroic", &inputs);
+        assert!(
+            report.items.iter().all(|i| i.item_id != 999),
+            "equipped baseline item leaked into report: {:?}",
+            report.items.iter().map(|i| i.item_id).collect::<Vec<_>>()
+        );
+        assert!(report.items.iter().any(|i| i.item_id == 111), "drop should be present");
+        assert_eq!(report.items.len(), 1);
     }
 
     #[test]
