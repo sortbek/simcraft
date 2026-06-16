@@ -849,6 +849,19 @@ pub fn quality_color(quality: u64) -> &'static str {
 
 // ---- Utilities ----
 
+/// Map a SimHammer internal class name to the token SimC expects on its
+/// player-declaration line. The two-word classes drop the underscore:
+/// `death_knight` → `deathknight`, `demon_hunter` → `demonhunter`.
+/// Emitting the underscore form makes SimC reject the line with "Unknown
+/// option" and create no actor.
+pub fn simc_class_token(class: &str) -> &str {
+    match class {
+        "death_knight" => "deathknight",
+        "demon_hunter" => "demonhunter",
+        other => other,
+    }
+}
+
 pub fn title_case(s: &str) -> String {
     s.split_whitespace()
         .map(|word| {

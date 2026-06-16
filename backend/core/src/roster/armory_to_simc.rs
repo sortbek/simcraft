@@ -1,6 +1,6 @@
 use crate::roster::armory_client::realm_slug;
 use crate::talent_normalize::spec_id_from_loadout;
-use crate::types::class_data::{spec_id_to_class, spec_id_to_name, title_case};
+use crate::types::class_data::{simc_class_token, spec_id_to_class, spec_id_to_name, title_case};
 use serde_json::Value;
 
 /// Fallback player level when the armory payload omits one. Simming a max-level
@@ -44,18 +44,6 @@ fn value_as_id(v: &Value) -> Option<u64> {
     ["id", "itemId", "enchantId", "enchant_id"]
         .iter()
         .find_map(|k| v.get(k).and_then(|x| x.as_u64()))
-}
-
-/// SimC's player-declaration token differs from our internal class names for the
-/// two-word classes: `death_knight` -> `deathknight`, `demon_hunter` -> `demonhunter`.
-/// Emitting the underscore form makes SimC reject the line ("Unknown option") and
-/// create no actor.
-fn simc_class_token(class: &str) -> &str {
-    match class {
-        "death_knight" => "deathknight",
-        "demon_hunter" => "demonhunter",
-        other => other,
-    }
 }
 
 /// Build a single SimC gear line for one armory item, or `None` if it should be
@@ -287,6 +275,7 @@ mod tests {
         assert_eq!(simc_class_token("mage"), "mage");
         assert_eq!(simc_class_token("shaman"), "shaman");
     }
+
 
     #[test]
     fn race_strips_apostrophe_and_spaces() {

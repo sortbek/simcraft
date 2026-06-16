@@ -58,8 +58,6 @@ struct ItemAccum {
     ilevel: u64,
     /// member_id -> (dps, delta) of that member's best combo for this item.
     best: HashMap<String, (f64, f64)>,
-    /// member base_dps, captured so upgrade_pct can be computed per member.
-    base: HashMap<String, f64>,
     /// first-seen order of item_ids, tracked by the caller (see aggregate_report).
     order: usize,
 }
@@ -148,12 +146,10 @@ pub fn aggregate_report(
                         .to_string(),
                     ilevel: item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0),
                     best: HashMap::new(),
-                    base: HashMap::new(),
                     order,
                 }
             });
 
-            accum.base.insert(member.member_id.clone(), base);
             accum
                 .best
                 .entry(member.member_id.clone())
@@ -166,6 +162,13 @@ pub fn aggregate_report(
         }
     }
 
+    // Build a member_id -> base_dps map for upgrade_pct computation at flatten time.
+    let member_base: HashMap<String, f64> = players
+        .iter()
+        .filter(|p| p.status == "ok")
+        .map(|p| (p.member_id.clone(), p.base_dps))
+        .collect();
+
     // Flatten accumulators into ItemEntry list.
     let mut item_entries: Vec<(usize, ItemEntry)> = items
         .into_iter()
@@ -174,7 +177,7 @@ pub fn aggregate_report(
                 .best
                 .iter()
                 .map(|(member_id, (dps, delta))| {
-                    let base = accum.base.get(member_id).copied().unwrap_or(0.0);
+                    let base = member_base.get(member_id.as_str()).copied().unwrap_or(0.0);
                     let upgrade_pct = if base > 0.0 { delta / base * 100.0 } else { 0.0 };
                     ItemResult {
                         member_id: member_id.clone(),
