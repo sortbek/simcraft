@@ -280,10 +280,10 @@ main_hand=,id=200\n";
     }
 
     #[test]
-    fn droptimizer_ring_drop_inherits_enchant_per_slot_and_fills_most_used_gem() {
-        // Enchants inherit per target slot (7437 / 7438); gems use the player's
-        // most-used gem (213743) and fill every socket on both fingers. Drop
-        // carries bonus 13534 (= +1 socket per fixture).
+    fn droptimizer_ring_drop_inherits_enchant_and_gem_per_slot() {
+        // Each finger inherits its OWN equipped enchant (7437 / 7438) and gem
+        // (both 213743) for the drop's single socket. Drop carries bonus 13534
+        // (= +1 socket per fixture).
         crate::test_support::ensure_game_data_loaded();
         let base_profile = "\
 mage=test\n\
@@ -308,13 +308,13 @@ main_hand=,id=200\n";
             input.contains(
                 "finger1=,id=555,ilevel=671,bonus_id=13534,enchant_id=7437,gem_id=213743"
             ),
-            "expected finger1 profileset with inherited enchant + most-used gem; got:\n{input}"
+            "expected finger1 profileset with per-slot enchant + gem; got:\n{input}"
         );
         assert!(
             input.contains(
                 "finger2=,id=555,ilevel=671,bonus_id=13534,enchant_id=7438,gem_id=213743"
             ),
-            "expected finger2 profileset with per-slot enchant + most-used gem; got:\n{input}"
+            "expected finger2 profileset with per-slot enchant + gem; got:\n{input}"
         );
 
         let f1 = metadata

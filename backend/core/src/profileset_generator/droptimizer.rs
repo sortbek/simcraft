@@ -167,9 +167,10 @@ pub(super) fn generate_droptimizer_input(
             let mut simc_str = base_simc_str.clone();
             let mut applied_enchant: u64 = 0;
             let mut applied_gem: u64 = 0;
+            let equipped = equipped_gear.get(*slot);
 
             // Enchant: inherit from the equipped item in this slot.
-            if let Some(equipped) = equipped_gear.get(*slot) {
+            if let Some(equipped) = equipped {
                 if let Some(caps) = legacy_enchant_re.captures(equipped) {
                     if let Ok(eid) = caps[1].parse::<u64>() {
                         if eid > 0 {
@@ -180,17 +181,31 @@ pub(super) fn generate_droptimizer_input(
                 }
             }
 
-            // Gems: fill every socket on the drop with the player's most-used gem
-            // (their best-stat choice). The socket count folds the item's base
-            // sockets, bonus-granted sockets, and curated overrides. SimC applies
-            // exactly the gems we list (it does not cap to real sockets), so the
-            // count must be accurate.
+            // Gems: keep the gem(s) the player already has in this slot, then fill
+            // any EXTRA sockets the drop has with their most-used gem (best-stat
+            // choice). The socket count folds base sockets, bonus-granted sockets,
+            // and curated overrides. SimC applies exactly the gems we list (it does
+            // not cap to real sockets), so the count must be accurate.
             let drop_sockets = crate::item_db::item_socket_count(item_id, &bonus_ids);
             if drop_sockets > 0 {
-                if let Some(gem) = best_gem {
-                    let gems = vec![gem.to_string(); drop_sockets as usize].join("/");
-                    simc_str.push_str(&format!(",gem_id={}", gems));
-                    applied_gem = gem;
+                let slot_gems: Vec<u64> = equipped
+                    .and_then(|e| legacy_gem_re.captures(e))
+                    .map(|caps| {
+                        caps[1]
+                            .split('/')
+                            .filter_map(|g| g.parse::<u64>().ok())
+                            .filter(|&id| id > 0)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                // Socket i uses the slot's own gem when present, else the most-used.
+                let gems: Vec<String> = (0..drop_sockets as usize)
+                    .filter_map(|i| slot_gems.get(i).copied().or(best_gem))
+                    .map(|id| id.to_string())
+                    .collect();
+                if !gems.is_empty() {
+                    applied_gem = gems[0].parse().unwrap_or(0);
+                    simc_str.push_str(&format!(",gem_id={}", gems.join("/")));
                 }
             }
 
@@ -482,57 +497,55 @@ main_hand=,id=200\n";
     }
 
     #[test]
-    fn ring_drop_inherits_enchant_per_slot_and_fills_most_used_gem() {
-        // Enchants inherit per target slot (finger1 has 7000, finger2 none).
-        // Gems use the player's most-used gem (5000) and fill every socket on
-        // BOTH fingers; the drop has bonus 13534 (+1 socket).
+    fn ring_drop_inherits_enchant_and_gem_per_target_slot() {
+        // Each finger inherits from its OWN equipped item — enchant AND gem. The
+        // most-used gem (6000) must NOT override finger1's own gem (5000). Drop
+        // has bonus 13534 (+1 socket).
         crate::test_support::ensure_game_data_loaded();
         let profile = "\
 mage=test\n\
 spec=frost\n\
 finger1=,id=100,enchant_id=7000,gem_id=5000\n\
-finger2=,id=101\n";
+finger2=,id=101,gem_id=6000\n\
+main_hand=,id=200,gem_id=6000\n"; // 6000 is most-used (x2)
         let drops = vec![drop(999, 11, vec![13534])];
         let (input, count, _) = generate_droptimizer_input(profile, &drops);
         assert_eq!(count, 2);
         assert!(
             input.contains("finger1=,id=999,ilevel=600,bonus_id=13534,enchant_id=7000,gem_id=5000"),
-            "expected finger1 with inherited enchant + most-used gem:\n{input}"
+            "finger1 must keep its own gem 5000, not the most-used 6000:\n{input}"
         );
         let f2_line = input
             .lines()
             .find(|l| l.contains("Combo 3") && l.contains("finger2=,id=999"))
             .expect("missing finger2 line");
         assert!(
-            !f2_line.contains("enchant_id="),
-            "finger2 has no equipped enchant; drop must not invent one: {f2_line}"
-        );
-        assert!(
-            f2_line.contains("gem_id=5000"),
-            "finger2 should still get the player's most-used gem: {f2_line}"
+            f2_line.contains("gem_id=6000") && !f2_line.contains("enchant_id="),
+            "finger2 keeps its own gem 6000 and has no enchant: {f2_line}"
         );
     }
 
     #[test]
-    fn override_neck_fills_two_gems_with_most_used() {
-        // 250247 (Amulet of the Abyssal Hymn) carries a curated socket override of
-        // 2 even though the drop has only its ilvl bonus. It must be gemmed with
-        // the player's most-used gem (8888, equipped twice) in BOTH sockets.
+    fn override_neck_keeps_equipped_gem_and_fills_extra_socket() {
+        // 250247 (Amulet of the Abyssal Hymn) has a curated override of 2 sockets
+        // though the drop carries only its ilvl bonus. The player's neck has ONE
+        // gem (1111); the drop must keep that gem in socket 1 and fill socket 2
+        // with their most-used gem (2222).
         crate::test_support::ensure_game_data_loaded();
         let profile = "\
 mage=test\n\
 spec=frost\n\
-neck=,id=100,gem_id=8888\n\
-finger1=,id=101,gem_id=8888\n\
-finger2=,id=102,gem_id=7777\n";
+neck=,id=100,gem_id=1111\n\
+finger1=,id=101,gem_id=2222\n\
+finger2=,id=102,gem_id=2222\n"; // 2222 is most-used (x2)
         let drops = vec![drop(250247, 2, vec![])]; // neck, no socket bonus on the drop
         let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
         assert!(
-            input.contains("neck=,id=250247,ilevel=600,gem_id=8888/8888"),
-            "expected 2 gems (most-used 8888) on the override neck:\n{input}"
+            input.contains("neck=,id=250247,ilevel=600,gem_id=1111/2222"),
+            "expected equipped gem 1111 + most-used 2222 on the override neck:\n{input}"
         );
         let combo = metadata.get("Combo 2").expect("missing combo");
-        assert_eq!(combo[0]["gem_id"], 8888);
+        assert_eq!(combo[0]["gem_id"], 1111);
     }
 
     #[test]
