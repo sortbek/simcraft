@@ -12,9 +12,9 @@ import type {
   SeasonConfigResponse,
   DifficultyDef,
   DifficultyGroup,
-  DungeonCategory,
 } from '../../lib/types';
 import type { Instance, UpgradeTracks } from '../loot/types';
+import { groupInstances } from '../../lib/instanceCategories';
 import RosterReportView from './RosterReportView';
 import FightStyleSelector from '../sim-config/FightStyleSelector';
 import CategorySelector from '../loot/CategorySelector';
@@ -75,49 +75,11 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     };
   }, [roster.id, stopPolling]);
 
-  // Derive raids + dungeon categories (mirror DropFinderContent)
-  const { raids, dungeonCats } = useMemo(() => {
-    if (!seasonConfig)
-      return {
-        raids: [] as Instance[],
-        dungeonCats: [] as { cat: DungeonCategory; instances: Instance[] }[],
-      };
-
-    const poolMap = new Map<number, Set<number>>();
-    for (const cat of seasonConfig.dungeon_categories) {
-      const meta = instances.find((i) => i.id === cat.poolInstanceId);
-      if (meta) {
-        poolMap.set(cat.poolInstanceId, new Set(meta.encounters.map((e) => e.id)));
-      }
-    }
-
-    const raidList: Instance[] = [];
-    const dcList: { cat: DungeonCategory; instances: Instance[] }[] =
-      seasonConfig.dungeon_categories.map((cat) => ({ cat, instances: [] }));
-
-    for (const inst of instances) {
-      if (inst.type === 'raid' && inst.id > 0) {
-        raidList.push(inst);
-      } else if (inst.type === 'dungeon') {
-        let placed = false;
-        for (const dc of dcList) {
-          const pool = poolMap.get(dc.cat.poolInstanceId);
-          if (pool?.has(inst.id)) {
-            dc.instances.push(inst);
-            placed = true;
-          }
-        }
-        if (!placed && dcList.length > 0) {
-          dcList[dcList.length - 1].instances.push(inst);
-        }
-      }
-    }
-    raidList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    for (const dc of dcList) {
-      dc.instances.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return { raids: raidList, dungeonCats: dcList };
-  }, [instances, seasonConfig]);
+  // Derive raids + dungeon categories (shared with DropFinderContent)
+  const { raids, dungeonCats } = useMemo(
+    () => groupInstances(instances, seasonConfig),
+    [instances, seasonConfig],
+  );
 
   const isRaid = category === 'raids';
   const activeDungeonCat = dungeonCats.find((dc) => dc.cat.key === category);
