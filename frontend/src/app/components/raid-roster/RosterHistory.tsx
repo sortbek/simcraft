@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { API_URL, fetchJson } from '../../lib/api';
 import {
   listRuns,
@@ -34,14 +34,18 @@ export default function RosterHistory({ roster }: { roster: Roster }) {
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [loadingRun, setLoadingRun] = useState(false);
 
-  useEffect(() => {
-    setSelected(null);
+  const loadRuns = useCallback(() => {
     setLoadingRuns(true);
     listRuns(roster.id).then((r) => {
       setRuns(r);
       setLoadingRuns(false);
     });
   }, [roster.id]);
+
+  useEffect(() => {
+    setSelected(null);
+    loadRuns();
+  }, [loadRuns]);
 
   useEffect(() => {
     fetchJson<Instance[]>(`${API_URL}/api/instances`)
@@ -53,13 +57,7 @@ export default function RosterHistory({ roster }: { roster: Roster }) {
       .catch(() => {});
   }, []);
 
-  const handleRefresh = () => {
-    setLoadingRuns(true);
-    listRuns(roster.id).then((r) => {
-      setRuns(r);
-      setLoadingRuns(false);
-    });
-  };
+  const handleRefresh = loadRuns;
 
   const handleSelectRun = async (run: RosterRun) => {
     setLoadingRun(true);

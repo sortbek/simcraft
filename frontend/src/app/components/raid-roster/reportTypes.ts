@@ -19,9 +19,10 @@ export function playerMap(players: ReportPlayer[]): Map<string, ReportPlayer> {
  *  filtered out. Returns a NEW array (no mutation of inputs). */
 export function filterItems(items: ReportItem[], f: ReportFilters): ReportItem[] {
   const playerSet = new Set(f.players);
+  const slotSet = new Set(f.slots);
   const out: ReportItem[] = [];
   for (const item of items) {
-    if (f.slots.length > 0 && !f.slots.includes(item.slot)) continue;
+    if (slotSet.size > 0 && !slotSet.has(item.slot)) continue;
     let results = item.results;
     if (playerSet.size > 0) results = results.filter((r) => playerSet.has(r.member_id));
     if (f.hideDowngrades) results = results.filter((r) => !r.is_downgrade);

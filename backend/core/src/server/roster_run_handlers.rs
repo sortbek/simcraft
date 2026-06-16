@@ -264,20 +264,17 @@ pub(super) async fn get_run(
 
     let report = aggregate_report(&run.roster_id, run.instance_id, &run.difficulty, &inputs);
 
-    match serde_json::to_string(&report) {
-        Ok(json) => {
-            if let Err(e) = run_repo.set_report(&run_id, &json).await {
-                return HttpResponse::InternalServerError()
-                    .json(json!({"detail": e.to_string()}));
-            }
-        }
+    // Serialize once for the cached column, then parse that string back into a
+    // Value for the response — avoids serializing the whole report struct twice.
+    let json = match serde_json::to_string(&report) {
+        Ok(j) => j,
         Err(e) => {
             return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
         }
+    };
+    if let Err(e) = run_repo.set_report(&run_id, &json).await {
+        return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}));
     }
-
-    HttpResponse::Ok().json(json!({
-        "status": "done",
-        "report": serde_json::to_value(&report).unwrap_or(Value::Null),
-    }))
+    let report_value = serde_json::from_str::<Value>(&json).unwrap_or(Value::Null);
+    HttpResponse::Ok().json(json!({ "status": "done", "report": report_value }))
 }

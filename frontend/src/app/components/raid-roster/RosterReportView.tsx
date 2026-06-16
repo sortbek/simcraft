@@ -8,41 +8,36 @@ import {
 } from './reportTypes';
 import ItemCentricView from './ItemCentricView';
 import MatrixView from './MatrixView';
-
-function slotLabel(slot: string): string {
-  return slot
-    .replace(/\d+$/, '')
-    .split('_')
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
+import { SLOT_LABELS } from '../../lib/types';
 
 export default function RosterReportView({ report }: { report: RosterReport }) {
   const [mode, setMode] = useState<ReportViewMode>('item');
   const [filters, setFilters] = useState<ReportFilters>(EMPTY_FILTERS);
 
   // batch-fetch item icons/quality for every item in the report (stable dep)
-  const itemQueries = useMemo(() => report.items.map((i) => ({ item_id: i.item_id })), [report]);
+  const itemQueries = useMemo(() => report.items.map((i) => ({ item_id: i.item_id })), [report.items]);
   const itemInfo = useItemInfo(itemQueries);
 
-  const pmap = useMemo(() => playerMap(report.players), [report]);
+  const pmap = useMemo(() => playerMap(report.players), [report.players]);
 
   // derived filtered + sorted items
-  const filtered = useMemo(() => sortItemsByBest(filterItems(report.items, filters)), [report, filters]);
+  const filtered = useMemo(
+    () => sortItemsByBest(filterItems(report.items, filters)),
+    [report.items, filters]
+  );
   const lookup = useMemo(() => resultLookup(filtered), [filtered]);
 
   // matrix column order: report players that (a) are status "ok" and (b) pass the player filter (empty = all)
   const columns: ReportPlayer[] = useMemo(() => {
     const sel = new Set(filters.players);
     return report.players.filter((p) => p.status === 'ok' && (sel.size === 0 || sel.has(p.member_id)));
-  }, [report, filters]);
+  }, [report.players, filters]);
 
   // option lists for the filter controls
-  const playerOptions = useMemo(() => report.players.filter((p) => p.status === 'ok'), [report]);
+  const playerOptions = useMemo(() => report.players.filter((p) => p.status === 'ok'), [report.players]);
   const slotOptions = useMemo(
     () => Array.from(new Set(report.items.map((i) => i.slot))).sort(),
-    [report]
+    [report.items]
   );
   const failedCount = report.players.filter((p) => p.status !== 'ok').length;
 
@@ -138,7 +133,7 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
                 onClick={() => toggleSlot(s)}
                 className={`${chipBase} ${on ? chipOn : chipOff}`}
               >
-                {slotLabel(s)}
+                {SLOT_LABELS[s] ?? s}
               </button>
             );
           })}

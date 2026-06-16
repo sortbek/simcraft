@@ -1,25 +1,15 @@
 'use client';
-import { useState } from 'react';
-import type { ReportItem, ReportItemResult } from '../../lib/rosters';
-import type { ReportPlayer } from '../../lib/rosters';
+import { useMemo, useState } from 'react';
+import type { ReportItem, ReportItemResult, ReportPlayer } from '../../lib/rosters';
 import type { ItemInfo } from '../../lib/useItemInfo';
 import { getIconUrl, getWowheadUrl, getWowheadData } from '../../lib/useItemInfo';
 import { QUALITY_HEX } from '../../lib/qualityColors';
+import { SLOT_LABELS } from '../../lib/types';
 
 interface Props {
   items: ReportItem[];
   players: Map<string, ReportPlayer>;
   itemInfo: Record<number, ItemInfo>;
-}
-
-function slotLabel(slot: string): string {
-  // e.g. "trinket1" → "Trinket", "main_hand" → "Main Hand"
-  return slot
-    .replace(/\d+$/, '')
-    .split('_')
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
 }
 
 function ResultRow({
@@ -30,8 +20,8 @@ function ResultRow({
   playerName: string;
 }) {
   const pct = result.upgrade_pct;
-  const isUpgrade = !result.is_downgrade && pct > 0;
-  const isDowngrade = result.is_downgrade || pct < 0;
+  const isUpgrade = pct > 0;
+  const isDowngrade = pct < 0;
   const barWidth = Math.min(Math.abs(pct) / 5, 1) * 100;
 
   const barColor = isUpgrade
@@ -67,24 +57,20 @@ function ResultRow({
 export default function ItemCentricView({ items, players, itemInfo }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  if (items.length === 0) {
-    return (
-      <div className="py-12 text-center text-sm text-on-surface-variant/50">
-        No results match the current filters.
-      </div>
-    );
-  }
-
-  // Group items by boss, preserving first-seen boss order.
-  const bossOrder: string[] = [];
-  const byBoss = new Map<string, ReportItem[]>();
-  for (const item of items) {
-    if (!byBoss.has(item.boss)) {
-      bossOrder.push(item.boss);
-      byBoss.set(item.boss, []);
+  // Group items by boss, preserving first-seen order. Memoized so toggling a
+  // collapsed section doesn't re-bucket every item on each render.
+  const { bossOrder, byBoss } = useMemo(() => {
+    const order: string[] = [];
+    const map = new Map<string, ReportItem[]>();
+    for (const item of items) {
+      if (!map.has(item.boss)) {
+        order.push(item.boss);
+        map.set(item.boss, []);
+      }
+      map.get(item.boss)!.push(item);
     }
-    byBoss.get(item.boss)!.push(item);
-  }
+    return { bossOrder: order, byBoss: map };
+  }, [items]);
 
   function toggleBoss(boss: string) {
     setCollapsed((prev) => {
@@ -93,6 +79,14 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
       else next.add(boss);
       return next;
     });
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="py-12 text-center text-sm text-on-surface-variant/50">
+        No results match the current filters.
+      </div>
+    );
   }
 
   return (
@@ -157,7 +151,7 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
                             {displayName}
                           </a>
                           <p className="mt-0.5 text-xs text-on-surface-variant/60">
-                            ilvl {item.ilevel} · {slotLabel(item.slot)}
+                            ilvl {item.ilevel} · {SLOT_LABELS[item.slot] ?? item.slot}
                           </p>
                         </div>
                       </div>

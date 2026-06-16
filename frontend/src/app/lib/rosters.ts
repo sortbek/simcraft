@@ -1,4 +1,4 @@
-import { API_URL, fetchJson } from './api';
+import { API_URL, fetchJson, postJson } from './api';
 
 export interface Roster {
   id: string;
@@ -31,11 +31,7 @@ export async function getRosters(): Promise<Roster[]> {
 
 export async function createRoster(name: string, region: string): Promise<Roster | null> {
   try {
-    return await fetchJson<Roster>(`${API_URL}/api/rosters`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, region }),
-    });
+    return await postJson<Roster>('/api/rosters', { name, region });
   } catch {
     return null;
   }
@@ -55,11 +51,7 @@ export async function getMembers(id: string): Promise<RosterMember[]> {
 
 export async function importMembers(id: string, text: string): Promise<RosterMember[]> {
   try {
-    return await fetchJson<RosterMember[]>(`${API_URL}/api/rosters/${id}/import`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
+    return await postJson<RosterMember[]>(`/api/rosters/${id}/import`, { text });
   } catch {
     return [];
   }
@@ -129,10 +121,9 @@ export interface RunStatus {
 
 export async function startQuickSim(simcInput: string): Promise<{ id: string } | null> {
   try {
-    return await fetchJson(`${API_URL}/api/sim`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ simc_input: simcInput, sim_type: 'quick' }),
+    return await postJson<{ id: string }>('/api/sim', {
+      simc_input: simcInput,
+      sim_type: 'quick',
     });
   } catch {
     return null;
@@ -154,10 +145,10 @@ export async function startRun(
   opts: RunOptions = {}
 ): Promise<{ run_id: string } | null> {
   try {
-    return await fetchJson(`${API_URL}/api/rosters/${rosterId}/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instance_id: instanceId, difficulty, ...opts }),
+    return await postJson<{ run_id: string }>(`/api/rosters/${rosterId}/runs`, {
+      instance_id: instanceId,
+      difficulty,
+      ...opts,
     });
   } catch {
     return null;

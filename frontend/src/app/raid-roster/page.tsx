@@ -21,7 +21,7 @@ export default function RaidRosterPage() {
   const [tab, setTab] = useState<'manage' | 'report' | 'history'>('manage');
 
   const refreshRosters = useCallback(() => {
-    getRosters().then(setRosters);
+    return getRosters().then(setRosters);
   }, []);
 
   useEffect(() => {
@@ -41,11 +41,11 @@ export default function RaidRosterPage() {
       const created = await createRoster(trimmed, region);
       if (created) {
         setName('');
-        await getRosters().then(setRosters);
+        await refreshRosters();
         setSelectedId(created.id);
       }
     },
-    [name, region]
+    [name, region, refreshRosters]
   );
 
   const handleDelete = useCallback(
