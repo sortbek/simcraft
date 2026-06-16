@@ -6,7 +6,8 @@ use crate::game_data;
 ///
 /// `upgrade_level` bumps every drop to that track level (0 = as dropped, mirroring
 /// Drop Finder's `resolveUpgrade`). `encounter_ids` restricts to selected bosses by
-/// encounter id (empty = all bosses).
+/// encounter id (empty = all bosses). `tracks` is `game_data::get_upgrade_tracks()`
+/// output, passed in so callers can compute it once across many members.
 pub fn build_drop_items(
     instance_id: i64,
     difficulty: &str,
@@ -14,11 +15,11 @@ pub fn build_drop_items(
     spec: &str,
     upgrade_level: u64,
     encounter_ids: &[i64],
+    tracks: &Value,
 ) -> Vec<Value> {
     match game_data::get_instance_drops(instance_id, Some(class), Some(spec)) {
         Some(by_slot) => {
-            let tracks = game_data::get_upgrade_tracks();
-            drop_items_from_slots(&by_slot, difficulty, upgrade_level, encounter_ids, &tracks)
+            drop_items_from_slots(&by_slot, difficulty, upgrade_level, encounter_ids, tracks)
         }
         None => Vec::new(),
     }
@@ -27,6 +28,12 @@ pub fn build_drop_items(
 /// Resolve an item's (ilvl, bonus_id) at the requested `upgrade_level`, mirroring the
 /// frontend `resolveUpgrade`. `base` is the per-difficulty track info (from
 /// `difficulty_info`/`dungeon_info`); `tracks` is `get_upgrade_tracks()` output.
+///
+/// PARITY: this and `drop_items_from_slots` reimplement the upgrade-track math from
+/// the canonical frontend spec `resolveUpgrade` in
+/// `frontend/src/app/components/loot/types.ts`. Any change to the algorithm there
+/// (track lookup, fallback order, level matching) MUST be mirrored here, and vice
+/// versa, or the two will drift. The `upgrade_level_*` tests below cover the algorithm.
 fn resolve_upgrade(
     base: Option<&Value>,
     upgrade_level: u64,
@@ -358,7 +365,15 @@ mod tests {
     fn builds_drop_items_for_known_instance() {
         crate::test_support::ensure_game_data_loaded();
         // 1314 = The Dreamrift (raid, current tier), heroic difficulty
-        let items = build_drop_items(1314, "heroic", "mage", "frost", 0, &[]);
+        let items = build_drop_items(
+            1314,
+            "heroic",
+            "mage",
+            "frost",
+            0,
+            &[],
+            &game_data::get_upgrade_tracks(),
+        );
         assert!(!items.is_empty(), "expected drops for The Dreamrift (1314)");
         let first = &items[0];
         assert!(first.get("item_id").and_then(|v| v.as_u64()).unwrap() > 0);
@@ -372,6 +387,15 @@ mod tests {
     #[test]
     fn unknown_instance_returns_empty() {
         crate::test_support::ensure_game_data_loaded();
-        assert!(build_drop_items(-999999, "heroic", "mage", "frost", 0, &[]).is_empty());
+        assert!(build_drop_items(
+            -999999,
+            "heroic",
+            "mage",
+            "frost",
+            0,
+            &[],
+            &game_data::get_upgrade_tracks(),
+        )
+        .is_empty());
     }
 }

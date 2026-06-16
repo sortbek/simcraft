@@ -60,6 +60,7 @@ pub(super) async fn start_run(
     // estimate (for provider resolution) and the spawn loop — avoids computing
     // drops twice. Only members that are importable AND have eligible drops are
     // kept; a member with zero combos would otherwise spawn a zero-combo job.
+    let tracks = crate::game_data::get_upgrade_tracks();
     let eligible: Vec<(&crate::db::RosterMember, Vec<Value>)> = members
         .iter()
         .filter(|m| m.armory_status == "ok" && !m.source_simc.trim().is_empty())
@@ -71,6 +72,7 @@ pub(super) async fn start_run(
                 &m.spec,
                 req.upgrade_level.unwrap_or(0),
                 req.encounters.as_deref().unwrap_or(&[]),
+                &tracks,
             );
             if drops.is_empty() {
                 None
@@ -194,19 +196,22 @@ pub(super) async fn get_run(
         }
     };
 
-    // Fetch every child job once; reuse the snapshots for both the progress count
-    // and (if all terminal) the aggregation inputs.
-    let mut jobs: Vec<(String, Option<crate::models::Job>)> = Vec::with_capacity(mappings.len());
-    for mapping in &mappings {
-        let job = match job_repo.get(&mapping.job_id).await {
-            Ok(j) => j,
-            Err(e) => {
-                return HttpResponse::InternalServerError()
-                    .json(json!({"detail": e.to_string()}))
-            }
-        };
-        jobs.push((mapping.member_id.clone(), job));
-    }
+    // Fetch every child job in one batched query; reuse the snapshots for both the
+    // progress count and (if all terminal) the aggregation inputs. A mapping whose
+    // job row is absent maps to None — same as the per-id `get` returning None.
+    let job_ids: Vec<String> = mappings.iter().map(|m| m.job_id.clone()).collect();
+    let fetched = match job_repo.get_many(&job_ids).await {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
+    };
+    let by_id: std::collections::HashMap<String, crate::models::Job> =
+        fetched.into_iter().map(|j| (j.id.clone(), j)).collect();
+    let jobs: Vec<(String, Option<crate::models::Job>)> = mappings
+        .iter()
+        .map(|mapping| (mapping.member_id.clone(), by_id.get(&mapping.job_id).cloned()))
+        .collect();
 
     let total = mappings.len();
     let is_terminal = |j: &Option<crate::models::Job>| {
