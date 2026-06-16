@@ -3,6 +3,13 @@ use crate::talent_normalize::spec_id_from_loadout;
 use crate::types::class_data::{spec_id_to_class, spec_id_to_name, title_case};
 use serde_json::Value;
 
+/// Fallback player level when the armory payload omits one. Simming a max-level
+/// character at the wrong level grossly distorts DPS (secondary-stat rating
+/// conversions + target armor scale with level), so this must track the current
+/// expansion's max level. The proxy should send `character.level` so we use the
+/// real value; this is only the floor for older payloads.
+const DEFAULT_PLAYER_LEVEL: u64 = 90;
+
 /// Map a simhammer.com armory gear `slot` to the SimC gear slot.
 ///
 /// Returns `None` for slots SimC does not model (SHIRT, TABARD) or unknown types.
@@ -92,6 +99,10 @@ pub fn armory_to_simc(armory: &Value) -> String {
         .and_then(|c| c.get("realm"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
+    let level = character
+        .and_then(|c| c.get("level"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(DEFAULT_PLAYER_LEVEL);
 
     let loadout = armory
         .get("talents")
@@ -106,7 +117,7 @@ pub fn armory_to_simc(armory: &Value) -> String {
     if let Some(class) = class {
         lines.push(format!("{class}=\"{}\"", title_case(name)));
     }
-    lines.push("level=80".to_string());
+    lines.push(format!("level={level}"));
     lines.push(format!("server={}", realm_slug(realm)));
     if let Some(spec) = spec {
         lines.push(format!("spec={spec}"));
@@ -169,6 +180,29 @@ mod tests {
         assert_eq!(parsed.character.spec.as_deref(), Some("frost"));
         assert!(parsed.items.iter().any(|i| i.raw_slot == "head"));
         assert!(parsed.items.iter().any(|i| i.raw_slot == "trinket1"));
+    }
+
+    #[test]
+    fn uses_level_from_armory_when_present() {
+        let armory = json!({
+            "character": { "name": "x", "realm": "r", "level": 70 },
+            "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" }
+        });
+        let simc = armory_to_simc(&armory);
+        assert!(simc.lines().any(|l| l == "level=70"), "expected level=70:\n{simc}");
+    }
+
+    #[test]
+    fn defaults_to_max_level_not_80_when_level_absent() {
+        // The /armory payload has no `level`; we must NOT emit the old hardcoded
+        // level=80 (simming a max-level char at 80 ~doubles DPS).
+        let armory = json!({
+            "character": { "name": "x", "realm": "r" },
+            "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" }
+        });
+        let simc = armory_to_simc(&armory);
+        assert!(simc.lines().any(|l| l == "level=90"), "expected level=90 fallback:\n{simc}");
+        assert!(!simc.contains("level=80"), "must not hardcode level=80:\n{simc}");
     }
 
     #[test]
