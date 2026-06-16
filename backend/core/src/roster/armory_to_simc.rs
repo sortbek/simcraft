@@ -46,6 +46,18 @@ fn value_as_id(v: &Value) -> Option<u64> {
         .find_map(|k| v.get(k).and_then(|x| x.as_u64()))
 }
 
+/// SimC's player-declaration token differs from our internal class names for the
+/// two-word classes: `death_knight` -> `deathknight`, `demon_hunter` -> `demonhunter`.
+/// Emitting the underscore form makes SimC reject the line ("Unknown option") and
+/// create no actor.
+fn simc_class_token(class: &str) -> &str {
+    match class {
+        "death_knight" => "deathknight",
+        "demon_hunter" => "demonhunter",
+        other => other,
+    }
+}
+
 /// Build a single SimC gear line for one armory item, or `None` if it should be
 /// skipped (unmodeled slot, or missing/zero item id).
 fn item_line(item: &Value) -> Option<String> {
@@ -133,7 +145,7 @@ pub fn armory_to_simc(armory: &Value) -> String {
     let race = character
         .and_then(|c| c.get("race"))
         .and_then(|v| v.as_str())
-        .map(|r| r.trim().to_lowercase().replace(' ', "_"))
+        .map(|r| r.trim().to_lowercase().replace('\'', "").replace(' ', "_"))
         .filter(|r| !r.is_empty());
 
     let loadout = armory
@@ -147,7 +159,7 @@ pub fn armory_to_simc(armory: &Value) -> String {
     let mut lines: Vec<String> = Vec::new();
 
     if let Some(class) = class {
-        lines.push(format!("{class}=\"{}\"", title_case(name)));
+        lines.push(format!("{}=\"{}\"", simc_class_token(class), title_case(name)));
     }
     lines.push(format!("level={level}"));
     if let Some(race) = race {
@@ -265,6 +277,24 @@ mod tests {
         assert!(head.contains("enchant_id=8017"), "enchant id from enchants array:\n{head}");
         // race emitted
         assert!(simc.lines().any(|l| l == "race=troll"), "race line:\n{simc}");
+    }
+
+    #[test]
+    fn simc_class_token_maps_two_word_classes() {
+        // SimC's player line needs no-underscore tokens for these two.
+        assert_eq!(simc_class_token("death_knight"), "deathknight");
+        assert_eq!(simc_class_token("demon_hunter"), "demonhunter");
+        assert_eq!(simc_class_token("mage"), "mage");
+        assert_eq!(simc_class_token("shaman"), "shaman");
+    }
+
+    #[test]
+    fn race_strips_apostrophe_and_spaces() {
+        // "Mag'har Orc" must become `maghar_orc` (SimC rejects the apostrophe form).
+        let armory = json!({ "character": { "name": "x", "realm": "r", "race": "Mag'har Orc" } });
+        let simc = armory_to_simc(&armory);
+        assert!(simc.lines().any(|l| l == "race=maghar_orc"), "race line:\n{simc}");
+        assert!(!simc.contains('\''), "no apostrophe in output:\n{simc}");
     }
 
     #[test]
