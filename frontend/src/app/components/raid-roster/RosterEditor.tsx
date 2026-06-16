@@ -6,6 +6,8 @@ import {
   getMembers,
   importMembers,
   deleteMember,
+  refreshRoster,
+  refreshMember,
   startQuickSim,
   type Roster,
   type RosterMember,
@@ -49,14 +51,19 @@ function StatusBadge({ status }: { status: string }) {
 
 function MemberRow({
   member,
+  rosterId,
+  onMembersChange,
   onRemove,
 }: {
   member: RosterMember;
+  rosterId: string;
+  onMembersChange: (members: RosterMember[]) => void;
   onRemove: (memberId: string) => void;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [simming, setSimming] = useState(false);
+  const [refetching, setRefetching] = useState(false);
 
   const canSim = member.armory_status === 'ok' && !!member.source_simc;
 
@@ -77,6 +84,16 @@ function MemberRow({
       setSimming(false);
     }
   }, [canSim, member.source_simc, router]);
+
+  const handleRefetch = useCallback(async () => {
+    setRefetching(true);
+    try {
+      const res = await refreshMember(rosterId, member.id);
+      if (res.length) onMembersChange(res);
+    } finally {
+      setRefetching(false);
+    }
+  }, [rosterId, member.id, onMembersChange]);
 
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
@@ -116,6 +133,15 @@ function MemberRow({
         {simming ? 'Simming…' : 'Quick Sim'}
       </button>
       <button
+        onClick={handleRefetch}
+        disabled={refetching}
+        title="Re-fetch from armory"
+        aria-label={`Re-fetch ${member.name} from armory`}
+        className="shrink-0 rounded-md border border-outline-variant/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        {refetching ? '…' : 'Re-fetch'}
+      </button>
+      <button
         onClick={() => onRemove(member.id)}
         className="shrink-0 text-base text-on-surface-variant/30 transition-colors hover:text-red-400"
         aria-label={`Remove ${member.name}`}
@@ -130,6 +156,7 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
   const [members, setMembers] = useState<RosterMember[]>([]);
   const [text, setText] = useState('');
   const [fetching, setFetching] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
 
   const refreshMembers = useCallback(() => {
     getMembers(roster.id).then(setMembers);
@@ -156,6 +183,16 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
     },
     [roster.id, refreshMembers]
   );
+
+  const handleRefreshAll = useCallback(async () => {
+    setRefreshingAll(true);
+    try {
+      const res = await refreshRoster(roster.id);
+      if (res.length) setMembers(res);
+    } finally {
+      setRefreshingAll(false);
+    }
+  }, [roster.id]);
 
   return (
     <div className="space-y-6">
@@ -196,8 +233,36 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
       </div>
 
       <div className="space-y-1">
-        <div className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-          Members ({members.length})
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+            Members ({members.length})
+          </div>
+          <button
+            onClick={handleRefreshAll}
+            disabled={members.length === 0 || refreshingAll}
+            title="Re-fetch all members from armory"
+            aria-label="Refresh all members from armory"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/10 px-3 py-1.5 font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {refreshingAll && (
+              <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+            )}
+            {refreshingAll ? 'Refreshing…' : 'Refresh from armory'}
+          </button>
         </div>
         {members.length === 0 ? (
           <p className="py-4 text-sm text-on-surface-variant/60">
@@ -206,7 +271,13 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
         ) : (
           <div className="divide-y divide-outline-variant/10 overflow-hidden rounded-lg border border-outline-variant/10 bg-surface-container-low">
             {members.map((member) => (
-              <MemberRow key={member.id} member={member} onRemove={handleRemove} />
+              <MemberRow
+                key={member.id}
+                member={member}
+                rosterId={roster.id}
+                onMembersChange={setMembers}
+                onRemove={handleRemove}
+              />
             ))}
           </div>
         )}

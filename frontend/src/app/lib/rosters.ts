@@ -69,6 +69,22 @@ export async function deleteMember(rosterId: string, memberId: string): Promise<
   await fetch(`${API_URL}/api/rosters/${rosterId}/members/${memberId}`, { method: 'DELETE' });
 }
 
+export async function refreshRoster(rosterId: string): Promise<RosterMember[]> {
+  try {
+    return await fetchJson<RosterMember[]>(`${API_URL}/api/rosters/${rosterId}/refresh`, { method: 'POST' });
+  } catch {
+    return [];
+  }
+}
+
+export async function refreshMember(rosterId: string, memberId: string): Promise<RosterMember[]> {
+  try {
+    return await fetchJson<RosterMember[]>(`${API_URL}/api/rosters/${rosterId}/members/${memberId}/refresh`, { method: 'POST' });
+  } catch {
+    return [];
+  }
+}
+
 export interface ReportPlayer {
   member_id: string;
   name: string;
