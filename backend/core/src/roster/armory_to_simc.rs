@@ -75,9 +75,14 @@ fn item_line(item: &Value) -> Option<String> {
         tokens.push(format!("bonus_id={}", bonus_ids.join("/")));
     }
 
-    // enchant_id — only usable when given as a numeric id. The proxy currently
-    // sends a human-readable display string for enchants, which we can't convert.
-    if let Some(enchant_id) = item.get("enchant").and_then(value_as_id) {
+    // enchant_id — `enchants` is an array of {id,name}; take the first (permanent)
+    // enchant's id. (Older payloads used a display-string `enchant` with no id.)
+    if let Some(enchant_id) = item
+        .get("enchants")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .and_then(value_as_id)
+    {
         tokens.push(format!("enchant_id={enchant_id}"));
     }
 
@@ -245,7 +250,7 @@ mod tests {
             "gear": { "items": [
                 { "slot": "HEAD", "itemId": 249988, "itemLevel": 289,
                   "bonusIds": [43, 13440, 13338],
-                  "enchant": "Enchanted: Enchant Helm - Empowered Rune of Avoidance |A:x|a",
+                  "enchants": [ { "id": 8017, "name": "Enchanted: Enchant Helm - Empowered Rune of Avoidance |A:x|a" } ],
                   "gems": [ { "itemId": 240898, "name": "+16 Mastery & +7 Critical Strike" } ] }
             ]}
         });
@@ -256,8 +261,8 @@ mod tests {
         assert!(head.contains("gem_id=240898"), "gem from object:\n{head}");
         // bonus ids encode the item level, so no explicit ilevel on bonus'd items
         assert!(!head.contains("ilevel="), "ilevel should be omitted when bonus present:\n{head}");
-        // enchant is a display string -> no enchant_id
-        assert!(!head.contains("enchant_id="), "string enchant must not become an id:\n{head}");
+        // enchants array -> enchant_id from the first entry's `id`
+        assert!(head.contains("enchant_id=8017"), "enchant id from enchants array:\n{head}");
         // race emitted
         assert!(simc.lines().any(|l| l == "race=troll"), "race line:\n{simc}");
     }
@@ -281,7 +286,7 @@ mod tests {
             "character": { "name": "ench", "realm": "some-realm" },
             "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" },
             "gear": { "items": [
-                { "slot": "MAIN_HAND", "itemId": 111, "itemLevel": 600, "enchant": 7340, "gems": [213743, 213458] }
+                { "slot": "MAIN_HAND", "itemId": 111, "itemLevel": 600, "enchants": [{ "id": 7340 }], "gems": [213743, 213458] }
             ]}
         });
         let simc = armory_to_simc(&armory);
