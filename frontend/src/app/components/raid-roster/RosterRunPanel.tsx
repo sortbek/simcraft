@@ -416,7 +416,11 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
 
           <button
             onClick={handleGenerate}
-            disabled={running || instanceId === null}
+            disabled={
+              running ||
+              instanceId === null ||
+              (isRaid && raidEncounters.length > 0 && selectedBosses.size === 0)
+            }
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-headline text-xs font-bold uppercase tracking-wider text-on-primary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {running && (
@@ -439,6 +443,9 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
             {running ? 'Running…' : 'Generate'}
           </button>
         </div>
+        {isRaid && raidEncounters.length > 0 && selectedBosses.size === 0 && (
+          <p className="text-xs text-amber-400/80">Select at least one boss to run a report.</p>
+        )}
       </div>
 
       {running && (
