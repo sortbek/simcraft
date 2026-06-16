@@ -73,19 +73,19 @@ pub(super) async fn delete_member(
     }
 }
 
-/// Import members into a roster: parse the pasted text, fetch each character's
-/// armory data via `client`, convert to a SimC profile, and upsert. Per-member
-/// failures are recorded as the member's `armory_status` (never abort the batch).
-/// Returns the roster's members after import.
-pub(super) async fn run_import(
+/// Fetch + convert + upsert each (name, realm) pair. Per-member failures are
+/// recorded as armory_status (never abort the batch). Returns the roster's
+/// members after the operation. Shared by import (pairs from pasted text) and
+/// refresh (pairs from existing members).
+pub(super) async fn import_pairs(
     client: &dyn ArmoryClient,
     repo: &RosterRepo,
     roster_id: &str,
     region: &str,
-    text: &str,
+    pairs: &[(String, String)],
 ) -> Result<Vec<RosterMember>, sqlx::Error> {
-    for (name, realm) in parse_member_list(text) {
-        match client.fetch(region, &realm, &name).await {
+    for (name, realm) in pairs {
+        match client.fetch(region, realm, name).await {
             Ok(armory) => {
                 let simc = armory_to_simc(&armory);
                 let item_level = armory
@@ -97,20 +97,35 @@ pub(super) async fn run_import(
                 let class = parsed.character.class_name.unwrap_or_default();
                 let spec = parsed.character.spec.unwrap_or_default();
                 let status = if class.is_empty() { "armory_failed" } else { "ok" };
-                repo.upsert_member(roster_id, &name, &realm, &class, &spec, &simc, status, item_level)
+                repo.upsert_member(roster_id, name, realm, &class, &spec, &simc, status, item_level)
                     .await?;
             }
             Err(ArmoryError::NotFound) => {
-                repo.upsert_member(roster_id, &name, &realm, "", "", "", "not_found", 0)
+                repo.upsert_member(roster_id, name, realm, "", "", "", "not_found", 0)
                     .await?;
             }
             Err(ArmoryError::Http(_)) => {
-                repo.upsert_member(roster_id, &name, &realm, "", "", "", "armory_failed", 0)
+                repo.upsert_member(roster_id, name, realm, "", "", "", "armory_failed", 0)
                     .await?;
             }
         }
     }
     repo.list_members(roster_id).await
+}
+
+/// Import members into a roster: parse the pasted text, fetch each character's
+/// armory data via `client`, convert to a SimC profile, and upsert. Per-member
+/// failures are recorded as the member's `armory_status` (never abort the batch).
+/// Returns the roster's members after import.
+pub(super) async fn run_import(
+    client: &dyn ArmoryClient,
+    repo: &RosterRepo,
+    roster_id: &str,
+    region: &str,
+    text: &str,
+) -> Result<Vec<RosterMember>, sqlx::Error> {
+    let pairs = parse_member_list(text);
+    import_pairs(client, repo, roster_id, region, &pairs).await
 }
 
 pub(super) async fn import_members(
@@ -126,6 +141,60 @@ pub(super) async fn import_members(
     };
     let client = HttpArmoryClient::new();
     match run_import(&client, repo.get_ref(), &roster_id, &roster.region, &req.text).await {
+        Ok(members) => HttpResponse::Ok().json(members),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
+}
+
+/// Re-fetch armory data for ALL existing members of a roster (no pasted text).
+/// Reuses each member's stored (name, realm); idempotent via `import_pairs`.
+pub(super) async fn refresh_roster(
+    path: web::Path<String>,
+    repo: web::Data<RosterRepo>,
+) -> HttpResponse {
+    let roster_id = path.into_inner();
+    let roster = match repo.get(&roster_id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Roster not found"})),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+    let members = match repo.list_members(&roster_id).await {
+        Ok(m) => m,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+    let pairs: Vec<(String, String)> = members
+        .iter()
+        .map(|m| (m.name.clone(), m.realm.clone()))
+        .collect();
+    let client = HttpArmoryClient::new();
+    match import_pairs(&client, repo.get_ref(), &roster_id, &roster.region, &pairs).await {
+        Ok(members) => HttpResponse::Ok().json(members),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
+}
+
+/// Re-fetch armory data for a SINGLE existing member of a roster. Returns the
+/// full updated member list.
+pub(super) async fn refresh_member(
+    path: web::Path<(String, String)>,
+    repo: web::Data<RosterRepo>,
+) -> HttpResponse {
+    let (roster_id, member_id) = path.into_inner();
+    let roster = match repo.get(&roster_id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Roster not found"})),
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+    let members = match repo.list_members(&roster_id).await {
+        Ok(m) => m,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    };
+    let Some(member) = members.iter().find(|m| m.id == member_id) else {
+        return HttpResponse::NotFound().json(json!({"detail": "Member not found"}));
+    };
+    let pairs = vec![(member.name.clone(), member.realm.clone())];
+    let client = HttpArmoryClient::new();
+    match import_pairs(&client, repo.get_ref(), &roster_id, &roster.region, &pairs).await {
         Ok(members) => HttpResponse::Ok().json(members),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
@@ -202,5 +271,24 @@ mod tests {
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].armory_status, "armory_failed");
         assert!(members[0].source_simc.is_empty());
+    }
+
+    #[tokio::test]
+    async fn import_pairs_refreshes_existing_member() {
+        let repo = RosterRepo::new_memory();
+        let roster = repo.create("T", "eu").await.unwrap();
+        // seed a stale/pending member
+        repo.upsert_member(&roster.id, "Thrall", "Draenor", "", "", "", "pending", 0)
+            .await
+            .unwrap();
+        // refresh that one pair via the shared seam + MockOk (returns the armory fixture)
+        let pairs = vec![("Thrall".to_string(), "Draenor".to_string())];
+        let members = import_pairs(&MockOk, &repo, &roster.id, "eu", &pairs)
+            .await
+            .unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].class, "mage"); // fixture is a frost mage
+        assert_eq!(members[0].armory_status, "ok");
+        assert!(members[0].source_simc.contains("id=132863"));
     }
 }

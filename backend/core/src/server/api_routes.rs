@@ -258,6 +258,14 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::post().to(roster_handlers::import_members),
         )
         .route(
+            "/api/rosters/{id}/refresh",
+            web::post().to(roster_handlers::refresh_roster),
+        )
+        .route(
+            "/api/rosters/{id}/members/{member_id}/refresh",
+            web::post().to(roster_handlers::refresh_member),
+        )
+        .route(
             "/api/rosters/{id}/runs",
             web::post().to(roster_run_handlers::start_run),
         )
