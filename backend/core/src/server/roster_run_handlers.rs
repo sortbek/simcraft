@@ -147,6 +147,19 @@ pub(super) async fn start_run(
     }))
 }
 
+/// GET /api/rosters/{id}/runs — list that roster's runs, newest first. `report_json`
+/// is omitted to keep the payload small; fetch the full report via get_run.
+pub(super) async fn list_runs(
+    path: web::Path<String>,
+    repo: web::Data<RosterRunRepo>,
+) -> HttpResponse {
+    let roster_id = path.into_inner();
+    match repo.list_runs(&roster_id).await {
+        Ok(runs) => HttpResponse::Ok().json(runs),
+        Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+    }
+}
+
 /// GET /api/rosters/runs/{run_id} — report progress. Once every child job is
 /// terminal, build + cache the aggregated `RosterReport` (idempotent: a cached
 /// report short-circuits subsequent polls) and return it.

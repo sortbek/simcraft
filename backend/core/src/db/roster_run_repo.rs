@@ -232,6 +232,50 @@ impl RosterRunRepo {
         }
         Ok(())
     }
+
+    /// List a roster's runs, newest first. `report_json` is omitted (set to None) to
+    /// keep the payload small — callers fetch the full report via get_run.
+    pub async fn list_runs(&self, roster_id: &str) -> Result<Vec<RosterRun>, sqlx::Error> {
+        match &self.backend {
+            RosterRunBackend::Database(pool) => {
+                let rows = sqlx::query(
+                    "SELECT id, roster_id, instance_id, difficulty, batch_id, status, created_at FROM roster_runs WHERE roster_id = $1 ORDER BY created_at DESC",
+                )
+                .bind(roster_id)
+                .fetch_all(pool)
+                .await?;
+
+                Ok(rows
+                    .iter()
+                    .map(|r| RosterRun {
+                        id: r.get("id"),
+                        roster_id: r.get("roster_id"),
+                        instance_id: r.get("instance_id"),
+                        difficulty: r.get("difficulty"),
+                        batch_id: r.get("batch_id"),
+                        status: r.get("status"),
+                        report_json: None,
+                        created_at: r.get("created_at"),
+                    })
+                    .collect())
+            }
+            RosterRunBackend::Memory(memory) => {
+                let mut runs: Vec<RosterRun> = memory
+                    .lock()
+                    .unwrap()
+                    .runs
+                    .iter()
+                    .filter(|r| r.roster_id == roster_id)
+                    .map(|r| RosterRun {
+                        report_json: None,
+                        ..r.clone()
+                    })
+                    .collect();
+                runs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                Ok(runs)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -270,5 +314,19 @@ mod tests {
         let run = repo.create_run("r", 1, "heroic", "b").await.unwrap();
         repo.set_status(&run.id, "failed").await.unwrap();
         assert_eq!(repo.get_run(&run.id).await.unwrap().unwrap().status, "failed");
+    }
+
+    #[tokio::test]
+    async fn list_runs_returns_roster_runs_newest_first_without_report() {
+        let repo = RosterRunRepo::new_memory();
+        let r1 = repo.create_run("roster1", 100, "heroic", "b1").await.unwrap();
+        let r2 = repo.create_run("roster1", 200, "mythic", "b2").await.unwrap();
+        repo.create_run("other", 300, "heroic", "b3").await.unwrap();
+        repo.set_report(&r2.id, "{\"big\":true}").await.unwrap();
+        let runs = repo.list_runs("roster1").await.unwrap();
+        assert_eq!(runs.len(), 2);
+        // only roster1's runs; report_json omitted even though r2 has one
+        assert!(runs.iter().all(|x| x.report_json.is_none()));
+        assert!(runs.iter().any(|x| x.id == r1.id) && runs.iter().any(|x| x.id == r2.id));
     }
 }

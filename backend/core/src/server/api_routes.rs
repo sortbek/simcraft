@@ -270,6 +270,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::post().to(roster_run_handlers::start_run),
         )
         .route(
+            "/api/rosters/{id}/runs",
+            web::get().to(roster_run_handlers::list_runs),
+        )
+        .route(
             "/api/rosters/runs/{run_id}",
             web::get().to(roster_run_handlers::get_run),
         );
