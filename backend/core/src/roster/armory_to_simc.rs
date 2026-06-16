@@ -58,12 +58,30 @@ fn item_line(item: &Value) -> Option<String> {
 
     let mut tokens: Vec<String> = vec![format!("id={id}")];
 
-    // enchant_id — armory `enchant` may be a bare id, an object, or null.
+    // bonus_id=<a>/<b>/... — encodes the upgrade track (item level), tier-set
+    // membership, tertiary stats and sockets. Critical for accuracy.
+    let bonus_ids: Vec<String> = item
+        .get("bonusIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|b| b.as_u64())
+                .map(|b| b.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let has_bonus = !bonus_ids.is_empty();
+    if has_bonus {
+        tokens.push(format!("bonus_id={}", bonus_ids.join("/")));
+    }
+
+    // enchant_id — only usable when given as a numeric id. The proxy currently
+    // sends a human-readable display string for enchants, which we can't convert.
     if let Some(enchant_id) = item.get("enchant").and_then(value_as_id) {
         tokens.push(format!("enchant_id={enchant_id}"));
     }
 
-    // gem_id=<a>/<b> — armory `gems` is an array of ids (or objects).
+    // gem_id=<a>/<b> — armory `gems` is an array of objects ({itemId,name}) or bare ids.
     if let Some(gems) = item.get("gems").and_then(|v| v.as_array()) {
         let ids: Vec<String> = gems
             .iter()
@@ -75,9 +93,13 @@ fn item_line(item: &Value) -> Option<String> {
         }
     }
 
-    // ilevel — given directly by the armory payload (no bonus_list to derive from).
-    if let Some(ilvl) = item.get("itemLevel").and_then(|v| v.as_u64()) {
-        tokens.push(format!("ilevel={ilvl}"));
+    // ilevel — the bonus_ids encode the upgrade track's item level (as in the SimC
+    // addon export), so emit an explicit ilevel only as a fallback when no bonus
+    // ids are present.
+    if !has_bonus {
+        if let Some(ilvl) = item.get("itemLevel").and_then(|v| v.as_u64()) {
+            tokens.push(format!("ilevel={ilvl}"));
+        }
     }
 
     Some(format!("{slot}=,{}", tokens.join(",")))
@@ -103,6 +125,11 @@ pub fn armory_to_simc(armory: &Value) -> String {
         .and_then(|c| c.get("level"))
         .and_then(|v| v.as_u64())
         .unwrap_or(DEFAULT_PLAYER_LEVEL);
+    let race = character
+        .and_then(|c| c.get("race"))
+        .and_then(|v| v.as_str())
+        .map(|r| r.trim().to_lowercase().replace(' ', "_"))
+        .filter(|r| !r.is_empty());
 
     let loadout = armory
         .get("talents")
@@ -118,6 +145,9 @@ pub fn armory_to_simc(armory: &Value) -> String {
         lines.push(format!("{class}=\"{}\"", title_case(name)));
     }
     lines.push(format!("level={level}"));
+    if let Some(race) = race {
+        lines.push(format!("race={race}"));
+    }
     lines.push(format!("server={}", realm_slug(realm)));
     if let Some(spec) = spec {
         lines.push(format!("spec={spec}"));
@@ -203,6 +233,46 @@ mod tests {
         let simc = armory_to_simc(&armory);
         assert!(simc.lines().any(|l| l == "level=90"), "expected level=90 fallback:\n{simc}");
         assert!(!simc.contains("level=80"), "must not hardcode level=80:\n{simc}");
+    }
+
+    #[test]
+    fn parses_new_armory_shape_bonus_gems_race() {
+        // Mirrors the current /armory payload: bonusIds array, gems as objects
+        // ({itemId,name}), enchant as a display string (unusable), race present.
+        let armory = json!({
+            "character": { "name": "sortbek", "realm": "draenor", "race": "Troll", "level": 90 },
+            "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" },
+            "gear": { "items": [
+                { "slot": "HEAD", "itemId": 249988, "itemLevel": 289,
+                  "bonusIds": [43, 13440, 13338],
+                  "enchant": "Enchanted: Enchant Helm - Empowered Rune of Avoidance |A:x|a",
+                  "gems": [ { "itemId": 240898, "name": "+16 Mastery & +7 Critical Strike" } ] }
+            ]}
+        });
+        let simc = armory_to_simc(&armory);
+        let head = simc.lines().find(|l| l.starts_with("head=")).expect("head line");
+        assert!(head.contains("id=249988"), "{head}");
+        assert!(head.contains("bonus_id=43/13440/13338"), "bonus ids:\n{head}");
+        assert!(head.contains("gem_id=240898"), "gem from object:\n{head}");
+        // bonus ids encode the item level, so no explicit ilevel on bonus'd items
+        assert!(!head.contains("ilevel="), "ilevel should be omitted when bonus present:\n{head}");
+        // enchant is a display string -> no enchant_id
+        assert!(!head.contains("enchant_id="), "string enchant must not become an id:\n{head}");
+        // race emitted
+        assert!(simc.lines().any(|l| l == "race=troll"), "race line:\n{simc}");
+    }
+
+    #[test]
+    fn falls_back_to_ilevel_when_no_bonus_ids() {
+        let armory = json!({
+            "character": { "name": "x", "realm": "r", "level": 90 },
+            "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" },
+            "gear": { "items": [ { "slot": "HEAD", "itemId": 111, "itemLevel": 600 } ] }
+        });
+        let simc = armory_to_simc(&armory);
+        let head = simc.lines().find(|l| l.starts_with("head=")).unwrap();
+        assert!(head.contains("ilevel=600"), "ilevel fallback when no bonus:\n{head}");
+        assert!(!head.contains("bonus_id="), "{head}");
     }
 
     #[test]
