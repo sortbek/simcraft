@@ -171,3 +171,21 @@ export async function getRun(runId: string): Promise<RunStatus | null> {
     return null;
   }
 }
+
+export interface RosterRun {
+  id: string;
+  roster_id: string;
+  instance_id: number;
+  difficulty: string;
+  batch_id: string;
+  status: string;
+  created_at: string;
+}
+
+export async function listRuns(rosterId: string): Promise<RosterRun[]> {
+  try {
+    return await fetchJson<RosterRun[]>(`${API_URL}/api/rosters/${rosterId}/runs`);
+  } catch {
+    return [];
+  }
+}

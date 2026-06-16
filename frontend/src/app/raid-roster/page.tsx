@@ -9,6 +9,7 @@ import {
 } from '../lib/rosters';
 import RosterEditor from '../components/raid-roster/RosterEditor';
 import RosterRunPanel from '../components/raid-roster/RosterRunPanel';
+import RosterHistory from '../components/raid-roster/RosterHistory';
 
 const REGIONS = ['eu', 'us', 'kr', 'tw'] as const;
 
@@ -17,7 +18,7 @@ export default function RaidRosterPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [region, setRegion] = useState<string>('eu');
-  const [tab, setTab] = useState<'manage' | 'report'>('manage');
+  const [tab, setTab] = useState<'manage' | 'report' | 'history'>('manage');
 
   const refreshRosters = useCallback(() => {
     getRosters().then(setRosters);
@@ -154,6 +155,7 @@ export default function RaidRosterPage() {
                   [
                     ['manage', 'Manage Roster'],
                     ['report', 'Loot Report'],
+                    ['history', 'History'],
                   ] as const
                 ).map(([key, label]) => (
                   <button
@@ -175,6 +177,9 @@ export default function RaidRosterPage() {
               </div>
               <div className={tab === 'report' ? '' : 'hidden'}>
                 <RosterRunPanel key={`run-${selectedRoster.id}`} roster={selectedRoster} />
+              </div>
+              <div className={tab === 'history' ? '' : 'hidden'}>
+                <RosterHistory key={`hist-${selectedRoster.id}`} roster={selectedRoster} />
               </div>
             </div>
           ) : (
