@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   getMembers,
   importMembers,
   deleteMember,
+  startQuickSim,
   type Roster,
   type RosterMember,
 } from '../../lib/rosters';
@@ -42,6 +44,85 @@ function StatusBadge({ status }: { status: string }) {
     >
       {style.label}
     </span>
+  );
+}
+
+function MemberRow({
+  member,
+  onRemove,
+}: {
+  member: RosterMember;
+  onRemove: (memberId: string) => void;
+}) {
+  const router = useRouter();
+  const [copied, setCopied] = useState(false);
+  const [simming, setSimming] = useState(false);
+
+  const canSim = member.armory_status === 'ok' && !!member.source_simc;
+
+  const handleCopy = useCallback(() => {
+    if (!member.source_simc) return;
+    navigator.clipboard.writeText(member.source_simc);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [member.source_simc]);
+
+  const handleQuickSim = useCallback(async () => {
+    if (!canSim) return;
+    setSimming(true);
+    const res = await startQuickSim(member.source_simc);
+    if (res) {
+      router.push('/sim/' + res.id);
+    } else {
+      setSimming(false);
+    }
+  }, [canSim, member.source_simc, router]);
+
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium text-on-surface">
+          {member.name}
+          {member.item_level > 0 && (
+            <span className="ml-1.5 rounded bg-surface-container-high px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+              ilvl {member.item_level}
+            </span>
+          )}
+          <span className="text-on-surface-variant/60"> - {member.realm}</span>
+        </div>
+        {(member.class || member.spec) && (
+          <div className="truncate text-[12px] text-on-surface-variant/60">
+            {[member.spec, member.class].filter(Boolean).join(' ')}
+          </div>
+        )}
+      </div>
+      <StatusBadge status={member.armory_status} />
+      <button
+        onClick={handleCopy}
+        disabled={!member.source_simc}
+        title={copied ? 'Copied!' : 'Copy SimC'}
+        aria-label={`Copy SimC for ${member.name}`}
+        className="shrink-0 rounded-md border border-outline-variant/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+      <button
+        onClick={handleQuickSim}
+        disabled={!canSim || simming}
+        title="Quick sim this player"
+        aria-label={`Quick sim ${member.name}`}
+        className="shrink-0 rounded-md border border-outline-variant/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        {simming ? 'Simming…' : 'Quick Sim'}
+      </button>
+      <button
+        onClick={() => onRemove(member.id)}
+        className="shrink-0 text-base text-on-surface-variant/30 transition-colors hover:text-red-400"
+        aria-label={`Remove ${member.name}`}
+      >
+        &times;
+      </button>
+    </div>
   );
 }
 
@@ -125,35 +206,7 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
         ) : (
           <div className="divide-y divide-outline-variant/10 overflow-hidden rounded-lg border border-outline-variant/10 bg-surface-container-low">
             {members.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between gap-4 px-4 py-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-on-surface">
-                    {member.name}
-                    {member.item_level > 0 && (
-                      <span className="ml-1.5 rounded bg-surface-container-high px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
-                        ilvl {member.item_level}
-                      </span>
-                    )}
-                    <span className="text-on-surface-variant/60"> - {member.realm}</span>
-                  </div>
-                  {(member.class || member.spec) && (
-                    <div className="truncate text-[12px] text-on-surface-variant/60">
-                      {[member.spec, member.class].filter(Boolean).join(' ')}
-                    </div>
-                  )}
-                </div>
-                <StatusBadge status={member.armory_status} />
-                <button
-                  onClick={() => handleRemove(member.id)}
-                  className="shrink-0 text-base text-on-surface-variant/30 transition-colors hover:text-red-400"
-                  aria-label={`Remove ${member.name}`}
-                >
-                  &times;
-                </button>
-              </div>
+              <MemberRow key={member.id} member={member} onRemove={handleRemove} />
             ))}
           </div>
         )}

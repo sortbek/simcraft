@@ -111,16 +111,35 @@ export interface RunStatus {
   report?: RosterReport;
 }
 
+export async function startQuickSim(simcInput: string): Promise<{ id: string } | null> {
+  try {
+    return await fetchJson(`${API_URL}/api/sim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ simc_input: simcInput, sim_type: 'quick' }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+export interface RunOptions {
+  target_error?: number;
+  iterations?: number;
+  fight_style?: string;
+}
+
 export async function startRun(
   rosterId: string,
   instanceId: number,
-  difficulty: string
+  difficulty: string,
+  opts: RunOptions = {}
 ): Promise<{ run_id: string } | null> {
   try {
     return await fetchJson(`${API_URL}/api/rosters/${rosterId}/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instance_id: instanceId, difficulty }),
+      body: JSON.stringify({ instance_id: instanceId, difficulty, ...opts }),
     });
   } catch {
     return null;

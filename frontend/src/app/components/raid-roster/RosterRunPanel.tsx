@@ -9,6 +9,7 @@ import {
   type RosterReport,
 } from '../../lib/rosters';
 import RosterReportView from './RosterReportView';
+import FightStyleSelector from '../sim-config/FightStyleSelector';
 
 interface Instance {
   id: number;
@@ -21,6 +22,9 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [instanceId, setInstanceId] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<string>('heroic');
+  const [targetError, setTargetError] = useState<number>(0.1);
+  const [iterations, setIterations] = useState<number>(1000);
+  const [fightStyle, setFightStyle] = useState<string>('Patchwerk');
 
   const [running, setRunning] = useState(false);
   const [progressPct, setProgressPct] = useState<number>(0);
@@ -64,7 +68,11 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     setDone(0);
     setTotal(0);
 
-    const started = await startRun(roster.id, instanceId, difficulty);
+    const started = await startRun(roster.id, instanceId, difficulty, {
+      target_error: targetError,
+      iterations,
+      fight_style: fightStyle,
+    });
     if (!started) {
       setError('Failed to start run. Make sure all members have armory status "ok".');
       setRunning(false);
@@ -91,7 +99,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
         setReport(status.report ?? null);
       }
     }, 2000);
-  }, [roster.id, instanceId, difficulty, stopPolling]);
+  }, [roster.id, instanceId, difficulty, targetError, iterations, fightStyle, stopPolling]);
 
   return (
     <div className="space-y-6 border-t border-outline-variant/10 pt-6">
@@ -137,6 +145,43 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+            Target error
+          </label>
+          <input
+            type="number"
+            step={0.01}
+            min={0.01}
+            value={targetError}
+            onChange={(e) => setTargetError(Number(e.target.value))}
+            disabled={running}
+            className="w-24 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+            Iterations
+          </label>
+          <input
+            type="number"
+            step={100}
+            min={100}
+            value={iterations}
+            onChange={(e) => setIterations(Number(e.target.value))}
+            disabled={running}
+            className="w-28 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </div>
+
+        <div className="w-44 space-y-1">
+          <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+            Fight style
+          </label>
+          <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
         </div>
 
         <button
