@@ -1,5 +1,5 @@
-/// Parse pasted roster text into (name, realm) pairs. Accepts `Realm-Playername`
-/// (realm may contain spaces/extra dashes — split on the LAST dash, since a
+/// Parse pasted roster text into (name, realm) pairs. Accepts `CharacterName-Realm`
+/// (realm may contain spaces/extra dashes — split on the FIRST dash, since a
 /// character name never contains one). Skips lines without both parts. Dedupes
 /// case-insensitively, preserving first-seen order.
 pub fn parse_member_list(input: &str) -> Vec<(String, String)> {
@@ -10,7 +10,7 @@ pub fn parse_member_list(input: &str) -> Vec<(String, String)> {
         if line.is_empty() {
             continue;
         }
-        let Some((realm, name)) = line.rsplit_once('-') else {
+        let Some((name, realm)) = line.split_once('-') else {
             continue;
         };
         let name = name.trim();
@@ -31,8 +31,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_realm_dash_name_lines() {
-        let input = "Draenor-Thrall\nTarren Mill-Jaina\n";
+    fn parses_name_dash_realm_lines() {
+        let input = "Thrall-Draenor\nJaina-Tarren Mill\n";
         let got = parse_member_list(input);
         assert_eq!(
             got,
@@ -45,15 +45,15 @@ mod tests {
 
     #[test]
     fn realm_may_contain_dashes() {
-        // Realm with an internal dash; name is always the segment after the LAST dash.
-        let input = "Azjol-Nerub-Thrall";
+        // Realm with an internal dash; name is always the segment before the FIRST dash.
+        let input = "Thrall-Azjol-Nerub";
         let got = parse_member_list(input);
         assert_eq!(got, vec![("Thrall".to_string(), "Azjol-Nerub".to_string())]);
     }
 
     #[test]
     fn trims_blank_lines_and_whitespace() {
-        let input = "  Draenor - Thrall  \n\n\nTarren Mill-Jaina";
+        let input = "  Thrall - Draenor  \n\n\nJaina-Tarren Mill";
         let got = parse_member_list(input);
         assert_eq!(got.len(), 2);
         assert_eq!(got[0], ("Thrall".to_string(), "Draenor".to_string()));
@@ -61,13 +61,13 @@ mod tests {
 
     #[test]
     fn dedupes_case_insensitively() {
-        let input = "Draenor-Thrall\ndraenor-thrall";
+        let input = "Thrall-Draenor\nthrall-draenor";
         assert_eq!(parse_member_list(input).len(), 1);
     }
 
     #[test]
     fn skips_lines_without_a_realm() {
-        let input = "JustAName\nDraenor-Thrall";
+        let input = "JustAName\nThrall-Draenor";
         let got = parse_member_list(input);
         assert_eq!(got, vec![("Thrall".to_string(), "Draenor".to_string())]);
     }
