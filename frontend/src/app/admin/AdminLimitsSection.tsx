@@ -185,7 +185,7 @@ export default function AdminLimitsSection() {
           </div>
 
           {/* Per-branch rows */}
-          <div className={`space-y-2${isSource ? 'pointer-events-none opacity-40' : ''}`}>
+          <div className={`space-y-2 ${isSource ? 'pointer-events-none opacity-40' : ''}`}>
             {allBranches.map((branch) => {
               const isEnabled = enabledBranches.includes(branch);
               const info = simc?.versions[branch];
