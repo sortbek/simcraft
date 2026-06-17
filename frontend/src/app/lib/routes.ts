@@ -9,6 +9,7 @@ export const ROUTES = {
   dungeonRoute: '/route',
   routesManager: '/routes',
   upgradeCompare: '/upgrade-compare',
+  raidRoster: '/raid-roster',
   advanced: '/advanced',
   sims: '/sims',
   settings: '/settings',

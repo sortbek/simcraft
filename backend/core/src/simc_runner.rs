@@ -1235,7 +1235,15 @@ pub async fn run_simc_staged(
     let max_time = p.max_time;
     let single_actor_batch = p.single_actor_batch;
 
-    if combo_count < STAGED_THRESHOLD {
+    // Roster loot reports set `force_single_pass` so EVERY combo is simmed in one
+    // pass at the user's target_error — no coarse staging/pruning that would leave
+    // "losing" items at low precision (loot reports compare all items, not just the winner).
+    let force_single_pass = options
+        .get("force_single_pass")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if force_single_pass || combo_count < STAGED_THRESHOLD {
         if let Some(tok) = cancel.as_ref() {
             if tok.is_cancelled().await {
                 return Err(StagedRunError::Other(CANCEL_ERR.to_string()));

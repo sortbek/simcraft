@@ -433,6 +433,18 @@
     }
   ],
   "instanceOverrides": [],
+  "encounterFixedDifficulty": {
+    "2711": {
+      "lfr":    { "ilvl": 259, "bonus_id": 13789, "quality": 4 },
+      "normal": { "ilvl": 272, "bonus_id": 13788, "quality": 4 },
+      "heroic": { "ilvl": 285, "bonus_id": 13787, "quality": 4 },
+      "mythic": { "ilvl": 298, "bonus_id": 13786, "quality": 4 }
+    }
+  },
+  "socketByInventoryType": {
+    "2": 1,
+    "11": 1
+  },
   "raidDifficultyTracks": {
     "lfr": "Veteran",
     "normal": "Champion",

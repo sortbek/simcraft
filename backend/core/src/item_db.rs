@@ -49,6 +49,12 @@ static BONUSES: OnceCell<HashMap<u64, Value>> = OnceCell::new();
 static UPGRADE_MAX: OnceCell<HashMap<u64, u64>> = OnceCell::new();
 static INSTANCES: OnceCell<Vec<Value>> = OnceCell::new();
 static DROPS_BY_ENCOUNTER: OnceCell<HashMap<i64, Vec<Value>>> = OnceCell::new();
+/// Base gem-socket count per item_id (from encounter-items `socketInfo`).
+static BASE_SOCKETS_BY_ITEM: OnceCell<HashMap<u64, u64>> = OnceCell::new();
+/// Curated socket-count overrides (item_id → true total sockets) for items
+/// whose guaranteed sockets the extracted data under-reports — e.g. Amulet of
+/// the Abyssal Hymn (250247) has 1 base socket recorded but 2 in-game.
+static SOCKET_OVERRIDES: OnceCell<HashMap<u64, u64>> = OnceCell::new();
 type UpgradeTrackKey = (String, u64, u64);
 type UpgradeTrackValue = (u64, u64, u64);
 static UPGRADE_TRACKS: OnceCell<HashMap<UpgradeTrackKey, UpgradeTrackValue>> = OnceCell::new();
@@ -370,10 +376,22 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
     // items that share encounter IDs across multiple instances (e.g. profession pools).
     let encounter_items_path = data_dir.join("encounter-items.json");
     let mut drops: HashMap<i64, Vec<Value>> = HashMap::new();
+    let mut base_sockets: HashMap<u64, u64> = HashMap::new();
     if encounter_items_path.exists() {
         let data: Vec<Value> = read_json_vec(&encounter_items_path)?;
         println!("Loaded {} encounter items", data.len());
         for item in &data {
+            if let (Some(id), Some(n)) = (
+                item.get("id").and_then(|v| v.as_u64()),
+                item.get("socketInfo")
+                    .and_then(|s| s.get("sockets"))
+                    .and_then(|s| s.as_array())
+                    .map(|a| a.len() as u64),
+            ) {
+                if n > 0 {
+                    base_sockets.insert(id, n);
+                }
+            }
             if let Some(sources) = item.get("sources").and_then(|s| s.as_array()) {
                 for src in sources {
                     if let Some(eid) = src.get("encounterId").and_then(|e| e.as_i64()) {
@@ -391,6 +409,28 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
     }
     println!("Indexed drops for {} encounters", drops.len());
     let _ = DROPS_BY_ENCOUNTER.set(drops);
+    let _ = BASE_SOCKETS_BY_ITEM.set(base_sockets);
+
+    // item-socket-overrides.json — our own committed file (crate-root fallback,
+    // like season-config.json below): curated item_id → true socket count for
+    // items whose guaranteed sockets the extracted data under-reports.
+    let socket_overrides_path = data_dir.join("item-socket-overrides.json");
+    let socket_overrides_path = if socket_overrides_path.exists() {
+        socket_overrides_path
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("item-socket-overrides.json")
+    };
+    let mut socket_overrides: HashMap<u64, u64> = HashMap::new();
+    if socket_overrides_path.exists() {
+        let raw: HashMap<String, Value> = read_json_map_str(&socket_overrides_path)?;
+        for (k, v) in raw {
+            if let (Ok(id), Some(n)) = (k.parse::<u64>(), v.as_u64()) {
+                socket_overrides.insert(id, n);
+            }
+        }
+        println!("Loaded {} item socket overrides", socket_overrides.len());
+    }
+    let _ = SOCKET_OVERRIDES.set(socket_overrides);
 
     // season-config.json — check data_dir first, fall back to crate root
     let season_path = data_dir.join("season-config.json");
@@ -676,6 +716,22 @@ pub fn void_forge_map() -> &'static HashMap<u64, u64> {
     VOID_FORGE_MAP.get_or_init(HashMap::new)
 }
 
+/// Voidforged (bonus_id, ilvl) for a track's MAX upgrade level, or None if that
+/// track has no voidforge mapping. Used to build Void Forged drop variants.
+pub fn void_forge_for_track(track: &str) -> Option<(u64, u64)> {
+    let tracks = UPGRADE_TRACKS.get()?;
+    let vf_map = void_forge_map();
+    // bonus_id of the track's highest level
+    let max_bonus = tracks
+        .iter()
+        .filter(|((t, _, _), _)| t == track)
+        .max_by_key(|((_, level, _), _)| *level)
+        .map(|(_, (_, bonus, _))| *bonus)?;
+    let vf_bonus = vf_map.get(&max_bonus).copied()?;
+    let vf_ilvl = resolve_bonuses(&[vf_bonus]).ilevel?;
+    Some((vf_bonus, vf_ilvl))
+}
+
 fn upgrade_max() -> &'static HashMap<u64, u64> {
     UPGRADE_MAX.get().expect("Game data not loaded")
 }
@@ -749,6 +805,18 @@ const TIER_SET_BONUS_ID: u64 = 13575;
 /// Get the tier set marker bonus ID.
 pub fn tier_set_bonus_id() -> u64 {
     TIER_SET_BONUS_ID
+}
+
+/// Guaranteed gem-socket count for a slot's inventory type this season, e.g. necks
+/// (inv 2) and rings (inv 11) always carry a socket in Midnight S1 even though the
+/// item data doesn't record it (the socket comes from a drop-context bonus). Used
+/// as a floor by the droptimizer so neck/ring drops get gemmed. 0 when unset.
+pub fn inv_type_guaranteed_sockets(inv_type: u64) -> u64 {
+    season_cfg()
+        .get("socketByInventoryType")
+        .and_then(|m| m.get(inv_type.to_string()))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0)
 }
 
 /// Current season ID (highest seasonId found in upgrade bonuses).
@@ -899,6 +967,31 @@ pub fn item_limit_categories_for(item_id: u64, bonus_ids: &[u64]) -> HashMap<u64
         }
     }
     cats
+}
+
+/// True gem-socket count for an item as it should be simmed, given the bonus IDs
+/// it drops with. The max of three signals: the item's base sockets (from item
+/// data), the sockets granted by `bonus_ids`, and any curated override.
+///
+/// SimC applies exactly the gems we emit — it does NOT cap to the item's real
+/// socket count — so this number must never exceed the truth. Each signal is
+/// individually ≤ the true total, so their max is safe; the override exists to
+/// reach the true total for items whose guaranteed sockets the extracted data
+/// under-reports (e.g. Amulet of the Abyssal Hymn, 1 recorded socket but 2
+/// in-game).
+pub fn item_socket_count(item_id: u64, bonus_ids: &[u64]) -> u64 {
+    let base = BASE_SOCKETS_BY_ITEM
+        .get()
+        .and_then(|m| m.get(&item_id))
+        .copied()
+        .unwrap_or(0);
+    let from_bonus = resolve_bonuses(bonus_ids).sockets.unwrap_or(0);
+    let from_override = SOCKET_OVERRIDES
+        .get()
+        .and_then(|m| m.get(&item_id))
+        .copied()
+        .unwrap_or(0);
+    base.max(from_bonus).max(from_override)
 }
 
 /// Get inventory type for an item (e.g. 1=head, 7=legs, 13=one-hand, 17=two-hand).
@@ -1471,6 +1564,17 @@ pub fn encounter_upgrade_level(encounter_id: i64) -> Option<u64> {
         .and_then(|v| v.as_u64())
 }
 
+/// Fixed per-difficulty item levels for "special" raids whose gear does NOT use
+/// the normal upgrade-track system (e.g. Sporefall's Sporefused gear: fixed
+/// 259/272/285/298 with no upgrade track). Returns the season-config
+/// `encounterFixedDifficulty[encounter_id]` object — `{ difficulty: {ilvl,
+/// bonus_id} }` — or None for normal track-based encounters.
+pub fn encounter_fixed_difficulty(encounter_id: i64) -> Option<&'static Value> {
+    season_cfg()
+        .get("encounterFixedDifficulty")
+        .and_then(|m| m.get(encounter_id.to_string()))
+}
+
 pub fn dungeon_normal_ilvl() -> u64 {
     season_cfg()
         .get("dungeonNormal")
@@ -1660,10 +1764,52 @@ mod tests {
     // ---- resolve_bonuses ----
 
     #[test]
+    fn void_forge_for_track_myth_has_voidforge() {
+        ensure_game_data_loaded();
+        let vf = void_forge_for_track("Myth");
+        assert!(vf.is_some(), "Myth should have a voidforge mapping");
+        let (_bonus, ilvl) = vf.unwrap();
+        assert!(ilvl > 0, "voidforged ilvl should be > 0");
+    }
+
+    #[test]
+    fn void_forge_for_track_unknown_returns_none() {
+        ensure_game_data_loaded();
+        assert!(void_forge_for_track("NotARealTrack").is_none());
+    }
+
+    #[test]
     fn resolve_bonuses_returns_socket_count_for_13534() {
         ensure_game_data_loaded();
         let resolved = resolve_bonuses(&[13534]);
         assert_eq!(resolved.sockets, Some(1));
+    }
+
+    // ---- item_socket_count ----
+
+    #[test]
+    fn item_socket_count_uses_override_for_abyssal_hymn() {
+        ensure_game_data_loaded();
+        // 250247 records 1 base socket in socketInfo but has 2 sockets in-game;
+        // the curated override (item-socket-overrides.json) must win.
+        assert_eq!(item_socket_count(250247, &[]), 2);
+    }
+
+    #[test]
+    fn item_socket_count_is_max_of_base_bonus_override() {
+        ensure_game_data_loaded();
+        // No base sockets, no override, but a +1 socket bonus → 1.
+        assert_eq!(item_socket_count(1, &[13534]), 1);
+        // Nothing anywhere → 0.
+        assert_eq!(item_socket_count(1, &[]), 0);
+    }
+
+    #[test]
+    fn inv_type_guaranteed_sockets_for_neck_and_ring() {
+        ensure_game_data_loaded();
+        assert_eq!(inv_type_guaranteed_sockets(2), 1); // neck
+        assert_eq!(inv_type_guaranteed_sockets(11), 1); // ring
+        assert_eq!(inv_type_guaranteed_sockets(12), 0); // trinket — no guaranteed socket
     }
 
     #[test]

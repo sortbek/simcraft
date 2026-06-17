@@ -5,6 +5,7 @@ import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
+import Checkbox from '../components/ui/Checkbox';
 import { API_URL } from '../lib/api';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import { useComputeChoice } from '../lib/useComputeChoice';
@@ -12,8 +13,8 @@ import type {
   SeasonConfigResponse,
   DifficultyDef,
   DifficultyGroup,
-  DungeonCategory,
 } from '../lib/types';
+import { groupInstances } from '../lib/instanceCategories';
 import ItemTable from '../components/loot/ItemTable';
 import DungeonDrawer from '../components/loot/DungeonDrawer';
 import DifficultySelect from '../components/loot/DifficultySelect';
@@ -25,6 +26,7 @@ import { useLanguage } from '../lib/i18n';
 import {
   detectClass,
   detectSpec,
+  dropUid,
   formatSpecName,
   getClassSpecs,
   getTrackInfo,
@@ -71,7 +73,12 @@ const TRACK_COLORS: Record<string, { text: string; bg: string; border: string }>
 
 // --- Data loading hook ---
 
-function useDropFinderData(simcInput: string, activeSpecs: Set<string>) {
+function useDropFinderData(
+  simcInput: string,
+  activeSpecs: Set<string>,
+  includeVoidForge: boolean,
+  includeCatalyst: boolean
+) {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
   const [upgradeTracks, setUpgradeTracks] = useState<UpgradeTracks>({});
@@ -98,48 +105,10 @@ function useDropFinderData(simcInput: string, activeSpecs: Set<string>) {
       .catch(() => {});
   }, []);
 
-  const { raids, dungeonCats } = useMemo(() => {
-    if (!seasonConfig)
-      return {
-        raids: [] as Instance[],
-        dungeonCats: [] as { cat: DungeonCategory; instances: Instance[] }[],
-      };
-
-    const poolMap = new Map<number, Set<number>>();
-    for (const cat of seasonConfig.dungeon_categories) {
-      const meta = instances.find((i) => i.id === cat.poolInstanceId);
-      if (meta) {
-        poolMap.set(cat.poolInstanceId, new Set(meta.encounters.map((e) => e.id)));
-      }
-    }
-
-    const raidList: Instance[] = [];
-    const dcList: { cat: DungeonCategory; instances: Instance[] }[] =
-      seasonConfig.dungeon_categories.map((cat) => ({ cat, instances: [] }));
-
-    for (const inst of instances) {
-      if (inst.type === 'raid' && inst.id > 0) {
-        raidList.push(inst);
-      } else if (inst.type === 'dungeon') {
-        let placed = false;
-        for (const dc of dcList) {
-          const pool = poolMap.get(dc.cat.poolInstanceId);
-          if (pool?.has(inst.id)) {
-            dc.instances.push(inst);
-            placed = true;
-          }
-        }
-        if (!placed && dcList.length > 0) {
-          dcList[dcList.length - 1].instances.push(inst);
-        }
-      }
-    }
-    raidList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    for (const dc of dcList) {
-      dc.instances.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return { raids: raidList, dungeonCats: dcList };
-  }, [instances, seasonConfig]);
+  const { raids, dungeonCats } = useMemo(
+    () => groupInstances(instances, seasonConfig),
+    [instances, seasonConfig],
+  );
 
   useEffect(() => {
     if (!selectedId) {
@@ -150,6 +119,8 @@ function useDropFinderData(simcInput: string, activeSpecs: Set<string>) {
     const params = new URLSearchParams();
     if (className) params.set('class_name', className);
     if (specParam) params.set('spec', specParam);
+    params.set('void_forge', String(includeVoidForge));
+    params.set('catalyst', String(includeCatalyst));
     const qs = params.toString();
     const url = selectedId.startsWith('type:')
       ? `${API_URL}/api/instances/type/${selectedId.slice(5)}/drops`
@@ -159,7 +130,7 @@ function useDropFinderData(simcInput: string, activeSpecs: Set<string>) {
       .then((data) => setDrops(data.detail ? null : data))
       .catch(() => setDrops(null))
       .finally(() => setLoading(false));
-  }, [selectedId, className, specParam]);
+  }, [selectedId, className, specParam, includeVoidForge, includeCatalyst]);
 
   return {
     instances,
@@ -225,6 +196,9 @@ export default function DropFinderContent() {
     });
   }
 
+  const [includeVoidForge, setIncludeVoidForge] = useState(false);
+  const [includeCatalyst, setIncludeCatalyst] = useState(false);
+
   const {
     instances,
     seasonConfig,
@@ -237,7 +211,7 @@ export default function DropFinderContent() {
     dungeonCats,
     className,
     specName,
-  } = useDropFinderData(simcInput, activeSpecs);
+  } = useDropFinderData(simcInput, activeSpecs, includeVoidForge, includeCatalyst);
 
   // Count equipped embellished items
   const equippedEmbellishments = useMemo(() => {
@@ -257,7 +231,7 @@ export default function DropFinderContent() {
   const equippedGear: EquippedGear = useMemo(() => parseEquippedGear(simcInput), [simcInput]);
 
   const hasCharacter = hasInput;
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
   const [upgradeLevel, setUpgradeLevel] = useState(0);
@@ -307,8 +281,8 @@ export default function DropFinderContent() {
       setSelected(new Set());
       return;
     }
-    const all = new Set<number>();
-    for (const items of Object.values(drops)) for (const item of items) all.add(item.item_id);
+    const all = new Set<string>();
+    for (const items of Object.values(drops)) for (const item of items) all.add(dropUid(item));
     setSelected(all);
   }, [drops]);
 
@@ -321,16 +295,16 @@ export default function DropFinderContent() {
       instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
     );
     if (selectedNames.size === instanceList.length) return;
-    const available = new Set<number>();
+    const available = new Set<string>();
     for (const items of Object.values(drops)) {
       for (const item of items) {
         if (!item.instance_name || selectedNames.has(item.instance_name)) {
-          available.add(item.item_id);
+          available.add(dropUid(item));
         }
       }
     }
     setSelected((prev) => {
-      const pruned = new Set<number>();
+      const pruned = new Set<string>();
       for (const id of prev) {
         if (available.has(id)) pruned.add(id);
       }
@@ -389,24 +363,46 @@ export default function DropFinderContent() {
   // Filter drops by instance pool (dungeons or raids)
   const filteredDrops = useMemo(() => {
     if (!drops) return null;
-    if (isPoolOnly) return drops;
 
-    const pool = isRaid ? raidPool : dungeonPool;
-    const instanceList = isRaid ? raids : dungeonInstances;
-    if (pool.size === 0) return {};
-    const selectedNames = new Set(
-      instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
-    );
-    if (selectedNames.size === instanceList.length) return drops; // all selected = no filter
-    const filtered: Record<string, DropItem[]> = {};
-    for (const [slot, items] of Object.entries(drops)) {
-      const kept = items.filter(
-        (item) => !item.instance_name || selectedNames.has(item.instance_name)
-      );
-      if (kept.length > 0) filtered[slot] = kept;
+    // Instance-pool filter (raids/dungeons selected in the picker).
+    let base: Record<string, DropItem[]>;
+    if (isPoolOnly) {
+      base = drops;
+    } else {
+      const pool = isRaid ? raidPool : dungeonPool;
+      const instanceList = isRaid ? raids : dungeonInstances;
+      if (pool.size === 0) {
+        base = {};
+      } else {
+        const selectedNames = new Set(
+          instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
+        );
+        if (selectedNames.size === instanceList.length) {
+          base = drops; // all selected = no filter
+        } else {
+          base = {};
+          for (const [slot, items] of Object.entries(drops)) {
+            const kept = items.filter(
+              (item) => !item.instance_name || selectedNames.has(item.instance_name)
+            );
+            if (kept.length > 0) base[slot] = kept;
+          }
+        }
+      }
     }
-    return filtered;
-  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly]);
+
+    // Void Forged variants only carry entries for the difficulties whose track
+    // has a voidforge tier (Hero/Myth); hide them at other difficulties so they
+    // never resolve to a stale (mythic) ilvl with the voidforge bonus dropped.
+    const result: Record<string, DropItem[]> = {};
+    for (const [slot, items] of Object.entries(base)) {
+      const kept = items.filter(
+        (item) => !item.is_void_forge || getTrackInfo(item, difficulty, dungeonDiff) !== null
+      );
+      if (kept.length > 0) result[slot] = kept;
+    }
+    return result;
+  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly, difficulty, dungeonDiff]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];
@@ -450,18 +446,18 @@ export default function DropFinderContent() {
     return t('dropFinder.slotsMany', { visibleCount });
   }, [availableSlots, excludedSlots, t]);
 
-  function selectItems(itemIds: number[]) {
+  function selectItems(uids: string[]) {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const itemId of itemIds) next.add(itemId);
+      for (const uid of uids) next.add(uid);
       return next;
     });
   }
 
-  function clearItems(itemIds: number[]) {
+  function clearItems(uids: string[]) {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const itemId of itemIds) next.delete(itemId);
+      for (const uid of uids) next.delete(uid);
       return next;
     });
   }
@@ -500,14 +496,14 @@ export default function DropFinderContent() {
     if (!filteredDrops) return;
     if (excludedSlots.size === 0) return;
 
-    const available = new Set<number>();
+    const available = new Set<string>();
     for (const [slot, items] of Object.entries(filteredDrops)) {
       if (excludedSlots.has(slot)) continue;
-      for (const item of items) available.add(item.item_id);
+      for (const item of items) available.add(dropUid(item));
     }
 
     setSelected((prev) => {
-      const next = new Set<number>();
+      const next = new Set<string>();
       for (const id of prev) {
         if (available.has(id)) next.add(id);
       }
@@ -530,8 +526,8 @@ export default function DropFinderContent() {
 
       for (const slot of reenabledSlots) {
         for (const item of filteredDrops[slot] ?? []) {
-          if (!next.has(item.item_id)) {
-            next.add(item.item_id);
+          if (!next.has(dropUid(item))) {
+            next.add(dropUid(item));
             changed = true;
           }
         }
@@ -561,7 +557,7 @@ export default function DropFinderContent() {
     const dropItems: DropItemPayload[] = [];
     for (const items of Object.values(visibleDrops)) {
       for (const item of items) {
-        if (selected.has(item.item_id)) {
+        if (selected.has(dropUid(item))) {
           const resolved = resolveUpgrade(
             item,
             difficulty,
@@ -575,7 +571,10 @@ export default function DropFinderContent() {
             ...item,
             ilevel: resolved.ilvl,
             quality: resolved.quality,
-            bonus_ids: resolved.bonus_id ? [resolved.bonus_id] : [],
+            bonus_ids: [
+              ...(resolved.bonus_id ? [resolved.bonus_id] : []),
+              ...(item.extra_bonus_ids ?? []),
+            ],
           });
         }
       }
@@ -690,6 +689,30 @@ export default function DropFinderContent() {
               )}
             </div>
           )}
+
+          {/* Variant toggles: voidforge + catalyst */}
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+              <Checkbox
+                variant="primary"
+                size="sm"
+                checked={includeVoidForge}
+                onChange={() => setIncludeVoidForge((v) => !v)}
+                aria-label={t('dropFinder.includeVoidForge')}
+              />
+              {t('dropFinder.includeVoidForge')}
+            </label>
+            <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+              <Checkbox
+                variant="primary"
+                size="sm"
+                checked={includeCatalyst}
+                onChange={() => setIncludeCatalyst((v) => !v)}
+                aria-label={t('dropFinder.includeCatalyst')}
+              />
+              {t('dropFinder.includeCatalyst')}
+            </label>
+          </div>
         </div>
       )}
 

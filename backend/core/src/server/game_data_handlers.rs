@@ -342,10 +342,17 @@ pub(super) async fn get_season_config() -> HttpResponse {
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
+    let fixed_difficulty_encounters: Vec<i64> = cfg
+        .get("encounterFixedDifficulty")
+        .and_then(|v| v.as_object())
+        .map(|m| m.keys().filter_map(|k| k.parse::<i64>().ok()).collect())
+        .unwrap_or_default();
+
     HttpResponse::Ok().json(SeasonConfigResponse {
         season,
         raid_difficulties,
         dungeon_categories,
+        fixed_difficulty_encounters,
     })
 }
 
@@ -369,7 +376,10 @@ pub(super) async fn get_drops_by_type(
         Some(query.spec.as_str())
     };
     match game_data::get_drops_by_type(&instance_type, class_name, spec) {
-        Some(drops) => HttpResponse::Ok().json(drops),
+        Some(mut drops) => {
+            game_data::add_drop_variants(&mut drops, class_name, query.void_forge, query.catalyst);
+            HttpResponse::Ok().json(drops)
+        }
         None => HttpResponse::NotFound()
             .json(json!({"detail": "No drops found for this instance type"})),
     }
@@ -391,7 +401,10 @@ pub(super) async fn get_instance_drops(
         Some(query.spec.as_str())
     };
     match game_data::get_instance_drops(instance_id, class_name, spec) {
-        Some(drops) => HttpResponse::Ok().json(drops),
+        Some(mut drops) => {
+            game_data::add_drop_variants(&mut drops, class_name, query.void_forge, query.catalyst);
+            HttpResponse::Ok().json(drops)
+        }
         None => {
             HttpResponse::NotFound().json(json!({"detail": "Instance not found or has no drops"}))
         }

@@ -159,7 +159,7 @@ export default function SimcEngineSection() {
           </span>
         </div>
 
-        <div className={`space-y-2${sourceVersion ? 'pointer-events-none opacity-40' : ''}`}>
+        <div className={`space-y-2 ${sourceVersion ? 'pointer-events-none opacity-40' : ''}`}>
           {branchData.map(({ branch, installed, available }) => (
             <div
               key={branch}

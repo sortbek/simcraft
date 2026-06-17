@@ -1,0 +1,344 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+
+/// Per-member identity passed in by the caller (from the roster).
+#[derive(Debug, Clone)]
+pub struct MemberMeta {
+    pub member_id: String,
+    pub name: String,
+    pub class: String,
+    pub spec: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerEntry {
+    pub member_id: String,
+    pub name: String,
+    pub class: String,
+    pub spec: String,
+    pub base_dps: f64,
+    pub status: String, // "ok" | "sim_failed"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemResult {
+    pub member_id: String,
+    pub dps: f64,
+    pub upgrade_pct: f64,
+    pub abs_gain: f64,
+    pub is_downgrade: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemEntry {
+    pub boss: String,
+    pub item_id: u64,
+    pub name: String,
+    pub slot: String,
+    pub ilevel: u64,
+    pub results: Vec<ItemResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RosterReport {
+    pub roster_id: String,
+    pub instance_id: i64,
+    pub difficulty: String,
+    pub players: Vec<PlayerEntry>,
+    pub items: Vec<ItemEntry>,
+}
+
+/// Item metadata captured the first time an item_id is seen, plus the best combo
+/// (max delta) recorded per member.
+struct ItemAccum {
+    boss: String,
+    name: String,
+    slot: String,
+    ilevel: u64,
+    /// member_id -> (dps, delta) of that member's best combo for this item.
+    best: HashMap<String, (f64, f64)>,
+    /// first-seen order of item_ids, tracked by the caller (see aggregate_report).
+    order: usize,
+}
+
+/// Aggregate per-member droptimizer results into the pivoted report.
+/// Each input is (member, Some(result_json)) or (member, None) when that member's
+/// sim failed / was skipped. For each item, keep each member's BEST combo (max
+/// delta), then rank members within the item by upgrade_pct descending.
+pub fn aggregate_report(
+    roster_id: &str,
+    instance_id: i64,
+    difficulty: &str,
+    inputs: &[(MemberMeta, Option<Value>)],
+) -> RosterReport {
+    let mut players: Vec<PlayerEntry> = Vec::with_capacity(inputs.len());
+    let mut items: HashMap<u64, ItemAccum> = HashMap::new();
+    let mut next_order: usize = 0;
+
+    for (member, result) in inputs {
+        let base = result
+            .as_ref()
+            .and_then(|r| r.get("base_dps"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+
+        // A member is "ok" only when we have a result with a usable base DPS.
+        // base <= 0.0 means we cannot compute upgrade percentages, so we treat
+        // the member as failed and skip their combos.
+        let ok = result.is_some() && base > 0.0;
+
+        players.push(PlayerEntry {
+            member_id: member.member_id.clone(),
+            name: member.name.clone(),
+            class: member.class.clone(),
+            spec: member.spec.clone(),
+            base_dps: if ok { base } else { 0.0 },
+            status: if ok { "ok".into() } else { "sim_failed".into() },
+        });
+
+        if !ok {
+            continue;
+        }
+
+        let combos = result
+            .as_ref()
+            .and_then(|r| r.get("results"))
+            .and_then(|v| v.as_array());
+        let Some(combos) = combos else { continue };
+
+        for combo in combos {
+            // Skip the "Currently Equipped" baseline — parse_gear_comparison_result
+            // pushes it into `results[]`, but its items are the player's equipped
+            // gear, not a dropped item, so it must not appear in the loot report.
+            let combo_name = combo.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if combo_name.starts_with("Currently Equipped") {
+                continue;
+            }
+            let Some(item) = combo.get("items").and_then(|v| v.as_array()).and_then(|a| a.first())
+            else {
+                continue;
+            };
+            let Some(item_id) = item.get("item_id").and_then(|v| v.as_u64()) else {
+                continue;
+            };
+            let delta = combo.get("delta").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let dps = combo.get("dps").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+            let accum = items.entry(item_id).or_insert_with(|| {
+                let order = next_order;
+                next_order += 1;
+                ItemAccum {
+                    boss: item
+                        .get("encounter")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    name: item
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    slot: item
+                        .get("slot")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    ilevel: item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0),
+                    best: HashMap::new(),
+                    order,
+                }
+            });
+
+            accum
+                .best
+                .entry(member.member_id.clone())
+                .and_modify(|cur| {
+                    if delta > cur.1 {
+                        *cur = (dps, delta);
+                    }
+                })
+                .or_insert((dps, delta));
+        }
+    }
+
+    // Build a member_id -> base_dps map for upgrade_pct computation at flatten time.
+    let member_base: HashMap<String, f64> = players
+        .iter()
+        .filter(|p| p.status == "ok")
+        .map(|p| (p.member_id.clone(), p.base_dps))
+        .collect();
+
+    // Flatten accumulators into ItemEntry list.
+    let mut item_entries: Vec<(usize, ItemEntry)> = items
+        .into_iter()
+        .map(|(item_id, accum)| {
+            let mut results: Vec<ItemResult> = accum
+                .best
+                .iter()
+                .map(|(member_id, (dps, delta))| {
+                    let base = member_base.get(member_id.as_str()).copied().unwrap_or(0.0);
+                    let upgrade_pct = if base > 0.0 { delta / base * 100.0 } else { 0.0 };
+                    ItemResult {
+                        member_id: member_id.clone(),
+                        dps: *dps,
+                        upgrade_pct,
+                        abs_gain: *delta,
+                        is_downgrade: *delta < 0.0,
+                    }
+                })
+                .collect();
+
+            // Rank members within the item by upgrade_pct desc; tie-break by member_id.
+            results.sort_by(|a, b| {
+                b.upgrade_pct
+                    .partial_cmp(&a.upgrade_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a.member_id.cmp(&b.member_id))
+            });
+
+            (
+                accum.order,
+                ItemEntry {
+                    boss: accum.boss,
+                    item_id,
+                    name: accum.name,
+                    slot: accum.slot,
+                    ilevel: accum.ilevel,
+                    results,
+                },
+            )
+        })
+        .collect();
+
+    // Deterministic item ordering: by boss, then name (tie-break by first-seen order).
+    item_entries.sort_by(|(ord_a, a), (ord_b, b)| {
+        a.boss
+            .cmp(&b.boss)
+            .then_with(|| a.name.cmp(&b.name))
+            .then_with(|| ord_a.cmp(ord_b))
+    });
+
+    let items = item_entries.into_iter().map(|(_, e)| e).collect();
+
+    RosterReport {
+        roster_id: roster_id.to_string(),
+        instance_id,
+        difficulty: difficulty.to_string(),
+        players,
+        items,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn member(id: &str, name: &str) -> MemberMeta {
+        MemberMeta {
+            member_id: id.into(),
+            name: name.into(),
+            class: "mage".into(),
+            spec: "frost".into(),
+        }
+    }
+
+    #[test]
+    fn excludes_currently_equipped_baseline() {
+        // parse_gear_comparison_result pushes a "Currently Equipped" entry into
+        // results[]; its items are the player's equipped gear and must NOT show up
+        // as dropped loot in the report.
+        let inputs = vec![(
+            member("a", "Alice"),
+            Some(json!({
+                "base_dps": 1000.0,
+                "results": [
+                    {"name":"Currently Equipped","items":[{"item_id":999,"slot":"finger1","ilevel":289,"name":"Equipped Ring","encounter":""}],"dps":1000.0,"delta":0.0},
+                    {"name":"Combo 2","items":[{"item_id":111,"slot":"trinket1","ilevel":600,"name":"Whorl","encounter":"Ovinax"}],"dps":1048.0,"delta":48.0}
+                ]
+            })),
+        )];
+        let report = aggregate_report("r", 1, "heroic", &inputs);
+        assert!(
+            report.items.iter().all(|i| i.item_id != 999),
+            "equipped baseline item leaked into report: {:?}",
+            report.items.iter().map(|i| i.item_id).collect::<Vec<_>>()
+        );
+        assert!(report.items.iter().any(|i| i.item_id == 111), "drop should be present");
+        assert_eq!(report.items.len(), 1);
+    }
+
+    #[test]
+    fn pivots_by_item_with_per_player_upgrade_pct() {
+        let inputs = vec![
+            (
+                member("a", "Alice"),
+                Some(json!({
+                    "base_dps": 1000.0,
+                    "results": [
+                        {"items":[{"item_id":111,"slot":"trinket1","ilevel":600,"name":"Whorl","encounter":"Ovinax"}],"dps":1048.0,"delta":48.0},
+                        {"items":[{"item_id":222,"slot":"head","ilevel":600,"name":"Hood","encounter":"Ovinax"}],"dps":990.0,"delta":-10.0}
+                    ]
+                })),
+            ),
+            (
+                member("b", "Bob"),
+                Some(json!({
+                    "base_dps": 2000.0,
+                    "results": [
+                        {"items":[{"item_id":111,"slot":"trinket1","ilevel":600,"name":"Whorl","encounter":"Ovinax"}],"dps":2040.0,"delta":40.0}
+                    ]
+                })),
+            ),
+        ];
+        let report = aggregate_report("roster1", 1234, "heroic", &inputs);
+
+        assert_eq!(report.players.len(), 2);
+        assert!(report.players.iter().all(|p| p.status == "ok"));
+
+        // item 111: both players, ranked desc by upgrade_pct (Alice 4.8% > Bob 2.0%)
+        let whorl = report.items.iter().find(|i| i.item_id == 111).unwrap();
+        assert_eq!(whorl.results.len(), 2);
+        assert_eq!(whorl.results[0].member_id, "a");
+        assert!((whorl.results[0].upgrade_pct - 4.8).abs() < 1e-6);
+        assert_eq!(whorl.results[1].member_id, "b");
+        assert!((whorl.results[1].upgrade_pct - 2.0).abs() < 1e-6);
+        assert!((whorl.results[0].abs_gain - 48.0).abs() < 1e-6);
+
+        // item 222: downgrade for Alice
+        let hood = report.items.iter().find(|i| i.item_id == 222).unwrap();
+        assert_eq!(hood.results.len(), 1);
+        assert!(hood.results[0].is_downgrade);
+        assert!(hood.results[0].upgrade_pct < 0.0);
+    }
+
+    #[test]
+    fn keeps_best_combo_per_item_per_member() {
+        // Same item_id 111 in two slots for one member -> keep the max-delta combo.
+        let inputs = vec![(
+            member("a", "Alice"),
+            Some(json!({
+                "base_dps": 1000.0,
+                "results": [
+                    {"items":[{"item_id":111,"slot":"finger1","ilevel":600,"name":"Ring","encounter":"Boss"}],"dps":1010.0,"delta":10.0},
+                    {"items":[{"item_id":111,"slot":"finger2","ilevel":600,"name":"Ring","encounter":"Boss"}],"dps":1030.0,"delta":30.0}
+                ]
+            })),
+        )];
+        let report = aggregate_report("r", 1, "heroic", &inputs);
+        let ring = report.items.iter().find(|i| i.item_id == 111).unwrap();
+        assert_eq!(ring.results.len(), 1);
+        assert!((ring.results[0].abs_gain - 30.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn failed_member_recorded_without_items() {
+        let inputs = vec![(member("a", "Alice"), None)];
+        let report = aggregate_report("r", 1, "mythic", &inputs);
+        assert_eq!(report.players.len(), 1);
+        assert_eq!(report.players[0].status, "sim_failed");
+        assert_eq!(report.players[0].base_dps, 0.0);
+        assert!(report.items.is_empty());
+    }
+}

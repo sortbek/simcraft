@@ -10,6 +10,7 @@ pub mod mdt;
 pub mod models;
 pub mod profileset_generator;
 pub mod result_parser;
+pub mod roster;
 pub mod server;
 pub mod simc_runner;
 pub mod simc_string;

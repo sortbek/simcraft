@@ -140,6 +140,7 @@ export default function Sidebar() {
         <NavItem href={ROUTES.topGear} label={t('nav.topGear')} pathname={pathname} />
         <NavItem href={ROUTES.dropFinder} label={t('nav.dropFinder')} pathname={pathname} />
         <NavItem href={ROUTES.upgradeCompare} label={t('nav.crestUpgrades')} pathname={pathname} />
+        <NavItem href={ROUTES.raidRoster} label={t('nav.raidRoster')} pathname={pathname} />
         <NavItem href={ROUTES.advanced} label={t('nav.advancedSim')} pathname={pathname} />
 
         <GroupLabel>{t('nav.library')}</GroupLabel>

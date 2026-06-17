@@ -267,6 +267,10 @@ pub(super) struct DropsQuery {
     pub class_name: String,
     #[serde(default)]
     pub spec: String,
+    #[serde(default)]
+    pub void_forge: bool,
+    #[serde(default)]
+    pub catalyst: bool,
 }
 
 #[derive(Debug, Deserialize)]

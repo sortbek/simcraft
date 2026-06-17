@@ -1,0 +1,1 @@
+ALTER TABLE roster_members ADD COLUMN item_level INTEGER NOT NULL DEFAULT 0;

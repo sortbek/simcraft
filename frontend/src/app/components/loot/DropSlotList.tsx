@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
-import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
+import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
+import VariantBadges from './VariantBadges';
 
 const SLOT_ORDER = [
   'Main Hand',
@@ -27,8 +28,8 @@ type GroupMode = 'slot' | 'instance';
 
 interface DropSlotListProps {
   drops: Record<string, DropItem[]>;
-  selected: Set<number>;
-  onToggle: (itemId: number) => void;
+  selected: Set<string>;
+  onToggle: (uid: string) => void;
   onSelectAll: () => void;
   onClear: () => void;
   difficulty: string;
@@ -62,7 +63,7 @@ export default function DropSlotList({
     let count = 0;
     for (const items of Object.values(drops)) {
       for (const item of items) {
-        if (item.embellished && selected.has(item.item_id)) count++;
+        if (item.embellished && selected.has(dropUid(item))) count++;
       }
     }
     return count;
@@ -149,10 +150,10 @@ export default function DropSlotList({
           <div className="flex flex-wrap gap-2">
             {items.map((item) => (
               <DropItemCard
-                key={item.item_id}
+                key={dropUid(item)}
                 item={item}
-                isSelected={selected.has(item.item_id)}
-                onToggle={() => onToggle(item.item_id)}
+                isSelected={selected.has(dropUid(item))}
+                onToggle={() => onToggle(dropUid(item))}
                 difficulty={difficulty}
                 dungeonDiff={dungeonDiff}
                 upgradeLevel={upgradeLevel}
@@ -231,16 +232,19 @@ function DropItemCard({
         )}
       </div>
       <div className={`min-w-0 ${isOffSpec ? 'opacity-60' : ''}`}>
-        <a
-          href={getWowheadUrl(item.item_id, locale)}
-          data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className={`block text-[14px] font-medium leading-tight ${QUALITY_COLORS[resolved.quality] || 'text-gray-400'}`}
-        >
-          {localizedItemName(item.item_id, item.name, locale)}
-        </a>
+        <span className="flex items-center gap-1.5">
+          <a
+            href={getWowheadUrl(item.item_id, locale)}
+            data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className={`block text-[14px] font-medium leading-tight ${QUALITY_COLORS[resolved.quality] || 'text-gray-400'}`}
+          >
+            {localizedItemName(item.item_id, item.name, locale)}
+          </a>
+          <VariantBadges item={item} />
+        </span>
         {item.encounter && (
           <span className="text-[12px] text-on-surface-variant/60">{item.encounter}</span>
         )}

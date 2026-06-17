@@ -256,6 +256,7 @@ mod tests {
 
     #[test]
     fn droptimizer_generator_emits_head_drop_combo() {
+        crate::test_support::ensure_game_data_loaded();
         let base_profile = "\
 mage=test\n\
 spec=frost\n\
@@ -279,15 +280,16 @@ main_hand=,id=200\n";
     }
 
     #[test]
-    fn droptimizer_ring_drop_inherits_gem_and_enchant() {
-        // Drop carries bonus 13534 (= +1 socket per fixture), so gem
-        // inheritance from the equipped finger is allowed for both slots.
+    fn droptimizer_ring_drop_inherits_enchant_and_gem_per_slot() {
+        // Each finger inherits its OWN equipped enchant (7437 / 7438) and gem
+        // (both 213743) for the drop's single socket. Drop carries bonus 13534
+        // (= +1 socket per fixture).
         crate::test_support::ensure_game_data_loaded();
         let base_profile = "\
 mage=test\n\
 spec=frost\n\
 finger1=,id=10,enchant_id=7437,gem_id=213743\n\
-finger2=,id=20,enchant_id=7438,gem_id=213744\n\
+finger2=,id=20,enchant_id=7438,gem_id=213743\n\
 main_hand=,id=200\n";
 
         let drop_items = vec![json!({
@@ -306,13 +308,13 @@ main_hand=,id=200\n";
             input.contains(
                 "finger1=,id=555,ilevel=671,bonus_id=13534,enchant_id=7437,gem_id=213743"
             ),
-            "expected finger1 profileset with inherited enchant + gem; got:\n{input}"
+            "expected finger1 profileset with per-slot enchant + gem; got:\n{input}"
         );
         assert!(
             input.contains(
-                "finger2=,id=555,ilevel=671,bonus_id=13534,enchant_id=7438,gem_id=213744"
+                "finger2=,id=555,ilevel=671,bonus_id=13534,enchant_id=7438,gem_id=213743"
             ),
-            "expected finger2 profileset with inherited enchant + gem; got:\n{input}"
+            "expected finger2 profileset with per-slot enchant + gem; got:\n{input}"
         );
 
         let f1 = metadata
@@ -1211,6 +1213,7 @@ finger2=,id=101\n";
 
     #[test]
     fn droptimizer_multiple_drops_emit_one_combo_each() {
+        crate::test_support::ensure_game_data_loaded();
         let base_profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![
             json!({

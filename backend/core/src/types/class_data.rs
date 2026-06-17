@@ -749,6 +749,14 @@ pub fn spec_id_to_name(spec_id: u64) -> Option<&'static str> {
         .map(|s| s.name)
 }
 
+/// Map a numeric spec ID to the SimC class name (e.g., 262 → "shaman").
+pub fn spec_id_to_class(spec_id: u64) -> Option<&'static str> {
+    CLASSES
+        .iter()
+        .find(|c| c.specs.iter().any(|s| s.id == spec_id))
+        .map(|c| c.name)
+}
+
 /// Map a SimC class name to its WoW numeric class ID.
 pub fn class_wow_id(class_name: &str) -> Option<u64> {
     let n = class_name.to_lowercase();
@@ -840,6 +848,19 @@ pub fn quality_color(quality: u64) -> &'static str {
 }
 
 // ---- Utilities ----
+
+/// Map a SimHammer internal class name to the token SimC expects on its
+/// player-declaration line. The two-word classes drop the underscore:
+/// `death_knight` → `deathknight`, `demon_hunter` → `demonhunter`.
+/// Emitting the underscore form makes SimC reject the line with "Unknown
+/// option" and create no actor.
+pub fn simc_class_token(class: &str) -> &str {
+    match class {
+        "death_knight" => "deathknight",
+        "demon_hunter" => "demonhunter",
+        other => other,
+    }
+}
 
 pub fn title_case(s: &str) -> String {
     s.split_whitespace()
@@ -1063,6 +1084,14 @@ mod tests {
             p.weapon_subclasses.contains(&6),
             "Resto druid should allow Polearm (6)"
         );
+    }
+
+    #[test]
+    fn spec_id_to_class_maps_known_ids() {
+        assert_eq!(spec_id_to_class(262), Some("shaman")); // Elemental
+        assert_eq!(spec_id_to_class(64), Some("mage")); // Frost mage
+        assert_eq!(spec_id_to_class(251), Some("death_knight")); // Frost DK
+        assert_eq!(spec_id_to_class(999999), None);
     }
 
     #[test]

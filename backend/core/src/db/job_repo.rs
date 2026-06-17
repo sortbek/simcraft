@@ -110,6 +110,46 @@ fn job_to_overview_summary(
     }
 }
 
+/// Convert a full `jobs` row into a `Job`. Shared by `get` and `get_many` so the
+/// column mapping lives in one place — both SELECT the same column list.
+fn row_to_job(r: &sqlx::any::AnyRow) -> Job {
+    let stages_str: String = r.get("stages_completed");
+    let stages: Vec<String> = serde_json::from_str(&stages_str).unwrap_or_default();
+    let status_str: String = r.get("status");
+    let pct: i32 = r.get("progress_pct");
+    let iterations: i32 = r.get("iterations");
+    Job {
+        id: r.get("id"),
+        status: str_to_status(&status_str),
+        sim_type: r.get("sim_type"),
+        simc_input: r.get("simc_input"),
+        result_json: r.get("result_json"),
+        error_message: r.get("error_message"),
+        progress_pct: pct as u8,
+        progress_stage: r.get("progress_stage"),
+        progress_detail: r.get("progress_detail"),
+        stages_completed: stages,
+        iterations: iterations as u32,
+        fight_style: r.get("fight_style"),
+        target_error: r.get("target_error"),
+        created_at: r.get("created_at"),
+        raw_json: r.get("raw_json"),
+        html_report: r.get("html_report"),
+        text_output: r.get("text_output"),
+        batch_id: r.get("batch_id"),
+        request_json: r.get("request_json"),
+        simc_input_mode: SimcInputMode::from_str(
+            &r.try_get::<String, _>("simc_input_mode")
+                .unwrap_or_else(|_| "inline".to_string()),
+        ),
+        checkpoint: r.get("checkpoint"),
+        pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
+        provider_id: r
+            .try_get("provider_id")
+            .unwrap_or_else(|_| "local".to_string()),
+    }
+}
+
 /// Convert a `jobs` row (with `simc_input_head` via SUBSTR, optional
 /// `result_json`) into a `JobOverviewSummary`. Shared by `list_active` and
 /// `list_jobs` so the field mapping lives in one place.
@@ -261,43 +301,7 @@ impl JobRepo {
                 .fetch_optional(pool)
                 .await?;
 
-                Ok(row.map(|r| {
-                    let stages_str: String = r.get("stages_completed");
-                    let stages: Vec<String> = serde_json::from_str(&stages_str).unwrap_or_default();
-                    let status_str: String = r.get("status");
-                    let pct: i32 = r.get("progress_pct");
-                    let iterations: i32 = r.get("iterations");
-                    Job {
-                        id: r.get("id"),
-                        status: str_to_status(&status_str),
-                        sim_type: r.get("sim_type"),
-                        simc_input: r.get("simc_input"),
-                        result_json: r.get("result_json"),
-                        error_message: r.get("error_message"),
-                        progress_pct: pct as u8,
-                        progress_stage: r.get("progress_stage"),
-                        progress_detail: r.get("progress_detail"),
-                        stages_completed: stages,
-                        iterations: iterations as u32,
-                        fight_style: r.get("fight_style"),
-                        target_error: r.get("target_error"),
-                        created_at: r.get("created_at"),
-                        raw_json: r.get("raw_json"),
-                        html_report: r.get("html_report"),
-                        text_output: r.get("text_output"),
-                        batch_id: r.get("batch_id"),
-                        request_json: r.get("request_json"),
-                        simc_input_mode: SimcInputMode::from_str(
-                            &r.try_get::<String, _>("simc_input_mode")
-                                .unwrap_or_else(|_| "inline".to_string()),
-                        ),
-                        checkpoint: r.get("checkpoint"),
-                        pause_requested: r.try_get::<i32, _>("pause_requested").unwrap_or(0) != 0,
-                        provider_id: r
-                            .try_get("provider_id")
-                            .unwrap_or_else(|_| "local".to_string()),
-                    }
-                }))
+                Ok(row.map(|r| row_to_job(&r)))
             }
             JobBackend::Memory(jobs) => Ok(jobs
                 .lock()
@@ -305,6 +309,44 @@ impl JobRepo {
                 .iter()
                 .find(|job| job.id == id)
                 .cloned()),
+        }
+    }
+
+    /// Batched `get`: fetch all jobs whose id is in `ids` in a single query
+    /// (Database) or one in-memory pass. Mirrors `get`'s column mapping exactly.
+    /// Returns only the jobs that exist; order is not guaranteed. An empty `ids`
+    /// short-circuits to an empty Vec (avoids an empty `IN ()` clause).
+    pub async fn get_many(&self, ids: &[String]) -> Result<Vec<Job>, sqlx::Error> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                let placeholders = (1..=ids.len())
+                    .map(|i| format!("${i}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let sql = format!(
+                    "SELECT id, status, sim_type, simc_input, result_json,
+                     error_message, progress_pct, progress_stage, progress_detail, stages_completed,
+                     iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
+                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id
+                     FROM jobs WHERE id IN ({placeholders})"
+                );
+                let mut query = sqlx::query(&sql);
+                for id in ids {
+                    query = query.bind(id);
+                }
+                let rows = query.fetch_all(pool).await?;
+                Ok(rows.iter().map(row_to_job).collect())
+            }
+            JobBackend::Memory(jobs) => Ok(jobs
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|job| ids.contains(&job.id))
+                .cloned()
+                .collect()),
         }
     }
 

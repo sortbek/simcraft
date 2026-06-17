@@ -34,6 +34,20 @@ fn read_bits(bits: &[bool], pos: usize, width: usize) -> (u64, usize) {
     (value, pos + width)
 }
 
+/// Extract the spec ID encoded in a WoW talent loadout export string.
+///
+/// Layout (LSB-first, 6 bits/char base64): 8-bit serialization version, then a
+/// 16-bit spec id. Returns `None` if the string is too short to hold the header.
+pub fn spec_id_from_loadout(code: &str) -> Option<u64> {
+    let bits = to_bits(code.trim());
+    if bits.len() < 24 {
+        return None;
+    }
+    let (_version, pos) = read_bits(&bits, 0, 8);
+    let (spec_id, _) = read_bits(&bits, pos, 16);
+    Some(spec_id)
+}
+
 struct BitWriter {
     bits: Vec<bool>,
 }
@@ -332,4 +346,22 @@ fn normalize_talent_string(talent_str: &str) -> Option<String> {
     }
 
     Some(writer.to_base64())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spec_id_from_loadout_decodes_known_code() {
+        // Frost mage (spec id 64) export captured from the live armory endpoint.
+        let code = "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA";
+        assert_eq!(spec_id_from_loadout(code), Some(64));
+    }
+
+    #[test]
+    fn spec_id_from_loadout_rejects_short_input() {
+        assert_eq!(spec_id_from_loadout(""), None);
+        assert_eq!(spec_id_from_loadout("AB"), None);
+    }
 }
