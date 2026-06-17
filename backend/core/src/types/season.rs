@@ -89,4 +89,9 @@ pub struct SeasonConfigResponse {
     pub season: String,
     pub raid_difficulties: Vec<DifficultyDef>,
     pub dungeon_categories: Vec<DungeonCategory>,
+    /// Encounter IDs whose loot uses fixed per-difficulty item levels with no
+    /// upgrade track (e.g. Sporefall). Clients hide the upgrade-track control
+    /// when the selected raid's encounters are all in this set.
+    #[serde(default)]
+    pub fixed_difficulty_encounters: Vec<i64>,
 }

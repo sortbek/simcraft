@@ -342,10 +342,17 @@ pub(super) async fn get_season_config() -> HttpResponse {
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
+    let fixed_difficulty_encounters: Vec<i64> = cfg
+        .get("encounterFixedDifficulty")
+        .and_then(|v| v.as_object())
+        .map(|m| m.keys().filter_map(|k| k.parse::<i64>().ok()).collect())
+        .unwrap_or_default();
+
     HttpResponse::Ok().json(SeasonConfigResponse {
         season,
         raid_difficulties,
         dungeon_categories,
+        fixed_difficulty_encounters,
     })
 }
 

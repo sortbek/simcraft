@@ -127,14 +127,28 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, activeDifficulties]);
 
+  // Selected raid's encounters (raids only)
+  const selectedRaid = isRaid ? raids.find((r) => r.id === selectedRaidId) : undefined;
+  const raidEncounters = useMemo(() => selectedRaid?.encounters ?? [], [selectedRaid]);
+
+  // Special raids (e.g. Sporefall) use fixed per-difficulty item levels with NO
+  // upgrade track — hide the upgrade-track control when the selected raid's
+  // encounters are all flagged fixed-difficulty by the season config.
+  const isFixedDifficultyRaid = useMemo(() => {
+    const fixed = seasonConfig?.fixed_difficulty_encounters;
+    if (!isRaid || !fixed || fixed.length === 0 || raidEncounters.length === 0) return false;
+    const set = new Set(fixed);
+    return raidEncounters.every((e) => set.has(e.id));
+  }, [isRaid, seasonConfig, raidEncounters]);
+
   // Track info derived from the selected difficulty's track (drops-independent)
   const selectedDiffDef = activeDifficulties.find((d) => d.key === difficulty);
   const currentTrackInfo = useMemo(() => {
-    if (isCrafted) return null;
+    if (isCrafted || isFixedDifficultyRaid) return null;
     const track = selectedDiffDef?.track;
     if (!track || !upgradeTracks[track]) return null;
     return { name: track, levels: upgradeTracks[track] };
-  }, [isCrafted, selectedDiffDef, upgradeTracks]);
+  }, [isCrafted, isFixedDifficultyRaid, selectedDiffDef, upgradeTracks]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [{ key: 0, label: 'As dropped' }];
@@ -154,10 +168,6 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
       setUpgradeLevel(0);
     }
   }, [upgradeLevelOptions, upgradeLevel]);
-
-  // Selected raid's encounters (raids only)
-  const selectedRaid = isRaid ? raids.find((r) => r.id === selectedRaidId) : undefined;
-  const raidEncounters = selectedRaid?.encounters ?? [];
 
   // Default all bosses selected whenever the selected raid changes
   useEffect(() => {
@@ -285,18 +295,20 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
             </div>
           )}
 
-          <div className="space-y-1">
-            <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              Upgrade level
-            </label>
-            <div className={running ? 'pointer-events-none opacity-50' : ''}>
-              <UpgradeSelect
-                value={upgradeLevel}
-                onChange={setUpgradeLevel}
-                options={upgradeLevelOptions}
-              />
+          {!isFixedDifficultyRaid && (
+            <div className="space-y-1">
+              <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                Upgrade level
+              </label>
+              <div className={running ? 'pointer-events-none opacity-50' : ''}>
+                <UpgradeSelect
+                  value={upgradeLevel}
+                  onChange={setUpgradeLevel}
+                  options={upgradeLevelOptions}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Boss toggles (raids only) */}
