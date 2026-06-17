@@ -42,13 +42,14 @@ export function sortItemsByBest(items: ReportItem[]): ReportItem[] {
   return [...items].sort((a, b) => bestUpgrade(b) - bestUpgrade(a));
 }
 
-/** item_id -> (member_id -> result) lookup for the matrix view. */
-export function resultLookup(items: ReportItem[]): Map<number, Map<string, ReportItemResult>> {
-  const m = new Map<number, Map<string, ReportItemResult>>();
+/** uid -> (member_id -> result) lookup for the matrix view. Keyed by uid (not
+ *  item_id) so a Void Forged variant doesn't collide with its base item. */
+export function resultLookup(items: ReportItem[]): Map<string, Map<string, ReportItemResult>> {
+  const m = new Map<string, Map<string, ReportItemResult>>();
   for (const item of items) {
     const inner = new Map<string, ReportItemResult>();
     for (const r of item.results) inner.set(r.member_id, r);
-    m.set(item.item_id, inner);
+    m.set(item.uid, inner);
   }
   return m;
 }

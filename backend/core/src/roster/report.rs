@@ -32,11 +32,19 @@ pub struct ItemResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemEntry {
+    /// Variant-aware identity (item_id + Void Forged / Catalyst marker). A Void
+    /// Forged item shares its base item's `item_id`, so the report keys on this
+    /// instead to keep the two rows distinct.
+    pub uid: String,
     pub boss: String,
     pub item_id: u64,
     pub name: String,
     pub slot: String,
     pub ilevel: u64,
+    #[serde(default)]
+    pub is_void_forge: bool,
+    #[serde(default)]
+    pub is_catalyst: bool,
     pub results: Vec<ItemResult>,
 }
 
@@ -52,13 +60,16 @@ pub struct RosterReport {
 /// Item metadata captured the first time an item_id is seen, plus the best combo
 /// (max delta) recorded per member.
 struct ItemAccum {
+    item_id: u64,
     boss: String,
     name: String,
     slot: String,
     ilevel: u64,
+    is_void_forge: bool,
+    is_catalyst: bool,
     /// member_id -> (dps, delta) of that member's best combo for this item.
     best: HashMap<String, (f64, f64)>,
-    /// first-seen order of item_ids, tracked by the caller (see aggregate_report).
+    /// first-seen order of items, tracked by the caller (see aggregate_report).
     order: usize,
 }
 
@@ -73,7 +84,7 @@ pub fn aggregate_report(
     inputs: &[(MemberMeta, Option<Value>)],
 ) -> RosterReport {
     let mut players: Vec<PlayerEntry> = Vec::with_capacity(inputs.len());
-    let mut items: HashMap<u64, ItemAccum> = HashMap::new();
+    let mut items: HashMap<String, ItemAccum> = HashMap::new();
     let mut next_order: usize = 0;
 
     for (member, result) in inputs {
@@ -125,10 +136,30 @@ pub fn aggregate_report(
             let delta = combo.get("delta").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let dps = combo.get("dps").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
-            let accum = items.entry(item_id).or_insert_with(|| {
+            // A Void Forged variant keeps the base item_id, so key on a variant-aware
+            // uid (mirrors the frontend `dropUid`) to keep base/variant rows distinct.
+            let is_void_forge = item
+                .get("is_void_forge")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let is_catalyst = item
+                .get("is_catalyst")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let uid = if is_void_forge {
+                format!("{item_id}:vf")
+            } else if is_catalyst {
+                let source = item.get("source_item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                format!("{item_id}:cat:{source}")
+            } else {
+                item_id.to_string()
+            };
+
+            let accum = items.entry(uid).or_insert_with(|| {
                 let order = next_order;
                 next_order += 1;
                 ItemAccum {
+                    item_id,
                     boss: item
                         .get("encounter")
                         .and_then(|v| v.as_str())
@@ -145,6 +176,8 @@ pub fn aggregate_report(
                         .unwrap_or("")
                         .to_string(),
                     ilevel: item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0),
+                    is_void_forge,
+                    is_catalyst,
                     best: HashMap::new(),
                     order,
                 }
@@ -172,7 +205,7 @@ pub fn aggregate_report(
     // Flatten accumulators into ItemEntry list.
     let mut item_entries: Vec<(usize, ItemEntry)> = items
         .into_iter()
-        .map(|(item_id, accum)| {
+        .map(|(uid, accum)| {
             let mut results: Vec<ItemResult> = accum
                 .best
                 .iter()
@@ -200,11 +233,14 @@ pub fn aggregate_report(
             (
                 accum.order,
                 ItemEntry {
+                    uid,
                     boss: accum.boss,
-                    item_id,
+                    item_id: accum.item_id,
                     name: accum.name,
                     slot: accum.slot,
                     ilevel: accum.ilevel,
+                    is_void_forge: accum.is_void_forge,
+                    is_catalyst: accum.is_catalyst,
                     results,
                 },
             )
@@ -330,6 +366,33 @@ mod tests {
         let ring = report.items.iter().find(|i| i.item_id == 111).unwrap();
         assert_eq!(ring.results.len(), 1);
         assert!((ring.results[0].abs_gain - 30.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn void_forge_variant_is_separate_row_from_base() {
+        // Base item 111 and its Void Forged variant share item_id 111; the
+        // variant marker must key them into distinct rows, not merge them.
+        let inputs = vec![(
+            member("a", "Alice"),
+            Some(json!({
+                "base_dps": 1000.0,
+                "results": [
+                    {"items":[{"item_id":111,"slot":"trinket1","ilevel":620,"name":"Whorl","encounter":"Ovinax"}],"dps":1048.0,"delta":48.0},
+                    {"items":[{"item_id":111,"slot":"trinket1","ilevel":639,"name":"Whorl","encounter":"Ovinax","is_void_forge":true,"source_item_id":111}],"dps":1080.0,"delta":80.0}
+                ]
+            })),
+        )];
+        let report = aggregate_report("r", 1, "heroic", &inputs);
+        assert_eq!(report.items.len(), 2, "base + void forge must be separate rows");
+        let vf = report.items.iter().find(|i| i.is_void_forge).expect("vf row");
+        assert_eq!(vf.item_id, 111);
+        assert_eq!(vf.uid, "111:vf");
+        let base = report
+            .items
+            .iter()
+            .find(|i| !i.is_void_forge && !i.is_catalyst)
+            .expect("base row");
+        assert_eq!(base.uid, "111");
     }
 
     #[test]

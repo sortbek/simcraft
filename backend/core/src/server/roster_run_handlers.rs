@@ -19,6 +19,10 @@ pub struct StartRunRequest {
     pub upgrade_level: Option<u64>,
     #[serde(default)]
     pub encounters: Option<Vec<i64>>,
+    #[serde(default)]
+    pub void_forge: bool,
+    #[serde(default)]
+    pub catalyst: bool,
     #[serde(flatten)]
     pub options: SimOptions,
 }
@@ -73,6 +77,8 @@ pub(super) async fn start_run(
                 req.upgrade_level.unwrap_or(0),
                 req.encounters.as_deref().unwrap_or(&[]),
                 &tracks,
+                req.void_forge,
+                req.catalyst,
             );
             if drops.is_empty() {
                 None

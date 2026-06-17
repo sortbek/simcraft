@@ -4,11 +4,12 @@ import type { ItemInfo } from '../../lib/useItemInfo';
 import { getIconUrl, getWowheadUrl, getWowheadData } from '../../lib/useItemInfo';
 import { QUALITY_HEX } from '../../lib/qualityColors';
 import { heatClasses } from './reportTypes';
+import VariantBadges from '../loot/VariantBadges';
 
 interface Props {
   items: ReportItem[];                                  // filtered + sorted by container
   players: ReportPlayer[];                              // column order (filtered)
-  lookup: Map<number, Map<string, ReportItemResult>>;   // item_id -> member_id -> result
+  lookup: Map<string, Map<string, ReportItemResult>>;   // uid -> member_id -> result
   itemInfo: Record<number, ItemInfo>;
 }
 
@@ -31,12 +32,12 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
     const iconName = info?.icon ?? 'inv_misc_questionmark';
     const displayName = item.name || info?.name || String(item.item_id);
     const qualityColor = QUALITY_HEX[quality] ?? '#ffffff';
-    const itemResults = lookup.get(item.item_id);
+    const itemResults = lookup.get(item.uid);
 
     if (item.boss !== prevBoss) {
       prevBoss = item.boss;
       rows.push(
-        <tr key={`boss-${item.boss}-${item.item_id}`}>
+        <tr key={`boss-${item.boss}-${item.uid}`}>
           <td
             colSpan={players.length + 1}
             className="bg-surface-container px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60"
@@ -48,28 +49,31 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
     }
 
     rows.push(
-      <tr key={item.item_id} className="group">
+      <tr key={item.uid} className="group">
         {/* Sticky item cell */}
         <td className="sticky left-0 z-10 bg-surface-container-low">
-          <a
-            href={getWowheadUrl(item.item_id)}
-            data-wowhead={getWowheadData(undefined, item.ilevel)}
-            target="_blank"
-            rel="noreferrer"
-            className="flex w-56 items-center gap-2 px-2 py-1 hover:underline"
-          >
-            <img
-              src={getIconUrl(iconName)}
-              alt={displayName}
-              className="h-6 w-6 shrink-0 rounded object-cover"
-            />
-            <span
-              className="truncate text-xs font-semibold"
-              style={{ color: qualityColor }}
+          <div className="flex w-56 items-center gap-2 px-2 py-1">
+            <a
+              href={getWowheadUrl(item.item_id)}
+              data-wowhead={getWowheadData(undefined, item.ilevel)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex min-w-0 items-center gap-2 hover:underline"
             >
-              {displayName}
-            </span>
-          </a>
+              <img
+                src={getIconUrl(iconName)}
+                alt={displayName}
+                className="h-6 w-6 shrink-0 rounded object-cover"
+              />
+              <span
+                className="truncate text-xs font-semibold"
+                style={{ color: qualityColor }}
+              >
+                {displayName}
+              </span>
+            </a>
+            <VariantBadges item={item} />
+          </div>
         </td>
 
         {/* Player cells */}

@@ -133,6 +133,19 @@ pub(super) fn generate_droptimizer_input(
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
             .unwrap_or_default();
+        // Drop-variant markers (Void Forged / Catalyst) ride along in the combo
+        // metadata so the result parser echoes them and the roster report can
+        // tell a variant apart from its base item (a Void Forged item keeps the
+        // base item_id). Absent on plain drops.
+        let is_void_forge = item
+            .get("is_void_forge")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let is_catalyst = item
+            .get("is_catalyst")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let source_item_id = item.get("source_item_id").and_then(|v| v.as_u64());
         // `slot_inherits` is intentionally ignored (kept in the type for API
         // back-compat, no longer authoritative).
         let mut slots = class_data::inv_type_to_slots(inv_type, &spec);
@@ -240,6 +253,9 @@ pub(super) fn generate_droptimizer_input(
                     "gem_id": applied_gem,
                     "is_kept": false,
                     "encounter": encounter,
+                    "is_void_forge": is_void_forge,
+                    "is_catalyst": is_catalyst,
+                    "source_item_id": source_item_id,
                 }]),
             );
             combo_idx += 1;

@@ -5,6 +5,7 @@ import type { ItemInfo } from '../../lib/useItemInfo';
 import { getIconUrl, getWowheadUrl, getWowheadData } from '../../lib/useItemInfo';
 import { QUALITY_HEX } from '../../lib/qualityColors';
 import { SLOT_LABELS } from '../../lib/types';
+import VariantBadges from '../loot/VariantBadges';
 
 interface Props {
   items: ReportItem[];
@@ -123,7 +124,7 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
                   const displayName = item.name || info?.name || String(item.item_id);
 
                   return (
-                    <div key={item.item_id} className="px-4 py-3">
+                    <div key={item.uid} className="px-4 py-3">
                       {/* Item header row */}
                       <div className="mb-2 flex items-start gap-3">
                         {/* Icon */}
@@ -140,16 +141,19 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
 
                         {/* Name + meta */}
                         <div className="min-w-0 flex-1">
-                          <a
-                            href={getWowheadUrl(item.item_id)}
-                            data-wowhead={getWowheadData(undefined, item.ilevel)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm font-bold hover:underline"
-                            style={{ color: QUALITY_HEX[quality] ?? '#ffffff' }}
-                          >
-                            {displayName}
-                          </a>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <a
+                              href={getWowheadUrl(item.item_id)}
+                              data-wowhead={getWowheadData(undefined, item.ilevel)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-sm font-bold hover:underline"
+                              style={{ color: QUALITY_HEX[quality] ?? '#ffffff' }}
+                            >
+                              {displayName}
+                            </a>
+                            <VariantBadges item={item} />
+                          </div>
                           <p className="mt-0.5 text-xs text-on-surface-variant/60">
                             ilvl {item.ilevel} · {SLOT_LABELS[item.slot] ?? item.slot}
                           </p>

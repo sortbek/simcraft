@@ -8,6 +8,11 @@ use crate::game_data;
 /// Drop Finder's `resolveUpgrade`). `encounter_ids` restricts to selected bosses by
 /// encounter id (empty = all bosses). `tracks` is `game_data::get_upgrade_tracks()`
 /// output, passed in so callers can compute it once across many members.
+///
+/// `void_forge`/`catalyst` opt into the same Void Forged / Catalyst drop variants as
+/// the Drop Finder, via the shared `game_data::add_drop_variants` (no-op when both
+/// are false, so default runs are unchanged).
+#[allow(clippy::too_many_arguments)]
 pub fn build_drop_items(
     instance_id: i64,
     difficulty: &str,
@@ -16,9 +21,12 @@ pub fn build_drop_items(
     upgrade_level: u64,
     encounter_ids: &[i64],
     tracks: &Value,
+    void_forge: bool,
+    catalyst: bool,
 ) -> Vec<Value> {
     match game_data::get_instance_drops(instance_id, Some(class), Some(spec)) {
-        Some(by_slot) => {
+        Some(mut by_slot) => {
+            game_data::add_drop_variants(&mut by_slot, Some(class), void_forge, catalyst);
             drop_items_from_slots(&by_slot, difficulty, upgrade_level, encounter_ids, tracks)
         }
         None => Vec::new(),
@@ -116,14 +124,32 @@ pub fn drop_items_from_slots(
             if bonus != 0 {
                 bonus_ids.push(bonus);
             }
-            out.push(json!({
+            // Catalyst variants carry their tier set bonus via `extra_bonus_ids`;
+            // fold it into the sim'd bonus_ids so the drop runs with the set bonus.
+            if let Some(extra) = item.get("extra_bonus_ids").and_then(|v| v.as_array()) {
+                bonus_ids.extend(extra.iter().filter_map(|b| b.as_u64()));
+            }
+            let mut out_item = json!({
                 "item_id": item_id,
                 "ilevel": ilevel,
                 "name": item.get("name").and_then(|v| v.as_str()).unwrap_or(""),
                 "encounter": item.get("encounter").and_then(|v| v.as_str()).unwrap_or(""),
                 "inventory_type": item.get("inventory_type").and_then(|v| v.as_u64()).unwrap_or(0),
                 "bonus_ids": bonus_ids,
-            }));
+            });
+            // Carry variant markers through to combo metadata and the report so
+            // Void Forged / Catalyst rows stay distinct from their base item.
+            let out_obj = out_item.as_object_mut().expect("json object");
+            if item.get("is_void_forge").and_then(|v| v.as_bool()) == Some(true) {
+                out_obj.insert("is_void_forge".to_string(), json!(true));
+            }
+            if item.get("is_catalyst").and_then(|v| v.as_bool()) == Some(true) {
+                out_obj.insert("is_catalyst".to_string(), json!(true));
+            }
+            if let Some(src) = item.get("source_item_id").and_then(|v| v.as_u64()) {
+                out_obj.insert("source_item_id".to_string(), json!(src));
+            }
+            out.push(out_item);
         }
     }
     out
@@ -389,6 +415,42 @@ mod tests {
         assert_eq!(bonus_ids, vec![13787]);
     }
 
+    #[test]
+    fn carries_variant_markers_and_folds_extra_bonus_ids() {
+        // A catalyst variant carries the tier item_id, a source_item_id, and a
+        // tier-set extra_bonus_id that must be folded into the sim'd bonus_ids.
+        let item = json!({
+            "item_id": 5000u64,
+            "ilevel": 600u64,
+            "name": "Tier Helm",
+            "encounter": "Boss",
+            "inventory_type": 1u64,
+            "is_catalyst": true,
+            "source_item_id": 12345u64,
+            "extra_bonus_ids": [99999u64],
+            "difficulty_info": {
+                "heroic": { "ilvl": 639u64, "bonus_id": 111u64, "quality": 4u64 }
+            }
+        });
+        let by_slot = make_slot_map(vec![item]);
+        let result = drop_items_from_slots(&by_slot, "heroic", 0, &[], &empty_tracks());
+        assert_eq!(result.len(), 1);
+        let r = &result[0];
+        assert_eq!(r.get("item_id").and_then(|v| v.as_u64()), Some(5000));
+        assert_eq!(r.get("is_catalyst").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(r.get("source_item_id").and_then(|v| v.as_u64()), Some(12345));
+        let bonus_ids: Vec<u64> = r
+            .get("bonus_ids")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter_map(|b| b.as_u64())
+            .collect();
+        assert_eq!(bonus_ids, vec![111, 99999], "tier-set bonus folded in");
+        // Not a void-forge variant -> that marker must be absent.
+        assert!(r.get("is_void_forge").is_none());
+    }
+
     // ---- Integration tests (require loaded game data) ----
 
     #[test]
@@ -403,6 +465,8 @@ mod tests {
             0,
             &[],
             &game_data::get_upgrade_tracks(),
+            false,
+            false,
         );
         assert!(!items.is_empty(), "expected drops for The Dreamrift (1314)");
         let first = &items[0];
@@ -425,6 +489,8 @@ mod tests {
             0,
             &[],
             &game_data::get_upgrade_tracks(),
+            false,
+            false,
         )
         .is_empty());
     }
@@ -435,8 +501,8 @@ mod tests {
         // Sporefall (instance 1305, encounter 2711 "Rotmire") uses fixed Sporefused
         // ilvls per difficulty (LFR 259 / Mythic 298) with NO upgrade track.
         let tracks = game_data::get_upgrade_tracks();
-        let lfr = build_drop_items(1305, "lfr", "mage", "frost", 0, &[], &tracks);
-        let mythic = build_drop_items(1305, "mythic", "mage", "frost", 0, &[], &tracks);
+        let lfr = build_drop_items(1305, "lfr", "mage", "frost", 0, &[], &tracks, false, false);
+        let mythic = build_drop_items(1305, "mythic", "mage", "frost", 0, &[], &tracks, false, false);
         assert!(!lfr.is_empty(), "expected Sporefall drops for mage/frost");
         assert!(
             lfr.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(259)),
@@ -447,7 +513,7 @@ mod tests {
             "Mythic Sporefall drops must all be ilvl 298"
         );
         // No upgrade track: a max upgrade level must NOT change the mythic ilvl.
-        let mythic_up = build_drop_items(1305, "mythic", "mage", "frost", 8, &[], &tracks);
+        let mythic_up = build_drop_items(1305, "mythic", "mage", "frost", 8, &[], &tracks, false, false);
         assert!(
             mythic_up.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
             "upgrade level must be a no-op for fixed-difficulty raids"

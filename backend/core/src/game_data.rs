@@ -503,8 +503,9 @@ fn build_catalyst_variant(item: &Value, class_id: u64, inv_type: u64) -> Option<
 }
 
 /// Append opt-in Void Forged (weapons/trinkets) and/or Catalyst (tier armor)
-/// variant rows to a drops-by-slot map IN PLACE. Only the Drop Finder calls this;
-/// the roster path (build_drop_items) does not, so default drops are unchanged.
+/// variant rows to a drops-by-slot map IN PLACE. Both the Drop Finder and roster
+/// runs (via `build_drop_items`) call this; it's a no-op when both flags are
+/// false, so default drops are unchanged.
 pub fn add_drop_variants(
     by_slot: &mut serde_json::Map<String, Value>,
     class_name: Option<&str>,

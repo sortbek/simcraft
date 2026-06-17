@@ -1,8 +1,12 @@
 import { useLanguage } from '../../lib/i18n';
-import type { DropItem } from './types';
 
-/** Void Forged / Catalyst pills shown next to a drop's item name. */
-export default function VariantBadges({ item }: { item: DropItem }) {
+/** Void Forged / Catalyst pills shown next to a drop's item name. Accepts any
+ *  item carrying the variant markers (Drop Finder `DropItem` or roster `ReportItem`). */
+export default function VariantBadges({
+  item,
+}: {
+  item: { is_void_forge?: boolean; is_catalyst?: boolean };
+}) {
   const { t } = useLanguage();
   return (
     <>

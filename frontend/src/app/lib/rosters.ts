@@ -95,11 +95,16 @@ export interface ReportItemResult {
 }
 
 export interface ReportItem {
+  /** Variant-aware identity (a Void Forged item shares its base item_id). Use
+   *  this for React keys and the matrix lookup, not item_id. */
+  uid: string;
   boss: string;
   item_id: number;
   name: string;
   slot: string;
   ilevel: number;
+  is_void_forge?: boolean;
+  is_catalyst?: boolean;
   results: ReportItemResult[];
 }
 
@@ -136,6 +141,8 @@ export interface RunOptions {
   fight_style?: string;
   upgrade_level?: number;
   encounters?: number[];
+  void_forge?: boolean;
+  catalyst?: boolean;
 }
 
 export async function startRun(
