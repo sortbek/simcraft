@@ -2,6 +2,7 @@ use actix_web::web;
 
 #[cfg(not(feature = "desktop"))]
 use super::admin_handlers;
+use super::armory_handlers;
 use super::character_handlers;
 use super::cloud_estimate;
 use super::droptimizer_handlers;
@@ -235,6 +236,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/talent-builds/{id}",
             web::delete().to(character_handlers::delete_talent_build),
+        )
+        .route(
+            "/api/armory/import",
+            web::post().to(armory_handlers::import_armory_character),
         )
         .route("/api/rosters", web::get().to(roster_handlers::list_rosters))
         .route(

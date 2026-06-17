@@ -10,8 +10,7 @@ import {
 import RosterEditor from '../components/raid-roster/RosterEditor';
 import RosterRunPanel from '../components/raid-roster/RosterRunPanel';
 import RosterHistory from '../components/raid-roster/RosterHistory';
-
-const REGIONS = ['eu', 'us', 'kr', 'tw'] as const;
+import { REGIONS } from '../lib/regions';
 
 export default function RaidRosterPage() {
   const [rosters, setRosters] = useState<Roster[]>([]);

@@ -1,6 +1,7 @@
 #[cfg(not(feature = "desktop"))]
 mod admin_handlers;
 mod api_routes;
+mod armory_handlers;
 mod character_handlers;
 mod cloud_estimate;
 pub(crate) mod cloud_streaming;

@@ -7,8 +7,11 @@ import {
   getCharacters,
   upsertCharacter,
   deleteCharacter,
+  fetchArmoryCharacter,
   type SavedCharacter,
 } from '../../lib/saved-characters';
+import { REGIONS } from '../../lib/regions';
+import { loadRealms, type RealmInfo } from '../../lib/realms';
 import WindowControls from './WindowTitlebar';
 import DesktopAppLink from './DesktopAppLink';
 import ActiveSimsIndicator from './ActiveSimsIndicator';
@@ -27,6 +30,68 @@ export default function TopBar() {
   const { simcInput, setSimcInput } = useSimContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Armory import tab state (the SimC paste box is the other tab)
+  const [importTab, setImportTab] = useState<'simc' | 'armory'>('simc');
+  const [armoryRegion, setArmoryRegion] = useState<string>('eu');
+  const [armoryRealm, setArmoryRealm] = useState(''); // holds the realm slug
+  const [armoryName, setArmoryName] = useState('');
+  const [armoryFetching, setArmoryFetching] = useState(false);
+  const [armoryError, setArmoryError] = useState('');
+  const [realmsByRegion, setRealmsByRegion] = useState<Record<string, RealmInfo[]> | null>(null);
+  const [realmsError, setRealmsError] = useState(false);
+
+  // Lazy-load the realm list the first time the Armory tab is opened.
+  useEffect(() => {
+    if (importTab !== 'armory' || realmsByRegion) return;
+    let cancelled = false;
+    loadRealms()
+      .then((r) => {
+        if (!cancelled) {
+          setRealmsByRegion(r);
+          setRealmsError(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRealmsError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [importTab, realmsByRegion]);
+
+  const regionRealms = realmsByRegion?.[armoryRegion] ?? [];
+  const canFetch = armoryRealm.trim() !== '' && armoryName.trim() !== '' && !armoryFetching;
+
+  // Shared by both import tabs' footers.
+  const cancelButton = (
+    <button
+      onClick={() => setEditing(false)}
+      className="rounded-lg px-4 py-2 text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
+    >
+      {t('common.cancel')}
+    </button>
+  );
+
+  const handleArmoryFetch = useCallback(async () => {
+    if (!canFetch) return;
+    setArmoryFetching(true);
+    setArmoryError('');
+    try {
+      const { simc_input } = await fetchArmoryCharacter(
+        armoryRegion,
+        armoryRealm.trim(),
+        armoryName.trim()
+      );
+      // Drop the generated profile into the SimC box for review; Apply persists it.
+      setEditValue(simc_input);
+      setImportTab('simc');
+    } catch (e) {
+      setArmoryError(e instanceof Error ? e.message : 'Armory fetch failed');
+    } finally {
+      setArmoryFetching(false);
+    }
+  }, [canFetch, armoryRegion, armoryRealm, armoryName]);
 
   const characterInfo = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
   const checksumWarning = useMemo(
@@ -289,45 +354,137 @@ export default function TopBar() {
         </div>
       )}
 
-      {/* Expanded SimC editor — drops below the top bar */}
+      {/* Expanded import editor — drops below the top bar */}
       {editing && (
         <div className="desktop-no-drag absolute left-0 right-0 top-full z-50 border-b border-outline-variant/10 bg-[#0e0e0e]/95 px-6 py-4 shadow-2xl shadow-black/40 backdrop-blur-xl">
           <div className="mx-auto max-w-3xl space-y-3">
-            <textarea
-              ref={textareaRef}
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setEditing(false);
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (editValue.trim()) {
-                    setSimcInput(editValue);
-                    setEditing(false);
-                  }
-                }
-              }}
-              placeholder={t('layout.pasteSimcExportFull')}
-              className="h-48 w-full resize-y rounded-lg bg-surface-container px-4 py-3 font-mono text-[12px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
-            />
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  setSimcInput(editValue);
-                  setEditing(false);
-                }}
-                disabled={!editValue.trim()}
-                className="rounded-lg bg-gold/10 px-4 py-2 text-[13px] font-bold text-gold transition-colors hover:bg-gold/20 disabled:opacity-40"
-              >
-                {t('common.apply')}
-              </button>
-              <button
-                onClick={() => setEditing(false)}
-                className="rounded-lg px-4 py-2 text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface"
-              >
-                {t('common.cancel')}
-              </button>
+            {/* Import source tabs: paste a SimC string or fetch from the armory */}
+            <div className="flex gap-1">
+              {(['simc', 'armory'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setImportTab(tab)}
+                  className={`rounded-lg px-3 py-1.5 text-[13px] font-bold transition-colors ${
+                    importTab === tab
+                      ? 'bg-surface-container-high text-on-surface'
+                      : 'text-on-surface-variant/60 hover:text-on-surface'
+                  }`}
+                >
+                  {tab === 'simc' ? t('layout.importTabSimc') : t('layout.importTabArmory')}
+                </button>
+              ))}
             </div>
+
+            {importTab === 'simc' ? (
+              <>
+                <textarea
+                  ref={textareaRef}
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setEditing(false);
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (editValue.trim()) {
+                        setSimcInput(editValue);
+                        setEditing(false);
+                      }
+                    }
+                  }}
+                  placeholder={t('layout.pasteSimcExportFull')}
+                  className="h-48 w-full resize-y rounded-lg bg-surface-container px-4 py-3 font-mono text-[12px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setSimcInput(editValue);
+                      setEditing(false);
+                    }}
+                    disabled={!editValue.trim()}
+                    className="rounded-lg bg-gold/10 px-4 py-2 text-[13px] font-bold text-gold transition-colors hover:bg-gold/20 disabled:opacity-40"
+                  >
+                    {t('common.apply')}
+                  </button>
+                  {cancelButton}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <select
+                    value={armoryRegion}
+                    onChange={(e) => {
+                      setArmoryRegion(e.target.value);
+                      setArmoryRealm('');
+                    }}
+                    className="rounded-lg bg-surface-container px-3 py-2 text-[13px] uppercase text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  >
+                    {REGIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={armoryRealm}
+                    onChange={(e) => setArmoryRealm(e.target.value)}
+                    disabled={regionRealms.length === 0}
+                    className="w-48 rounded-lg bg-surface-container px-3 py-2 text-[13px] text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:opacity-40"
+                  >
+                    <option value="">
+                      {realmsError
+                        ? t('layout.armoryRealmsUnavailable')
+                        : realmsByRegion
+                          ? t('layout.armorySelectRealm')
+                          : t('layout.armoryRealmsLoading')}
+                    </option>
+                    {regionRealms.map((r) => (
+                      <option key={r.slug} value={r.slug}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={armoryName}
+                    onChange={(e) => setArmoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setEditing(false);
+                      if (e.key === 'Enter') handleArmoryFetch();
+                    }}
+                    placeholder={t('layout.armoryNamePlaceholder')}
+                    className="flex-1 rounded-lg bg-surface-container px-3 py-2 text-[13px] text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  />
+                </div>
+                {armoryError && <p className="text-[12px] text-red-400">{armoryError}</p>}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleArmoryFetch}
+                    disabled={!canFetch}
+                    className="inline-flex items-center gap-2 rounded-lg bg-gold/10 px-4 py-2 text-[13px] font-bold text-gold transition-colors hover:bg-gold/20 disabled:opacity-40"
+                  >
+                    {armoryFetching && (
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                      </svg>
+                    )}
+                    {armoryFetching ? t('layout.armoryFetching') : t('layout.armoryFetch')}
+                  </button>
+                  {cancelButton}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,12 +1,13 @@
 {
   "name": "simhammer-frontend",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "build:desktop": "cross-env DESKTOP_BUILD=1 NEXT_PUBLIC_API_URL=http://127.0.0.1:17384 next build",
     "start": "next start",
+    "generate:realms": "node scripts/generate-realms.mjs",
     "lint": "eslint src/",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\""
