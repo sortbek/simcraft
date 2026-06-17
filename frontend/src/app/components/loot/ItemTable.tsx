@@ -6,6 +6,7 @@ import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import { resolveInherits, type EquippedGear, type SlotInherit } from '../../lib/inheritedGear';
 import { qualityBorderColor } from '../../lib/qualityColors';
 import Checkbox from '../ui/Checkbox';
+import VariantBadges from './VariantBadges';
 
 const SLOT_ORDER = [
   'Main Hand',
@@ -337,16 +338,7 @@ export default function ItemTable({
                         >
                           {localizedItemName(item.item_id, item.name, locale)}
                         </a>
-                        {item.is_void_forge && (
-                          <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-purple-300">
-                            {t('loot.voidforged')}
-                          </span>
-                        )}
-                        {item.is_catalyst && (
-                          <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
-                            {t('loot.catalyst')}
-                          </span>
-                        )}
+                        <VariantBadges item={item} />
                       </div>
                       {item.encounter && (
                         <p className="text-[10px] text-on-surface-variant/60">

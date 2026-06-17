@@ -201,13 +201,13 @@ pub(super) fn generate_droptimizer_input(
                     })
                     .unwrap_or_default();
                 // Socket i uses the slot's own gem when present, else the most-used.
-                let gems: Vec<String> = (0..drop_sockets as usize)
+                let gems: Vec<u64> = (0..drop_sockets as usize)
                     .filter_map(|i| slot_gems.get(i).copied().or(best_gem))
-                    .map(|id| id.to_string())
                     .collect();
-                if !gems.is_empty() {
-                    applied_gem = gems[0].parse().unwrap_or(0);
-                    simc_str.push_str(&format!(",gem_id={}", gems.join("/")));
+                if let Some(&first) = gems.first() {
+                    applied_gem = first;
+                    let gem_str = gems.iter().map(u64::to_string).collect::<Vec<_>>().join("/");
+                    simc_str.push_str(&format!(",gem_id={}", gem_str));
                 }
             }
 

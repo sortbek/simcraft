@@ -403,10 +403,14 @@ pub fn get_instance_drops(
 
 // ---- Drop Variants (opt-in, Drop Finder only) ----
 
-/// Inventory types eligible for Void Forge: trinket(12) + weapons + off-hand
-/// (matches gear-resolver VF_SLOTS: main_hand/off_hand/trinkets).
+/// Inventory types eligible for Void Forge: trinket + weapons + off-hand
+/// (matches gear-resolver VF_SLOTS: main_hand/off_hand/trinkets). Derived from
+/// the canonical inv-type classifier so it can't drift from the slot mapping.
 fn is_void_forge_inv_type(inv_type: u64) -> bool {
-    matches!(inv_type, 12 | 13 | 14 | 15 | 17 | 21 | 22 | 23 | 25 | 26)
+    matches!(
+        class_data::inventory_type_display_slot(inv_type),
+        "Main Hand" | "Off Hand" | "Trinket"
+    )
 }
 
 /// Recompute a per-difficulty info map for a Void Forged variant. For each
@@ -486,6 +490,9 @@ fn build_catalyst_variant(item: &Value, class_id: u64, inv_type: u64) -> Option<
     obj.insert("icon".to_string(), Value::String(tier.icon.clone()));
     obj.insert("is_catalyst".to_string(), Value::Bool(true));
     obj.insert("source_item_id".to_string(), serde_json::json!(source_item_id));
+    // The tier piece is not embellished even if the source drop was; drop the
+    // stale flag so it doesn't show the badge or count against the 2/2 limit.
+    obj.remove("embellished");
     if tier.has_set {
         obj.insert(
             "extra_bonus_ids".to_string(),
@@ -515,6 +522,9 @@ pub fn add_drop_variants(
             None => continue,
         };
         let mut variants: Vec<Value> = Vec::new();
+        // Many source items in a slot convert to the SAME class tier piece; keep
+        // only the first so we don't emit duplicate identical catalyst rows/sims.
+        let mut catalyst_tier_seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
         for item in arr.iter() {
             let inv_type = item
                 .get("inventory_type")
@@ -529,12 +539,25 @@ pub fn add_drop_variants(
             if include_catalyst {
                 if let Some(cid) = class_id {
                     if let Some(v) = build_catalyst_variant(item, cid, inv_type) {
-                        variants.push(v);
+                        let tier_id = v.get("item_id").and_then(|x| x.as_u64()).unwrap_or(0);
+                        if catalyst_tier_seen.insert(tier_id) {
+                            variants.push(v);
+                        }
                     }
                 }
             }
         }
-        arr.extend(variants);
+        if !variants.is_empty() {
+            arr.extend(variants);
+            // Variants (esp. the higher-ilvl Void Forged rows) were appended after
+            // the slot was ilvl-sorted; restore descending-ilvl order.
+            arr.sort_by(|a, b| {
+                b.get("ilevel")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+                    .cmp(&a.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0))
+            });
+        }
     }
 }
 

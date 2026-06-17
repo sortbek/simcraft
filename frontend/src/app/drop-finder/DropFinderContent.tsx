@@ -363,24 +363,46 @@ export default function DropFinderContent() {
   // Filter drops by instance pool (dungeons or raids)
   const filteredDrops = useMemo(() => {
     if (!drops) return null;
-    if (isPoolOnly) return drops;
 
-    const pool = isRaid ? raidPool : dungeonPool;
-    const instanceList = isRaid ? raids : dungeonInstances;
-    if (pool.size === 0) return {};
-    const selectedNames = new Set(
-      instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
-    );
-    if (selectedNames.size === instanceList.length) return drops; // all selected = no filter
-    const filtered: Record<string, DropItem[]> = {};
-    for (const [slot, items] of Object.entries(drops)) {
-      const kept = items.filter(
-        (item) => !item.instance_name || selectedNames.has(item.instance_name)
-      );
-      if (kept.length > 0) filtered[slot] = kept;
+    // Instance-pool filter (raids/dungeons selected in the picker).
+    let base: Record<string, DropItem[]>;
+    if (isPoolOnly) {
+      base = drops;
+    } else {
+      const pool = isRaid ? raidPool : dungeonPool;
+      const instanceList = isRaid ? raids : dungeonInstances;
+      if (pool.size === 0) {
+        base = {};
+      } else {
+        const selectedNames = new Set(
+          instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
+        );
+        if (selectedNames.size === instanceList.length) {
+          base = drops; // all selected = no filter
+        } else {
+          base = {};
+          for (const [slot, items] of Object.entries(drops)) {
+            const kept = items.filter(
+              (item) => !item.instance_name || selectedNames.has(item.instance_name)
+            );
+            if (kept.length > 0) base[slot] = kept;
+          }
+        }
+      }
     }
-    return filtered;
-  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly]);
+
+    // Void Forged variants only carry entries for the difficulties whose track
+    // has a voidforge tier (Hero/Myth); hide them at other difficulties so they
+    // never resolve to a stale (mythic) ilvl with the voidforge bonus dropped.
+    const result: Record<string, DropItem[]> = {};
+    for (const [slot, items] of Object.entries(base)) {
+      const kept = items.filter(
+        (item) => !item.is_void_forge || getTrackInfo(item, difficulty, dungeonDiff) !== null
+      );
+      if (kept.length > 0) result[slot] = kept;
+    }
+    return result;
+  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly, difficulty, dungeonDiff]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];

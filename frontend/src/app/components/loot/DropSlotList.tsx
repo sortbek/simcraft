@@ -5,6 +5,7 @@ import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
 import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
+import VariantBadges from './VariantBadges';
 
 const SLOT_ORDER = [
   'Main Hand',
@@ -242,16 +243,7 @@ function DropItemCard({
           >
             {localizedItemName(item.item_id, item.name, locale)}
           </a>
-          {item.is_void_forge && (
-            <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-purple-300">
-              {t('loot.voidforged')}
-            </span>
-          )}
-          {item.is_catalyst && (
-            <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
-              {t('loot.catalyst')}
-            </span>
-          )}
+          <VariantBadges item={item} />
         </span>
         {item.encounter && (
           <span className="text-[12px] text-on-surface-variant/60">{item.encounter}</span>
