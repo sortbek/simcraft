@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
-import { getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
+import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import { resolveInherits, type EquippedGear, type SlotInherit } from '../../lib/inheritedGear';
 import { qualityBorderColor } from '../../lib/qualityColors';
 import Checkbox from '../ui/Checkbox';
@@ -26,10 +26,10 @@ const SLOT_ORDER = [
 
 interface ItemTableProps {
   drops: Record<string, DropItem[]>;
-  selected: Set<number>;
-  onToggle: (itemId: number) => void;
-  onSelectItems: (itemIds: number[]) => void;
-  onClearItems: (itemIds: number[]) => void;
+  selected: Set<string>;
+  onToggle: (uid: string) => void;
+  onSelectItems: (uids: string[]) => void;
+  onClearItems: (uids: string[]) => void;
   difficulty: string;
   dungeonDiff: string;
   upgradeLevel: number;
@@ -78,7 +78,7 @@ export default function ItemTable({
     let count = 0;
     for (const items of Object.values(drops)) {
       for (const item of items) {
-        if (item.embellished && selected.has(item.item_id)) count++;
+        if (item.embellished && selected.has(dropUid(item))) count++;
       }
     }
     return count;
@@ -136,13 +136,13 @@ export default function ItemTable({
   }, [drops, filterText, locale, groupBy]);
 
   const visibleItemIds = useMemo(
-    () => groupedItems.flatMap(([, items]) => items.map((item) => item.item_id)),
+    () => groupedItems.flatMap(([, items]) => items.map((item) => dropUid(item))),
     [groupedItems]
   );
   const filteredTotal = groupedItems.reduce((n, [, items]) => n + items.length, 0);
   const allSelected =
     filteredTotal > 0 &&
-    groupedItems.every(([, items]) => items.every((item) => selected.has(item.item_id)));
+    groupedItems.every(([, items]) => items.every((item) => selected.has(dropUid(item))));
   return (
     <div className="overflow-hidden rounded-xl border border-outline-variant/5 bg-surface-container shadow-2xl">
       <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
@@ -267,7 +267,8 @@ export default function ItemTable({
                 upgradeTracks
               );
               const effectiveBonusId = getTrackInfo(item, difficulty, dungeonDiff)?.bonus_id;
-              const isSelected = selected.has(item.item_id);
+              const uid = dropUid(item);
+              const isSelected = selected.has(uid);
               const isEmbellished = item.embellished === true;
               const isOffSpec = item.off_spec === true;
               const embellishDisabled = isEmbellished && embellishmentsFull && !isSelected;
@@ -277,8 +278,8 @@ export default function ItemTable({
 
               return (
                 <div
-                  key={item.item_id}
-                  onClick={() => !embellishDisabled && onToggle(item.item_id)}
+                  key={uid}
+                  onClick={() => !embellishDisabled && onToggle(uid)}
                   className={`group grid grid-cols-12 items-center px-4 py-2 transition-colors ${
                     embellishDisabled
                       ? 'cursor-not-allowed opacity-40'
@@ -291,7 +292,7 @@ export default function ItemTable({
                       size="sm"
                       checked={isSelected}
                       disabled={embellishDisabled}
-                      onChange={() => onToggle(item.item_id)}
+                      onChange={() => onToggle(uid)}
                       aria-label={item.name}
                     />
                     <div className="relative shrink-0">
@@ -325,16 +326,28 @@ export default function ItemTable({
                       )}
                     </div>
                     <div className="min-w-0">
-                      <a
-                        href={getWowheadUrl(item.item_id, locale)}
-                        data-wowhead={wowheadAttr}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className={`text-[13px] font-bold group-hover:underline ${qualityColor}`}
-                      >
-                        {localizedItemName(item.item_id, item.name, locale)}
-                      </a>
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={getWowheadUrl(item.item_id, locale)}
+                          data-wowhead={wowheadAttr}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className={`text-[13px] font-bold group-hover:underline ${qualityColor}`}
+                        >
+                          {localizedItemName(item.item_id, item.name, locale)}
+                        </a>
+                        {item.is_void_forge && (
+                          <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-purple-300">
+                            {t('loot.voidforged')}
+                          </span>
+                        )}
+                        {item.is_catalyst && (
+                          <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
+                            {t('loot.catalyst')}
+                          </span>
+                        )}
+                      </div>
                       {item.encounter && (
                         <p className="text-[10px] text-on-surface-variant/60">
                           {item.instance_name && `${item.instance_name} • `}

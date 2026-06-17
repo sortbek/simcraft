@@ -46,6 +46,18 @@ export interface DropItem {
   specs?: number[];
   off_spec?: boolean;
   embellished?: boolean;
+  is_void_forge?: boolean;
+  is_catalyst?: boolean;
+  source_item_id?: number;
+  extra_bonus_ids?: number[];
+}
+
+/** Stable selection/render key. Variants share item_id with their base, so
+ *  they need a distinct id. */
+export function dropUid(item: DropItem): string {
+  if (item.is_void_forge) return `${item.item_id}:vf`;
+  if (item.is_catalyst) return `${item.item_id}:cat:${item.source_item_id ?? 0}`;
+  return `${item.item_id}`;
 }
 
 /**
