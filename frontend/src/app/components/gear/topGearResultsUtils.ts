@@ -44,7 +44,11 @@ export function dedupeEncounterResults(
       continue;
     }
 
-    const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}`;
+    // Include slot: a ring/trinket is simmed in BOTH slots (finger1 vs finger2,
+    // trinket1 vs trinket2) and each is a distinct result — they must NOT collapse
+    // into one row, or the better slot's verdict hides the other's (matches the
+    // per-slot breakdown shown by Raidbots).
+    const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}_${item.slot || ''}`;
     const existing = bestByItem.get(key);
     if (!existing || result.dps > existing.dps) {
       bestByItem.set(key, result);
