@@ -807,6 +807,18 @@ pub fn tier_set_bonus_id() -> u64 {
     TIER_SET_BONUS_ID
 }
 
+/// Guaranteed gem-socket count for a slot's inventory type this season, e.g. necks
+/// (inv 2) and rings (inv 11) always carry a socket in Midnight S1 even though the
+/// item data doesn't record it (the socket comes from a drop-context bonus). Used
+/// as a floor by the droptimizer so neck/ring drops get gemmed. 0 when unset.
+pub fn inv_type_guaranteed_sockets(inv_type: u64) -> u64 {
+    season_cfg()
+        .get("socketByInventoryType")
+        .and_then(|m| m.get(inv_type.to_string()))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0)
+}
+
 /// Current season ID (highest seasonId found in upgrade bonuses).
 pub fn current_season_id() -> u64 {
     CURRENT_SEASON_ID.get().copied().unwrap_or(0)
@@ -1790,6 +1802,14 @@ mod tests {
         assert_eq!(item_socket_count(1, &[13534]), 1);
         // Nothing anywhere → 0.
         assert_eq!(item_socket_count(1, &[]), 0);
+    }
+
+    #[test]
+    fn inv_type_guaranteed_sockets_for_neck_and_ring() {
+        ensure_game_data_loaded();
+        assert_eq!(inv_type_guaranteed_sockets(2), 1); // neck
+        assert_eq!(inv_type_guaranteed_sockets(11), 1); // ring
+        assert_eq!(inv_type_guaranteed_sockets(12), 0); // trinket — no guaranteed socket
     }
 
     #[test]

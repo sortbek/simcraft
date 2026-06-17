@@ -184,9 +184,11 @@ pub(super) fn generate_droptimizer_input(
             // Gems: keep the gem(s) the player already has in this slot, then fill
             // any EXTRA sockets the drop has with their most-used gem (best-stat
             // choice). The socket count folds base sockets, bonus-granted sockets,
-            // and curated overrides. SimC applies exactly the gems we list (it does
-            // not cap to real sockets), so the count must be accurate.
-            let drop_sockets = crate::item_db::item_socket_count(item_id, &bonus_ids);
+            // curated overrides, and the per-slot guaranteed-socket floor (necks/rings
+            // always carry a socket this season). SimC applies exactly the gems we
+            // list (it does not cap to real sockets), so the count must be accurate.
+            let drop_sockets = crate::item_db::item_socket_count(item_id, &bonus_ids)
+                .max(crate::item_db::inv_type_guaranteed_sockets(inv_type));
             if drop_sockets > 0 {
                 let slot_gems: Vec<u64> = equipped
                     .and_then(|e| legacy_gem_re.captures(e))
@@ -350,6 +352,21 @@ off_hand=,id=201\n";
         );
         let combo = metadata.get("Combo 2").expect("missing combo");
         assert_eq!(combo[0]["gem_id"], 0);
+    }
+
+    #[test]
+    fn ring_drop_gemmed_via_slot_socket_floor() {
+        // Rings (inv 11) carry a guaranteed socket this season even when the drop's
+        // bonus_ids encode none (the socket comes from a drop-context bonus our data
+        // doesn't record). The drop must still be gemmed from the equipped slot.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nfinger1=,id=100,gem_id=5000\nfinger2=,id=101\n";
+        let drops = vec![drop(999, 11, vec![])]; // ring drop, NO socket bonus
+        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        assert!(
+            input.contains("finger1=,id=999,ilevel=600,gem_id=5000"),
+            "ring drop must be gemmed via the per-slot socket floor:\n{input}"
+        );
     }
 
     #[test]

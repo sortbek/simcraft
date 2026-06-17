@@ -441,6 +441,10 @@
       "mythic": { "ilvl": 298, "bonus_id": 13786, "quality": 4 }
     }
   },
+  "socketByInventoryType": {
+    "2": 1,
+    "11": 1
+  },
   "raidDifficultyTracks": {
     "lfr": "Veteran",
     "normal": "Champion",
