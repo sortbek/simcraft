@@ -286,32 +286,6 @@ export default function DropFinderContent() {
     setSelected(all);
   }, [drops]);
 
-  // Prune selection when instance pool filter changes
-  useEffect(() => {
-    if (!drops || isPoolOnly) return;
-    const pool = isRaid ? raidPool : dungeonPool;
-    const instanceList = isRaid ? raids : dungeonInstances;
-    const selectedNames = new Set(
-      instanceList.filter((i) => pool.has(String(i.id))).map((i) => i.name)
-    );
-    if (selectedNames.size === instanceList.length) return;
-    const available = new Set<string>();
-    for (const items of Object.values(drops)) {
-      for (const item of items) {
-        if (!item.instance_name || selectedNames.has(item.instance_name)) {
-          available.add(dropUid(item));
-        }
-      }
-    }
-    setSelected((prev) => {
-      const pruned = new Set<string>();
-      for (const id of prev) {
-        if (available.has(id)) pruned.add(id);
-      }
-      return pruned.size === prev.size ? prev : pruned;
-    });
-  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly]);
-
   const currentTrackInfo = useMemo(() => {
     if (!drops) return null;
     for (const items of Object.values(drops)) {
@@ -403,6 +377,27 @@ export default function DropFinderContent() {
     }
     return result;
   }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly, difficulty, dungeonDiff]);
+
+  // Keep the selection in sync with what's actually available: drop any selected
+  // uid no longer in filteredDrops — an instance deselected from the pool, or a
+  // Void Forged variant on a difficulty whose track has no voidforge tier (so the
+  // count never includes hidden VF rows).
+  useEffect(() => {
+    if (!filteredDrops) return;
+    const available = new Set<string>();
+    for (const items of Object.values(filteredDrops)) {
+      for (const item of items) available.add(dropUid(item));
+    }
+    setSelected((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const uid of prev) {
+        if (available.has(uid)) next.add(uid);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [filteredDrops]);
 
   const upgradeLevelOptions = useMemo(() => {
     if (!currentTrackInfo) return [];
