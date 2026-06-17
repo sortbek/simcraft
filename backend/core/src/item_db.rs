@@ -1536,6 +1536,17 @@ pub fn encounter_upgrade_level(encounter_id: i64) -> Option<u64> {
         .and_then(|v| v.as_u64())
 }
 
+/// Fixed per-difficulty item levels for "special" raids whose gear does NOT use
+/// the normal upgrade-track system (e.g. Sporefall's Sporefused gear: fixed
+/// 259/272/285/298 with no upgrade track). Returns the season-config
+/// `encounterFixedDifficulty[encounter_id]` object — `{ difficulty: {ilvl,
+/// bonus_id} }` — or None for normal track-based encounters.
+pub fn encounter_fixed_difficulty(encounter_id: i64) -> Option<&'static Value> {
+    season_cfg()
+        .get("encounterFixedDifficulty")
+        .and_then(|m| m.get(encounter_id.to_string()))
+}
+
 pub fn dungeon_normal_ilvl() -> u64 {
     season_cfg()
         .get("dungeonNormal")

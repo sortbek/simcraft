@@ -359,6 +359,36 @@ mod tests {
         assert_eq!(bonus_ids, vec![111]);
     }
 
+    #[test]
+    fn fixed_difficulty_ignores_upgrade_level() {
+        // Special raids (e.g. Sporefall's Sporefused gear) carry fixed per-difficulty
+        // ilvl/bonus with NO "track" field — the upgrade level must be a no-op.
+        let item = json!({
+            "item_id": 555u64,
+            "ilevel": 298u64,
+            "name": "Sporefused Trinket",
+            "encounter": "Rotmire",
+            "encounter_id": 2711i64,
+            "inventory_type": 12u64,
+            "difficulty_info": {
+                "heroic": { "ilvl": 285u64, "bonus_id": 13787u64, "quality": 4u64 }
+            }
+        });
+        let by_slot = make_slot_map(vec![item]);
+        // upgrade_level=6 must NOT change the fixed values (no track to climb).
+        let result = drop_items_from_slots(&by_slot, "heroic", 6, &[], &empty_tracks());
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].get("ilevel").and_then(|v| v.as_u64()), Some(285));
+        let bonus_ids: Vec<u64> = result[0]
+            .get("bonus_ids")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_u64())
+            .collect();
+        assert_eq!(bonus_ids, vec![13787]);
+    }
+
     // ---- Integration tests (require loaded game data) ----
 
     #[test]
@@ -397,5 +427,30 @@ mod tests {
             &game_data::get_upgrade_tracks(),
         )
         .is_empty());
+    }
+
+    #[test]
+    fn sporefall_uses_fixed_per_difficulty_ilvls() {
+        crate::test_support::ensure_game_data_loaded();
+        // Sporefall (instance 1305, encounter 2711 "Rotmire") uses fixed Sporefused
+        // ilvls per difficulty (LFR 259 / Mythic 298) with NO upgrade track.
+        let tracks = game_data::get_upgrade_tracks();
+        let lfr = build_drop_items(1305, "lfr", "mage", "frost", 0, &[], &tracks);
+        let mythic = build_drop_items(1305, "mythic", "mage", "frost", 0, &[], &tracks);
+        assert!(!lfr.is_empty(), "expected Sporefall drops for mage/frost");
+        assert!(
+            lfr.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(259)),
+            "LFR Sporefall drops must all be ilvl 259"
+        );
+        assert!(
+            mythic.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
+            "Mythic Sporefall drops must all be ilvl 298"
+        );
+        // No upgrade track: a max upgrade level must NOT change the mythic ilvl.
+        let mythic_up = build_drop_items(1305, "mythic", "mage", "frost", 8, &[], &tracks);
+        assert!(
+            mythic_up.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
+            "upgrade level must be a no-op for fixed-difficulty raids"
+        );
     }
 }

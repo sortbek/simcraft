@@ -205,12 +205,30 @@ pub fn get_instance_drops(
 
                 let slot = class_data::inventory_type_display_slot(inv_type);
 
-                // Compute per-difficulty info from upgrade tracks (raids)
+                // Compute per-difficulty info. Special raids (e.g. Sporefall) carry
+                // FIXED per-difficulty item levels with no upgrade track; normal raids
+                // derive theirs from the upgrade tracks at the encounter's level.
                 let upgrade_lvl = item_db::encounter_upgrade_level(*eid);
+                let fixed_diff = item_db::encounter_fixed_difficulty(*eid);
                 let track_map = item_db::upgrade_tracks();
                 let tm = item_db::upgrade_track_max();
                 let mut diff_info = serde_json::Map::new();
-                if let (Some(lvl), Some(tracks)) = (upgrade_lvl, track_map) {
+                if let Some(fixed) = fixed_diff.and_then(|v| v.as_object()) {
+                    // Fixed-ilvl raid (e.g. Sporefused gear): copy each difficulty's
+                    // {ilvl, bonus_id} verbatim. No "track" field → the upgrade slider
+                    // is a no-op (resolve_upgrade returns these exactly as dropped).
+                    for (diff, entry) in fixed {
+                        let ilvl = entry.get("ilvl").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let bonus_id = entry.get("bonus_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let quality = entry.get("quality").and_then(|v| v.as_u64()).unwrap_or(4);
+                        diff_info.insert(
+                            diff.clone(),
+                            serde_json::json!({
+                                "ilvl": ilvl, "bonus_id": bonus_id, "quality": quality,
+                            }),
+                        );
+                    }
+                } else if let (Some(lvl), Some(tracks)) = (upgrade_lvl, track_map) {
                     for diff in &["lfr", "normal", "heroic", "mythic"] {
                         if let Some(track) = item_db::difficulty_track_name(diff) {
                             if let Some(&(ilvl, bonus_id, quality)) =
@@ -230,7 +248,7 @@ pub fn get_instance_drops(
 
                 // Compute per-difficulty info for dungeons/M+
                 let mut dungeon_info = serde_json::Map::new();
-                if upgrade_lvl.is_none() {
+                if upgrade_lvl.is_none() && fixed_diff.is_none() {
                     dungeon_info.insert("normal".to_string(), serde_json::json!({
                         "ilvl": item_db::dungeon_normal_ilvl(), "bonus_id": 0, "quality": item_db::dungeon_normal_quality(),
                     }));
