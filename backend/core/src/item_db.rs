@@ -716,6 +716,22 @@ pub fn void_forge_map() -> &'static HashMap<u64, u64> {
     VOID_FORGE_MAP.get_or_init(HashMap::new)
 }
 
+/// Voidforged (bonus_id, ilvl) for a track's MAX upgrade level, or None if that
+/// track has no voidforge mapping. Used to build Void Forged drop variants.
+pub fn void_forge_for_track(track: &str) -> Option<(u64, u64)> {
+    let tracks = UPGRADE_TRACKS.get()?;
+    let vf_map = void_forge_map();
+    // bonus_id of the track's highest level
+    let max_bonus = tracks
+        .iter()
+        .filter(|((t, _, _), _)| t == track)
+        .max_by_key(|((_, level, _), _)| *level)
+        .map(|(_, (_, bonus, _))| *bonus)?;
+    let vf_bonus = vf_map.get(&max_bonus).copied()?;
+    let vf_ilvl = resolve_bonuses(&[vf_bonus]).ilevel?;
+    Some((vf_bonus, vf_ilvl))
+}
+
 fn upgrade_max() -> &'static HashMap<u64, u64> {
     UPGRADE_MAX.get().expect("Game data not loaded")
 }
@@ -1734,6 +1750,21 @@ mod tests {
     }
 
     // ---- resolve_bonuses ----
+
+    #[test]
+    fn void_forge_for_track_myth_has_voidforge() {
+        ensure_game_data_loaded();
+        let vf = void_forge_for_track("Myth");
+        assert!(vf.is_some(), "Myth should have a voidforge mapping");
+        let (_bonus, ilvl) = vf.unwrap();
+        assert!(ilvl > 0, "voidforged ilvl should be > 0");
+    }
+
+    #[test]
+    fn void_forge_for_track_unknown_returns_none() {
+        ensure_game_data_loaded();
+        assert!(void_forge_for_track("NotARealTrack").is_none());
+    }
 
     #[test]
     fn resolve_bonuses_returns_socket_count_for_13534() {
