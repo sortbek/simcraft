@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import LootBrowser from '../loot/LootBrowser';
+import LootBrowser, { type LootBrowserRenderState } from '../loot/LootBrowser';
 import { buildItemLevelOptions, dropPayloadAtIlvl } from '../loot/itemLevelOptions';
 import { dropUid, type DropItem, type UpgradeTracks } from '../loot/types';
 import { postJson } from '../../lib/api';
@@ -19,6 +19,7 @@ export default function AddItemModal({ open, onClose, simcInput, onItemsResolved
   const [ilvlByUid, setIlvlByUid] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [browserState, setBrowserState] = useState<LootBrowserRenderState | null>(null);
 
   if (!open) return null;
 
@@ -103,29 +104,33 @@ export default function AddItemModal({ open, onClose, simcInput, onItemsResolved
               hideDifficultyControls
               hideTalentPicker
               renderLevel={renderLevel}
-              footer={(state) => (
-                <div className="mt-4 flex flex-col gap-2">
-                  {error && (
-                    <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
-                      {error}
-                    </p>
-                  )}
-                  <div className="flex items-center justify-end gap-3">
-                    <span className="text-xs text-on-surface-variant">
-                      {state.selectedDrops.length} item{state.selectedDrops.length !== 1 ? 's' : ''} selected
-                    </span>
-                    <button
-                      type="button"
-                      disabled={!state.hasSelection || loading}
-                      onClick={() => handleAdd(state.selectedDrops, state.upgradeTracks)}
-                      className="rounded-lg bg-gold px-5 py-2 text-sm font-bold text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
-                    >
-                      {loading ? 'Adding...' : 'Add'}
-                    </button>
-                  </div>
-                </div>
-              )}
+              onStateChange={setBrowserState}
             />
+          </div>
+        </div>
+
+        {/* Footer: always-visible add bar (sibling of the scroll body) */}
+        <div className="flex flex-col gap-2 border-t border-outline-variant/20 px-6 py-3">
+          {error && (
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+              {error}
+            </p>
+          )}
+          <div className="flex items-center justify-end gap-3">
+            <span className="text-xs text-on-surface-variant">
+              {(browserState?.selectedDrops.length ?? 0)} item
+              {(browserState?.selectedDrops.length ?? 0) !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              type="button"
+              disabled={!browserState?.hasSelection || loading}
+              onClick={() =>
+                browserState && handleAdd(browserState.selectedDrops, browserState.upgradeTracks)
+              }
+              className="rounded-lg bg-gold px-5 py-2 text-sm font-bold text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
+            >
+              {loading ? 'Adding...' : 'Add'}
+            </button>
           </div>
         </div>
       </div>

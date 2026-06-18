@@ -174,6 +174,9 @@ export interface LootBrowserProps {
   renderLevel?: (item: DropItem, tracks: UpgradeTracks) => ReactNode;
   /** Renders below the table (footer / submit). */
   footer?: (state: LootBrowserRenderState) => ReactNode;
+  /** Notified whenever the selection/difficulty state changes, so a host can
+   *  render its own fixed footer instead of using `footer`. */
+  onStateChange?: (state: LootBrowserRenderState) => void;
 }
 
 // --- Browser ---
@@ -183,6 +186,7 @@ export default function LootBrowser({
   hideTalentPicker = false,
   renderLevel,
   footer,
+  onStateChange,
 }: LootBrowserProps) {
   const { t } = useLanguage();
   const { simcInput, hasInput } = useSimContext();
@@ -603,6 +607,20 @@ export default function LootBrowser({
     upgradeTracks,
     hasSelection: selectedDrops.length > 0,
   };
+
+  // Lift state to a host that renders its own fixed footer. Deps are all stable
+  // (selectedDrops is memoized; the rest are primitives), so this fires only on
+  // real changes — no render loop when onStateChange is a stable setter.
+  useEffect(() => {
+    onStateChange?.({
+      selectedDrops,
+      difficulty,
+      dungeonDiff,
+      upgradeLevel,
+      upgradeTracks,
+      hasSelection: selectedDrops.length > 0,
+    });
+  }, [onStateChange, selectedDrops, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
 
   return (
     <>
