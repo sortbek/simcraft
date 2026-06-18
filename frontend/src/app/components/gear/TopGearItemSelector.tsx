@@ -35,7 +35,7 @@ interface TopGearItemSelectorProps {
   onSelectionChange: (selected: Record<string, Set<string>>) => void;
   onResolvedChange: (resolved: ResolveGearResponse) => void;
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
-  addedUids: Set<string>;
+  addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
   onAddItem: () => void;
   comboCount: number;
@@ -50,7 +50,7 @@ export default function TopGearItemSelector({
   onSelectionChange,
   onResolvedChange,
   onItemAdded,
-  addedUids,
+  addedKeys,
   onRemoveAdded,
   onAddItem,
   comboCount,
@@ -343,7 +343,7 @@ export default function TopGearItemSelector({
             onVoidForgeConvert={convertToVoidForge}
             onAddSocket={addSocketCopy}
             onRemoveGem={removeGemCopy}
-            addedUids={addedUids}
+            addedKeys={addedKeys}
             onRemoveAdded={onRemoveAdded}
             t={t}
           />

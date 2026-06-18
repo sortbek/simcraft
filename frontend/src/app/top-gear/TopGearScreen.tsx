@@ -644,7 +644,7 @@ export default function TopGearScreen() {
             onItemAdded={(slot, simcString, origin) =>
               setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])
             }
-            addedUids={new Set(addedLootItems.map((i) => i.uid))}
+            addedKeys={new Set(addedLootItems.map((i) => buildAlternativeKey(i)))}
             onRemoveAdded={handleRemoveAdded}
             onAddItem={() => setAddOpen(true)}
             comboCount={comboCount}

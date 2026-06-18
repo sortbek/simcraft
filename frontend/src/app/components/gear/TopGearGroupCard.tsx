@@ -1,6 +1,7 @@
 import type { ResolvedItem } from '../../lib/types';
 import { getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
 import GearItemRow from './GearItemRow';
+import { buildAlternativeKey } from './topGearIdentity';
 import type { DisplayGroup } from './topGearSelection';
 
 interface UpgradeOption {
@@ -35,7 +36,7 @@ interface TopGearGroupCardProps {
   onVoidForgeConvert: (item: ResolvedItem) => void;
   onAddSocket: (item: ResolvedItem) => void;
   onRemoveGem: (item: ResolvedItem) => void;
-  addedUids: Set<string>;
+  addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }
@@ -74,7 +75,7 @@ export default function TopGearGroupCard({
   onVoidForgeConvert,
   onAddSocket,
   onRemoveGem,
-  addedUids,
+  addedKeys,
   onRemoveAdded,
   t,
 }: TopGearGroupCardProps) {
@@ -134,7 +135,7 @@ export default function TopGearGroupCard({
           href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
           wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
         >
-          {addedUids.has(item.uid) && (
+          {addedKeys.has(buildAlternativeKey(item)) && (
             <button
               type="button"
               onClick={(event) => {
