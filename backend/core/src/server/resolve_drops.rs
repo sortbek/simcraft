@@ -72,7 +72,7 @@ pub(super) fn drop_to_raw_item(drop: &Value) -> Option<RawParsedItem> {
         bonus_ids,
         enchant_id: 0,
         gem_id: 0,
-        origin: ItemOrigin::Loot,
+        origin: ItemOrigin::Bags,
     })
 }
 
@@ -164,7 +164,7 @@ mod tests {
         assert!(slots.contains(&"finger1"), "got slots {:?}", slots);
         assert!(slots.contains(&"finger2"), "got slots {:?}", slots);
         assert!(items.iter().all(|i| i.item_id == RING_ITEM_ID));
-        assert!(items.iter().all(|i| i.origin == ItemOrigin::Loot));
+        assert!(items.iter().all(|i| i.origin == ItemOrigin::Bags));
         assert!(items.iter().all(|i| !i.is_void_forge && !i.is_catalyst));
     }
 
@@ -196,7 +196,7 @@ mod tests {
         let item = drop_to_raw_item(&drop).expect("some");
         assert_eq!(item.item_id, 212448);
         assert_eq!(item.raw_slot, "finger1");
-        assert_eq!(item.origin, ItemOrigin::Loot);
+        assert_eq!(item.origin, ItemOrigin::Bags);
         assert_eq!(item.simc_string, ",id=212448,bonus_id=10/20");
         assert_eq!(item.bonus_ids, vec![10, 20]);
     }
