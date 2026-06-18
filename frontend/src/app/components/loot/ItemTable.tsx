@@ -359,7 +359,10 @@ export default function ItemTable({
                     </span>
                   </div>
 
-                  <div className="col-span-2 text-center" onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="col-span-2 text-center"
+                    onClick={renderLevel ? (e) => e.stopPropagation() : undefined}
+                  >
                     {renderLevel ? (
                       renderLevel(item, upgradeTracks)
                     ) : (
