@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
+import AddItemModal from '../components/gear/AddItemModal';
 import EnchantSelector from '../components/gear/EnchantSelector';
 import GemSelector from '../components/gear/GemSelector';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -26,6 +27,8 @@ import {
 } from './topGearPayload';
 import type { TopGearLocalItem } from './topGearTypes';
 import { useComputeChoice } from '../lib/useComputeChoice';
+import { buildAlternativeKey } from '../components/gear/topGearIdentity';
+import { mergeAlternative, selectAlternative } from '../components/gear/topGearSelection';
 
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (
@@ -97,6 +100,8 @@ export default function TopGearScreen() {
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
   const [localItems, setLocalItems] = useState<TopGearLocalItem[]>([]);
+  const [addedLootItems, setAddedLootItems] = useState<ResolvedItem[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
   const [maxUpgrade, setMaxUpgrade] = useState(false);
   const [copyEnchants, setCopyEnchants] = useState(true);
   const [catalyst, setCatalyst] = useState(false);
@@ -143,6 +148,7 @@ export default function TopGearScreen() {
     }
     setEnchantSelections(restoredEnchants);
     setGemSelections(new Set(saved.gemSelections));
+    setAddedLootItems(saved.addedLootItems ?? []);
   }, []);
 
   useEffect(() => {
@@ -196,6 +202,7 @@ export default function TopGearScreen() {
           if (inputChanged && !restoringRef.current) {
             setSelectedUids({});
             setLocalItems([]);
+            setAddedLootItems([]);
             setEnchantSelections({});
             setGemSelections(new Set());
             setReplaceGems(false);
@@ -419,6 +426,66 @@ export default function TopGearScreen() {
     ]
   );
 
+  const handleAddedItems = useCallback(
+    (items: ResolvedItem[]) => {
+      const dedupedItems = items.filter((item) => {
+        const existing = resolved?.slots[item.slot]?.alternatives ?? [];
+        const key = buildAlternativeKey(item);
+        return !existing.some((alt) => buildAlternativeKey(alt) === key);
+      });
+      if (dedupedItems.length === 0) return;
+
+      setResolved((prev) => {
+        let next = prev;
+        for (const item of dedupedItems) next = mergeAlternative(next!, item.slot, item);
+        return next;
+      });
+      setSelectedUids((prev) => {
+        let next = prev;
+        for (const item of dedupedItems) next = selectAlternative(next, item.slot, item.uid);
+        return next;
+      });
+      setLocalItems((prev) => [
+        ...prev,
+        ...dedupedItems.map((i) => toLocalItem(i.slot, i.simc_string, 'loot')),
+      ]);
+      setAddedLootItems((prev) => [...prev, ...dedupedItems]);
+    },
+    [resolved]
+  );
+
+  const handleRemoveAdded = useCallback(
+    (item: ResolvedItem) => {
+      setResolved((prev) => {
+        if (!prev) return prev;
+        const slotRes = prev.slots[item.slot];
+        if (!slotRes) return prev;
+        return {
+          ...prev,
+          slots: {
+            ...prev.slots,
+            [item.slot]: {
+              ...slotRes,
+              alternatives: slotRes.alternatives.filter((alt) => alt.uid !== item.uid),
+            },
+          },
+        };
+      });
+      setSelectedUids((prev) => {
+        const slotSet = prev[item.slot];
+        if (!slotSet) return prev;
+        const next = new Set(slotSet);
+        next.delete(item.uid);
+        return { ...prev, [item.slot]: next };
+      });
+      setLocalItems((prev) =>
+        prev.filter((li) => !(li.slot === item.slot && li.simc_string === item.simc_string))
+      );
+      setAddedLootItems((prev) => prev.filter((li) => li.uid !== item.uid));
+    },
+    []
+  );
+
   const validate = useCallback(() => {
     if (!resolved) return t('validation.noGearResolved');
     return null;
@@ -437,6 +504,7 @@ export default function TopGearScreen() {
       replaceGems,
       diamondAlwaysUse,
       maxColors,
+      addedLootItems,
     });
   }, [
     selectedUids,
@@ -450,6 +518,7 @@ export default function TopGearScreen() {
     replaceGems,
     diamondAlwaysUse,
     maxColors,
+    addedLootItems,
   ]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
@@ -558,9 +627,20 @@ export default function TopGearScreen() {
             onItemAdded={(slot, simcString, origin) =>
               setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])
             }
+            addedUids={new Set(addedLootItems.map((i) => i.uid))}
+            onRemoveAdded={handleRemoveAdded}
+            onAddItem={() => setAddOpen(true)}
             comboCount={comboCount}
             comboError={comboError}
           />
+          {addOpen && (
+            <AddItemModal
+              open
+              onClose={() => setAddOpen(false)}
+              simcInput={submitInput}
+              onItemsResolved={handleAddedItems}
+            />
+          )}
           <EnchantSelector
             equippedSlots={equippedSlots}
             enchantSelections={enchantSelections}

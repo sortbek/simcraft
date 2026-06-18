@@ -35,6 +35,8 @@ interface TopGearGroupCardProps {
   onVoidForgeConvert: (item: ResolvedItem) => void;
   onAddSocket: (item: ResolvedItem) => void;
   onRemoveGem: (item: ResolvedItem) => void;
+  addedUids: Set<string>;
+  onRemoveAdded: (item: ResolvedItem) => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }
 
@@ -72,6 +74,8 @@ export default function TopGearGroupCard({
   onVoidForgeConvert,
   onAddSocket,
   onRemoveGem,
+  addedUids,
+  onRemoveAdded,
   t,
 }: TopGearGroupCardProps) {
   return (
@@ -130,6 +134,22 @@ export default function TopGearGroupCard({
           href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
           wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
         >
+          {addedUids.has(item.uid) && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                onRemoveAdded(item);
+              }}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-on-surface-variant/50 transition-colors hover:bg-red-500/10 hover:text-red-400"
+              title="Remove item"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M3 3l10 10M13 3L3 13" />
+              </svg>
+            </button>
+          )}
           <UpgradeButton
             item={item}
             upgradeMenuFor={upgradeMenuFor}

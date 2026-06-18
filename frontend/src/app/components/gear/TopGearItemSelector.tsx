@@ -35,6 +35,9 @@ interface TopGearItemSelectorProps {
   onSelectionChange: (selected: Record<string, Set<string>>) => void;
   onResolvedChange: (resolved: ResolveGearResponse) => void;
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
+  addedUids: Set<string>;
+  onRemoveAdded: (item: ResolvedItem) => void;
+  onAddItem: () => void;
   comboCount: number;
   comboError: string;
 }
@@ -47,6 +50,9 @@ export default function TopGearItemSelector({
   onSelectionChange,
   onResolvedChange,
   onItemAdded,
+  addedUids,
+  onRemoveAdded,
+  onAddItem,
   comboCount,
   comboError,
 }: TopGearItemSelectorProps) {
@@ -291,17 +297,29 @@ export default function TopGearItemSelector({
         <p className="text-xs font-medium uppercase tracking-widest text-muted">
           {t('gear.selectItems')}
         </p>
-        <TopGearQuickSelectBar
-          vaultUids={vaultUids}
-          lootUids={lootUids}
-          catalystUids={catalystUids}
-          selectedUids={selectedUids}
-          comboLabel={comboLabel}
-          comboColorClass={comboColorClass}
-          onToggleGroup={onToggleGroup}
-          onDeselectAll={() => onSelectionChange({})}
-          t={t}
-        />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onAddItem}
+            className="flex items-center gap-1.5 rounded-lg bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
+            Add item
+          </button>
+          <TopGearQuickSelectBar
+            vaultUids={vaultUids}
+            lootUids={lootUids}
+            catalystUids={catalystUids}
+            selectedUids={selectedUids}
+            comboLabel={comboLabel}
+            comboColorClass={comboColorClass}
+            onToggleGroup={onToggleGroup}
+            onDeselectAll={() => onSelectionChange({})}
+            t={t}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -325,6 +343,8 @@ export default function TopGearItemSelector({
             onVoidForgeConvert={convertToVoidForge}
             onAddSocket={addSocketCopy}
             onRemoveGem={removeGemCopy}
+            addedUids={addedUids}
+            onRemoveAdded={onRemoveAdded}
             t={t}
           />
         ))}
