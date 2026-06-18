@@ -457,51 +457,50 @@ export default function TopGearScreen() {
   const handleRemoveAdded = useCallback(
     (item: ResolvedItem) => {
       const clickedKey = buildAlternativeKey(item);
-      setAddedLootItems((prev) => {
-        const toRemove = prev.filter((li) => buildAlternativeKey(li) === clickedKey);
+      const toRemove = addedLootItems.filter((li) => buildAlternativeKey(li) === clickedKey);
+      if (toRemove.length === 0) return;
 
-        setResolved((prevResolved) => {
-          if (!prevResolved) return prevResolved;
-          let next = prevResolved;
-          for (const entry of toRemove) {
-            const slotRes = next.slots[entry.slot];
-            if (!slotRes) continue;
-            next = {
-              ...next,
-              slots: {
-                ...next.slots,
-                [entry.slot]: {
-                  ...slotRes,
-                  alternatives: slotRes.alternatives.filter((alt) => alt.uid !== entry.uid),
-                },
+      setResolved((prevResolved) => {
+        if (!prevResolved) return prevResolved;
+        let next = prevResolved;
+        for (const entry of toRemove) {
+          const slotRes = next.slots[entry.slot];
+          if (!slotRes) continue;
+          next = {
+            ...next,
+            slots: {
+              ...next.slots,
+              [entry.slot]: {
+                ...slotRes,
+                alternatives: slotRes.alternatives.filter((alt) => alt.uid !== entry.uid),
               },
-            };
-          }
-          return next;
-        });
-
-        setSelectedUids((prevUids) => {
-          let next = prevUids;
-          for (const entry of toRemove) {
-            const slotSet = next[entry.slot];
-            if (!slotSet) continue;
-            const nextSet = new Set(slotSet);
-            nextSet.delete(entry.uid);
-            next = { ...next, [entry.slot]: nextSet };
-          }
-          return next;
-        });
-
-        setLocalItems((prevLocal) =>
-          prevLocal.filter(
-            (li) => !toRemove.some((entry) => entry.slot === li.slot && entry.simc_string === li.simc_string)
-          )
-        );
-
-        return prev.filter((li) => buildAlternativeKey(li) !== clickedKey);
+            },
+          };
+        }
+        return next;
       });
+
+      setSelectedUids((prevUids) => {
+        let next = prevUids;
+        for (const entry of toRemove) {
+          const slotSet = next[entry.slot];
+          if (!slotSet) continue;
+          const nextSet = new Set(slotSet);
+          nextSet.delete(entry.uid);
+          next = { ...next, [entry.slot]: nextSet };
+        }
+        return next;
+      });
+
+      setLocalItems((prevLocal) =>
+        prevLocal.filter(
+          (li) => !toRemove.some((entry) => entry.slot === li.slot && entry.simc_string === li.simc_string)
+        )
+      );
+
+      setAddedLootItems((prev) => prev.filter((li) => buildAlternativeKey(li) !== clickedKey));
     },
-    []
+    [addedLootItems]
   );
 
   const validate = useCallback(() => {
