@@ -197,6 +197,12 @@ pub struct DroptimizerRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ResolveDropsRequest {
+    pub simc_input: String,
+    pub drop_items: Vec<Value>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct UpgradeCompareRequest {
     pub simc_input: String,
     pub selected_slots: Vec<String>,
