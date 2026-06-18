@@ -101,6 +101,7 @@ export default function AddItemModal({ open, onClose, simcInput, onItemsResolved
           <div className="space-y-4">
             <LootBrowser
               hideDifficultyControls
+              hideTalentPicker
               renderLevel={renderLevel}
               footer={(state) => (
                 <div className="mt-4 flex flex-col gap-2">

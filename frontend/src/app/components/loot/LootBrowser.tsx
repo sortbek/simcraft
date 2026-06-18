@@ -168,6 +168,8 @@ export interface LootBrowserProps {
    *  per-item ilvl dropdown). Instance pools and the void-forge/catalyst toggles
    *  stay visible. Default false. */
   hideDifficultyControls?: boolean;
+  /** Hide the TalentPicker (e.g. Top Gear add-item modal). Default false. */
+  hideTalentPicker?: boolean;
   /** Custom per-row item-level control, forwarded to ItemTable.renderLevel. */
   renderLevel?: (item: DropItem, tracks: UpgradeTracks) => ReactNode;
   /** Renders below the table (footer / submit). */
@@ -178,6 +180,7 @@ export interface LootBrowserProps {
 
 export default function LootBrowser({
   hideDifficultyControls = false,
+  hideTalentPicker = false,
   renderLevel,
   footer,
 }: LootBrowserProps) {
@@ -603,7 +606,7 @@ export default function LootBrowser({
 
   return (
     <>
-      <TalentPicker />
+      {!hideTalentPicker && <TalentPicker />}
 
       <CategorySelector category={category} onChange={setCategory} dungeonCats={dungeonCats} />
 

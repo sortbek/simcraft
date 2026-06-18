@@ -447,7 +447,7 @@ export default function TopGearScreen() {
       });
       setLocalItems((prev) => [
         ...prev,
-        ...dedupedItems.map((i) => toLocalItem(i.slot, i.simc_string, 'loot')),
+        ...dedupedItems.map((i) => toLocalItem(i.slot, i.simc_string, 'bags')),
       ]);
       setAddedLootItems((prev) => [...prev, ...dedupedItems]);
     },
@@ -456,32 +456,50 @@ export default function TopGearScreen() {
 
   const handleRemoveAdded = useCallback(
     (item: ResolvedItem) => {
-      setResolved((prev) => {
-        if (!prev) return prev;
-        const slotRes = prev.slots[item.slot];
-        if (!slotRes) return prev;
-        return {
-          ...prev,
-          slots: {
-            ...prev.slots,
-            [item.slot]: {
-              ...slotRes,
-              alternatives: slotRes.alternatives.filter((alt) => alt.uid !== item.uid),
-            },
-          },
-        };
+      const clickedKey = buildAlternativeKey(item);
+      setAddedLootItems((prev) => {
+        const toRemove = prev.filter((li) => buildAlternativeKey(li) === clickedKey);
+
+        setResolved((prevResolved) => {
+          if (!prevResolved) return prevResolved;
+          let next = prevResolved;
+          for (const entry of toRemove) {
+            const slotRes = next.slots[entry.slot];
+            if (!slotRes) continue;
+            next = {
+              ...next,
+              slots: {
+                ...next.slots,
+                [entry.slot]: {
+                  ...slotRes,
+                  alternatives: slotRes.alternatives.filter((alt) => alt.uid !== entry.uid),
+                },
+              },
+            };
+          }
+          return next;
+        });
+
+        setSelectedUids((prevUids) => {
+          let next = prevUids;
+          for (const entry of toRemove) {
+            const slotSet = next[entry.slot];
+            if (!slotSet) continue;
+            const nextSet = new Set(slotSet);
+            nextSet.delete(entry.uid);
+            next = { ...next, [entry.slot]: nextSet };
+          }
+          return next;
+        });
+
+        setLocalItems((prevLocal) =>
+          prevLocal.filter(
+            (li) => !toRemove.some((entry) => entry.slot === li.slot && entry.simc_string === li.simc_string)
+          )
+        );
+
+        return prev.filter((li) => buildAlternativeKey(li) !== clickedKey);
       });
-      setSelectedUids((prev) => {
-        const slotSet = prev[item.slot];
-        if (!slotSet) return prev;
-        const next = new Set(slotSet);
-        next.delete(item.uid);
-        return { ...prev, [item.slot]: next };
-      });
-      setLocalItems((prev) =>
-        prev.filter((li) => !(li.slot === item.slot && li.simc_string === item.simc_string))
-      );
-      setAddedLootItems((prev) => prev.filter((li) => li.uid !== item.uid));
     },
     []
   );
