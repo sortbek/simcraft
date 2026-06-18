@@ -177,6 +177,10 @@ export interface LootBrowserProps {
   /** Notified whenever the selection/difficulty state changes, so a host can
    *  render its own fixed footer instead of using `footer`. */
   onStateChange?: (state: LootBrowserRenderState) => void;
+  /** Auto-select every item when the drop list changes (droptimizer sims all
+   *  loot). Set false for a picker (Top Gear add-item) where the user chooses
+   *  specific items, so nothing is selected by default. Default true. */
+  autoSelectAll?: boolean;
 }
 
 // --- Browser ---
@@ -187,6 +191,7 @@ export default function LootBrowser({
   renderLevel,
   footer,
   onStateChange,
+  autoSelectAll = true,
 }: LootBrowserProps) {
   const { t } = useLanguage();
   const { simcInput, hasInput } = useSimContext();
@@ -299,16 +304,17 @@ export default function LootBrowser({
     }
   }, [category, activeDungeonCat, dungeonInstances, raids, setSelectedId]);
 
-  // Select all items whenever drops change
+  // Select all items whenever drops change (droptimizer). In picker mode
+  // (autoSelectAll=false) start empty so the user chooses items explicitly.
   useEffect(() => {
-    if (!drops) {
+    if (!drops || !autoSelectAll) {
       setSelected(new Set());
       return;
     }
     const all = new Set<string>();
     for (const items of Object.values(drops)) for (const item of items) all.add(dropUid(item));
     setSelected(all);
-  }, [drops]);
+  }, [drops, autoSelectAll]);
 
   const currentTrackInfo = useMemo(() => {
     if (!drops) return null;
@@ -553,6 +559,8 @@ export default function LootBrowser({
     const reenabledSlots = [...previousExcluded].filter((slot) => !excludedSlots.has(slot));
     previousExcludedSlotsRef.current = new Set(excludedSlots);
 
+    // In picker mode, re-enabling a slot must not auto-select its items.
+    if (!autoSelectAll) return;
     if (reenabledSlots.length === 0) return;
 
     setSelected((prev) => {
@@ -570,7 +578,7 @@ export default function LootBrowser({
 
       return changed ? next : prev;
     });
-  }, [filteredDrops, excludedSlots]);
+  }, [filteredDrops, excludedSlots, autoSelectAll]);
 
   useEffect(() => {
     if (!slotFilterOpen) return;

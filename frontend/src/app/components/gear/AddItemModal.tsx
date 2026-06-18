@@ -103,6 +103,7 @@ export default function AddItemModal({ open, onClose, simcInput, onItemsResolved
             <LootBrowser
               hideDifficultyControls
               hideTalentPicker
+              autoSelectAll={false}
               renderLevel={renderLevel}
               onStateChange={setBrowserState}
             />
