@@ -13,6 +13,8 @@ import {
   buildVisibleGroups,
   collectQuickSelectEntries,
   isItemSelected as getIsItemSelected,
+  mergeAlternative,
+  selectAlternative,
   toggleItemSelection,
   toggleQuickSelectGroup,
   type DisplayGroup,
@@ -38,35 +40,6 @@ interface TopGearItemSelectorProps {
 }
 
 const SOCKET_BONUS_ID = 13668;
-
-function mergeAlternative(
-  resolved: ResolveGearResponse,
-  slot: string,
-  alternative: ResolvedItem
-): ResolveGearResponse {
-  const updatedSlots = { ...resolved.slots };
-  const slotResolution = updatedSlots[slot];
-  if (!slotResolution) return resolved;
-
-  updatedSlots[slot] = {
-    ...slotResolution,
-    alternatives: [...slotResolution.alternatives, alternative],
-  };
-  return { ...resolved, slots: updatedSlots };
-}
-
-function selectAlternative(
-  selectedUids: Record<string, Set<string>>,
-  slot: string,
-  uid: string
-): Record<string, Set<string>> {
-  const updated = Object.fromEntries(
-    Object.entries(selectedUids).map(([key, values]) => [key, new Set(values)])
-  ) as Record<string, Set<string>>;
-  if (!updated[slot]) updated[slot] = new Set();
-  updated[slot].add(uid);
-  return updated;
-}
 
 export default function TopGearItemSelector({
   resolved,

@@ -42,6 +42,33 @@ export function cloneSelectedUids(
   );
 }
 
+export function mergeAlternative(
+  resolved: ResolveGearResponse,
+  slot: string,
+  alternative: ResolvedItem
+): ResolveGearResponse {
+  const updatedSlots = { ...resolved.slots };
+  const slotResolution = updatedSlots[slot];
+  if (!slotResolution) return resolved;
+
+  updatedSlots[slot] = {
+    ...slotResolution,
+    alternatives: [...slotResolution.alternatives, alternative],
+  };
+  return { ...resolved, slots: updatedSlots };
+}
+
+export function selectAlternative(
+  selectedUids: Record<string, Set<string>>,
+  slot: string,
+  uid: string
+): Record<string, Set<string>> {
+  const updated = cloneSelectedUids(selectedUids);
+  if (!updated[slot]) updated[slot] = new Set();
+  updated[slot].add(uid);
+  return updated;
+}
+
 export function isItemSelected(
   item: ResolvedItem,
   group: DisplayGroup,
