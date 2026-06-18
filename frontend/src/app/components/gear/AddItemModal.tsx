@@ -76,7 +76,7 @@ export default function AddItemModal({ open, onClose, simcInput, onItemsResolved
       onClick={onClose}
     >
       <div
-        className="card relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden shadow-2xl shadow-black/60"
+        className="card relative flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden shadow-2xl shadow-black/60"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
