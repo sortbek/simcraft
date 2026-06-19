@@ -713,8 +713,8 @@ pub fn search_equippable_items(query: &str, locale: &str, limit: usize) -> Vec<V
     };
     let names = ITEM_NAMES.get();
 
-    // (starts_with_rank, lowercased name, json) — sort by rank then name.
-    let mut scored: Vec<(u8, String, Value)> = Vec::new();
+    // (rank, lowercased name, item id, json) — sort by rank, then name, then id.
+    let mut scored: Vec<(u8, String, u64, Value)> = Vec::new();
     for (id, item) in items {
         let inv_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
         if inv_type == 0 {
@@ -731,16 +731,27 @@ pub fn search_equippable_items(query: &str, locale: &str, limit: usize) -> Vec<V
         if name.is_empty() {
             continue;
         }
+        let id_str = id.to_string();
         let name_lc = name.to_lowercase();
         let name_match = name_lc.contains(&q);
-        let id_match = id.to_string().contains(&q);
+        let id_match = id_str.contains(&q);
         if !name_match && !id_match {
             continue;
         }
-        let rank = if name_lc.starts_with(&q) { 0 } else { 1 };
+        // Rank 0: exact id (always surfaces first, ahead of the 50-cap).
+        // Rank 1: name-prefix match. Rank 2: other substring matches. Tertiary
+        // sort by id keeps order deterministic (ITEMS iterates in HashMap order).
+        let rank = if id_str == q {
+            0
+        } else if name_lc.starts_with(&q) {
+            1
+        } else {
+            2
+        };
         scored.push((
             rank,
             name_lc,
+            *id,
             serde_json::json!({
                 "item_id": id,
                 "name": name,
@@ -751,9 +762,9 @@ pub fn search_equippable_items(query: &str, locale: &str, limit: usize) -> Vec<V
             }),
         ));
     }
-    scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)).then_with(|| a.2.cmp(&b.2)));
     scored.truncate(limit);
-    scored.into_iter().map(|(_, _, v)| v).collect()
+    scored.into_iter().map(|(_, _, _, v)| v).collect()
 }
 
 #[cfg(test)]
@@ -789,6 +800,20 @@ mod search_tests {
         // A common substring that matches many items.
         let results = super::search_equippable_items("a", "en_US", 5);
         assert!(results.len() <= 5);
+    }
+
+    #[test]
+    fn search_exact_id_ranks_first() {
+        ensure_game_data_loaded();
+        // "25" is a substring of many item ids; the exact id 25 must rank first
+        // so it survives the result cap.
+        let results = super::search_equippable_items("25", "en_US", 50);
+        assert_eq!(
+            results.first().and_then(|r| r.get("item_id")).and_then(|v| v.as_u64()),
+            Some(25),
+            "exact id 25 should be the first result, got {:?}",
+            results.first()
+        );
     }
 }
 
