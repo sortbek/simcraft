@@ -758,7 +758,13 @@ pub fn search_equippable_items(
             let item_subclass = item.get("itemSubClass").and_then(|v| v.as_u64()).unwrap_or(0);
             if item_class == 4 {
                 if let Some(max) = class_max_armor {
-                    if item_subclass > 0 && item_subclass > max {
+                    // Show only the class's own body-armor type. Subclass 0
+                    // (neck/ring/trinket/off-hand frill) and cloaks (back, inv 16)
+                    // are universal; any other cloth/leather/mail/plate body piece
+                    // — including lighter types a Hunter could technically equip —
+                    // is dropped.
+                    let universal = item_subclass == 0 || inv_type == 16;
+                    if !universal && item_subclass != max {
                         continue;
                     }
                 }
@@ -887,6 +893,24 @@ mod search_tests {
             "mage filter should drop plate/mail/leather breastplates: all={}, mage={}",
             all.len(),
             mage.len()
+        );
+    }
+
+    #[test]
+    fn search_armor_filter_is_class_specific() {
+        ensure_game_data_loaded();
+        let ids = |class: &str| -> std::collections::HashSet<u64> {
+            super::search_equippable_items("breastplate", Some(class), None, "en_US", 1000)
+                .iter()
+                .filter_map(|r| r.get("item_id").and_then(|v| v.as_u64()))
+                .collect()
+        };
+        // A mail class and a plate class each see only their own body-armor type,
+        // so their breastplate result sets must differ.
+        assert_ne!(
+            ids("hunter"),
+            ids("warrior"),
+            "mail (hunter) and plate (warrior) should see different breastplates"
         );
     }
 
