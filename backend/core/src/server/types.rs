@@ -290,6 +290,14 @@ pub(super) struct GemListQuery {
     pub expansion: u64,
 }
 
+#[derive(Debug, Deserialize)]
+pub(super) struct ItemSearchQuery {
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub locale: Option<String>,
+}
+
 fn default_iterations() -> u32 {
     1000
 }

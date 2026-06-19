@@ -135,6 +135,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(game_data_handlers::get_item_info),
         )
         .route(
+            "/api/items/search",
+            web::get().to(game_data_handlers::search_items),
+        )
+        .route(
             "/api/item-info/batch",
             web::post().to(game_data_handlers::get_item_info_batch),
         )

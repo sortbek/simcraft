@@ -163,6 +163,12 @@ pub(super) async fn list_gems(query: web::Query<GemListQuery>) -> HttpResponse {
         .json(gems)
 }
 
+pub(super) async fn search_items(query: web::Query<ItemSearchQuery>) -> HttpResponse {
+    let locale = query.locale.as_deref().unwrap_or("en_US");
+    let items = crate::item_db::search_equippable_items(&query.q, locale, 50);
+    HttpResponse::Ok().json(json!({ "items": items }))
+}
+
 pub(super) async fn list_consumables() -> HttpResponse {
     let result = serde_json::json!({
         "flasks": game_data::list_flasks(),

@@ -700,6 +700,98 @@ pub fn item_names() -> Option<&'static HashMap<u64, HashMap<String, String>>> {
     ITEM_NAMES.get()
 }
 
+/// Search equippable items by localized name (or numeric id). Returns up to
+/// `limit` matches as JSON `{ item_id, name, icon, inventory_type, quality,
+/// ilevel }`, with name-prefix matches ranked before substring matches.
+pub fn search_equippable_items(query: &str, locale: &str, limit: usize) -> Vec<Value> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let Some(items) = ITEMS.get() else {
+        return Vec::new();
+    };
+    let names = ITEM_NAMES.get();
+
+    // (starts_with_rank, lowercased name, json) — sort by rank then name.
+    let mut scored: Vec<(u8, String, Value)> = Vec::new();
+    for (id, item) in items {
+        let inv_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
+        if inv_type == 0 {
+            continue; // equippable only
+        }
+        let name = names
+            .and_then(|n| n.get(id))
+            .and_then(|loc| loc.get(locale).or_else(|| loc.get("en_US")))
+            .cloned()
+            .or_else(|| {
+                item.get("name").and_then(|n| n.as_str()).map(str::to_string)
+            })
+            .unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        let name_lc = name.to_lowercase();
+        let name_match = name_lc.contains(&q);
+        let id_match = id.to_string().contains(&q);
+        if !name_match && !id_match {
+            continue;
+        }
+        let rank = if name_lc.starts_with(&q) { 0 } else { 1 };
+        scored.push((
+            rank,
+            name_lc,
+            serde_json::json!({
+                "item_id": id,
+                "name": name,
+                "icon": item.get("icon").and_then(|i| i.as_str()).unwrap_or("inv_misc_questionmark"),
+                "inventory_type": inv_type,
+                "quality": item.get("quality").and_then(|v| v.as_u64()).unwrap_or(1),
+                "ilevel": item.get("itemLevel").and_then(|v| v.as_u64()).unwrap_or(0),
+            }),
+        ));
+    }
+    scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    scored.truncate(limit);
+    scored.into_iter().map(|(_, _, v)| v).collect()
+}
+
+#[cfg(test)]
+mod search_tests {
+    use crate::test_support::ensure_game_data_loaded;
+
+    #[test]
+    fn search_matches_equippable_by_name() {
+        ensure_game_data_loaded();
+        let results = super::search_equippable_items("worn shortsword", "en_US", 50);
+        assert!(
+            results.iter().any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(25)),
+            "expected item 25 (Worn Shortsword) in {:?}",
+            results
+        );
+        // Every result is equippable (inventory_type > 0) and carries the fields.
+        for r in &results {
+            assert!(r.get("inventory_type").and_then(|v| v.as_u64()).unwrap_or(0) > 0);
+            assert!(r.get("name").and_then(|v| v.as_str()).is_some());
+            assert!(r.get("icon").and_then(|v| v.as_str()).is_some());
+        }
+    }
+
+    #[test]
+    fn search_empty_query_returns_nothing() {
+        ensure_game_data_loaded();
+        assert!(super::search_equippable_items("  ", "en_US", 50).is_empty());
+    }
+
+    #[test]
+    fn search_respects_limit() {
+        ensure_game_data_loaded();
+        // A common substring that matches many items.
+        let results = super::search_equippable_items("a", "en_US", 5);
+        assert!(results.len() <= 5);
+    }
+}
+
 pub fn enchants() -> &'static HashMap<u64, Value> {
     ENCHANTS.get().expect("Game data not loaded")
 }
