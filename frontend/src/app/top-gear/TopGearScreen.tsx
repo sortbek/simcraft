@@ -60,34 +60,53 @@ function Toggle({
   onChange,
   label,
   tooltip,
-  color = 'bg-primary',
+  children,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   label: string;
   tooltip?: string;
-  color?: string;
+  children?: ReactNode;
 }) {
   return (
     <div
-      className="group flex cursor-pointer items-center gap-2.5"
       onClick={() => onChange(!checked)}
+      className={`group flex w-full min-w-0 cursor-pointer select-none items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${
+        checked
+          ? 'border-gold/30 bg-gold/[0.07]'
+          : 'border-outline-variant/15 bg-surface-container hover:border-outline-variant/25 hover:bg-surface-container-high'
+      }`}
     >
       <div
-        className={`relative h-5 w-9 shrink-0 rounded-full p-1 transition-colors ${
-          checked ? color : 'bg-surface-container-highest'
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+          checked ? 'bg-gold' : 'bg-surface-container-highest'
         }`}
       >
         <div
-          className={`absolute h-3 w-3 rounded-full transition-all ${
-            checked ? 'right-1 bg-on-surface' : 'left-1 bg-on-surface-variant'
+          className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-all ${
+            checked ? 'right-0.5 bg-background' : 'left-0.5 bg-on-surface-variant'
           }`}
         />
       </div>
-      <span className="font-headline text-sm font-bold text-on-surface-variant transition-colors group-hover:text-primary">
+      <span
+        className={`min-w-0 truncate text-sm transition-colors ${
+          checked ? 'font-semibold text-on-surface' : 'font-medium text-on-surface-variant'
+        }`}
+      >
         {label}
       </span>
-      {tooltip && <InfoIcon tooltip={tooltip} />}
+      {children}
+      <div className="flex-1" />
+      {tooltip && (
+        <span
+          onClick={(e) => e.stopPropagation()}
+          className={`shrink-0 transition-opacity ${
+            checked ? 'opacity-90' : 'opacity-40 group-hover:opacity-90'
+          }`}
+        >
+          <InfoIcon tooltip={tooltip} />
+        </span>
+      )}
     </div>
   );
 }
@@ -596,14 +615,13 @@ export default function TopGearScreen() {
 
       <TalentPicker />
 
-      <div className="flex flex-wrap items-center gap-6 rounded-xl border border-outline-variant/10 bg-surface-container-low px-6 py-4">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <Toggle
           checked={copyEnchants}
           onChange={setCopyEnchants}
           label={t('topGear.copyEnchants')}
           tooltip={t('topGear.copyEnchantsTooltip')}
         />
-        <span className="h-5 w-px bg-outline-variant/20" />
         <Toggle
           checked={maxUpgrade}
           onChange={setMaxUpgrade}
@@ -611,37 +629,28 @@ export default function TopGearScreen() {
           tooltip={t('topGear.simHighestUpgradeTooltip')}
         />
         {catalystCharges != null && catalystCharges > 0 && (
-          <>
-            <span className="h-5 w-px bg-outline-variant/20" />
-            <div className="flex items-center gap-2.5">
-              <Toggle
-                checked={catalyst}
-                onChange={setCatalyst}
-                label={t('topGear.revivalCatalyst')}
-                tooltip={t('topGear.revivalCatalystTooltip')}
-                color="bg-purple-500"
+          <Toggle
+            checked={catalyst}
+            onChange={setCatalyst}
+            label={t('topGear.revivalCatalyst')}
+            tooltip={t('topGear.revivalCatalystTooltip')}
+          >
+            <span onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={catalystCharges}
+                onChange={(event) => {
+                  const value = parseInt(event.target.value, 10);
+                  if (!Number.isNaN(value) && value >= 0) setCatalystCharges(value);
+                }}
+                className="w-9 rounded-md border border-outline-variant/30 bg-surface-container px-1 py-1 text-center text-[13px] font-bold tabular-nums text-on-surface outline-none focus:border-gold/40"
               />
-              <div className="ml-1 flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={0}
-                  max={10}
-                  value={catalystCharges}
-                  onChange={(event) => {
-                    const value = parseInt(event.target.value, 10);
-                    if (!Number.isNaN(value) && value >= 0) setCatalystCharges(value);
-                  }}
-                  className="input-field !w-12 !px-1.5 !py-0.5 text-center !text-[13px]"
-                />
-                <span className="text-[11px] text-on-surface-variant/60">
-                  {t('topGear.charges')}
-                </span>
-                <InfoIcon tooltip={t('topGear.chargesTooltip')} />
-              </div>
-            </div>
-          </>
+              <span className="text-[11px] text-on-surface-variant/60">{t('topGear.charges')}</span>
+            </span>
+          </Toggle>
         )}
-        <span className="h-5 w-px bg-outline-variant/20" />
         <Toggle checked={voidForge} onChange={setVoidForge} label={t('topGear.voidForge')} />
       </div>
 
