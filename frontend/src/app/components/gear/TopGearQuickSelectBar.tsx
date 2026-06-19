@@ -5,8 +5,6 @@ interface TopGearQuickSelectBarProps {
   lootUids: QuickSelectEntry[];
   catalystUids: QuickSelectEntry[];
   selectedUids: Record<string, Set<string>>;
-  comboLabel: string;
-  comboColorClass: string;
   onToggleGroup: (entries: QuickSelectEntry[]) => void;
   onDeselectAll: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
@@ -17,8 +15,6 @@ export default function TopGearQuickSelectBar({
   lootUids,
   catalystUids,
   selectedUids,
-  comboLabel,
-  comboColorClass,
   onToggleGroup,
   onDeselectAll,
   t,
@@ -82,9 +78,6 @@ export default function TopGearQuickSelectBar({
           {t('common.clear')}
         </button>
       )}
-      <span className={`rounded-md px-2.5 py-1 font-mono text-xs ${comboColorClass}`}>
-        {comboLabel}
-      </span>
     </div>
   );
 }

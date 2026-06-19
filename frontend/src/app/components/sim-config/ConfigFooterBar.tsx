@@ -21,6 +21,8 @@ interface ConfigFooterBarProps {
   computeTargetDisabledReasons?: Record<string, string>;
   /** Optional second line for the Run button (e.g. cloud cost estimate). */
   subLabel?: ReactNode;
+  /** Optional status segment in the left info group (e.g. Top Gear combo count). */
+  status?: ReactNode;
 }
 
 export default function ConfigFooterBar({
@@ -35,6 +37,7 @@ export default function ConfigFooterBar({
   onComputeChange,
   computeTargetDisabledReasons,
   subLabel,
+  status,
 }: ConfigFooterBarProps) {
   const { t } = useLanguage();
   const { fightStyle, fightLength, targetCount, statWeights, setStatWeights } = useSimContext();
@@ -97,6 +100,8 @@ export default function ConfigFooterBar({
           </svg>
           {drawerOpen ? t('common.close') : t('common.options')}
         </button>
+
+        {status}
 
         <RunButton
           value={compute}

@@ -671,8 +671,6 @@ export default function TopGearScreen() {
             }
             addedKeys={addedKeys}
             onRemoveAdded={handleRemoveAdded}
-            comboCount={comboCount}
-            comboError={comboError}
           />
           <EnchantSelector
             equippedSlots={equippedSlots}
@@ -709,6 +707,32 @@ export default function TopGearScreen() {
         compute={compute}
         onComputeChange={setCompute}
         subLabel={creditsSubLabel}
+        status={
+          resolved ? (
+            <div
+              className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 ${
+                comboError
+                  ? 'border-red-500/30 bg-red-500/10'
+                  : 'border-outline-variant/20 bg-surface-container-high'
+              }`}
+            >
+              <span
+                className={`font-mono text-base font-bold tabular-nums ${
+                  comboError
+                    ? 'text-red-400'
+                    : comboCount > 0
+                      ? 'text-on-surface'
+                      : 'text-on-surface-variant'
+                }`}
+              >
+                {comboCount.toLocaleString()}
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                {comboCount === 1 ? 'combo' : 'combos'}
+              </span>
+            </div>
+          ) : undefined
+        }
       />
     </div>
   );

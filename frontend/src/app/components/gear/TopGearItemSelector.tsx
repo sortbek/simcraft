@@ -37,8 +37,6 @@ interface TopGearItemSelectorProps {
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
   addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
-  comboCount: number;
-  comboError: string;
 }
 
 const SOCKET_BONUS_ID = 13668;
@@ -51,8 +49,6 @@ export default function TopGearItemSelector({
   onItemAdded,
   addedKeys,
   onRemoveAdded,
-  comboCount,
-  comboError,
 }: TopGearItemSelectorProps) {
   const { t, locale } = useLanguage();
   useItemNames();
@@ -285,13 +281,6 @@ export default function TopGearItemSelector({
     );
   }
 
-  const comboLabel = `${comboCount.toLocaleString()} combo${comboCount !== 1 ? 's' : ''}`;
-  const comboColorClass = comboError
-    ? 'bg-red-500/10 text-red-400'
-    : comboCount > 0
-      ? 'bg-surface-container-high text-white'
-      : 'bg-surface-container-high text-muted';
-
   return (
     <div className="space-y-4">
       <div className="sticky top-14 z-30 -mx-8 flex items-center justify-between border-b border-outline-variant/20 bg-background/90 px-8 py-2 backdrop-blur-sm">
@@ -303,8 +292,6 @@ export default function TopGearItemSelector({
           lootUids={lootUids}
           catalystUids={catalystUids}
           selectedUids={selectedUids}
-          comboLabel={comboLabel}
-          comboColorClass={comboColorClass}
           onToggleGroup={onToggleGroup}
           onDeselectAll={() => onSelectionChange({})}
           t={t}

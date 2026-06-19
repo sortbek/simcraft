@@ -19,6 +19,8 @@ interface ConfigFooterProps {
   computeTargetDisabledReasons?: Record<string, string>;
   /** Optional second line for the Run button (e.g. cloud cost estimate). */
   subLabel?: ReactNode;
+  /** Optional status segment in the footer's left info group (e.g. combo count). */
+  status?: ReactNode;
 }
 
 export default function ConfigFooter({
@@ -32,6 +34,7 @@ export default function ConfigFooter({
   onComputeChange,
   computeTargetDisabledReasons,
   subLabel,
+  status,
 }: ConfigFooterProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'simulation' | 'buffs' | 'expert'>('simulation');
@@ -69,6 +72,7 @@ export default function ConfigFooter({
         onComputeChange={onComputeChange}
         computeTargetDisabledReasons={computeTargetDisabledReasons}
         subLabel={subLabel}
+        status={status}
       />
     </div>
   );
