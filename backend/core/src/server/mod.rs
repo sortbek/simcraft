@@ -14,6 +14,7 @@ mod job_handlers;
 mod mdt_handlers;
 mod provider_handlers;
 pub mod request_json;
+mod resolve_drops;
 mod roster_handlers;
 mod roster_run_handlers;
 mod route_handlers;

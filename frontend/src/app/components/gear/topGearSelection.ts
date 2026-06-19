@@ -42,6 +42,34 @@ export function cloneSelectedUids(
   );
 }
 
+export function mergeAlternative(
+  resolved: ResolveGearResponse,
+  slot: string,
+  alternative: ResolvedItem
+): ResolveGearResponse {
+  const updatedSlots = { ...resolved.slots };
+  const slotResolution = updatedSlots[slot];
+
+  // Create the slot if it doesn't exist yet (e.g. adding an off-hand for a
+  // two-hander, or a second ring/trinket): otherwise the merge would silently
+  // no-op and the added item would be selected/persisted but never rendered.
+  updatedSlots[slot] = slotResolution
+    ? { ...slotResolution, alternatives: [...slotResolution.alternatives, alternative] }
+    : { equipped: null, alternatives: [alternative] };
+  return { ...resolved, slots: updatedSlots };
+}
+
+export function selectAlternative(
+  selectedUids: Record<string, Set<string>>,
+  slot: string,
+  uid: string
+): Record<string, Set<string>> {
+  const updated = cloneSelectedUids(selectedUids);
+  if (!updated[slot]) updated[slot] = new Set();
+  updated[slot].add(uid);
+  return updated;
+}
+
 export function isItemSelected(
   item: ResolvedItem,
   group: DisplayGroup,

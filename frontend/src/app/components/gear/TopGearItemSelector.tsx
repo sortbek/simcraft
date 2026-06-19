@@ -8,11 +8,13 @@ import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, localizedUpgrade, useItemNames } from '../../lib/useItemInfo';
 import TopGearGroupCard from './TopGearGroupCard';
 import TopGearQuickSelectBar from './TopGearQuickSelectBar';
-import { buildResolvedCopy } from './topGearIdentity';
+import { buildAlternativeKey, buildResolvedCopy } from './topGearIdentity';
 import {
   buildVisibleGroups,
   collectQuickSelectEntries,
   isItemSelected as getIsItemSelected,
+  mergeAlternative,
+  selectAlternative,
   toggleItemSelection,
   toggleQuickSelectGroup,
   type DisplayGroup,
@@ -33,40 +35,13 @@ interface TopGearItemSelectorProps {
   onSelectionChange: (selected: Record<string, Set<string>>) => void;
   onResolvedChange: (resolved: ResolveGearResponse) => void;
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
+  addedKeys: Set<string>;
+  onRemoveAdded: (item: ResolvedItem) => void;
   comboCount: number;
   comboError: string;
 }
 
 const SOCKET_BONUS_ID = 13668;
-
-function mergeAlternative(
-  resolved: ResolveGearResponse,
-  slot: string,
-  alternative: ResolvedItem
-): ResolveGearResponse {
-  const updatedSlots = { ...resolved.slots };
-  const slotResolution = updatedSlots[slot];
-  if (!slotResolution) return resolved;
-
-  updatedSlots[slot] = {
-    ...slotResolution,
-    alternatives: [...slotResolution.alternatives, alternative],
-  };
-  return { ...resolved, slots: updatedSlots };
-}
-
-function selectAlternative(
-  selectedUids: Record<string, Set<string>>,
-  slot: string,
-  uid: string
-): Record<string, Set<string>> {
-  const updated = Object.fromEntries(
-    Object.entries(selectedUids).map(([key, values]) => [key, new Set(values)])
-  ) as Record<string, Set<string>>;
-  if (!updated[slot]) updated[slot] = new Set();
-  updated[slot].add(uid);
-  return updated;
-}
 
 export default function TopGearItemSelector({
   resolved,
@@ -74,6 +49,8 @@ export default function TopGearItemSelector({
   onSelectionChange,
   onResolvedChange,
   onItemAdded,
+  addedKeys,
+  onRemoveAdded,
   comboCount,
   comboError,
 }: TopGearItemSelectorProps) {
@@ -242,6 +219,9 @@ export default function TopGearItemSelector({
   const itemDetails = useCallback(
     (item: ResolvedItem): { text: string; color?: string }[] => {
       const parts: { text: string; color?: string }[] = [];
+      if (addedKeys.has(buildAlternativeKey(item))) {
+        parts.push({ text: 'Added', color: 'text-gold/90' });
+      }
       if (item.origin === 'vault') {
         parts.push({ text: t('gear.greatVault'), color: 'text-amber-400/80' });
       }
@@ -274,7 +254,7 @@ export default function TopGearItemSelector({
       }
       return parts;
     },
-    [locale, t]
+    [locale, t, addedKeys]
   );
 
   const isSelected = useCallback(
@@ -352,6 +332,8 @@ export default function TopGearItemSelector({
             onVoidForgeConvert={convertToVoidForge}
             onAddSocket={addSocketCopy}
             onRemoveGem={removeGemCopy}
+            addedKeys={addedKeys}
+            onRemoveAdded={onRemoveAdded}
             t={t}
           />
         ))}

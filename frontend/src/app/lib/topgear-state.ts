@@ -1,4 +1,4 @@
-import type { ItemOrigin } from './types';
+import type { ItemOrigin, ResolvedItem } from './types';
 
 const STORAGE_KEY = 'simhammer_topgear_state';
 
@@ -14,6 +14,7 @@ export interface TopGearSavedState {
   replaceGems: boolean;
   diamondAlwaysUse: boolean;
   maxColors: boolean;
+  addedLootItems?: ResolvedItem[];
 }
 
 export function storeTopGearState(state: TopGearSavedState): void {

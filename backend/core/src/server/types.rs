@@ -197,6 +197,12 @@ pub struct DroptimizerRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ResolveDropsRequest {
+    pub simc_input: String,
+    pub drop_items: Vec<Value>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct UpgradeCompareRequest {
     pub simc_input: String,
     pub selected_slots: Vec<String>,
@@ -282,6 +288,22 @@ pub(super) struct EnchantListQuery {
 #[derive(Debug, Deserialize)]
 pub(super) struct GemListQuery {
     pub expansion: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct ItemSearchQuery {
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
+    pub class_name: Option<String>,
+    #[serde(default)]
+    pub spec: Option<String>,
+    /// When true/absent, search the current-season drop catalog; when false,
+    /// search all equippable items across every expansion.
+    #[serde(default)]
+    pub seasonal: Option<bool>,
 }
 
 fn default_iterations() -> u32 {

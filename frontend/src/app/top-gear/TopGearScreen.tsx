@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
+import AddItemSearch from '../components/gear/AddItemSearch';
 import EnchantSelector from '../components/gear/EnchantSelector';
 import GemSelector from '../components/gear/GemSelector';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -26,6 +27,8 @@ import {
 } from './topGearPayload';
 import type { TopGearLocalItem } from './topGearTypes';
 import { useComputeChoice } from '../lib/useComputeChoice';
+import { buildAlternativeKey } from '../components/gear/topGearIdentity';
+import { mergeAlternative, selectAlternative } from '../components/gear/topGearSelection';
 
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (
@@ -97,6 +100,7 @@ export default function TopGearScreen() {
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
   const [localItems, setLocalItems] = useState<TopGearLocalItem[]>([]);
+  const [addedLootItems, setAddedLootItems] = useState<ResolvedItem[]>([]);
   const [maxUpgrade, setMaxUpgrade] = useState(false);
   const [copyEnchants, setCopyEnchants] = useState(true);
   const [catalyst, setCatalyst] = useState(false);
@@ -143,6 +147,7 @@ export default function TopGearScreen() {
     }
     setEnchantSelections(restoredEnchants);
     setGemSelections(new Set(saved.gemSelections));
+    setAddedLootItems(saved.addedLootItems ?? []);
   }, []);
 
   useEffect(() => {
@@ -196,6 +201,7 @@ export default function TopGearScreen() {
           if (inputChanged && !restoringRef.current) {
             setSelectedUids({});
             setLocalItems([]);
+            setAddedLootItems([]);
             setEnchantSelections({});
             setGemSelections(new Set());
             setReplaceGems(false);
@@ -285,6 +291,10 @@ export default function TopGearScreen() {
     [simcInput, localItems]
   );
   const selectedItemsJson = useMemo(() => buildSelectedUidsJson(selectedUids), [selectedUids]);
+  const addedKeys = useMemo(
+    () => new Set(addedLootItems.map((i) => buildAlternativeKey(i))),
+    [addedLootItems]
+  );
   const hasVoidForgeItems = useMemo(() => {
     if (!resolved?.slots) return false;
     return Object.values(resolved.slots).some(
@@ -419,6 +429,92 @@ export default function TopGearScreen() {
     ]
   );
 
+  const handleAddedItems = useCallback(
+    (items: ResolvedItem[]) => {
+      const dedupedItems = items.filter((item) => {
+        const existing = resolved?.slots[item.slot]?.alternatives ?? [];
+        const key = buildAlternativeKey(item);
+        return !existing.some((alt) => buildAlternativeKey(alt) === key);
+      });
+      if (dedupedItems.length === 0) return;
+
+      setResolved((prev) => {
+        // Guard against `resolved` having been cleared (input changed / resolve
+        // failed) while the resolve-drops request was in flight. Re-check
+        // against the live `prev` so a rapid second add can't duplicate.
+        if (!prev) return prev;
+        let next = prev;
+        for (const item of dedupedItems) {
+          const existing = next.slots[item.slot]?.alternatives ?? [];
+          const key = buildAlternativeKey(item);
+          if (existing.some((alt) => buildAlternativeKey(alt) === key)) continue;
+          next = mergeAlternative(next, item.slot, item);
+        }
+        return next;
+      });
+      setSelectedUids((prev) => {
+        let next = prev;
+        for (const item of dedupedItems) next = selectAlternative(next, item.slot, item.uid);
+        return next;
+      });
+      setLocalItems((prev) => [
+        ...prev,
+        ...dedupedItems.map((i) => toLocalItem(i.slot, i.simc_string, 'bags')),
+      ]);
+      setAddedLootItems((prev) => [...prev, ...dedupedItems]);
+    },
+    [resolved]
+  );
+
+  const handleRemoveAdded = useCallback(
+    (item: ResolvedItem) => {
+      const clickedKey = buildAlternativeKey(item);
+      const toRemove = addedLootItems.filter((li) => buildAlternativeKey(li) === clickedKey);
+      if (toRemove.length === 0) return;
+
+      setResolved((prevResolved) => {
+        if (!prevResolved) return prevResolved;
+        let next = prevResolved;
+        for (const entry of toRemove) {
+          const slotRes = next.slots[entry.slot];
+          if (!slotRes) continue;
+          next = {
+            ...next,
+            slots: {
+              ...next.slots,
+              [entry.slot]: {
+                ...slotRes,
+                alternatives: slotRes.alternatives.filter((alt) => alt.uid !== entry.uid),
+              },
+            },
+          };
+        }
+        return next;
+      });
+
+      setSelectedUids((prevUids) => {
+        let next = prevUids;
+        for (const entry of toRemove) {
+          const slotSet = next[entry.slot];
+          if (!slotSet) continue;
+          const nextSet = new Set(slotSet);
+          nextSet.delete(entry.uid);
+          next = { ...next, [entry.slot]: nextSet };
+        }
+        return next;
+      });
+
+      setLocalItems((prevLocal) =>
+        prevLocal.filter(
+          (li) => !toRemove.some((entry) => entry.slot === li.slot && entry.simc_string === li.simc_string)
+        )
+      );
+
+      setAddedLootItems((prev) => prev.filter((li) => buildAlternativeKey(li) !== clickedKey));
+    },
+    [addedLootItems]
+  );
+
   const validate = useCallback(() => {
     if (!resolved) return t('validation.noGearResolved');
     return null;
@@ -437,6 +533,7 @@ export default function TopGearScreen() {
       replaceGems,
       diamondAlwaysUse,
       maxColors,
+      addedLootItems,
     });
   }, [
     selectedUids,
@@ -450,6 +547,7 @@ export default function TopGearScreen() {
     replaceGems,
     diamondAlwaysUse,
     maxColors,
+    addedLootItems,
   ]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
@@ -550,6 +648,7 @@ export default function TopGearScreen() {
         </p>
       ) : (
         <>
+          <AddItemSearch simcInput={submitInput} onItemsResolved={handleAddedItems} />
           <TopGearItemSelector
             resolved={resolved}
             selectedUids={selectedUids}
@@ -558,6 +657,8 @@ export default function TopGearScreen() {
             onItemAdded={(slot, simcString, origin) =>
               setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])
             }
+            addedKeys={addedKeys}
+            onRemoveAdded={handleRemoveAdded}
             comboCount={comboCount}
             comboError={comboError}
           />
