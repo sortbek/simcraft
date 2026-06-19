@@ -73,7 +73,6 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
   const [tracks, setTracks] = useState<UpgradeTracks>({});
   const [ilvl, setIlvl] = useState<number | null>(null);
   const [adding, setAdding] = useState<number | null>(null);
-  const [added, setAdded] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   const seasonal = useMemo(() => buildSeasonalIlvls(tracks), [tracks]);
@@ -142,7 +141,9 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
           ],
         });
         onItemsResolved(res.items);
-        setAdded((prev) => new Set(prev).add(item.item_id));
+        // Reset the search after a successful add — you rarely need two of the
+        // same item, so clearing keeps the next search ready.
+        setQuery('');
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to add item');
       } finally {
@@ -236,7 +237,6 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
               const qualityColor = QUALITY_TEXT_CLASS[item.quality] ?? 'text-on-surface';
               const shownIlvl = effective?.ilvl ?? item.ilevel;
               const isAdding = adding === item.item_id;
-              const isAdded = added.has(item.item_id);
               return (
                 <button
                   key={item.item_id}
@@ -263,21 +263,13 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                     </p>
                   </div>
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
-                      isAdded
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'bg-surface-container-highest text-on-surface-variant/50 group-hover:bg-gold/15 group-hover:text-gold'
-                    }`}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant/50 transition-colors group-hover:bg-gold/15 group-hover:text-gold"
                     aria-hidden
                   >
                     {isAdding ? (
                       <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
                         <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
                         <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    ) : isAdded ? (
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 8.5l3.5 3.5L13 4.5" />
                       </svg>
                     ) : (
                       <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
