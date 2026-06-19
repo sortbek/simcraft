@@ -709,6 +709,7 @@ pub fn item_names() -> Option<&'static HashMap<u64, HashMap<String, String>>> {
 pub fn search_equippable_items(
     query: &str,
     class_name: Option<&str>,
+    expansion: Option<u64>,
     locale: &str,
     limit: usize,
 ) -> Vec<Value> {
@@ -729,6 +730,14 @@ pub fn search_equippable_items(
         let inv_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
         if inv_type == 0 {
             continue; // equippable only
+        }
+
+        // Current-expansion filter (mirror the enchant/gem expansion filter).
+        if let Some(exp) = expansion {
+            let item_exp = item.get("expansion").and_then(|v| v.as_u64()).unwrap_or(0);
+            if item_exp != exp {
+                continue;
+            }
         }
 
         // Class eligibility (same exclusion as gear_resolver): drop too-heavy
@@ -806,7 +815,7 @@ mod search_tests {
     #[test]
     fn search_matches_equippable_by_name() {
         ensure_game_data_loaded();
-        let results = super::search_equippable_items("worn shortsword", None, "en_US", 50);
+        let results = super::search_equippable_items("worn shortsword", None, None, "en_US", 50);
         assert!(
             results.iter().any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(25)),
             "expected item 25 (Worn Shortsword) in {:?}",
@@ -823,14 +832,14 @@ mod search_tests {
     #[test]
     fn search_empty_query_returns_nothing() {
         ensure_game_data_loaded();
-        assert!(super::search_equippable_items("  ", None, "en_US", 50).is_empty());
+        assert!(super::search_equippable_items("  ", None, None, "en_US", 50).is_empty());
     }
 
     #[test]
     fn search_respects_limit() {
         ensure_game_data_loaded();
         // A common substring that matches many items.
-        let results = super::search_equippable_items("a", None, "en_US", 5);
+        let results = super::search_equippable_items("a", None, None, "en_US", 5);
         assert!(results.len() <= 5);
     }
 
@@ -839,7 +848,7 @@ mod search_tests {
         ensure_game_data_loaded();
         // "25" is a substring of many item ids; the exact id 25 must rank first
         // so it survives the result cap.
-        let results = super::search_equippable_items("25", None, "en_US", 50);
+        let results = super::search_equippable_items("25", None, None, "en_US", 50);
         assert_eq!(
             results.first().and_then(|r| r.get("item_id")).and_then(|v| v.as_u64()),
             Some(25),
@@ -855,8 +864,8 @@ mod search_tests {
         // cannot use them, so class-filtering must strictly reduce the result set.
         // (A narrow query keeps both result sets under the cap so the comparison
         // is meaningful.)
-        let all = super::search_equippable_items("breastplate", None, "en_US", 1000);
-        let mage = super::search_equippable_items("breastplate", Some("mage"), "en_US", 1000);
+        let all = super::search_equippable_items("breastplate", None, None, "en_US", 1000);
+        let mage = super::search_equippable_items("breastplate", Some("mage"), None, "en_US", 1000);
         assert!(!all.is_empty(), "expected some breastplate items in the fixture");
         assert!(mage.len() <= all.len());
         assert!(
@@ -864,6 +873,22 @@ mod search_tests {
             "mage filter should drop plate/mail/leather breastplates: all={}, mage={}",
             all.len(),
             mage.len()
+        );
+    }
+
+    #[test]
+    fn search_expansion_filter_excludes_other_expansions() {
+        ensure_game_data_loaded();
+        // Item 25 (Worn Shortsword) is expansion 0.
+        let exp0 = super::search_equippable_items("25", None, Some(0), "en_US", 50);
+        assert!(
+            exp0.iter().any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(25)),
+            "item 25 should match expansion=0"
+        );
+        let exp_current = super::search_equippable_items("25", None, Some(11), "en_US", 50);
+        assert!(
+            !exp_current.iter().any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(25)),
+            "item 25 (expansion 0) must be excluded when expansion=11"
         );
     }
 }

@@ -66,9 +66,12 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
     }
     const controller = new AbortController();
     const classParam = className ? `&class_name=${className}` : '';
+    // expansion=11 (current) — matches the hardcoded convention in EnchantSelector/GemSelector.
     const timer = setTimeout(() => {
       fetchJson<{ items: SearchItem[] }>(
-        apiUrl(`/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}`),
+        apiUrl(
+          `/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}&expansion=11`
+        ),
         { signal: controller.signal }
       )
         .then((data) => setResults(data.items ?? []))

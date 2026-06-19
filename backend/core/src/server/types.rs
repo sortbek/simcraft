@@ -298,6 +298,8 @@ pub(super) struct ItemSearchQuery {
     pub locale: Option<String>,
     #[serde(default)]
     pub class_name: Option<String>,
+    #[serde(default)]
+    pub expansion: Option<u64>,
 }
 
 fn default_iterations() -> u32 {
