@@ -5,6 +5,7 @@ import { apiUrl, fetchJson, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { QUALITY_TEXT_CLASS, qualityBorderColor } from '../../lib/qualityColors';
 import { getIconUrl } from '../../lib/useItemInfo';
+import Checkbox from '../ui/Checkbox';
 import { detectClass, detectSpec, type UpgradeTracks } from '../loot/types';
 import type { ResolvedItem } from '../../lib/types';
 
@@ -76,6 +77,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
   const [ilvl, setIlvl] = useState<number | null>(null);
   const [adding, setAdding] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [seasonalOnly, setSeasonalOnly] = useState(true);
 
   const seasonal = useMemo(() => buildSeasonalIlvls(tracks), [tracks]);
 
@@ -105,7 +107,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
     const timer = setTimeout(() => {
       fetchJson<{ items: SearchItem[] }>(
         apiUrl(
-          `/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}${specParam}`
+          `/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}${specParam}&seasonal=${seasonalOnly}`
         ),
         { signal: controller.signal }
       )
@@ -124,7 +126,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, locale, className, spec]);
+  }, [query, locale, className, spec, seasonalOnly]);
 
   // The selected seasonal item level shown on cards and used on add.
   const effective = useMemo(
@@ -174,8 +176,8 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
           Item Search
         </h3>
         <p className="mt-1 text-xs text-on-surface-variant/70">
-          Search any current-season item your class can use and add it at a chosen item level. Lets
-          you sim gear you don&apos;t own yet.
+          Search items your class can use and add them at a chosen item level. Lets you sim gear you
+          don&apos;t own yet.
         </p>
       </div>
 
@@ -234,6 +236,18 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
           </select>
         </div>
       </div>
+
+      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+        <Checkbox
+          variant="primary"
+          size="sm"
+          checked={seasonalOnly}
+          onChange={() => setSeasonalOnly((v) => !v)}
+          aria-label="Seasonal items only"
+        />
+        Seasonal items only
+        <span className="text-xs text-on-surface-variant/50">(off: search every expansion)</span>
+      </label>
 
       {error && (
         <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">

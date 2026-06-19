@@ -300,6 +300,10 @@ pub(super) struct ItemSearchQuery {
     pub class_name: Option<String>,
     #[serde(default)]
     pub spec: Option<String>,
+    /// When true/absent, search the current-season drop catalog; when false,
+    /// search all equippable items across every expansion.
+    #[serde(default)]
+    pub seasonal: Option<bool>,
 }
 
 fn default_iterations() -> u32 {

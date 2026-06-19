@@ -700,6 +700,147 @@ pub fn item_names() -> Option<&'static HashMap<u64, HashMap<String, String>>> {
     ITEM_NAMES.get()
 }
 
+/// Search ALL equippable items in the item DB, every expansion, by localized
+/// name or numeric id. Filtered to real gear slots and to what `class_name` can
+/// equip (its own armor type; usable weapon types). This backs the non-seasonal
+/// ("show everything") search mode; the default seasonal mode uses
+/// `game_data::search_season_drops` over the current drop catalog instead.
+pub fn search_all_equippable(
+    query: &str,
+    class_name: Option<&str>,
+    locale: &str,
+    limit: usize,
+) -> Vec<Value> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let Some(items) = ITEMS.get() else {
+        return Vec::new();
+    };
+    let names = ITEM_NAMES.get();
+    let class_max_armor = class_name.and_then(class_data::class_max_armor);
+    let class_weapons = class_name.and_then(class_data::class_allowed_weapons);
+    let numeric_query = q.bytes().all(|b| b.is_ascii_digit());
+
+    // (rank, lowercased name, id, name, raw item) — JSON built only for survivors.
+    let mut scored: Vec<(u8, String, u64, String, &Value)> = Vec::new();
+    for (id, item) in items {
+        let inv_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
+        if inv_type == 0 {
+            continue; // equippable only
+        }
+        // Real gear slots only (skip shirts/tabards/bags that map to no slot).
+        if class_data::inv_type_to_slots(inv_type, "").is_empty() {
+            continue;
+        }
+
+        if class_name.is_some() {
+            let item_class = item.get("itemClass").and_then(|v| v.as_u64()).unwrap_or(0);
+            let item_subclass = item.get("itemSubClass").and_then(|v| v.as_u64()).unwrap_or(0);
+            // Armor: only the class's own body-armor type (subclass 0 = neck/ring/
+            // trinket/off-hand frill and cloaks (inv 16) are universal).
+            if item_class == 4 {
+                if let Some(max) = class_max_armor {
+                    let universal = item_subclass == 0 || inv_type == 16;
+                    if !universal && item_subclass != max {
+                        continue;
+                    }
+                }
+            }
+            // Weapons: only types the class can use.
+            if item_class == 2 {
+                if let Some(weapons) = class_weapons {
+                    if !weapons.contains(&item_subclass) {
+                        continue;
+                    }
+                }
+            }
+        }
+
+        let name = names
+            .and_then(|n| n.get(id))
+            .and_then(|loc| loc.get(locale).or_else(|| loc.get("en_US")))
+            .cloned()
+            .or_else(|| item.get("name").and_then(|n| n.as_str()).map(str::to_string))
+            .unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        let name_lc = name.to_lowercase();
+        let name_match = name_lc.contains(&q);
+        let (id_match, exact_id) = if numeric_query {
+            let id_str = id.to_string();
+            (id_str.contains(&q), id_str == q)
+        } else {
+            (false, false)
+        };
+        if !name_match && !id_match {
+            continue;
+        }
+        let rank = if exact_id {
+            0
+        } else if name_lc.starts_with(&q) {
+            1
+        } else {
+            2
+        };
+        scored.push((rank, name_lc, *id, name, item));
+    }
+    scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)).then_with(|| a.2.cmp(&b.2)));
+    scored.truncate(limit);
+    scored
+        .into_iter()
+        .map(|(_, _, id, name, item)| {
+            serde_json::json!({
+                "item_id": id,
+                "name": name,
+                "icon": item.get("icon").and_then(|i| i.as_str()).unwrap_or("inv_misc_questionmark"),
+                "inventory_type": item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0),
+                "quality": item.get("quality").and_then(|v| v.as_u64()).unwrap_or(1),
+                "ilevel": item.get("itemLevel").and_then(|v| v.as_u64()).unwrap_or(0),
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod all_equippable_search_tests {
+    use crate::test_support::ensure_game_data_loaded;
+
+    #[test]
+    fn empty_query_returns_nothing() {
+        ensure_game_data_loaded();
+        assert!(super::search_all_equippable("  ", Some("hunter"), "en_US", 50).is_empty());
+    }
+
+    #[test]
+    fn finds_old_expansion_item_by_id() {
+        ensure_game_data_loaded();
+        // 151323 (Pauldrons of the Void Hunter, Legion mail shoulder) is not in
+        // the current season, so it only surfaces in the all-expansions mode.
+        let results = super::search_all_equippable("151323", Some("hunter"), "en_US", 50);
+        assert_eq!(
+            results.first().and_then(|r| r.get("item_id")).and_then(|v| v.as_u64()),
+            Some(151323),
+            "exact id should rank first; got {:?}",
+            results.first()
+        );
+    }
+
+    #[test]
+    fn armor_filter_is_class_specific() {
+        ensure_game_data_loaded();
+        let ids = |class: &str| -> std::collections::HashSet<u64> {
+            super::search_all_equippable("breastplate", Some(class), "en_US", 1000)
+                .iter()
+                .filter_map(|r| r.get("item_id").and_then(|v| v.as_u64()))
+                .collect()
+        };
+        assert_ne!(ids("hunter"), ids("warrior"), "mail vs plate classes differ");
+    }
+}
+
 pub fn enchants() -> &'static HashMap<u64, Value> {
     ENCHANTS.get().expect("Game data not loaded")
 }
