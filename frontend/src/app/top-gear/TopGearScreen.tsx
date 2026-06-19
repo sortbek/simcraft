@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
-import AddItemModal from '../components/gear/AddItemModal';
+import AddItemSearch from '../components/gear/AddItemSearch';
 import EnchantSelector from '../components/gear/EnchantSelector';
 import GemSelector from '../components/gear/GemSelector';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -101,7 +101,6 @@ export default function TopGearScreen() {
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
   const [localItems, setLocalItems] = useState<TopGearLocalItem[]>([]);
   const [addedLootItems, setAddedLootItems] = useState<ResolvedItem[]>([]);
-  const [addOpen, setAddOpen] = useState(false);
   const [maxUpgrade, setMaxUpgrade] = useState(false);
   const [copyEnchants, setCopyEnchants] = useState(true);
   const [catalyst, setCatalyst] = useState(false);
@@ -636,6 +635,7 @@ export default function TopGearScreen() {
         </p>
       ) : (
         <>
+          <AddItemSearch simcInput={submitInput} onItemsResolved={handleAddedItems} />
           <TopGearItemSelector
             resolved={resolved}
             selectedUids={selectedUids}
@@ -646,18 +646,9 @@ export default function TopGearScreen() {
             }
             addedKeys={new Set(addedLootItems.map((i) => buildAlternativeKey(i)))}
             onRemoveAdded={handleRemoveAdded}
-            onAddItem={() => setAddOpen(true)}
             comboCount={comboCount}
             comboError={comboError}
           />
-          {addOpen && (
-            <AddItemModal
-              open
-              onClose={() => setAddOpen(false)}
-              simcInput={submitInput}
-              onItemsResolved={handleAddedItems}
-            />
-          )}
           <EnchantSelector
             equippedSlots={equippedSlots}
             enchantSelections={enchantSelections}

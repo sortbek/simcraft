@@ -37,7 +37,6 @@ interface TopGearItemSelectorProps {
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
   addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
-  onAddItem: () => void;
   comboCount: number;
   comboError: string;
 }
@@ -52,7 +51,6 @@ export default function TopGearItemSelector({
   onItemAdded,
   addedKeys,
   onRemoveAdded,
-  onAddItem,
   comboCount,
   comboError,
 }: TopGearItemSelectorProps) {
@@ -301,16 +299,6 @@ export default function TopGearItemSelector({
           {t('gear.selectItems')}
         </p>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onAddItem}
-            className="flex items-center gap-1.5 rounded-lg bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-          >
-            <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M8 3v10M3 8h10" />
-            </svg>
-            Add item
-          </button>
           <TopGearQuickSelectBar
             vaultUids={vaultUids}
             lootUids={lootUids}

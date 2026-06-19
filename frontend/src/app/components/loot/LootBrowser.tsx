@@ -164,35 +164,13 @@ export interface LootBrowserRenderState {
 }
 
 export interface LootBrowserProps {
-  /** Hide the global difficulty + upgrade-LEVEL grid only (Top Gear modal uses a
-   *  per-item ilvl dropdown). Instance pools and the void-forge/catalyst toggles
-   *  stay visible. Default false. */
-  hideDifficultyControls?: boolean;
-  /** Hide the TalentPicker (e.g. Top Gear add-item modal). Default false. */
-  hideTalentPicker?: boolean;
-  /** Custom per-row item-level control, forwarded to ItemTable.renderLevel. */
-  renderLevel?: (item: DropItem, tracks: UpgradeTracks) => ReactNode;
   /** Renders below the table (footer / submit). */
   footer?: (state: LootBrowserRenderState) => ReactNode;
-  /** Notified whenever the selection/difficulty state changes, so a host can
-   *  render its own fixed footer instead of using `footer`. */
-  onStateChange?: (state: LootBrowserRenderState) => void;
-  /** Auto-select every item when the drop list changes (droptimizer sims all
-   *  loot). Set false for a picker (Top Gear add-item) where the user chooses
-   *  specific items, so nothing is selected by default. Default true. */
-  autoSelectAll?: boolean;
 }
 
 // --- Browser ---
 
-export default function LootBrowser({
-  hideDifficultyControls = false,
-  hideTalentPicker = false,
-  renderLevel,
-  footer,
-  onStateChange,
-  autoSelectAll = true,
-}: LootBrowserProps) {
+export default function LootBrowser({ footer }: LootBrowserProps) {
   const { t } = useLanguage();
   const { simcInput, hasInput } = useSimContext();
   const [category, setCategory] = useState('mplus');
@@ -304,17 +282,16 @@ export default function LootBrowser({
     }
   }, [category, activeDungeonCat, dungeonInstances, raids, setSelectedId]);
 
-  // Select all items whenever drops change (droptimizer). In picker mode
-  // (autoSelectAll=false) start empty so the user chooses items explicitly.
+  // Select all items whenever drops change
   useEffect(() => {
-    if (!drops || !autoSelectAll) {
+    if (!drops) {
       setSelected(new Set());
       return;
     }
     const all = new Set<string>();
     for (const items of Object.values(drops)) for (const item of items) all.add(dropUid(item));
     setSelected(all);
-  }, [drops, autoSelectAll]);
+  }, [drops]);
 
   const currentTrackInfo = useMemo(() => {
     if (!drops) return null;
@@ -341,21 +318,6 @@ export default function LootBrowser({
     return [];
   }, [seasonConfig, isRaid, activeDungeonCat]);
 
-  // When the difficulty control is hidden (Top Gear modal), default difficulty /
-  // dungeonDiff to the HIGHEST tier available for the active category (last entry
-  // of activeDifficulties) so Void-Forged variants — which only carry entries for
-  // difficulties whose track has a voidforge tier — resolve and stay visible. The
-  // per-item ilvl dropdown still gives full ilvl control regardless.
-  useEffect(() => {
-    if (!hideDifficultyControls) return;
-    if (activeDifficulties.length === 0) return;
-    const top = activeDifficulties[activeDifficulties.length - 1];
-    if (isRaid) {
-      setDifficulty(top.key);
-    } else {
-      setDungeonDiff(top.key);
-    }
-  }, [hideDifficultyControls, activeDifficulties, isRaid]);
 
   const activeDifficultyGroups: DifficultyGroup[] | null = useMemo(() => {
     if (activeDungeonCat?.cat.difficultyGroups) return activeDungeonCat.cat.difficultyGroups;
@@ -559,8 +521,6 @@ export default function LootBrowser({
     const reenabledSlots = [...previousExcluded].filter((slot) => !excludedSlots.has(slot));
     previousExcludedSlotsRef.current = new Set(excludedSlots);
 
-    // In picker mode, re-enabling a slot must not auto-select its items.
-    if (!autoSelectAll) return;
     if (reenabledSlots.length === 0) return;
 
     setSelected((prev) => {
@@ -578,7 +538,7 @@ export default function LootBrowser({
 
       return changed ? next : prev;
     });
-  }, [filteredDrops, excludedSlots, autoSelectAll]);
+  }, [filteredDrops, excludedSlots]);
 
   useEffect(() => {
     if (!slotFilterOpen) return;
@@ -616,23 +576,9 @@ export default function LootBrowser({
     hasSelection: selectedDrops.length > 0,
   };
 
-  // Lift state to a host that renders its own fixed footer. Deps are all stable
-  // (selectedDrops is memoized; the rest are primitives), so this fires only on
-  // real changes — no render loop when onStateChange is a stable setter.
-  useEffect(() => {
-    onStateChange?.({
-      selectedDrops,
-      difficulty,
-      dungeonDiff,
-      upgradeLevel,
-      upgradeTracks,
-      hasSelection: selectedDrops.length > 0,
-    });
-  }, [onStateChange, selectedDrops, difficulty, dungeonDiff, upgradeLevel, upgradeTracks]);
-
   return (
     <>
-      {!hideTalentPicker && <TalentPicker />}
+      <TalentPicker />
 
       <CategorySelector category={category} onChange={setCategory} dungeonCats={dungeonCats} />
 
@@ -666,7 +612,7 @@ export default function LootBrowser({
           )}
 
           {/* Difficulty + upgrade level */}
-          {!hideDifficultyControls && activeDifficulties.length > 0 && (
+          {activeDifficulties.length > 0 && (
             <div
               className={`grid gap-4 ${currentTrackInfo && drops ? 'grid-cols-1 sm:grid-cols-2' : ''}`}
             >
@@ -884,7 +830,6 @@ export default function LootBrowser({
           equippedEmbellishments={equippedEmbellishments}
           equippedGear={equippedGear}
           spec={specName ?? ''}
-          renderLevel={renderLevel}
         />
       )}
 

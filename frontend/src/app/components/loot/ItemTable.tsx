@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
@@ -39,9 +39,6 @@ interface ItemTableProps {
   equippedEmbellishments?: number;
   equippedGear: EquippedGear;
   spec: string;
-  /** When set, renders a custom item-level control per row instead of the
-   *  static resolved ilvl. Used by the Top Gear "add item" modal. */
-  renderLevel?: (item: DropItem, tracks: UpgradeTracks) => ReactNode;
 }
 
 export default function ItemTable({
@@ -58,7 +55,6 @@ export default function ItemTable({
   equippedEmbellishments = 0,
   equippedGear,
   spec,
-  renderLevel,
 }: ItemTableProps) {
   const { t, locale } = useLanguage();
   useItemNames();
@@ -361,17 +357,10 @@ export default function ItemTable({
                     </span>
                   </div>
 
-                  <div
-                    className="col-span-2 text-center"
-                    onClick={renderLevel ? (e) => e.stopPropagation() : undefined}
-                  >
-                    {renderLevel ? (
-                      renderLevel(item, upgradeTracks)
-                    ) : (
-                      <span className="font-headline text-xs font-black tabular-nums text-on-surface">
-                        {resolved.ilvl}
-                      </span>
-                    )}
+                  <div className="col-span-2 text-center">
+                    <span className="font-headline text-xs font-black tabular-nums text-on-surface">
+                      {resolved.ilvl}
+                    </span>
                   </div>
                 </div>
               );
