@@ -47,22 +47,6 @@ const SLOT_ORDER = [
   'Trinket',
 ];
 
-const TRACK_SHORT: Record<string, string> = {
-  Adventurer: 'Adv',
-  Veteran: 'Vet',
-  Champion: 'Champ',
-  Hero: 'Hero',
-  Myth: 'Myth',
-};
-
-const TRACK_COLORS: Record<string, { text: string; bg: string; border: string }> = {
-  Adventurer: { text: 'text-green-400', bg: 'bg-green-400/10', border: 'border-green-400/30' },
-  Veteran: { text: 'text-blue-400', bg: 'bg-blue-400/10', border: 'border-blue-400/30' },
-  Champion: { text: 'text-purple-400', bg: 'bg-purple-400/10', border: 'border-purple-400/30' },
-  Hero: { text: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/30' },
-  Myth: { text: 'text-amber-300', bg: 'bg-amber-300/10', border: 'border-amber-300/30' },
-};
-
 // --- Data loading hook ---
 
 function useDropFinderData(
@@ -329,19 +313,6 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
     : String(activeDungeonCat?.cat.poolInstanceId ?? 'type:dungeon');
 
   // Resolve current difficulty info for the summary
-  const currentDiff = isRaid ? difficulty : dungeonDiff;
-  const selectedDiffDef = activeDifficulties.find((d) => d.key === currentDiff);
-  const selectedDiffInfo = useMemo(() => {
-    if (!selectedDiffDef) return null;
-    const trackLevels = selectedDiffDef.track ? upgradeTracks[selectedDiffDef.track] : null;
-    const max = trackLevels?.at(-1)?.max_level ?? selectedDiffDef.level;
-    const ilvl =
-      trackLevels?.find((t) => t.level === selectedDiffDef.level)?.ilvl ??
-      selectedDiffDef.fixedIlvl;
-    const tc = selectedDiffDef.track ? TRACK_COLORS[selectedDiffDef.track] : null;
-    return { ilvl, max, tc, track: selectedDiffDef.track, level: selectedDiffDef.level };
-  }, [selectedDiffDef, upgradeTracks]);
-
   // Filter drops by instance pool (dungeons or raids)
   const filteredDrops = useMemo(() => {
     if (!drops) return null;
@@ -483,17 +454,6 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
     (selectedId.startsWith('type:') ? (isRaid ? t('loot.allRaids') : t('loot.allDungeons')) : '');
 
   // Dungeon pool summary for context
-  const dungeonPoolLabel = useMemo(() => {
-    if (isRaid) return isRaid ? t('loot.allRaids') : '';
-    const total = dungeonInstances.length;
-    const checked = dungeonInstances.filter((i) => dungeonPool.has(String(i.id))).length;
-    if (checked === total) return t('loot.allDungeons');
-    if (checked === 1) {
-      const sel = dungeonInstances.find((i) => dungeonPool.has(String(i.id)));
-      return sel?.name ?? t('dropFinder.dungeonsCount', { checked });
-    }
-    return t('dropFinder.dungeonsCount', { checked });
-  }, [isRaid, dungeonInstances, dungeonPool, t]);
 
   useEffect(() => {
     if (!filteredDrops) return;

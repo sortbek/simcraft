@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiUrl, fetchJson, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { QUALITY_TEXT_CLASS, qualityBorderColor } from '../../lib/qualityColors';
+import { getIconUrl } from '../../lib/useItemInfo';
 import { detectClass, type UpgradeTracks } from '../loot/types';
 import type { ResolvedItem } from '../../lib/types';
 
@@ -249,11 +250,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                     className="h-9 w-9 shrink-0 overflow-hidden rounded-md border-b-2 bg-surface-container-highest"
                     style={{ borderBottomColor: qualityBorderColor(item.quality) }}
                   >
-                    <img
-                      src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={getIconUrl(item.icon)} alt="" className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className={`truncate text-[13px] font-bold ${qualityColor}`}>{item.name}</p>

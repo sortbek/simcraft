@@ -8,24 +8,12 @@ use crate::{addon_parser, gear_resolver};
 
 /// Map an inventory type to a representative gear slot for `RawParsedItem.raw_slot`.
 /// The resolver fans items to all eligible slots via item_db; raw_slot is only a
-/// fallback, so a single representative slot per inv_type is sufficient.
+/// fallback, so the first eligible slot from the canonical mapping is sufficient.
 pub(super) fn primary_slot_for_inv_type(inv_type: u64) -> &'static str {
-    match inv_type {
-        1 => "head",
-        2 => "neck",
-        3 => "shoulder",
-        5 | 20 => "chest",
-        6 => "waist",
-        7 => "legs",
-        8 => "feet",
-        9 => "wrist",
-        10 => "hands",
-        11 => "finger1",
-        12 => "trinket1",
-        16 => "back",
-        14 | 22 | 23 => "off_hand",
-        _ => "main_hand",
-    }
+    crate::types::class_data::inv_type_to_slots(inv_type, "")
+        .first()
+        .copied()
+        .unwrap_or("main_hand")
 }
 
 /// Build a loot-origin RawParsedItem from a DropFinder drop payload.

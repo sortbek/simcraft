@@ -298,19 +298,17 @@ export default function TopGearItemSelector({
         <p className="text-xs font-medium uppercase tracking-widest text-muted">
           {t('gear.selectItems')}
         </p>
-        <div className="flex items-center gap-3">
-          <TopGearQuickSelectBar
-            vaultUids={vaultUids}
-            lootUids={lootUids}
-            catalystUids={catalystUids}
-            selectedUids={selectedUids}
-            comboLabel={comboLabel}
-            comboColorClass={comboColorClass}
-            onToggleGroup={onToggleGroup}
-            onDeselectAll={() => onSelectionChange({})}
-            t={t}
-          />
-        </div>
+        <TopGearQuickSelectBar
+          vaultUids={vaultUids}
+          lootUids={lootUids}
+          catalystUids={catalystUids}
+          selectedUids={selectedUids}
+          comboLabel={comboLabel}
+          comboColorClass={comboColorClass}
+          onToggleGroup={onToggleGroup}
+          onDeselectAll={() => onSelectionChange({})}
+          t={t}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">

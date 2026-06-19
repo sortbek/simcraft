@@ -291,6 +291,10 @@ export default function TopGearScreen() {
     [simcInput, localItems]
   );
   const selectedItemsJson = useMemo(() => buildSelectedUidsJson(selectedUids), [selectedUids]);
+  const addedKeys = useMemo(
+    () => new Set(addedLootItems.map((i) => buildAlternativeKey(i))),
+    [addedLootItems]
+  );
   const hasVoidForgeItems = useMemo(() => {
     if (!resolved?.slots) return false;
     return Object.values(resolved.slots).some(
@@ -644,7 +648,7 @@ export default function TopGearScreen() {
             onItemAdded={(slot, simcString, origin) =>
               setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])
             }
-            addedKeys={new Set(addedLootItems.map((i) => buildAlternativeKey(i)))}
+            addedKeys={addedKeys}
             onRemoveAdded={handleRemoveAdded}
             comboCount={comboCount}
             comboError={comboError}
