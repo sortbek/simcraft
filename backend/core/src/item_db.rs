@@ -702,8 +702,16 @@ pub fn item_names() -> Option<&'static HashMap<u64, HashMap<String, String>>> {
 
 /// Search equippable items by localized name (or numeric id). Returns up to
 /// `limit` matches as JSON `{ item_id, name, icon, inventory_type, quality,
-/// ilevel }`, with name-prefix matches ranked before substring matches.
-pub fn search_equippable_items(query: &str, locale: &str, limit: usize) -> Vec<Value> {
+/// ilevel }`, with name-prefix matches ranked before substring matches. When
+/// `class_name` is given, items the class cannot equip (too-heavy armor or a
+/// disallowed weapon type) are excluded — mirroring the gear_resolver filter so
+/// search only surfaces items that can actually be added.
+pub fn search_equippable_items(
+    query: &str,
+    class_name: Option<&str>,
+    locale: &str,
+    limit: usize,
+) -> Vec<Value> {
     let q = query.trim().to_lowercase();
     if q.is_empty() {
         return Vec::new();
@@ -712,6 +720,8 @@ pub fn search_equippable_items(query: &str, locale: &str, limit: usize) -> Vec<V
         return Vec::new();
     };
     let names = ITEM_NAMES.get();
+    let class_max_armor = class_name.and_then(class_data::class_max_armor);
+    let class_weapons = class_name.and_then(class_data::class_allowed_weapons);
 
     // (rank, lowercased name, item id, json) — sort by rank, then name, then id.
     let mut scored: Vec<(u8, String, u64, Value)> = Vec::new();
@@ -719,6 +729,28 @@ pub fn search_equippable_items(query: &str, locale: &str, limit: usize) -> Vec<V
         let inv_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
         if inv_type == 0 {
             continue; // equippable only
+        }
+
+        // Class eligibility (same exclusion as gear_resolver): drop too-heavy
+        // armor and weapon types the class can't use, so they never appear as
+        // un-addable results.
+        if class_name.is_some() {
+            let item_class = item.get("itemClass").and_then(|v| v.as_u64()).unwrap_or(0);
+            let item_subclass = item.get("itemSubClass").and_then(|v| v.as_u64()).unwrap_or(0);
+            if item_class == 4 {
+                if let Some(max) = class_max_armor {
+                    if item_subclass > 0 && item_subclass > max {
+                        continue;
+                    }
+                }
+            }
+            if item_class == 2 {
+                if let Some(weapons) = class_weapons {
+                    if !weapons.contains(&item_subclass) {
+                        continue;
+                    }
+                }
+            }
         }
         let name = names
             .and_then(|n| n.get(id))
@@ -774,7 +806,7 @@ mod search_tests {
     #[test]
     fn search_matches_equippable_by_name() {
         ensure_game_data_loaded();
-        let results = super::search_equippable_items("worn shortsword", "en_US", 50);
+        let results = super::search_equippable_items("worn shortsword", None, "en_US", 50);
         assert!(
             results.iter().any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(25)),
             "expected item 25 (Worn Shortsword) in {:?}",
@@ -791,14 +823,14 @@ mod search_tests {
     #[test]
     fn search_empty_query_returns_nothing() {
         ensure_game_data_loaded();
-        assert!(super::search_equippable_items("  ", "en_US", 50).is_empty());
+        assert!(super::search_equippable_items("  ", None, "en_US", 50).is_empty());
     }
 
     #[test]
     fn search_respects_limit() {
         ensure_game_data_loaded();
         // A common substring that matches many items.
-        let results = super::search_equippable_items("a", "en_US", 5);
+        let results = super::search_equippable_items("a", None, "en_US", 5);
         assert!(results.len() <= 5);
     }
 
@@ -807,12 +839,31 @@ mod search_tests {
         ensure_game_data_loaded();
         // "25" is a substring of many item ids; the exact id 25 must rank first
         // so it survives the result cap.
-        let results = super::search_equippable_items("25", "en_US", 50);
+        let results = super::search_equippable_items("25", None, "en_US", 50);
         assert_eq!(
             results.first().and_then(|r| r.get("item_id")).and_then(|v| v.as_u64()),
             Some(25),
             "exact id 25 should be the first result, got {:?}",
             results.first()
+        );
+    }
+
+    #[test]
+    fn search_class_filter_narrows_results() {
+        ensure_game_data_loaded();
+        // "Breastplate" items are plate/mail/leather armor; a cloth caster (mage)
+        // cannot use them, so class-filtering must strictly reduce the result set.
+        // (A narrow query keeps both result sets under the cap so the comparison
+        // is meaningful.)
+        let all = super::search_equippable_items("breastplate", None, "en_US", 1000);
+        let mage = super::search_equippable_items("breastplate", Some("mage"), "en_US", 1000);
+        assert!(!all.is_empty(), "expected some breastplate items in the fixture");
+        assert!(mage.len() <= all.len());
+        assert!(
+            mage.len() < all.len(),
+            "mage filter should drop plate/mail/leather breastplates: all={}, mage={}",
+            all.len(),
+            mage.len()
         );
     }
 }

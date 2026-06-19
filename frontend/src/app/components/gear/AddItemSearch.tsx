@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiUrl, fetchJson, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { QUALITY_TEXT_CLASS } from '../../lib/qualityColors';
-import type { UpgradeTracks } from '../loot/types';
+import { detectClass, type UpgradeTracks } from '../loot/types';
 import type { ResolvedItem } from '../../lib/types';
 
 interface SearchItem {
@@ -43,6 +43,7 @@ function buildSeasonIlvlOptions(tracks: UpgradeTracks, baseIlvl: number): IlvlOp
 
 export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSearchProps) {
   const { locale } = useLanguage();
+  const className = useMemo(() => detectClass(simcInput), [simcInput]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchItem[]>([]);
   const [tracks, setTracks] = useState<UpgradeTracks>({});
@@ -64,9 +65,10 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
       return;
     }
     const controller = new AbortController();
+    const classParam = className ? `&class_name=${className}` : '';
     const timer = setTimeout(() => {
       fetchJson<{ items: SearchItem[] }>(
-        apiUrl(`/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}`),
+        apiUrl(`/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}`),
         { signal: controller.signal }
       )
         .then((data) => setResults(data.items ?? []))
@@ -78,7 +80,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, locale]);
+  }, [query, locale, className]);
 
   const optionsFor = useCallback(
     (item: SearchItem) => buildSeasonIlvlOptions(tracks, item.ilevel),
@@ -119,7 +121,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
   const hasQuery = query.trim().length > 0;
 
   return (
-    <div className="relative">
+    <div className="relative z-40">
       <div className="relative">
         <svg
           className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/55"

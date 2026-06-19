@@ -165,7 +165,8 @@ pub(super) async fn list_gems(query: web::Query<GemListQuery>) -> HttpResponse {
 
 pub(super) async fn search_items(query: web::Query<ItemSearchQuery>) -> HttpResponse {
     let locale = query.locale.as_deref().unwrap_or("en_US");
-    let items = crate::item_db::search_equippable_items(&query.q, locale, 50);
+    let items =
+        crate::item_db::search_equippable_items(&query.q, query.class_name.as_deref(), locale, 50);
     HttpResponse::Ok().json(json!({ "items": items }))
 }
 
