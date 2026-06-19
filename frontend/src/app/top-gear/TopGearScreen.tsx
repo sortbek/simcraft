@@ -439,8 +439,17 @@ export default function TopGearScreen() {
       if (dedupedItems.length === 0) return;
 
       setResolved((prev) => {
+        // Guard against `resolved` having been cleared (input changed / resolve
+        // failed) while the resolve-drops request was in flight. Re-check
+        // against the live `prev` so a rapid second add can't duplicate.
+        if (!prev) return prev;
         let next = prev;
-        for (const item of dedupedItems) next = mergeAlternative(next!, item.slot, item);
+        for (const item of dedupedItems) {
+          const existing = next.slots[item.slot]?.alternatives ?? [];
+          const key = buildAlternativeKey(item);
+          if (existing.some((alt) => buildAlternativeKey(alt) === key)) continue;
+          next = mergeAlternative(next, item.slot, item);
+        }
         return next;
       });
       setSelectedUids((prev) => {

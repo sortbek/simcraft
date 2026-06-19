@@ -156,7 +156,7 @@ export interface LootBrowserProps {
 
 export default function LootBrowser({ footer }: LootBrowserProps) {
   const { t } = useLanguage();
-  const { simcInput, hasInput } = useSimContext();
+  const { simcInput } = useSimContext();
   const [category, setCategory] = useState('mplus');
 
   // Spec selection: main spec on by default, off-specs toggleable
@@ -221,7 +221,6 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
 
   const equippedGear: EquippedGear = useMemo(() => parseEquippedGear(simcInput), [simcInput]);
 
-  const hasCharacter = hasInput;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');

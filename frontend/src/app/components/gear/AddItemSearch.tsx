@@ -105,9 +105,15 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
         ),
         { signal: controller.signal }
       )
-        .then((data) => setResults(data.items ?? []))
-        .catch(() => {
-          /* aborted or failed — leave previous results */
+        .then((data) => {
+          setResults(data.items ?? []);
+          setError(null);
+        })
+        .catch((e: unknown) => {
+          // Aborts are expected on debounce/unmount — keep the prior results.
+          if (e instanceof DOMException && e.name === 'AbortError') return;
+          setResults([]);
+          setError(e instanceof Error ? e.message : 'Search failed');
         });
     }, 250);
     return () => {

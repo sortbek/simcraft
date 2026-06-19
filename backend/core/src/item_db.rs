@@ -736,6 +736,11 @@ pub fn search_equippable_items(
         if inv_type == 0 {
             continue; // equippable only
         }
+        // Skip equippable items that map to no gear slot (shirts, tabards, bags):
+        // they resolve to zero alternatives, so "Add" would be a silent no-op.
+        if class_data::inv_type_to_slots(inv_type, "").is_empty() {
+            continue;
+        }
 
         // Current-expansion filter (mirror the enchant/gem expansion filter).
         if let Some(exp) = expansion {
