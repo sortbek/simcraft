@@ -146,7 +146,14 @@ export default function TopGearGroupCard({
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-on-surface-variant/50 transition-colors hover:bg-red-500/10 hover:text-red-400"
               title="Remove item"
             >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
                 <path d="M3 3l10 10M13 3L3 13" />
               </svg>
             </button>

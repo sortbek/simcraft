@@ -10,12 +10,12 @@ use super::game_data_handlers;
 use super::job_handlers;
 use super::mdt_handlers;
 use super::provider_handlers;
+use super::resolve_drops;
 use super::roster_handlers;
 use super::roster_run_handlers;
 use super::route_handlers;
 use super::sim_handlers;
 use super::system_handlers;
-use super::resolve_drops;
 use super::top_gear_handlers;
 use super::upgrade_compare;
 

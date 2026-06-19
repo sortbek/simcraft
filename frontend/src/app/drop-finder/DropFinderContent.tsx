@@ -91,7 +91,13 @@ export default function DropFinderContent() {
           const buildPayload = () => {
             if (!hasSelection) return null;
             const dropItems: DropItemPayload[] = selectedDrops.map((item) => {
-              const resolved = resolveUpgrade(item, difficulty, dungeonDiff, upgradeLevel, upgradeTracks);
+              const resolved = resolveUpgrade(
+                item,
+                difficulty,
+                dungeonDiff,
+                upgradeLevel,
+                upgradeTracks
+              );
               // No `slot_inherits` here: backend derives enchant/gem inheritance
               // from the equipped profile, keeping sim semantics off the frontend.
               return {

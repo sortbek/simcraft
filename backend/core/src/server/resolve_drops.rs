@@ -97,8 +97,14 @@ pub(super) fn resolve_drops_to_items(simc_input: &str, drops: &[Value]) -> Vec<R
             .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
             .unwrap_or_default();
         b.sort();
-        let vf = drop.get("is_void_forge").and_then(|v| v.as_bool()).unwrap_or(false);
-        let cat = drop.get("is_catalyst").and_then(|v| v.as_bool()).unwrap_or(false);
+        let vf = drop
+            .get("is_void_forge")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let cat = drop
+            .get("is_catalyst")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         flags.insert((item_id, b), (vf, cat));
     }
 

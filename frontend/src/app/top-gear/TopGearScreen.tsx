@@ -506,7 +506,10 @@ export default function TopGearScreen() {
 
       setLocalItems((prevLocal) =>
         prevLocal.filter(
-          (li) => !toRemove.some((entry) => entry.slot === li.slot && entry.simc_string === li.simc_string)
+          (li) =>
+            !toRemove.some(
+              (entry) => entry.slot === li.slot && entry.simc_string === li.simc_string
+            )
         )
       );
 

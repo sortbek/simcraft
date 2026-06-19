@@ -67,7 +67,11 @@ fn rank_candidates<'a>(
             .and_then(|n| n.get(&item_id))
             .and_then(|loc| loc.get(locale).or_else(|| loc.get("en_US")))
             .cloned()
-            .or_else(|| item.get("name").and_then(|n| n.as_str()).map(str::to_string))
+            .or_else(|| {
+                item.get("name")
+                    .and_then(|n| n.as_str())
+                    .map(str::to_string)
+            })
             .unwrap_or_default();
         if name.is_empty() {
             continue;
@@ -92,7 +96,11 @@ fn rank_candidates<'a>(
         };
         scored.push((rank, name_lc, item_id, name, item));
     }
-    scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)).then_with(|| a.2.cmp(&b.2)));
+    scored.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
     scored.truncate(limit);
     scored
         .into_iter()
@@ -148,7 +156,10 @@ pub fn all_equippable(
     let class_weapons = class_name.and_then(class_data::class_allowed_weapons);
 
     let filtered = item_db::items().values().filter(|item| {
-        let inv_type = item.get("inventoryType").and_then(|v| v.as_u64()).unwrap_or(0);
+        let inv_type = item
+            .get("inventoryType")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         if inv_type == 0 || class_data::inv_type_to_slots(inv_type, "").is_empty() {
             return false; // equippable, real gear slot only
         }
@@ -156,7 +167,10 @@ pub fn all_equippable(
             return true;
         }
         let item_class = item.get("itemClass").and_then(|v| v.as_u64()).unwrap_or(0);
-        let item_subclass = item.get("itemSubClass").and_then(|v| v.as_u64()).unwrap_or(0);
+        let item_subclass = item
+            .get("itemSubClass")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         // Armor: only the class's own body-armor type; subclass 0 (neck/ring/
         // trinket/off-hand frill) and cloaks (inv 16) are universal.
         if item_class == 4 {
@@ -201,7 +215,11 @@ mod tests {
             .iter()
             .filter_map(|r| r.get("item_id").and_then(|v| v.as_u64()))
             .collect();
-        assert_eq!(ids.len(), results.len(), "results must be deduped by item_id");
+        assert_eq!(
+            ids.len(),
+            results.len(),
+            "results must be deduped by item_id"
+        );
     }
 
     #[test]
@@ -211,10 +229,16 @@ mod tests {
         let Some(first) = broad.first() else {
             return;
         };
-        let name = first.get("name").and_then(|v| v.as_str()).unwrap().to_string();
+        let name = first
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap()
+            .to_string();
         let id = first.get("item_id").and_then(|v| v.as_u64()).unwrap();
         let results = season_drops(&name, Some("hunter"), Some("marksmanship"), "en_US", 50);
-        assert!(results.iter().any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(id)));
+        assert!(results
+            .iter()
+            .any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(id)));
     }
 
     #[test]
@@ -224,7 +248,10 @@ mod tests {
         // surfaces in the all-expansions mode.
         let results = all_equippable("151323", Some("hunter"), "en_US", 50);
         assert_eq!(
-            results.first().and_then(|r| r.get("item_id")).and_then(|v| v.as_u64()),
+            results
+                .first()
+                .and_then(|r| r.get("item_id"))
+                .and_then(|v| v.as_u64()),
             Some(151323),
             "exact id should rank first; got {:?}",
             results.first()
@@ -240,6 +267,10 @@ mod tests {
                 .filter_map(|r| r.get("item_id").and_then(|v| v.as_u64()))
                 .collect()
         };
-        assert_ne!(ids("hunter"), ids("warrior"), "mail vs plate classes differ");
+        assert_ne!(
+            ids("hunter"),
+            ids("warrior"),
+            "mail vs plate classes differ"
+        );
     }
 }

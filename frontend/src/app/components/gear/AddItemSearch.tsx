@@ -129,10 +129,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
   }, [query, locale, className, spec, seasonalOnly]);
 
   // The selected seasonal item level shown on cards and used on add.
-  const effective = useMemo(
-    () => seasonal.find((o) => o.ilvl === ilvl) ?? null,
-    [ilvl, seasonal]
-  );
+  const effective = useMemo(() => seasonal.find((o) => o.ilvl === ilvl) ?? null, [ilvl, seasonal]);
 
   const handleAdd = useCallback(
     async (item: SearchItem) => {
@@ -212,7 +209,14 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                 className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant/55 transition-colors hover:bg-surface-container-highest hover:text-on-surface"
                 aria-label="Clear search"
               >
-                <svg viewBox="0 0 12 12" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <svg
+                  viewBox="0 0 12 12"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                >
                   <path d="M3 3l6 6M9 3L3 9" />
                 </svg>
               </button>
@@ -274,7 +278,11 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                     className="h-9 w-9 shrink-0 overflow-hidden rounded-md border-b-2 bg-surface-container-highest"
                     style={{ borderBottomColor: qualityBorderColor(item.quality) }}
                   >
-                    <img src={getIconUrl(item.icon)} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={getIconUrl(item.icon)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className={`truncate text-[13px] font-bold ${qualityColor}`}>{item.name}</p>
@@ -289,11 +297,30 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                   >
                     {isAdding ? (
                       <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                        <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <circle
+                          cx="8"
+                          cy="8"
+                          r="6"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          opacity="0.25"
+                        />
+                        <path
+                          d="M14 8a6 6 0 00-6-6"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
                       </svg>
                     ) : (
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <svg
+                        className="h-3.5 w-3.5"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      >
                         <path d="M8 3v10M3 8h10" />
                       </svg>
                     )}

@@ -4,11 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSimContext } from '../sim-config/SimContext';
 import Checkbox from '../ui/Checkbox';
 import { API_URL } from '../../lib/api';
-import type {
-  SeasonConfigResponse,
-  DifficultyDef,
-  DifficultyGroup,
-} from '../../lib/types';
+import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup } from '../../lib/types';
 import { groupInstances } from '../../lib/instanceCategories';
 import ItemTable from './ItemTable';
 import DungeonDrawer from './DungeonDrawer';
@@ -83,7 +79,7 @@ function useDropFinderData(
 
   const { raids, dungeonCats } = useMemo(
     () => groupInstances(instances, seasonConfig),
-    [instances, seasonConfig],
+    [instances, seasonConfig]
   );
 
   useEffect(() => {
@@ -301,7 +297,6 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
     return [];
   }, [seasonConfig, isRaid, activeDungeonCat]);
 
-
   const activeDifficultyGroups: DifficultyGroup[] | null = useMemo(() => {
     if (activeDungeonCat?.cat.difficultyGroups) return activeDungeonCat.cat.difficultyGroups;
     return null;
@@ -354,7 +349,17 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
       if (kept.length > 0) result[slot] = kept;
     }
     return result;
-  }, [drops, dungeonPool, raidPool, dungeonInstances, raids, isRaid, isPoolOnly, difficulty, dungeonDiff]);
+  }, [
+    drops,
+    dungeonPool,
+    raidPool,
+    dungeonInstances,
+    raids,
+    isRaid,
+    isPoolOnly,
+    difficulty,
+    dungeonDiff,
+  ]);
 
   // Keep the selection in sync with what's actually available: drop any selected
   // uid no longer in filteredDrops — an instance deselected from the pool, or a

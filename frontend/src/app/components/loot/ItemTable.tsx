@@ -108,9 +108,11 @@ export default function ItemTable({
         })
         .map(([slot, items]) => {
           const filtered = filter
-            ? items.filter((item) =>
-                localizedItemName(item.item_id, item.name, locale).toLowerCase().includes(filter) ||
-                String(item.item_id).includes(filter)
+            ? items.filter(
+                (item) =>
+                  localizedItemName(item.item_id, item.name, locale)
+                    .toLowerCase()
+                    .includes(filter) || String(item.item_id).includes(filter)
               )
             : items;
           return [slot, filtered] as [string, DropItem[]];
