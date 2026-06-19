@@ -299,7 +299,7 @@ pub(super) struct ItemSearchQuery {
     #[serde(default)]
     pub class_name: Option<String>,
     #[serde(default)]
-    pub expansion: Option<u64>,
+    pub spec: Option<String>,
 }
 
 fn default_iterations() -> u32 {

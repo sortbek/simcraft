@@ -165,10 +165,10 @@ pub(super) async fn list_gems(query: web::Query<GemListQuery>) -> HttpResponse {
 
 pub(super) async fn search_items(query: web::Query<ItemSearchQuery>) -> HttpResponse {
     let locale = query.locale.as_deref().unwrap_or("en_US");
-    let items = crate::item_db::search_equippable_items(
+    let items = game_data::search_season_drops(
         &query.q,
         query.class_name.as_deref(),
-        query.expansion,
+        query.spec.as_deref(),
         locale,
         50,
     );

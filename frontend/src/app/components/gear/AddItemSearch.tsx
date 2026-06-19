@@ -5,7 +5,7 @@ import { apiUrl, fetchJson, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { QUALITY_TEXT_CLASS, qualityBorderColor } from '../../lib/qualityColors';
 import { getIconUrl } from '../../lib/useItemInfo';
-import { detectClass, type UpgradeTracks } from '../loot/types';
+import { detectClass, detectSpec, type UpgradeTracks } from '../loot/types';
 import type { ResolvedItem } from '../../lib/types';
 
 interface SearchItem {
@@ -69,6 +69,7 @@ function buildSeasonalIlvls(tracks: UpgradeTracks): IlvlOption[] {
 export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSearchProps) {
   const { locale } = useLanguage();
   const className = useMemo(() => detectClass(simcInput), [simcInput]);
+  const spec = useMemo(() => detectSpec(simcInput), [simcInput]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchItem[]>([]);
   const [tracks, setTracks] = useState<UpgradeTracks>({});
@@ -97,11 +98,14 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
       return;
     }
     const controller = new AbortController();
+    // Search the current-season drop catalog filtered to this class/spec (the
+    // same data DropFinder uses), so only obtainable items appear.
     const classParam = className ? `&class_name=${className}` : '';
+    const specParam = spec ? `&spec=${spec}` : '';
     const timer = setTimeout(() => {
       fetchJson<{ items: SearchItem[] }>(
         apiUrl(
-          `/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}&expansion=11`
+          `/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}${specParam}`
         ),
         { signal: controller.signal }
       )
@@ -120,7 +124,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, locale, className]);
+  }, [query, locale, className, spec]);
 
   // The selected seasonal item level shown on cards and used on add.
   const effective = useMemo(
