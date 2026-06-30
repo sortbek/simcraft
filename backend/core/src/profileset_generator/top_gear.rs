@@ -174,14 +174,16 @@ pub(crate) fn build_iterator_config(
                     gems.push(gid);
                 }
             }
-            if !replace_gems {
-                let has_equipped_diamond = equipped_gear
-                    .values()
-                    .flat_map(|simc| extract_gem_ids(simc))
-                    .any(is_diamond);
-                if has_equipped_diamond {
-                    gems.retain(|g| !is_diamond(*g));
-                }
+
+            let gem_slot_names: std::collections::HashSet<&str> =
+                gem_slots.iter().map(|(s, _)| s.as_str()).collect();
+            let preserved_diamond = equipped_gear
+                .iter()
+                .filter(|(slot, _)| !gem_slot_names.contains(slot.as_str()))
+                .flat_map(|(_, simc)| extract_gem_ids(simc))
+                .any(is_diamond);
+            if preserved_diamond {
+                gems.retain(|g| !is_diamond(*g));
             }
 
             let diamond_ids: Vec<u64> = gems.iter().filter(|&&g| is_diamond(g)).copied().collect();

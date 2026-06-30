@@ -455,6 +455,55 @@ finger1=,id=102,gem_id=213453\n";
         }
     }
 
+    #[test]
+    fn top_gear_keeps_one_diamond_when_one_is_preserved_on_a_non_varied_slot() {
+        ensure_game_data_loaded();
+
+        // Mirrors the reported bug: the neck (id 220000) already carries a diamond but
+        // its item id is NOT in socketed_item_ids (e.g. an under-reported crafted
+        // socket), so it is excluded from the gem-optimized slots and preserved as-is in
+        // the base actor. finger1 (id 220001) is a socketed item with an EMPTY socket
+        // (via bonus 13534) that the optimizer fills. A diamond is unique-equipped (one
+        // per character), so no emitted actor may end up with two diamonds.
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+neck=,id=220000,gem_id=213738\n\
+finger1=,id=220001,bonus_id=13534\n";
+
+        let socketed_item_ids = HashSet::from([220001_u64]); // neck (220000) intentionally absent
+        let diamond_id = 213738_u64; // quality-4 Algari diamond
+        let other_colored = 213465_u64; // sapphire (a non-diamond gem to fill the socket)
+
+        let gems = [diamond_id, other_colored];
+        let (input, _combo_count, _metadata) = generate_top_gear_input_with_talents(
+            base_profile,
+            &HashMap::new(),
+            &HashMap::new(),
+            Some(20),
+            &[],
+            None,
+            &GemEnchantOptions {
+                gem_options: &gems,
+                socketed_item_ids: Some(&socketed_item_ids),
+                replace_gems: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // Each "### " block is one profileset's full actor, so the diamond gem id must
+        // appear at most once: the preserved neck diamond already uses the budget, and
+        // the optimizer must not also place one in finger1's freshly-filled socket.
+        for block in input.split("### ").skip(1) {
+            let diamonds = block.matches(&format!("gem_id={diamond_id}")).count();
+            assert!(
+                diamonds <= 1,
+                "profileset actor ended up with {diamonds} diamonds (one preserved on neck + one added):\n{block}"
+            );
+        }
+    }
+
     // Multi-socket support: a 2-socket equipped item with N gem options should
     // produce N + C(N,2) = N*(N+1)/2 multiset combos for that slot (e.g. 3 gems
     // → 6 combos: AA, AB, AC, BB, BC, CC). Mirror combos (A,B) and (B,A) collapse
