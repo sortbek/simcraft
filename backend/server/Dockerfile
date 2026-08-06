@@ -6,6 +6,7 @@ WORKDIR /build
 COPY Cargo.toml ./
 COPY core/ core/
 COPY server/ server/
+COPY calibration/ calibration/
 COPY migrations/ migrations/
 
 ARG CARGO_FEATURES=
