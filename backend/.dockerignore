@@ -1,0 +1,18 @@
+# Applies only to builds whose context is `backend` (docker-compose.yml,
+# docker-compose.dev.yml, docker-compose.test-pg.yml).
+#
+# Must NOT exclude anything server/Dockerfile copies: Cargo.toml, core/,
+# server/, calibration/, migrations/ (compile-time — core/src/db/mod.rs runs
+# sqlx::migrate!("../migrations")), scripts/compact-data.js,
+# core/season-config.json, server/entrypoint.sh.
+target
+
+# The server image fetches its game data in the `fetcher` stage, never from the
+# build context. The MDT files under resources/data are needed only by
+# Dockerfile.standalone, which builds from the repo root and so is unaffected
+# by this file.
+resources
+
+*.db
+*.db-shm
+*.db-wal

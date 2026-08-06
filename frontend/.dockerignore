@@ -1,0 +1,21 @@
+# Applies only to builds whose context is `frontend` (docker-compose.yml,
+# docker-compose.dev.yml). Dockerfile.standalone uses the repo root, so it needs
+# the root .dockerignore instead.
+#
+# Everything here is regenerated inside the image: `npm ci` installs
+# node_modules, `next build` writes .next (and out/ for the desktop export).
+# Copying the host's copies over them wastes hundreds of MB of context and lets
+# stale host-installed versions shadow the lockfile-resolved install.
+node_modules
+.next
+out
+
+# Dev-only overrides. Next loads .env.local at build time, so without this a
+# developer's local NEXT_PUBLIC_* values get baked into shipped bundles. The
+# image gets its API URL from the Dockerfile ARG/ENV instead.
+# Narrow this to `.env*.local` if a committed .env.production is ever adopted.
+.env*
+
+*.tsbuildinfo
+Dockerfile
+.dockerignore
