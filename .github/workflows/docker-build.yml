@@ -1,0 +1,59 @@
+name: Docker Build
+
+# docker-publish.yml only builds Dockerfile.standalone, and only on tags. Nothing
+# built backend/server/Dockerfile or frontend/Dockerfile, which is how a missing
+# `COPY calibration/ calibration/` stayed broken from #121 until #130.
+on:
+  pull_request:
+    branches: [master, dev]
+
+# Deliberately not path-filtered to Dockerfile changes: this bug class is
+# triggered by workspace changes (a new member in backend/Cargo.toml), not by
+# edits to the Dockerfiles themselves.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only the first stage. The later stages download the Raidbots dataset and
+      # pull or compile SimC, which is far too slow per PR — and the COPY graph
+      # this job exists to check lives entirely in the builder stage. A missing
+      # workspace member fails here in seconds, during manifest loading, before
+      # a single crate is resolved.
+      # -f is resolved relative to the working directory, not the build context
+      # (only compose's `dockerfile:` key is context-relative), so this path is
+      # backend/server/Dockerfile even though the context is `backend`.
+      - name: Build backend builder stage
+        run: docker build --target builder -f backend/server/Dockerfile backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built in full rather than --target builder: the runner stage copies from
+      # .next/standalone/app, a path that depends on both the standalone output
+      # mode and the WORKDIR name (outputFileTracingRoot points at the parent
+      # dir). Stopping at the builder stage would leave that COPY unverified.
+      #
+      # Cached because the npm ci layer keys on package*.json and so hits on most
+      # PRs. The backend job is deliberately left uncached: it copies all sources
+      # before a single cargo build layer, so any source change invalidates it,
+      # and pushing a multi-GB Rust builder layer into the 10 GB repo-wide cache
+      # would evict docker-publish.yml's release caches. Scope is distinct from
+      # that workflow's for the same reason.
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          cache-from: type=gha,scope=pr-frontend
+          cache-to: type=gha,mode=max,scope=pr-frontend
