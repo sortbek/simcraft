@@ -15,7 +15,11 @@ RUN npm run build
 FROM rust:1.88-alpine AS backend-builder
 RUN apk add --no-cache musl-dev
 WORKDIR /build
-COPY backend/Cargo.toml ./
+# Without Cargo.lock cargo resolves every dependency from scratch, so this image
+# can ship a different dependency graph than the one CI tested. `--locked` is not
+# passed yet: the committed lockfile is currently out of sync with the manifests,
+# so it would fail the build. Add it once that is fixed.
+COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/core/ core/
 COPY backend/server/ server/
 COPY backend/calibration/ calibration/
