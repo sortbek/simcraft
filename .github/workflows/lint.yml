@@ -39,9 +39,10 @@ jobs:
         with:
           node-version: 20
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      # No toolchain action: rustup is preinstalled on GitHub runners and
+      # resolves backend/rust-toolchain.toml, which pins the version and
+      # declares rustfmt and clippy. Pinning here too would be a second
+      # source of truth that could drift.
 
       - name: Check formatting
         run: cargo fmt --all -- --check

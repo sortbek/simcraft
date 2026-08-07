@@ -12,7 +12,8 @@ ENV NEXT_PUBLIC_API_URL=""
 RUN npm run build
 
 # --- Stage 2: Build the Rust Backend ---
-FROM rust:1.88-alpine AS backend-builder
+# Keep this version in step with backend/rust-toolchain.toml; FROM cannot read it.
+FROM rust:1.96-alpine AS backend-builder
 RUN apk add --no-cache musl-dev
 WORKDIR /build
 # Without Cargo.lock cargo resolves every dependency from scratch, so this image

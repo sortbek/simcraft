@@ -1,4 +1,5 @@
-FROM rust:1.88-bookworm AS builder
+# Keep this version in step with backend/rust-toolchain.toml; FROM cannot read it.
+FROM rust:1.96-bookworm AS builder
 
 WORKDIR /build
 
