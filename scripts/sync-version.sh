@@ -9,12 +9,18 @@ VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 
 echo "Syncing version: $VERSION"
 
-# Cargo workspace
+# Cargo workspace. Cargo.lock records each workspace member's own version, so it
+# goes stale unless refreshed here, which breaks `cargo build --locked` in the
+# Docker images. `--workspace` touches only our own packages, never third-party
+# dependencies.
 sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "$ROOT/backend/Cargo.toml"
+(cd "$ROOT/backend" && cargo update --workspace --offline)
 
-# package.json files
-for f in "$ROOT/frontend/package.json" "$ROOT/desktop/package.json" "$ROOT/package.json"; do
-    sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" "$f"
+# npm projects. `npm version` updates package.json and package-lock.json
+# together; editing package.json alone left every lockfile stranded at 3.1.0.
+for d in "$ROOT/frontend" "$ROOT/desktop" "$ROOT"; do
+    [ -f "$d/package.json" ] || continue
+    (cd "$d" && npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null)
 done
 
 echo "Done."
