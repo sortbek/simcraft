@@ -7,9 +7,9 @@ import { heatClasses } from './reportTypes';
 import VariantBadges from '../loot/VariantBadges';
 
 interface Props {
-  items: ReportItem[];                                  // filtered + sorted by container
-  players: ReportPlayer[];                              // column order (filtered)
-  lookup: Map<string, Map<string, ReportItemResult>>;   // uid -> member_id -> result
+  items: ReportItem[]; // filtered + sorted by container
+  players: ReportPlayer[]; // column order (filtered)
+  lookup: Map<string, Map<string, ReportItemResult>>; // uid -> member_id -> result
   itemInfo: Record<number, ItemInfo>;
 }
 
@@ -65,10 +65,7 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
                 alt={displayName}
                 className="h-6 w-6 shrink-0 rounded object-cover"
               />
-              <span
-                className="truncate text-xs font-semibold"
-                style={{ color: qualityColor }}
-              >
+              <span className="truncate text-xs font-semibold" style={{ color: qualityColor }}>
                 {displayName}
               </span>
             </a>
@@ -80,10 +77,7 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
         {players.map((player) => {
           const result = itemResults?.get(player.member_id);
           const pct = result?.upgrade_pct;
-          const label =
-            pct !== undefined
-              ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}`
-              : '';
+          const label = pct !== undefined ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}` : '';
 
           return (
             <td

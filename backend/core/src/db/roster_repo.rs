@@ -151,12 +151,13 @@ impl RosterRepo {
         let now = chrono::Utc::now().to_rfc3339();
         match &self.backend {
             RosterBackend::Database(pool) => {
-                let result = sqlx::query("UPDATE rosters SET name = $1, updated_at = $2 WHERE id = $3")
-                    .bind(name)
-                    .bind(&now)
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
+                let result =
+                    sqlx::query("UPDATE rosters SET name = $1, updated_at = $2 WHERE id = $3")
+                        .bind(name)
+                        .bind(&now)
+                        .bind(id)
+                        .execute(pool)
+                        .await?;
                 Ok(result.rows_affected() > 0)
             }
             RosterBackend::Memory(memory) => {
@@ -394,8 +395,30 @@ mod tests {
     async fn upsert_member_is_idempotent_on_name_realm() {
         let repo = RosterRepo::new_memory();
         let r = repo.create("T", "eu").await.unwrap();
-        repo.upsert_member(&r.id, "Thrall", "Draenor", "shaman", "enhancement", "sim1", "ok", 480).await.unwrap();
-        repo.upsert_member(&r.id, "Thrall", "Draenor", "shaman", "enhancement", "sim2", "ok", 489).await.unwrap();
+        repo.upsert_member(
+            &r.id,
+            "Thrall",
+            "Draenor",
+            "shaman",
+            "enhancement",
+            "sim1",
+            "ok",
+            480,
+        )
+        .await
+        .unwrap();
+        repo.upsert_member(
+            &r.id,
+            "Thrall",
+            "Draenor",
+            "shaman",
+            "enhancement",
+            "sim2",
+            "ok",
+            489,
+        )
+        .await
+        .unwrap();
         let members = repo.list_members(&r.id).await.unwrap();
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].source_simc, "sim2");
@@ -406,7 +429,9 @@ mod tests {
     async fn delete_roster_removes_members() {
         let repo = RosterRepo::new_memory();
         let r = repo.create("T", "us").await.unwrap();
-        repo.upsert_member(&r.id, "A", "R", "mage", "frost", "s", "ok", 0).await.unwrap();
+        repo.upsert_member(&r.id, "A", "R", "mage", "frost", "s", "ok", 0)
+            .await
+            .unwrap();
         assert!(repo.delete(&r.id).await.unwrap());
         assert!(repo.list_members(&r.id).await.unwrap().is_empty());
     }

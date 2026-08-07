@@ -1,5 +1,5 @@
-use serde_json::{json, Value};
 use crate::game_data;
+use serde_json::{json, Value};
 
 /// Build droptimizer `drop_items` for one character: every eligible drop in the
 /// instance at the chosen difficulty's item level + bonus id.
@@ -74,10 +74,7 @@ fn resolve_upgrade(
         });
     match entry {
         Some(e) => {
-            let ilvl = e
-                .get("ilvl")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(base_ilvl);
+            let ilvl = e.get("ilvl").and_then(|v| v.as_u64()).unwrap_or(base_ilvl);
             let bonus = e
                 .get("bonus_id")
                 .and_then(|v| v.as_u64())
@@ -102,7 +99,9 @@ pub fn drop_items_from_slots(
 ) -> Vec<Value> {
     let mut out = Vec::new();
     for items in by_slot.values() {
-        let Some(arr) = items.as_array() else { continue };
+        let Some(arr) = items.as_array() else {
+            continue;
+        };
         for item in arr {
             let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
             if item_id == 0 {
@@ -192,7 +191,9 @@ mod tests {
         assert_eq!(r.get("item_id").and_then(|v| v.as_u64()), Some(12345));
         assert_eq!(r.get("ilevel").and_then(|v| v.as_u64()), Some(639));
         assert_eq!(
-            r.get("bonus_ids").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|b| b.as_u64()).collect::<Vec<_>>()),
+            r.get("bonus_ids")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|b| b.as_u64()).collect::<Vec<_>>()),
             Some(vec![10421u64])
         );
     }
@@ -438,7 +439,10 @@ mod tests {
         let r = &result[0];
         assert_eq!(r.get("item_id").and_then(|v| v.as_u64()), Some(5000));
         assert_eq!(r.get("is_catalyst").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(r.get("source_item_id").and_then(|v| v.as_u64()), Some(12345));
+        assert_eq!(
+            r.get("source_item_id").and_then(|v| v.as_u64()),
+            Some(12345)
+        );
         let bonus_ids: Vec<u64> = r
             .get("bonus_ids")
             .and_then(|v| v.as_array())
@@ -502,20 +506,45 @@ mod tests {
         // ilvls per difficulty (LFR 259 / Mythic 298) with NO upgrade track.
         let tracks = game_data::get_upgrade_tracks();
         let lfr = build_drop_items(1305, "lfr", "mage", "frost", 0, &[], &tracks, false, false);
-        let mythic = build_drop_items(1305, "mythic", "mage", "frost", 0, &[], &tracks, false, false);
+        let mythic = build_drop_items(
+            1305,
+            "mythic",
+            "mage",
+            "frost",
+            0,
+            &[],
+            &tracks,
+            false,
+            false,
+        );
         assert!(!lfr.is_empty(), "expected Sporefall drops for mage/frost");
         assert!(
-            lfr.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(259)),
+            lfr.iter()
+                .all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(259)),
             "LFR Sporefall drops must all be ilvl 259"
         );
         assert!(
-            mythic.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
+            mythic
+                .iter()
+                .all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
             "Mythic Sporefall drops must all be ilvl 298"
         );
         // No upgrade track: a max upgrade level must NOT change the mythic ilvl.
-        let mythic_up = build_drop_items(1305, "mythic", "mage", "frost", 8, &[], &tracks, false, false);
+        let mythic_up = build_drop_items(
+            1305,
+            "mythic",
+            "mage",
+            "frost",
+            8,
+            &[],
+            &tracks,
+            false,
+            false,
+        );
         assert!(
-            mythic_up.iter().all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
+            mythic_up
+                .iter()
+                .all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
             "upgrade level must be a no-op for fixed-difficulty raids"
         );
     }

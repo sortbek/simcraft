@@ -13,7 +13,7 @@ import type { SeasonConfigResponse, DungeonCategory } from './types';
  */
 export function groupInstances(
   instances: Instance[],
-  seasonConfig: SeasonConfigResponse | null,
+  seasonConfig: SeasonConfigResponse | null
 ): { raids: Instance[]; dungeonCats: { cat: DungeonCategory; instances: Instance[] }[] } {
   if (!seasonConfig)
     return {

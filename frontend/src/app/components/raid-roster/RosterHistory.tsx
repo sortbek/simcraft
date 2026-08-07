@@ -76,7 +76,9 @@ export default function RosterHistory({ roster }: { roster: Roster }) {
         </button>
 
         <div className="text-sm text-on-surface-variant">
-          <span className="font-semibold text-on-surface">{instanceName(selected.run.instance_id)}</span>
+          <span className="font-semibold text-on-surface">
+            {instanceName(selected.run.instance_id)}
+          </span>
           {' · '}
           <span className="capitalize">{selected.run.difficulty}</span>
           {' · '}
@@ -137,7 +139,9 @@ export default function RosterHistory({ roster }: { roster: Roster }) {
                   {new Date(run.created_at).toLocaleString()}
                 </div>
               </div>
-              <div className="ml-3 shrink-0"><StatusBadge status={run.status} /></div>
+              <div className="ml-3 shrink-0">
+                <StatusBadge status={run.status} />
+              </div>
             </button>
           ))}
         </div>

@@ -5,7 +5,7 @@ export type ReportViewMode = 'item' | 'matrix';
 export interface ReportFilters {
   hideDowngrades: boolean;
   players: string[]; // member_ids to include; empty = all
-  slots: string[];   // slot names to include; empty = all
+  slots: string[]; // slot names to include; empty = all
 }
 
 export const EMPTY_FILTERS: ReportFilters = { hideDowngrades: false, players: [], slots: [] };
