@@ -147,7 +147,11 @@ pub fn armory_to_simc(armory: &Value) -> String {
     let mut lines: Vec<String> = Vec::new();
 
     if let Some(class) = class {
-        lines.push(format!("{}=\"{}\"", simc_class_token(class), title_case(name)));
+        lines.push(format!(
+            "{}=\"{}\"",
+            simc_class_token(class),
+            title_case(name)
+        ));
     }
     lines.push(format!("level={level}"));
     if let Some(race) = race {
@@ -224,7 +228,10 @@ mod tests {
             "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" }
         });
         let simc = armory_to_simc(&armory);
-        assert!(simc.lines().any(|l| l == "level=70"), "expected level=70:\n{simc}");
+        assert!(
+            simc.lines().any(|l| l == "level=70"),
+            "expected level=70:\n{simc}"
+        );
     }
 
     #[test]
@@ -236,8 +243,14 @@ mod tests {
             "talents": { "loadoutCode": "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA" }
         });
         let simc = armory_to_simc(&armory);
-        assert!(simc.lines().any(|l| l == "level=90"), "expected level=90 fallback:\n{simc}");
-        assert!(!simc.contains("level=80"), "must not hardcode level=80:\n{simc}");
+        assert!(
+            simc.lines().any(|l| l == "level=90"),
+            "expected level=90 fallback:\n{simc}"
+        );
+        assert!(
+            !simc.contains("level=80"),
+            "must not hardcode level=80:\n{simc}"
+        );
     }
 
     #[test]
@@ -255,16 +268,31 @@ mod tests {
             ]}
         });
         let simc = armory_to_simc(&armory);
-        let head = simc.lines().find(|l| l.starts_with("head=")).expect("head line");
+        let head = simc
+            .lines()
+            .find(|l| l.starts_with("head="))
+            .expect("head line");
         assert!(head.contains("id=249988"), "{head}");
-        assert!(head.contains("bonus_id=43/13440/13338"), "bonus ids:\n{head}");
+        assert!(
+            head.contains("bonus_id=43/13440/13338"),
+            "bonus ids:\n{head}"
+        );
         assert!(head.contains("gem_id=240898"), "gem from object:\n{head}");
         // bonus ids encode the item level, so no explicit ilevel on bonus'd items
-        assert!(!head.contains("ilevel="), "ilevel should be omitted when bonus present:\n{head}");
+        assert!(
+            !head.contains("ilevel="),
+            "ilevel should be omitted when bonus present:\n{head}"
+        );
         // enchants array -> enchant_id from the first entry's `id`
-        assert!(head.contains("enchant_id=8017"), "enchant id from enchants array:\n{head}");
+        assert!(
+            head.contains("enchant_id=8017"),
+            "enchant id from enchants array:\n{head}"
+        );
         // race emitted
-        assert!(simc.lines().any(|l| l == "race=troll"), "race line:\n{simc}");
+        assert!(
+            simc.lines().any(|l| l == "race=troll"),
+            "race line:\n{simc}"
+        );
     }
 
     #[test]
@@ -276,13 +304,15 @@ mod tests {
         assert_eq!(simc_class_token("shaman"), "shaman");
     }
 
-
     #[test]
     fn race_strips_apostrophe_and_spaces() {
         // "Mag'har Orc" must become `maghar_orc` (SimC rejects the apostrophe form).
         let armory = json!({ "character": { "name": "x", "realm": "r", "race": "Mag'har Orc" } });
         let simc = armory_to_simc(&armory);
-        assert!(simc.lines().any(|l| l == "race=maghar_orc"), "race line:\n{simc}");
+        assert!(
+            simc.lines().any(|l| l == "race=maghar_orc"),
+            "race line:\n{simc}"
+        );
         assert!(!simc.contains('\''), "no apostrophe in output:\n{simc}");
     }
 
@@ -295,7 +325,10 @@ mod tests {
         });
         let simc = armory_to_simc(&armory);
         let head = simc.lines().find(|l| l.starts_with("head=")).unwrap();
-        assert!(head.contains("ilevel=600"), "ilevel fallback when no bonus:\n{head}");
+        assert!(
+            head.contains("ilevel=600"),
+            "ilevel fallback when no bonus:\n{head}"
+        );
         assert!(!head.contains("bonus_id="), "{head}");
     }
 
@@ -332,7 +365,10 @@ mod tests {
             "gear": { "items": [ { "slot": "HEAD", "itemId": 222, "itemLevel": 600 } ] }
         });
         let simc = armory_to_simc(&armory);
-        assert!(!simc.contains("spec="), "no spec for missing loadout:\n{simc}");
+        assert!(
+            !simc.contains("spec="),
+            "no spec for missing loadout:\n{simc}"
+        );
         let parsed = crate::addon_parser::parse_simc_input(&simc);
         assert_eq!(parsed.character.class_name, None);
         assert!(parsed.items.iter().any(|i| i.raw_slot == "head"));

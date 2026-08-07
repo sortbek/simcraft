@@ -150,7 +150,9 @@ raid_events+=/pull,pull=1,enemies=\"x_1\":100";
         assert_eq!(tal_a, tal_b, "talents unaffected by route lines");
         assert_eq!(spec_a, spec_b, "spec unaffected by route lines");
         assert!(non_gear_b.iter().any(|l| l == "fight_style=DungeonRoute"));
-        assert!(non_gear_b.iter().any(|l| l.starts_with("raid_events+=/pull")));
+        assert!(non_gear_b
+            .iter()
+            .any(|l| l.starts_with("raid_events+=/pull")));
     }
 
     #[test]

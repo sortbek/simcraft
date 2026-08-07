@@ -219,7 +219,11 @@ pub(super) fn generate_droptimizer_input(
                     .collect();
                 if let Some(&first) = gems.first() {
                     applied_gem = first;
-                    let gem_str = gems.iter().map(u64::to_string).collect::<Vec<_>>().join("/");
+                    let gem_str = gems
+                        .iter()
+                        .map(u64::to_string)
+                        .collect::<Vec<_>>()
+                        .join("/");
                     simc_str.push_str(&format!(",gem_id={}", gem_str));
                 }
             }

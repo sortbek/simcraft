@@ -63,7 +63,9 @@ export async function deleteMember(rosterId: string, memberId: string): Promise<
 
 export async function refreshRoster(rosterId: string): Promise<RosterMember[]> {
   try {
-    return await fetchJson<RosterMember[]>(`${API_URL}/api/rosters/${rosterId}/refresh`, { method: 'POST' });
+    return await fetchJson<RosterMember[]>(`${API_URL}/api/rosters/${rosterId}/refresh`, {
+      method: 'POST',
+    });
   } catch {
     return [];
   }
@@ -71,7 +73,10 @@ export async function refreshRoster(rosterId: string): Promise<RosterMember[]> {
 
 export async function refreshMember(rosterId: string, memberId: string): Promise<RosterMember[]> {
   try {
-    return await fetchJson<RosterMember[]>(`${API_URL}/api/rosters/${rosterId}/members/${memberId}/refresh`, { method: 'POST' });
+    return await fetchJson<RosterMember[]>(
+      `${API_URL}/api/rosters/${rosterId}/members/${memberId}/refresh`,
+      { method: 'POST' }
+    );
   } catch {
     return [];
   }

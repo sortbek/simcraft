@@ -2,17 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API_URL, fetchJson } from '../../lib/api';
-import {
-  startRun,
-  getRun,
-  type Roster,
-  type RosterReport,
-} from '../../lib/rosters';
-import type {
-  SeasonConfigResponse,
-  DifficultyDef,
-  DifficultyGroup,
-} from '../../lib/types';
+import { startRun, getRun, type Roster, type RosterReport } from '../../lib/rosters';
+import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup } from '../../lib/types';
 import type { Instance, UpgradeTracks } from '../loot/types';
 import { groupInstances } from '../../lib/instanceCategories';
 import RosterReportView from './RosterReportView';
@@ -80,7 +71,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
   // Derive raids + dungeon categories (shared with DropFinderContent)
   const { raids, dungeonCats } = useMemo(
     () => groupInstances(instances, seasonConfig),
-    [instances, seasonConfig],
+    [instances, seasonConfig]
   );
 
   const isRaid = category === 'raids';
@@ -197,8 +188,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     setDone(0);
     setTotal(0);
 
-    const encounters =
-      isRaid && selectedRaidId ? Array.from(selectedBosses) : undefined;
+    const encounters = isRaid && selectedRaidId ? Array.from(selectedBosses) : undefined;
 
     const started = await startRun(roster.id, instanceId, difficulty, {
       target_error: targetError,

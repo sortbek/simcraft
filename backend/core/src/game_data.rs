@@ -489,7 +489,10 @@ fn build_catalyst_variant(item: &Value, class_id: u64, inv_type: u64) -> Option<
     obj.insert("name".to_string(), Value::String(tier.name.clone()));
     obj.insert("icon".to_string(), Value::String(tier.icon.clone()));
     obj.insert("is_catalyst".to_string(), Value::Bool(true));
-    obj.insert("source_item_id".to_string(), serde_json::json!(source_item_id));
+    obj.insert(
+        "source_item_id".to_string(),
+        serde_json::json!(source_item_id),
+    );
     // The tier piece is not embellished even if the source drop was; drop the
     // stale flag so it doesn't show the badge or count against the 2/2 limit.
     obj.remove("embellished");
@@ -525,7 +528,8 @@ pub fn add_drop_variants(
         let mut variants: Vec<Value> = Vec::new();
         // Many source items in a slot convert to the SAME class tier piece; keep
         // only the first so we don't emit duplicate identical catalyst rows/sims.
-        let mut catalyst_tier_seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
+        let mut catalyst_tier_seen: std::collections::HashSet<u64> =
+            std::collections::HashSet::new();
         for item in arr.iter() {
             let inv_type = item
                 .get("inventory_type")
@@ -734,7 +738,11 @@ mod variant_tests {
         // 1307 = The Voidspire, a current raid with weapons + tier armor.
         let mut map = get_instance_drops(1307, Some("mage"), Some("frost"))
             .expect("Voidspire should have mage/frost drops");
-        let before: usize = map.values().filter_map(|v| v.as_array()).map(|a| a.len()).sum();
+        let before: usize = map
+            .values()
+            .filter_map(|v| v.as_array())
+            .map(|a| a.len())
+            .sum();
 
         add_drop_variants(&mut map, Some("mage"), true, true);
 
@@ -750,7 +758,11 @@ mod variant_tests {
                 }
             }
         }
-        let after: usize = map.values().filter_map(|v| v.as_array()).map(|a| a.len()).sum();
+        let after: usize = map
+            .values()
+            .filter_map(|v| v.as_array())
+            .map(|a| a.len())
+            .sum();
         assert!(vf_count > 0, "expected at least one void-forge sibling");
         assert!(cat_count > 0, "expected at least one catalyst sibling");
         assert_eq!(after, before + vf_count + cat_count);
@@ -762,6 +774,9 @@ mod variant_tests {
         let map = get_instance_drops(1307, Some("mage"), Some("frost")).unwrap();
         let mut copy = map.clone();
         add_drop_variants(&mut copy, Some("mage"), false, false);
-        assert_eq!(copy, map, "roster path (both false) must leave map unchanged");
+        assert_eq!(
+            copy, map,
+            "roster path (both false) must leave map unchanged"
+        );
     }
 }

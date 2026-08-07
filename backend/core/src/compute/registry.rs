@@ -139,10 +139,8 @@ fn smart_default(
     avail: &ProviderAvailability,
     est: &WorkloadEstimate,
 ) -> &'static str {
-    let big_job = matches!(
-        sim_type,
-        "top_gear" | "droptimizer" | "upgrade_compare"
-    ) && est.combo_count >= 50;
+    let big_job =
+        matches!(sim_type, "top_gear" | "droptimizer" | "upgrade_compare") && est.combo_count >= 50;
     if big_job {
         avail.first_configured_remote().unwrap_or("local")
     } else {

@@ -96,9 +96,15 @@ pub(super) async fn import_pairs(
                 let parsed = crate::addon_parser::parse_simc_input(&simc);
                 let class = parsed.character.class_name.unwrap_or_default();
                 let spec = parsed.character.spec.unwrap_or_default();
-                let status = if class.is_empty() { "armory_failed" } else { "ok" };
-                repo.upsert_member(roster_id, name, realm, &class, &spec, &simc, status, item_level)
-                    .await?;
+                let status = if class.is_empty() {
+                    "armory_failed"
+                } else {
+                    "ok"
+                };
+                repo.upsert_member(
+                    roster_id, name, realm, &class, &spec, &simc, status, item_level,
+                )
+                .await?;
             }
             Err(ArmoryError::NotFound) => {
                 repo.upsert_member(roster_id, name, realm, "", "", "", "not_found", 0)
@@ -137,10 +143,20 @@ pub(super) async fn import_members(
     let roster = match repo.get(&roster_id).await {
         Ok(Some(r)) => r,
         Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Roster not found"})),
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
     };
     let client = HttpArmoryClient::new();
-    match run_import(&client, repo.get_ref(), &roster_id, &roster.region, &req.text).await {
+    match run_import(
+        &client,
+        repo.get_ref(),
+        &roster_id,
+        &roster.region,
+        &req.text,
+    )
+    .await
+    {
         Ok(members) => HttpResponse::Ok().json(members),
         Err(e) => HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
     }
@@ -156,11 +172,15 @@ pub(super) async fn refresh_roster(
     let roster = match repo.get(&roster_id).await {
         Ok(Some(r)) => r,
         Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Roster not found"})),
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
     };
     let members = match repo.list_members(&roster_id).await {
         Ok(m) => m,
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
     };
     let pairs: Vec<(String, String)> = members
         .iter()
@@ -183,11 +203,15 @@ pub(super) async fn refresh_member(
     let roster = match repo.get(&roster_id).await {
         Ok(Some(r)) => r,
         Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Roster not found"})),
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
     };
     let members = match repo.list_members(&roster_id).await {
         Ok(m) => m,
-        Err(e) => return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()})),
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+        }
     };
     let Some(member) = members.iter().find(|m| m.id == member_id) else {
         return HttpResponse::NotFound().json(json!({"detail": "Member not found"}));

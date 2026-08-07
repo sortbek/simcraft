@@ -1089,7 +1089,10 @@ mod tests {
         let combo_idx = out.find("### Combo 1").expect("combo marker present");
         let gear_idx = out.find("hands=,id=2").expect("equipped gear present");
         assert!(route_idx > combo_idx, "route must come after ### Combo 1");
-        assert!(route_idx > gear_idx, "route must come after the equipped gear");
+        assert!(
+            route_idx > gear_idx,
+            "route must come after the equipped gear"
+        );
         // Route is emitted as its own trailing block, not a pre-combo "# Custom APL".
         assert!(out.contains("# Dungeon Route"));
         assert!(

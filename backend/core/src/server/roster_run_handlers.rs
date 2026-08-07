@@ -216,7 +216,12 @@ pub(super) async fn get_run(
         fetched.into_iter().map(|j| (j.id.clone(), j)).collect();
     let jobs: Vec<(String, Option<crate::models::Job>)> = mappings
         .iter()
-        .map(|mapping| (mapping.member_id.clone(), by_id.get(&mapping.job_id).cloned()))
+        .map(|mapping| {
+            (
+                mapping.member_id.clone(),
+                by_id.get(&mapping.job_id).cloned(),
+            )
+        })
         .collect();
 
     let total = mappings.len();

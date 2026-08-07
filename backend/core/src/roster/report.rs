@@ -126,7 +126,10 @@ pub fn aggregate_report(
             if combo_name.starts_with("Currently Equipped") {
                 continue;
             }
-            let Some(item) = combo.get("items").and_then(|v| v.as_array()).and_then(|a| a.first())
+            let Some(item) = combo
+                .get("items")
+                .and_then(|v| v.as_array())
+                .and_then(|a| a.first())
             else {
                 continue;
             };
@@ -149,7 +152,10 @@ pub fn aggregate_report(
             let uid = if is_void_forge {
                 format!("{item_id}:vf")
             } else if is_catalyst {
-                let source = item.get("source_item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                let source = item
+                    .get("source_item_id")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 format!("{item_id}:cat:{source}")
             } else {
                 item_id.to_string()
@@ -211,7 +217,11 @@ pub fn aggregate_report(
                 .iter()
                 .map(|(member_id, (dps, delta))| {
                     let base = member_base.get(member_id.as_str()).copied().unwrap_or(0.0);
-                    let upgrade_pct = if base > 0.0 { delta / base * 100.0 } else { 0.0 };
+                    let upgrade_pct = if base > 0.0 {
+                        delta / base * 100.0
+                    } else {
+                        0.0
+                    };
                     ItemResult {
                         member_id: member_id.clone(),
                         dps: *dps,
@@ -301,7 +311,10 @@ mod tests {
             "equipped baseline item leaked into report: {:?}",
             report.items.iter().map(|i| i.item_id).collect::<Vec<_>>()
         );
-        assert!(report.items.iter().any(|i| i.item_id == 111), "drop should be present");
+        assert!(
+            report.items.iter().any(|i| i.item_id == 111),
+            "drop should be present"
+        );
         assert_eq!(report.items.len(), 1);
     }
 
@@ -383,8 +396,16 @@ mod tests {
             })),
         )];
         let report = aggregate_report("r", 1, "heroic", &inputs);
-        assert_eq!(report.items.len(), 2, "base + void forge must be separate rows");
-        let vf = report.items.iter().find(|i| i.is_void_forge).expect("vf row");
+        assert_eq!(
+            report.items.len(),
+            2,
+            "base + void forge must be separate rows"
+        );
+        let vf = report
+            .items
+            .iter()
+            .find(|i| i.is_void_forge)
+            .expect("vf row");
         assert_eq!(vf.item_id, 111);
         assert_eq!(vf.uid, "111:vf");
         let base = report

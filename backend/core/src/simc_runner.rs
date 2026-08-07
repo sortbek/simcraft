@@ -1878,11 +1878,23 @@ mod tests {
         // The user's enabled buff is emitted (it would be absent under the old
         // skip-for-dungeon behavior) and lands after the route's fight_style line.
         assert!(out.contains("override.bloodlust=1"));
-        let fs_idx = out.find("fight_style=DungeonRoute").expect("route fight_style");
-        let user_lust = out.rfind("override.bloodlust=1").expect("user bloodlust override");
-        let user_ai = out.rfind("override.arcane_intellect=0").expect("user AI override");
-        assert!(user_lust > fs_idx, "user override must come after fight_style");
-        assert!(user_ai > fs_idx, "user override must come after fight_style");
+        let fs_idx = out
+            .find("fight_style=DungeonRoute")
+            .expect("route fight_style");
+        let user_lust = out
+            .rfind("override.bloodlust=1")
+            .expect("user bloodlust override");
+        let user_ai = out
+            .rfind("override.arcane_intellect=0")
+            .expect("user AI override");
+        assert!(
+            user_lust > fs_idx,
+            "user override must come after fight_style"
+        );
+        assert!(
+            user_ai > fs_idx,
+            "user override must come after fight_style"
+        );
         // fight_style is not re-emitted for dungeon routes (it lives in the block).
         assert_eq!(out.matches("fight_style=").count(), 1);
     }

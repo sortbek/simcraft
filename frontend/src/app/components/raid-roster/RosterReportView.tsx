@@ -3,8 +3,13 @@ import { useMemo, useState } from 'react';
 import type { RosterReport, ReportPlayer } from '../../lib/rosters';
 import { useItemInfo } from '../../lib/useItemInfo';
 import {
-  EMPTY_FILTERS, type ReportFilters, type ReportViewMode,
-  filterItems, playerMap, resultLookup, sortItemsByBest,
+  EMPTY_FILTERS,
+  type ReportFilters,
+  type ReportViewMode,
+  filterItems,
+  playerMap,
+  resultLookup,
+  sortItemsByBest,
 } from './reportTypes';
 import ItemCentricView from './ItemCentricView';
 import MatrixView from './MatrixView';
@@ -15,7 +20,10 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
   const [filters, setFilters] = useState<ReportFilters>(EMPTY_FILTERS);
 
   // batch-fetch item icons/quality for every item in the report (stable dep)
-  const itemQueries = useMemo(() => report.items.map((i) => ({ item_id: i.item_id })), [report.items]);
+  const itemQueries = useMemo(
+    () => report.items.map((i) => ({ item_id: i.item_id })),
+    [report.items]
+  );
   const itemInfo = useItemInfo(itemQueries);
 
   const pmap = useMemo(() => playerMap(report.players), [report.players]);
@@ -30,11 +38,16 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
   // matrix column order: report players that (a) are status "ok" and (b) pass the player filter (empty = all)
   const columns: ReportPlayer[] = useMemo(() => {
     const sel = new Set(filters.players);
-    return report.players.filter((p) => p.status === 'ok' && (sel.size === 0 || sel.has(p.member_id)));
+    return report.players.filter(
+      (p) => p.status === 'ok' && (sel.size === 0 || sel.has(p.member_id))
+    );
   }, [report.players, filters]);
 
   // option lists for the filter controls
-  const playerOptions = useMemo(() => report.players.filter((p) => p.status === 'ok'), [report.players]);
+  const playerOptions = useMemo(
+    () => report.players.filter((p) => p.status === 'ok'),
+    [report.players]
+  );
   const slotOptions = useMemo(
     () => Array.from(new Set(report.items.map((i) => i.slot))).sort(),
     [report.items]
@@ -44,7 +57,10 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
   function togglePlayer(memberId: string) {
     setFilters((f) => {
       const has = f.players.includes(memberId);
-      return { ...f, players: has ? f.players.filter((p) => p !== memberId) : [...f.players, memberId] };
+      return {
+        ...f,
+        players: has ? f.players.filter((p) => p !== memberId) : [...f.players, memberId],
+      };
     });
   }
 
@@ -55,10 +71,8 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
     });
   }
 
-  const chipBase =
-    'rounded-full border px-2.5 py-0.5 text-xs transition-colors';
-  const chipOn =
-    'border-primary/40 bg-primary/15 text-on-surface';
+  const chipBase = 'rounded-full border px-2.5 py-0.5 text-xs transition-colors';
+  const chipOn = 'border-primary/40 bg-primary/15 text-on-surface';
   const chipOff =
     'border-outline-variant/10 bg-surface-container-high text-on-surface-variant/70 hover:text-on-surface';
 

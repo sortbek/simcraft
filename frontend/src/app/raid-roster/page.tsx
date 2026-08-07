@@ -1,12 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  getRosters,
-  createRoster,
-  deleteRoster,
-  type Roster,
-} from '../lib/rosters';
+import { getRosters, createRoster, deleteRoster, type Roster } from '../lib/rosters';
 import RosterEditor from '../components/raid-roster/RosterEditor';
 import RosterRunPanel from '../components/raid-roster/RosterRunPanel';
 import RosterHistory from '../components/raid-roster/RosterHistory';
@@ -123,7 +118,9 @@ export default function RaidRosterPage() {
                       <button
                         onClick={() => setSelectedId(r.id)}
                         className={`min-w-0 flex-1 text-left transition-colors ${
-                          isActive ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface'
+                          isActive
+                            ? 'text-primary'
+                            : 'text-on-surface-variant hover:text-on-surface'
                         }`}
                       >
                         <div className="truncate text-sm font-medium">{r.name}</div>

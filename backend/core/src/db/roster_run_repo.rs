@@ -285,7 +285,10 @@ mod tests {
     #[tokio::test]
     async fn create_run_then_get_and_map_jobs() {
         let repo = RosterRunRepo::new_memory();
-        let run = repo.create_run("roster1", 1234, "heroic", "batch1").await.unwrap();
+        let run = repo
+            .create_run("roster1", 1234, "heroic", "batch1")
+            .await
+            .unwrap();
         assert_eq!(run.status, "running");
         assert_eq!(run.instance_id, 1234);
         assert!(run.report_json.is_none());
@@ -313,14 +316,23 @@ mod tests {
         let repo = RosterRunRepo::new_memory();
         let run = repo.create_run("r", 1, "heroic", "b").await.unwrap();
         repo.set_status(&run.id, "failed").await.unwrap();
-        assert_eq!(repo.get_run(&run.id).await.unwrap().unwrap().status, "failed");
+        assert_eq!(
+            repo.get_run(&run.id).await.unwrap().unwrap().status,
+            "failed"
+        );
     }
 
     #[tokio::test]
     async fn list_runs_returns_roster_runs_newest_first_without_report() {
         let repo = RosterRunRepo::new_memory();
-        let r1 = repo.create_run("roster1", 100, "heroic", "b1").await.unwrap();
-        let r2 = repo.create_run("roster1", 200, "mythic", "b2").await.unwrap();
+        let r1 = repo
+            .create_run("roster1", 100, "heroic", "b1")
+            .await
+            .unwrap();
+        let r2 = repo
+            .create_run("roster1", 200, "mythic", "b2")
+            .await
+            .unwrap();
         repo.create_run("other", 300, "heroic", "b3").await.unwrap();
         repo.set_report(&r2.id, "{\"big\":true}").await.unwrap();
         let runs = repo.list_runs("roster1").await.unwrap();

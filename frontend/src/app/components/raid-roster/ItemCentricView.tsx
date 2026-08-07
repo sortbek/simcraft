@@ -13,13 +13,7 @@ interface Props {
   itemInfo: Record<number, ItemInfo>;
 }
 
-function ResultRow({
-  result,
-  playerName,
-}: {
-  result: ReportItemResult;
-  playerName: string;
-}) {
+function ResultRow({ result, playerName }: { result: ReportItemResult; playerName: string }) {
   const pct = result.upgrade_pct;
   const isUpgrade = pct > 0;
   const isDowngrade = pct < 0;
@@ -49,7 +43,8 @@ function ResultRow({
         />
       </div>
       <span className={`w-14 shrink-0 text-right text-sm font-bold tabular-nums ${textColor}`}>
-        {sign}{pct.toFixed(1)}%
+        {sign}
+        {pct.toFixed(1)}%
       </span>
     </div>
   );
