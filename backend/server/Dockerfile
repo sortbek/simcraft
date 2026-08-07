@@ -4,8 +4,8 @@ WORKDIR /build
 
 # Copy workspace files. Without Cargo.lock cargo resolves every dependency from
 # scratch, so the shipped binary's graph can drift from the one CI tested.
-# `--locked` is not passed yet: the committed lockfile is currently out of sync
-# with the manifests, so it would fail the build. Add it once that is fixed.
+# `--locked` makes that guarantee enforceable: the build fails if the lockfile
+# drifts from the manifests, which scripts/sync-version.sh now keeps in sync.
 COPY Cargo.toml Cargo.lock ./
 COPY core/ core/
 COPY server/ server/
@@ -13,7 +13,7 @@ COPY calibration/ calibration/
 COPY migrations/ migrations/
 
 ARG CARGO_FEATURES=
-RUN cargo build --release -p simhammer-server ${CARGO_FEATURES:+--features $CARGO_FEATURES}
+RUN cargo build --release --locked -p simhammer-server ${CARGO_FEATURES:+--features $CARGO_FEATURES}
 
 # --- Fetch game data from Raidbots and compact ---
 FROM node:20-slim AS fetcher
