@@ -1,0 +1,44 @@
+# Applies only to builds whose context is the repo root — the `standalone`
+# compose service and .github/workflows/docker-publish.yml. The backend/,
+# frontend/ and desktop/ compose services use their own contexts and their own
+# .dockerignore files, so nothing here can affect them.
+#
+# Dockerfile.standalone copies, and this file must preserve, ALL of:
+#   frontend/package.json, frontend/package-lock.json, frontend/ (sources)
+#   backend/Cargo.toml, backend/core/, backend/server/, backend/calibration/,
+#   backend/migrations/, backend/scripts/compact-data.js,
+#   backend/core/season-config.json,
+#   backend/resources/data/mdt_dungeons.json, backend/resources/data/mdt-maps/
+#   standalone-entrypoint.sh
+.git
+.claude
+
+# Regenerated inside the image by npm ci / next build / cargo build.
+**/node_modules
+frontend/.next
+frontend/out
+backend/target
+
+# Fetched at runtime or in a later build stage, never copied from the context.
+#
+# backend/resources/data/ is deliberately NOT excluded. Dockerfile.standalone
+# copies mdt_dungeons.json and mdt-maps/ out of it, so excluding it would need a
+# glob-plus-negation (`data/*` then `!data/mdt-maps`), and re-inclusion under an
+# excluded directory behaves differently across BuildKit versions. Leaving it in
+# costs ~500 MB of context and risks nothing; the entries below plus .git,
+# .claude, target/ and node_modules already take the context from ~17 GB to well
+# under 1 GB. Revisit only with a local `docker build` to confirm both MDT paths
+# still land in the image.
+backend/resources/data-full
+backend/resources/data-compact
+backend/resources/data-compacted
+backend/resources/simc
+backend/resources/frontend
+desktop/resources
+desktop/dist
+
+.env*
+*.db
+*.db-shm
+*.db-wal
+*.log

@@ -2,8 +2,11 @@ FROM rust:1.88-bookworm AS builder
 
 WORKDIR /build
 
-# Copy workspace files
-COPY Cargo.toml ./
+# Copy workspace files. Without Cargo.lock cargo resolves every dependency from
+# scratch, so the shipped binary's graph can drift from the one CI tested.
+# `--locked` is not passed yet: the committed lockfile is currently out of sync
+# with the manifests, so it would fail the build. Add it once that is fixed.
+COPY Cargo.toml Cargo.lock ./
 COPY core/ core/
 COPY server/ server/
 COPY calibration/ calibration/
