@@ -1,13 +1,15 @@
 /// Parse pasted roster text into (name, realm) pairs. Accepts `CharacterName-Realm`
 /// (realm may contain spaces/extra dashes — split on the FIRST dash, since a
-/// character name never contains one). Skips lines without both parts. Dedupes
+/// character name never contains one). Skips lines without both parts, and any
+/// line holding `#` or `=`: a truncated SimC paste reaches this parser, and its
+/// `# Name - Spec - EU/Realm` headers would otherwise become bogus pairs. Dedupes
 /// case-insensitively, preserving first-seen order.
 pub fn parse_member_list(input: &str) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for line in input.lines() {
         let line = line.trim();
-        if line.is_empty() {
+        if line.is_empty() || line.contains('#') || line.contains('=') {
             continue;
         }
         let Some((name, realm)) = line.split_once('-') else {
@@ -63,6 +65,15 @@ mod tests {
     fn dedupes_case_insensitively() {
         let input = "Thrall-Draenor\nthrall-draenor";
         assert_eq!(parse_member_list(input).len(), 1);
+    }
+
+    #[test]
+    fn skips_simc_lines_so_a_truncated_paste_cant_mint_junk_members() {
+        // A SimC paste missing its class line falls through to this parser, where
+        // `# Duskryth - Devastation - EU/Silvermoon` would otherwise become a pair.
+        let input = "# Duskryth - Devastation - EU/Silvermoon\nserver=silvermoon\nThrall-Draenor";
+        let got = parse_member_list(input);
+        assert_eq!(got, vec![("Thrall".to_string(), "Draenor".to_string())]);
     }
 
     #[test]

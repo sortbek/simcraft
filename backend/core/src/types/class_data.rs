@@ -1,6 +1,7 @@
 //! Single source of truth for all WoW class, spec, and gear slot constants.
 //! Every module imports from here; nothing else defines these.
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 
 // ---- Gear Slots ----
@@ -799,6 +800,30 @@ pub fn detect_class(simc_input: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// A SimC profile's opening line: `evoker="Duskryth"`. Aliases are included because
+/// the addon emits `deathknight=`, not `death_knight=`.
+static RE_CLASS_LINE: Lazy<Regex> = Lazy::new(|| {
+    let names: Vec<&str> = CLASSES
+        .iter()
+        .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied()))
+        .collect();
+    Regex::new(&format!(
+        r#"^(?:{})\s*=\s*"?([^"]+)"?\s*$"#,
+        names.join("|")
+    ))
+    .unwrap()
+});
+
+/// Extract the character name from a profile's opening line, or `None` if the line
+/// doesn't open a profile. Unlike `detect_class` this is line-at-a-time and its
+/// regex is compiled once, so it is safe to run over every line of a large paste.
+pub fn class_line_character(line: &str) -> Option<String> {
+    RE_CLASS_LINE
+        .captures(line.trim())
+        .map(|caps| caps[1].trim().to_string())
+        .filter(|name| !name.is_empty())
 }
 
 /// Detect the spec from a simc input string.
