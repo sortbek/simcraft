@@ -40,7 +40,10 @@ jobs:
             frontend/package-lock.json
             desktop/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      # No toolchain action: rustup is preinstalled on GitHub runners and
+      # resolves backend/rust-toolchain.toml, which pins the version and
+      # declares rustfmt and clippy. Pinning here too would be a second
+      # source of truth that could drift.
 
       - name: Cache Rust build
         uses: actions/cache@v4

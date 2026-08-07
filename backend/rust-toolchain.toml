@@ -1,0 +1,18 @@
+# Single source of truth for the Rust toolchain.
+#
+# rustup honours this file for any cargo command run inside backend/, so CI,
+# the desktop release builds and local development all compile with the same
+# compiler. Before this existed, the workflows floated on latest stable while
+# the Docker images sat on 1.88 — two different compilers producing shipped
+# artifacts (see issue #135).
+#
+# The Docker images cannot read this file (FROM takes a literal tag), so
+# backend/server/Dockerfile and Dockerfile.standalone pin the same version in
+# their FROM lines and must be bumped together with the channel below.
+#
+# components are declared here rather than installed by a CI action, so that
+# `cargo fmt` and `cargo clippy` resolve against this toolchain rather than
+# whatever happens to be default on the runner.
+[toolchain]
+channel = "1.96.0"
+components = ["rustfmt", "clippy"]
