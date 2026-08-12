@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API_URL } from './api';
+import { apiUrl, fetchJson } from './api';
 
 export interface ProviderCaps {
   cancel: boolean;
@@ -22,10 +22,9 @@ const providerListeners = new Set<Listener>();
 export async function fetchProviders(): Promise<ProviderMeta[]> {
   if (cache) return cache;
   if (inflight) return inflight;
-  inflight = fetch(`${API_URL}/api/providers`)
-    .then(async (r) => {
-      if (!r.ok) throw new Error(`providers: ${r.status}`);
-      cache = (await r.json()) as ProviderMeta[];
+  inflight = fetchJson<ProviderMeta[]>(apiUrl('/api/providers'))
+    .then((list) => {
+      cache = list;
       return cache;
     })
     .finally(() => {

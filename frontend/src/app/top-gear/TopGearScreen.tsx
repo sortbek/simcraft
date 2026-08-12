@@ -18,6 +18,7 @@ import { useComboCount } from '../lib/useComboCount';
 import { useCloudEstimate } from '../lib/useCloudEstimate';
 import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useLanguage } from '../lib/i18n';
+import { VOID_FORGE_ENABLED } from '../lib/featureFlags';
 import { clearTopGearState, getTopGearState, storeTopGearState } from '../lib/topgear-state';
 import {
   appendLocalItems,
@@ -170,6 +171,9 @@ export default function TopGearScreen() {
   }, []);
 
   useEffect(() => {
+    // Skipped while Void Forge is hidden — otherwise a user who enabled it
+    // previously would be stuck with it on and no control to turn it off.
+    if (!VOID_FORGE_ENABLED) return;
     try {
       const storedVoidForge = localStorage.getItem('simhammer_void_forge');
       if (storedVoidForge === 'true') _setVoidForge(true);
@@ -651,7 +655,9 @@ export default function TopGearScreen() {
             </span>
           </Toggle>
         )}
-        <Toggle checked={voidForge} onChange={setVoidForge} label={t('topGear.voidForge')} />
+        {VOID_FORGE_ENABLED && (
+          <Toggle checked={voidForge} onChange={setVoidForge} label={t('topGear.voidForge')} />
+        )}
       </div>
 
       {!resolved ? (

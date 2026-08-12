@@ -1,5 +1,6 @@
 import type { ResolvedItem } from '../../lib/types';
 import { getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
+import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import GearItemRow from './GearItemRow';
 import { buildAlternativeKey } from './topGearIdentity';
 import type { DisplayGroup } from './topGearSelection';
@@ -185,7 +186,7 @@ function UpgradeButton({
   onUpgradeClick,
   onUpgradeSelect,
   onCatalystConvert,
-  onVoidForgeConvert,
+  onVoidForgeConvert: onVoidForgeConvertProp,
   onAddSocket,
   onRemoveGem,
   t,
@@ -202,6 +203,9 @@ function UpgradeButton({
   onRemoveGem?: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
+  // Gated once so the surrounding menu guards agree with the button itself and
+  // the menu never renders empty with Void Forge as its only action.
+  const onVoidForgeConvert = VOID_FORGE_ENABLED ? onVoidForgeConvertProp : undefined;
   if (!item.upgrade && !onCatalystConvert && !onVoidForgeConvert && !onAddSocket && !onRemoveGem)
     return null;
   const isMenuOpen = upgradeMenuFor === item.uid;

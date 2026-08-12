@@ -44,6 +44,27 @@ export function apiUrl(path: string): string {
   return `${API_URL}${path}`;
 }
 
+/** Fetch JSON, degrading to `fallback` on a network error or non-ok response.
+ *  The counterpart to `fetchJson` for endpoints whose failure should be silent —
+ *  optional decorations (icons, drop lists, server caps) where an error banner
+ *  would be worse than quietly showing nothing. Never throws. */
+export async function fetchJsonOr<T>(url: string, fallback: T, init?: RequestInit): Promise<T> {
+  try {
+    const res = await fetch(url, init);
+    if (!res.ok) return fallback;
+    return (await res.json()) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** DELETE a resource, throwing on a non-ok response so callers can surface the
+ *  failure. The handlers answer with a JSON body either way (`{status:"ok"}` or
+ *  `{detail:...}`), so `fetchJson` parses both and lifts `detail` into the error. */
+export async function apiDelete(path: string): Promise<void> {
+  await fetchJson<unknown>(apiUrl(path), { method: 'DELETE' });
+}
+
 /** POST a JSON body and parse a JSON response via shared `fetchJson` error handling. */
 export function postJson<T>(
   path: string,
@@ -284,5 +305,5 @@ export async function fetchAllJobs(opts?: {
 /** Delete a terminal-state job (Done/Failed/Cancelled); active jobs must be cancelled
  * first. Also removes per-job rows in combo_metadata, combo_dedup, and triage_batches. */
 export async function deleteJob(jobId: string): Promise<void> {
-  await fetchJson<unknown>(`${API_URL}/api/jobs/${jobId}`, { method: 'DELETE' });
+  await apiDelete(`/api/jobs/${jobId}`);
 }

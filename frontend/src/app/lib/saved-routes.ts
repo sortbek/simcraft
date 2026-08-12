@@ -1,4 +1,4 @@
-import { API_URL, fetchJson } from './api';
+import { API_URL, apiDelete, fetchJson } from './api';
 
 export interface SavedRoute {
   id: string;
@@ -42,9 +42,5 @@ export async function saveRoute(
 }
 
 export async function deleteSavedRoute(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/routes/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Server error ${res.status}`);
-  }
+  await apiDelete(`/api/routes/${id}`);
 }

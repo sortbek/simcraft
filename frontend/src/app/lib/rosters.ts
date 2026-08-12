@@ -1,4 +1,4 @@
-import { API_URL, fetchJson, postJson } from './api';
+import { API_URL, apiDelete, fetchJson, postJson } from './api';
 
 export interface Roster {
   id: string;
@@ -38,7 +38,7 @@ export async function createRoster(name: string, region: string): Promise<Roster
 }
 
 export async function deleteRoster(id: string): Promise<void> {
-  await fetch(`${API_URL}/api/rosters/${id}`, { method: 'DELETE' });
+  await apiDelete(`/api/rosters/${id}`);
 }
 
 export async function getMembers(id: string): Promise<RosterMember[]> {
@@ -58,7 +58,7 @@ export async function importMembers(id: string, text: string): Promise<RosterMem
 }
 
 export async function deleteMember(rosterId: string, memberId: string): Promise<void> {
-  await fetch(`${API_URL}/api/rosters/${rosterId}/members/${memberId}`, { method: 'DELETE' });
+  await apiDelete(`/api/rosters/${rosterId}/members/${memberId}`);
 }
 
 export async function refreshRoster(rosterId: string): Promise<RosterMember[]> {

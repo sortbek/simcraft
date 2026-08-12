@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSimContext, DEFAULT_RAID_BUFFS, DEFAULT_EXPANSION_OPTIONS } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
-import { API_URL } from '../../lib/api';
+import { API_URL, apiUrl, fetchJsonOr } from '../../lib/api';
 
 interface ConsumableEntry {
   value: string;
@@ -101,10 +101,9 @@ export default function RaidBuffsConsumables() {
   const [apiData, setApiData] = useState<ConsumablesApiResponse | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/consumables`)
-      .then((r) => r.json())
-      .then(setApiData)
-      .catch(() => {});
+    fetchJsonOr<ConsumablesApiResponse | null>(apiUrl('/api/consumables'), null).then(
+      (d) => d && setApiData(d)
+    );
   }, []);
 
   const consumableOptions = useMemo(() => {

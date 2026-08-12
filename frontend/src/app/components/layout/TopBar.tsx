@@ -320,7 +320,11 @@ export default function TopBar() {
                       </div>
                     </button>
                     <button
-                      onClick={() => deleteCharacter(char.id).then(refreshCharacters)}
+                      onClick={() =>
+                        deleteCharacter(char.id)
+                          .catch((e) => console.error('Delete character failed', e))
+                          .finally(refreshCharacters)
+                      }
                       className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant/30 transition-colors hover:bg-red-400/10 hover:text-red-400"
                     >
                       <svg

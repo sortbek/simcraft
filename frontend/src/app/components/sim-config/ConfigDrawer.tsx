@@ -4,7 +4,7 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
-import { API_URL } from '../../lib/api';
+import { API_URL, apiUrl, fetchJsonOr } from '../../lib/api';
 import { ROUTES } from '../../lib/routes';
 import { TRIAGE_BATCH_OPTIONS } from '../../lib/triageBatch';
 import FightStyleSelector from './FightStyleSelector';
@@ -86,14 +86,11 @@ export default function ConfigDrawer({
         onAvailableBranchesChange(branches);
       });
     } else {
-      fetch(`${API_URL}/api/branches`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.branches?.length) {
-            onAvailableBranchesChange(data.branches);
-          }
-        })
-        .catch(() => {});
+      fetchJsonOr<{ branches?: string[] }>(apiUrl('/api/branches'), {}).then((data) => {
+        if (data.branches?.length) {
+          onAvailableBranchesChange(data.branches);
+        }
+      });
     }
   }, [onAvailableBranchesChange]);
 

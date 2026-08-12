@@ -44,9 +44,15 @@ export default function RaidRosterPage() {
 
   const handleDelete = useCallback(
     async (id: string) => {
-      await deleteRoster(id);
-      setSelectedId((cur) => (cur === id ? null : cur));
-      refreshRosters();
+      try {
+        await deleteRoster(id);
+        setSelectedId((cur) => (cur === id ? null : cur));
+      } catch (e) {
+        console.error('Delete roster failed', e);
+      } finally {
+        // Re-sync either way: on failure the row must reappear, not look deleted.
+        refreshRosters();
+      }
     },
     [refreshRosters]
   );

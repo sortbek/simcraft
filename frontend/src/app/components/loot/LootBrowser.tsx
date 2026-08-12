@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSimContext } from '../sim-config/SimContext';
 import Checkbox from '../ui/Checkbox';
-import { API_URL } from '../../lib/api';
+import { API_URL, apiUrl, fetchJsonOr } from '../../lib/api';
 import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup } from '../../lib/types';
 import { groupInstances } from '../../lib/instanceCategories';
+import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import ItemTable from './ItemTable';
 import DungeonDrawer from './DungeonDrawer';
 import DifficultySelect from './DifficultySelect';
@@ -63,18 +64,9 @@ function useDropFinderData(
   const specParam = useMemo(() => [...activeSpecs].sort().join(','), [activeSpecs]);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/season-config`)
-      .then((r) => r.json())
-      .then(setSeasonConfig)
-      .catch(() => {});
-    fetch(`${API_URL}/api/instances`)
-      .then((r) => r.json())
-      .then(setInstances)
-      .catch(() => {});
-    fetch(`${API_URL}/api/upgrade-tracks`)
-      .then((r) => r.json())
-      .then(setUpgradeTracks)
-      .catch(() => {});
+    fetchJsonOr(apiUrl('/api/season-config'), null).then((c) => c && setSeasonConfig(c));
+    fetchJsonOr(apiUrl('/api/instances'), null).then((i) => i && setInstances(i));
+    fetchJsonOr(apiUrl('/api/upgrade-tracks'), null).then((t) => t && setUpgradeTracks(t));
   }, []);
 
   const { raids, dungeonCats } = useMemo(
@@ -97,10 +89,11 @@ function useDropFinderData(
     const url = selectedId.startsWith('type:')
       ? `${API_URL}/api/instances/type/${selectedId.slice(5)}/drops`
       : `${API_URL}/api/instances/${selectedId}/drops`;
-    fetch(`${url}${qs ? `?${qs}` : ''}`)
-      .then((r) => r.json())
-      .then((data) => setDrops(data.detail ? null : data))
-      .catch(() => setDrops(null))
+    fetchJsonOr<Record<string, DropItem[]> | { detail: string } | null>(
+      `${url}${qs ? `?${qs}` : ''}`,
+      null
+    )
+      .then((data) => setDrops(data && 'detail' in data ? null : data))
       .finally(() => setLoading(false));
   }, [selectedId, className, specParam, includeVoidForge, includeCatalyst]);
 
@@ -615,16 +608,18 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
 
           {/* Variant toggles: voidforge + catalyst */}
           <div className="flex flex-wrap items-center gap-4">
-            <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
-              <Checkbox
-                variant="primary"
-                size="sm"
-                checked={includeVoidForge}
-                onChange={() => setIncludeVoidForge((v) => !v)}
-                aria-label={t('dropFinder.includeVoidForge')}
-              />
-              {t('dropFinder.includeVoidForge')}
-            </label>
+            {VOID_FORGE_ENABLED && (
+              <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+                <Checkbox
+                  variant="primary"
+                  size="sm"
+                  checked={includeVoidForge}
+                  onChange={() => setIncludeVoidForge((v) => !v)}
+                  aria-label={t('dropFinder.includeVoidForge')}
+                />
+                {t('dropFinder.includeVoidForge')}
+              </label>
+            )}
             <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
               <Checkbox
                 variant="primary"

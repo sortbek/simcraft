@@ -1,4 +1,4 @@
-import { API_URL } from './api';
+import { apiUrl, fetchJson } from './api';
 
 export interface InstalledVersions {
   branches: string[];
@@ -21,14 +21,10 @@ export interface UpdateCheckResult {
 
 /** Fetch installed SimC versions from the backend. */
 export async function fetchInstalledVersions(): Promise<InstalledVersions> {
-  const res = await fetch(`${API_URL}/api/simc/versions`);
-  if (!res.ok) throw new Error('Failed to fetch installed versions');
-  return res.json();
+  return fetchJson<InstalledVersions>(apiUrl('/api/simc/versions'));
 }
 
 /** Check for SimC updates via the backend (handles GitHub API + platform detection). */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
-  const res = await fetch(`${API_URL}/api/simc/updates`);
-  if (!res.ok) throw new Error('Failed to check for updates');
-  return res.json();
+  return fetchJson<UpdateCheckResult>(apiUrl('/api/simc/updates'));
 }

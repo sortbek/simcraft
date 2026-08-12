@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { API_URL } from '../../lib/api';
+import { API_URL, apiUrl, fetchJsonOr } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import LogConsole from './LogConsole';
 
@@ -47,10 +47,9 @@ function useCpuUsage(isRunning: boolean): number | null {
       return;
     }
     function fetchCpu() {
-      fetch(`${API_URL}/api/system-stats`)
-        .then((r) => r.json())
-        .then((d) => setCpu(d.cpu_usage ?? null))
-        .catch(() => {});
+      fetchJsonOr<{ cpu_usage?: number }>(apiUrl('/api/system-stats'), {}).then((d) =>
+        setCpu(d.cpu_usage ?? null)
+      );
     }
     fetchCpu();
     intervalRef.current = setInterval(fetchCpu, 1500);
