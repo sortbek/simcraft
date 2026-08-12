@@ -5,7 +5,7 @@
 use serde_json::Value;
 use std::collections::HashSet;
 
-use super::helpers::{apply_spec_override, apply_talent_override};
+use super::simc_input::{apply_spec_override, apply_talent_override};
 
 /// Apply the standard talent-override → spec-override → talent-normalize chain
 /// that every sim handler runs before parsing the simc input. Single source of

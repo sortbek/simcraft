@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use super::helpers::sanitize_custom_simc;
+use super::simc_input::sanitize_custom_simc;
 use crate::types::RotationMode;
 
 /// Newtype wrapper to avoid colliding with the simc `web::Data<PathBuf>`.

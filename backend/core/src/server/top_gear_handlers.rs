@@ -6,10 +6,13 @@ use std::sync::Arc;
 use super::handler_prep::{
     capped_max_combinations, preprocess_simc_input, serialize_combo_metadata_vec, socketed_item_ids,
 };
-use super::helpers::*;
+use super::job_spawn::{
+    resolve_provider_for_request, submit_profileset_sim, validate_batch, ProfilesetSubmission,
+};
+use super::simc_input::{inject_expert_fields, resolve_to_items_by_slot};
 use super::types::*;
-use super::SimcBinaries;
 use crate::addon_parser;
+use crate::compute::SimcBinaries;
 use crate::compute::{ProviderRegistry, WorkloadEstimate};
 use crate::db::{JobRepo, SettingsRepo};
 use crate::game_data;

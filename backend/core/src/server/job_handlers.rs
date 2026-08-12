@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
 
 use super::types::*;
-use super::SimcBinaries;
+use crate::compute::SimcBinaries;
 use crate::db::{ComboDedupRepo, ComboMetadataRepo, JobRepo, TriageBatchesRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::{JobStatus, SimcInputMode};

@@ -7,11 +7,11 @@ use std::collections::{HashMap, HashSet};
 
 use super::iterator::ProfilesetIteratorConfig;
 use super::GemEnchantOptions;
-use crate::server::request_json::NormalizedRequest;
+use crate::jobs::request_json::NormalizedRequest;
 
 /// Rebuild a `ProfilesetIteratorConfig` from a stored normalized request envelope.
 /// The envelope shape is `{ sim_type, version, payload }` per
-/// [crate::server::request_json::NormalizedRequest].
+/// [crate::jobs::request_json::NormalizedRequest].
 pub fn build_iterator_from_request_json(json: &str) -> Result<ProfilesetIteratorConfig, String> {
     let envelope: NormalizedRequest =
         serde_json::from_str(json).map_err(|e| format!("Invalid request_json: {}", e))?;

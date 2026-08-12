@@ -6,7 +6,7 @@ use std::sync::Arc;
 #[cfg(feature = "desktop")]
 use std::sync::Mutex;
 
-use super::SimcBinaries;
+use crate::compute::SimcBinaries;
 
 use crate::db;
 
@@ -251,7 +251,7 @@ pub(super) async fn system_stats(stats: web::Data<Arc<Mutex<SystemStats>>>) -> H
 #[cfg(test)]
 mod tests {
     use super::{merge_simc_branches, normalized_branch_name};
-    use crate::server::SimcBinaries;
+    use crate::compute::SimcBinaries;
     use std::collections::HashMap;
     use std::path::PathBuf;
 

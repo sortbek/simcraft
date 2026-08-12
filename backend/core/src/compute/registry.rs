@@ -1,6 +1,6 @@
 use crate::compute::provider::{ProviderAuth, ProviderError, SimcProvider};
+use crate::compute::SimcBinaries;
 use crate::db::SettingsRepo;
-use crate::server::SimcBinaries;
 use actix_web::http::header::HeaderMap;
 use secrecy::SecretString;
 use std::collections::HashMap;

@@ -4,9 +4,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::handler_prep::{preprocess_simc_input, serialize_combo_metadata_vec};
-use super::helpers::*;
+use super::job_spawn::{
+    resolve_provider_for_request, submit_profileset_sim, validate_batch, ProfilesetSubmission,
+};
+use super::simc_input::{inject_expert_fields, resolve_to_items_by_slot};
 use super::types::*;
-use super::SimcBinaries;
+use crate::compute::SimcBinaries;
 use once_cell::sync::Lazy;
 
 use crate::addon_parser;

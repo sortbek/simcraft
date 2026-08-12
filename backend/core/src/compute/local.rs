@@ -2,7 +2,7 @@ use crate::cancel::CancelToken;
 use crate::compute::provider::{
     ProviderCaps, RunCtx, RunError, SimcOutput, SimcProvider, StagedExecutionContext,
 };
-use crate::server::SimcBinaries;
+use crate::compute::SimcBinaries;
 use crate::simc_runner;
 use async_trait::async_trait;
 use serde_json::Value;
