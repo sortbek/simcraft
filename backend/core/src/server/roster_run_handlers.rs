@@ -2,7 +2,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use super::helpers::{resolve_provider_for_request, spawn_droptimizer_child};
+use super::job_spawn::{resolve_provider_for_request, spawn_droptimizer_child};
 use super::types::SimOptions;
 use crate::compute::{ProviderRegistry, WorkloadEstimate};
 use crate::db::{JobRepo, RosterRepo, RosterRunRepo, SettingsRepo};

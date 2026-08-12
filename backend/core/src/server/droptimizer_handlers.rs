@@ -3,10 +3,13 @@ use serde_json::json;
 use std::sync::Arc;
 
 use super::handler_prep::{preprocess_simc_input, serialize_combo_metadata_value};
-use super::helpers::*;
+use super::job_spawn::{
+    resolve_provider_for_request, submit_profileset_sim, validate_batch, ProfilesetSubmission,
+};
+use super::simc_input::inject_expert_fields;
 use super::types::*;
-use super::SimcBinaries;
 use crate::addon_parser;
+use crate::compute::SimcBinaries;
 use crate::compute::{ProviderRegistry, WorkloadEstimate};
 use crate::db::{JobRepo, SettingsRepo};
 use crate::log_buffer::LogBuffer;

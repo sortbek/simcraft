@@ -6,12 +6,12 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::json;
 use std::sync::Arc;
 
-use super::cloud_streaming::REMOTE_MAX_PROFILESETS_PER_JOB;
 use super::handler_prep::{capped_max_combinations, preprocess_simc_input, socketed_item_ids};
-use super::helpers::resolve_provider_for_request;
+use super::job_spawn::resolve_provider_for_request;
 use super::types::TopGearRequest;
-use super::SimcBinaries;
 use crate::addon_parser;
+use crate::compute::cloud_streaming::REMOTE_MAX_PROFILESETS_PER_JOB;
+use crate::compute::SimcBinaries;
 use crate::compute::{ProviderRegistry, WorkloadEstimate};
 use crate::db::{JobRepo, SettingsRepo};
 use crate::game_data;
@@ -130,7 +130,7 @@ pub(super) async fn cloud_estimate_top_gear(
     let mut items_by_slot = if let Some(ref ibs) = req.items_by_slot {
         ibs.clone()
     } else {
-        super::helpers::resolve_to_items_by_slot(&resolved)
+        super::simc_input::resolve_to_items_by_slot(&resolved)
     };
     if req.max_upgrade {
         items_by_slot = game_data::upgrade_items_by_slot(&items_by_slot);

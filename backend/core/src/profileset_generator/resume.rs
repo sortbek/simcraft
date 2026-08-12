@@ -6,10 +6,10 @@ use sqlx::AnyPool;
 use std::sync::Arc;
 
 use super::checkpoint::{Checkpoint, CheckpointPhase};
+use crate::compute::SimcBinaries;
 use crate::db::JobRepo;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus, SimcInputMode};
-use crate::server::SimcBinaries;
 
 /// Bundle of dependencies the resume code needs. Built once by the HTTP
 /// handler and threaded through to the phase-specific continuations.
@@ -78,7 +78,7 @@ pub async fn resume_job(job_id: &str, inputs: ResumeInputs) -> Result<(), String
             resume_local_stage(job_id, &job, request_json, &checkpoint, inputs).await
         }
         CheckpointPhase::CloudStreaming(_) => {
-            crate::server::cloud_streaming::resume_cloud_streaming(
+            crate::compute::cloud_streaming::resume_cloud_streaming(
                 job_id,
                 &job,
                 request_json,
@@ -97,7 +97,7 @@ async fn resume_local_stage(
     checkpoint: &Checkpoint,
     inputs: ResumeInputs,
 ) -> Result<(), String> {
-    let envelope: crate::server::request_json::NormalizedRequest =
+    let envelope: crate::jobs::request_json::NormalizedRequest =
         serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
     let payload = &envelope.payload;
     let options_for_task = payload.get("options").cloned().unwrap_or_else(|| {
@@ -271,7 +271,7 @@ async fn resume_local_stage(
         {
             Ok(super::stage_pipeline::StagePipelineOutcome::Completed(result)) => {
                 drop(permit);
-                crate::server::helpers::finalize_local_stage_result(
+                crate::jobs::finalize::finalize_local_stage_result(
                     &repo_for_task,
                     &job_id_owned,
                     &base_profile_owned,
@@ -457,7 +457,7 @@ async fn resume_triage(
 
     // 3. Rebuild iterator config; parse the envelope once (step 6 reads simc_branch).
     let iter_cfg = super::iterator_from_request::build_iterator_from_request_json(request_json)?;
-    let envelope: crate::server::request_json::NormalizedRequest =
+    let envelope: crate::jobs::request_json::NormalizedRequest =
         serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
     let payload = &envelope.payload;
     let base_profile_owned = payload
@@ -597,7 +597,7 @@ async fn resume_triage(
                 // Release the permit so the provider-driven staged run can acquire
                 // it (single-permit queue → holding it here would deadlock).
                 drop(permit);
-                crate::server::helpers::handoff_streamed_top_gear_to_staged(
+                crate::server::job_spawn::handoff_streamed_top_gear_to_staged(
                     &pool_for_task,
                     &repo_for_task,
                     local_provider_for_task,
@@ -640,7 +640,7 @@ async fn resume_staged(
     };
 
     // 0. Parse the original request envelope to recover full options + base_profile.
-    let envelope: crate::server::request_json::NormalizedRequest =
+    let envelope: crate::jobs::request_json::NormalizedRequest =
         serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
     let payload = &envelope.payload;
     let options = payload.get("options").cloned().unwrap_or_else(|| {
@@ -693,7 +693,7 @@ async fn resume_staged(
         start_batch_idx: staged_cp.next_batch_idx,
         resumed_batch_results: staged_cp.batch_results.clone(),
     };
-    crate::server::helpers::spawn_profileset_sim(
+    crate::server::job_spawn::spawn_profileset_sim(
         inputs.repo.clone(),
         inputs.local_provider.clone(),
         crate::compute::ProviderAuth::None,

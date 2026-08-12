@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tar::Archive;
 use zip::ZipArchive;
 
-use super::SimcBinaries;
+use crate::compute::SimcBinaries;
 use crate::db;
 use crate::db::SettingsRepo;
 

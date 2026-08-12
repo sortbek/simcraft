@@ -5,15 +5,17 @@ use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 
-use super::helpers::*;
-use super::request_json::NormalizedRequest;
+use super::job_spawn::{validate_batch, validate_eager_branch};
+use super::simc_input::inject_expert_fields;
 use super::types::*;
-use super::SimcBinaries;
+use crate::compute::SimcBinaries;
 use crate::compute::{
     ProviderAvailability, ProviderRegistry, ProviderSettings, RunCtx, WorkloadEstimate,
 };
 use crate::db::{ComboMetadataRepo, JobRepo, SettingsRepo};
 use crate::game_data;
+use crate::jobs::finalize::{finalize_job_outcome, inject_realm, inject_total_elapsed};
+use crate::jobs::request_json::NormalizedRequest;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus, SimcInputMode};
 use crate::result_parser;
@@ -184,7 +186,7 @@ pub(super) async fn create_sim(
             .run_quick(ctx, &provider_input, &options)
             .await
             .map_err(|e| e.to_string());
-        super::helpers::finalize_job_outcome(
+        finalize_job_outcome(
             &repo_clone,
             &job_id_clone,
             &provider_input,

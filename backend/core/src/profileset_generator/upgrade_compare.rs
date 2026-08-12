@@ -5,6 +5,17 @@ use super::base_profile::{item_meta, parse_base_profile};
 use super::{ProfilesetResult, MAX_COMBINATIONS};
 use crate::types::class_data::GEAR_SLOTS;
 
+/// Generate the Crest-Upgrades profilesets: for each affordable combination of
+/// upgrade steps within the crest budget, one profileset with those items raised.
+///
+/// **Why this generator does NOT call `constraints::is_legal_gear_set`** (every
+/// other generator does): it never swaps an item into a slot. Each option is the
+/// *already-equipped* item with its upgrade bonus replaced by a higher one from
+/// the same bonus group, so `item_id` is invariant across every combination the
+/// DFS emits. Unique-equipped and item-limit-category violations are impossible
+/// by construction — the equipped set is legal already, and only item levels
+/// move. If this ever starts substituting different items, it must route through
+/// the shared validator like the others.
 pub fn generate_upgrade_compare_input(
     base_profile: &str,
     upgraded_options_by_slot: &HashMap<String, Vec<Value>>,

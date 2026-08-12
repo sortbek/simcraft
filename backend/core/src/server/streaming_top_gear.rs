@@ -3,11 +3,13 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use super::helpers::{finalize_local_stage_result, sanitize_custom_simc, validate_batch};
-use super::request_json::NormalizedRequest;
+use super::job_spawn::validate_batch;
+use super::simc_input::sanitize_custom_simc;
 use super::types::TopGearRequest;
-use super::SimcBinaries;
+use crate::compute::SimcBinaries;
 use crate::db::JobRepo;
+use crate::jobs::finalize::finalize_local_stage_result;
+use crate::jobs::request_json::NormalizedRequest;
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, SimcInputMode};
 use crate::profileset_generator;

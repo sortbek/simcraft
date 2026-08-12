@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use simhammer_core::compute::SimcBinaries;
 use simhammer_core::db;
 use simhammer_core::game_data;
 use simhammer_core::server;
-use simhammer_core::server::SimcBinaries;
 
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
