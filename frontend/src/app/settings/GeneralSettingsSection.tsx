@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useLanguage } from '../lib/i18n';
-import { API_URL } from '../lib/api';
+import { API_URL, apiUrl, fetchJsonOr } from '../lib/api';
 import SettingsToggle from './SettingsToggle';
 
 const THREAD_PRESETS = [
@@ -23,17 +23,14 @@ export default function GeneralSettingsSection() {
       setClipboardSync(localStorage.getItem('simhammer_clipboard_sync') === 'true');
     } catch {}
 
-    fetch(`${API_URL}/health`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.threads) {
-          setMaxThreads(data.threads);
-          if (threads === 0) {
-            setThreads(Math.max(1, Math.round(data.threads * 0.6)));
-          }
+    fetchJsonOr<{ threads?: number }>(apiUrl('/health'), {}).then((data) => {
+      if (data.threads) {
+        setMaxThreads(data.threads);
+        if (threads === 0) {
+          setThreads(Math.max(1, Math.round(data.threads * 0.6)));
         }
-      })
-      .catch(() => {});
+      }
+    });
   }, [setThreads, threads]);
 
   const selectedPresetIdx = useMemo(

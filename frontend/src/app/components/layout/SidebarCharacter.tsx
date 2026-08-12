@@ -113,7 +113,11 @@ export default function SidebarCharacter() {
                       </div>
                     </button>
                     <button
-                      onClick={() => deleteCharacter(char.id).then(refreshCharacters)}
+                      onClick={() =>
+                        deleteCharacter(char.id)
+                          .catch((e) => console.error('Delete character failed', e))
+                          .finally(refreshCharacters)
+                      }
                       className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 transition-colors hover:text-red-400"
                     >
                       &times;

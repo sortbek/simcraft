@@ -1,4 +1,4 @@
-import { API_URL, fetchJson, postJson } from './api';
+import { API_URL, apiDelete, fetchJson, postJson } from './api';
 
 export interface SavedCharacter {
   id: string;
@@ -31,7 +31,7 @@ export async function upsertCharacter(simcInput: string): Promise<SavedCharacter
 }
 
 export async function deleteCharacter(id: string): Promise<void> {
-  await fetch(`${API_URL}/api/characters/${id}`, { method: 'DELETE' });
+  await apiDelete(`/api/characters/${id}`);
 }
 
 /** Fetch a character from the Blizzard armory and convert it to a SimC profile
@@ -63,5 +63,5 @@ export async function getTalentBuilds(characterId: string): Promise<SavedTalentB
 }
 
 export async function deleteTalentBuild(id: string): Promise<void> {
-  await fetch(`${API_URL}/api/talent-builds/${id}`, { method: 'DELETE' });
+  await apiDelete(`/api/talent-builds/${id}`);
 }

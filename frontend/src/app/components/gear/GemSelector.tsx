@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { API_URL } from '../../lib/api';
+import { apiUrl, fetchJsonOr } from '../../lib/api';
 import GearItemRow from './GearItemRow';
 import type { ResolvedItem } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
@@ -77,10 +77,7 @@ export default function GemSelector({
 
   useEffect(() => {
     if (!hasSocketedSlots) return;
-    fetch(`${API_URL}/api/gems?expansion=11`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: GemOption[]) => setGemOptions(data))
-      .catch(() => setGemOptions([]));
+    fetchJsonOr<GemOption[]>(apiUrl('/api/gems?expansion=11'), []).then(setGemOptions);
   }, [hasSocketedSlots]);
 
   // Diamonds = quality 4, crafted rank 2 (separate from regular gems)

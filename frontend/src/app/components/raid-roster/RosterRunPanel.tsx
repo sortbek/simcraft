@@ -6,6 +6,7 @@ import { startRun, getRun, type Roster, type RosterReport } from '../../lib/rost
 import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup } from '../../lib/types';
 import type { Instance, UpgradeTracks } from '../loot/types';
 import { groupInstances } from '../../lib/instanceCategories';
+import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import RosterReportView from './RosterReportView';
 import FightStyleSelector from '../sim-config/FightStyleSelector';
 import CategorySelector from '../loot/CategorySelector';
@@ -310,16 +311,18 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
         {/* Drop variants: include Void Forged (weapons/trinkets) and/or Catalyst
             (tier) sibling drops, matching the Drop Finder. */}
         <div className="flex flex-wrap items-center gap-4">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
-            <input
-              type="checkbox"
-              checked={voidForge}
-              onChange={(e) => setVoidForge(e.target.checked)}
-              disabled={running}
-              className="h-3.5 w-3.5 rounded border-outline-variant/30 accent-primary disabled:opacity-50"
-            />
-            Void Forged
-          </label>
+          {VOID_FORGE_ENABLED && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={voidForge}
+                onChange={(e) => setVoidForge(e.target.checked)}
+                disabled={running}
+                className="h-3.5 w-3.5 rounded border-outline-variant/30 accent-primary disabled:opacity-50"
+              />
+              Void Forged
+            </label>
+          )}
           <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
             <input
               type="checkbox"

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { formatScenarioLabel } from '../../lib/scenario-siblings';
-import { API_URL } from '../../lib/api';
+import { apiUrl, fetchJsonOr } from '../../lib/api';
 
 export default function ScenarioBuilder() {
   const { t } = useLanguage();
@@ -14,10 +14,8 @@ export default function ScenarioBuilder() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/config`)
-      .then((r) => r.json())
+    fetchJsonOr<{ max_scenarios?: number }>(apiUrl('/api/config'), {})
       .then((data) => setMaxScenarios(data.max_scenarios ?? 10))
-      .catch(() => setMaxScenarios(10))
       .finally(() => setLoaded(true));
   }, []);
 

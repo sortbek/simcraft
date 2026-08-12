@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from 'react';
-import { API_URL } from './api';
+import { API_URL, apiUrl, fetchJsonOr } from './api';
 import { QUALITY_HEX } from './qualityColors';
 
 export interface ItemQuery {
@@ -252,9 +252,8 @@ const itemNamesListeners: Array<() => void> = [];
 function ensureItemNames() {
   if (itemNamesMap || itemNamesFetching) return;
   itemNamesFetching = true;
-  fetch(`${API_URL}/api/item-names`)
-    .then((r) => (r.ok ? r.json() : {}))
-    .then((data: Record<string, Record<string, string>>) => {
+  fetchJsonOr<Record<string, Record<string, string>>>(apiUrl('/api/item-names'), {})
+    .then((data) => {
       // JSON object keys are strings; rekey by number.
       const map: Record<number, Record<string, string>> = {};
       for (const [id, locales] of Object.entries(data)) {

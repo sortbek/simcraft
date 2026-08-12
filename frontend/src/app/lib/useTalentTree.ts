@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API_URL } from './api';
+import { apiUrl, fetchJson } from './api';
 
 export interface TalentEntry {
   id: number;
@@ -86,11 +86,7 @@ export function useTalentTree(specId: number | null): TalentTreeData | null {
     }
 
     let cancelled = false;
-    fetch(`${API_URL}/api/talent-tree/${specId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
+    fetchJson<TalentTreeData>(apiUrl(`/api/talent-tree/${specId}`))
       .then((data: TalentTreeData) => {
         cache[specId] = data;
         if (!cancelled) setTree(data);
