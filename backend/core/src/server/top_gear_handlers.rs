@@ -59,6 +59,8 @@ fn build_items_by_slot(
     items_by_slot
 }
 
+// Arguments are actix extractors; the count is the framework's, not a design choice.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn create_top_gear_sim(
     http_req: HttpRequest,
     req: web::Json<TopGearRequest>,
