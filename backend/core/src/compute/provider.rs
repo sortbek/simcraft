@@ -23,11 +23,14 @@ pub struct ProviderCaps {
     pub cloud_streaming: bool,
 }
 
+/// Progress callback: `(percent, stage, detail)`.
+pub type ProgressFn<'a> = Arc<dyn Fn(u8, &str, &str) + Send + Sync + 'a>;
+
 /// Callbacks passed through the `SimcProvider` trait. Arc-wrapped so providers
 /// can clone them into the multiple sub-tasks `run_simc_staged` requires.
 pub struct RunCtx<'a> {
     pub job_id: &'a str,
-    pub on_progress: Arc<dyn Fn(u8, &str, &str) + Send + Sync + 'a>,
+    pub on_progress: ProgressFn<'a>,
     pub on_stage_complete: Arc<dyn Fn(&str) + Send + Sync + 'a>,
     pub on_log: Arc<dyn Fn(&str) + Send + Sync + 'a>,
     pub cancel: Option<crate::cancel::CancelToken>,

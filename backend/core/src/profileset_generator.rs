@@ -1946,7 +1946,9 @@ head=,id=100\n";
     // job exercising gear alternatives, a paired slot (finger1/finger2), an
     // enchant axis, a gem axis, and a talent variant. The refactor must keep
     // (simc string, count, metadata) byte-for-byte identical to this snapshot.
-    fn golden_top_gear_inputs() -> (
+    /// (base profile, gear by slot, enchants by slot, gems by slot, gem ids,
+    /// equipped item ids, talent variants)
+    type GoldenInputs = (
         String,
         HashMap<String, Vec<serde_json::Value>>,
         HashMap<String, Vec<String>>,
@@ -1954,7 +1956,9 @@ head=,id=100\n";
         Vec<u64>,
         HashSet<u64>,
         Vec<(String, String)>,
-    ) {
+    );
+
+    fn golden_top_gear_inputs() -> GoldenInputs {
         let base = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7000\n\
 finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             .to_string();

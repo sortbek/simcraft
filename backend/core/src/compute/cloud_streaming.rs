@@ -2406,7 +2406,7 @@ mod orchestrator_tests {
         run.execute(runner).await;
 
         // (a) Exactly ONE chunk submitted (single-chunk fast path).
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1, "expected exactly one chunk submission");
         assert_eq!(recorded[0].chunk_idx, 0);
         assert_eq!(recorded[0].job_id, job_id);
@@ -2416,7 +2416,6 @@ mod orchestrator_tests {
             "chunk input must carry the base-actor header: {}",
             recorded[0].simc_input
         );
-        drop(recorded);
 
         // The cloud_chunks row is recorded + completed (never re-billed).
         let cloud_repo = CloudChunksRepo::new(pool.clone());
@@ -2612,7 +2611,7 @@ mod orchestrator_tests {
         run.execute(runner).await;
 
         // Exactly 3 chunks submitted, with the expected per-chunk sizes.
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(recorded.len(), 3, "expected 3 chunk submissions");
         let mut by_idx: Vec<(usize, usize)> = recorded
             .iter()
@@ -2620,7 +2619,6 @@ mod orchestrator_tests {
             .collect();
         by_idx.sort();
         assert_eq!(by_idx, vec![(0, 2), (1, 2), (2, 1)]);
-        drop(recorded);
 
         // Concurrency was bounded to K=2 (no more than 2 runners ever in flight).
         assert!(
@@ -2884,9 +2882,8 @@ mod orchestrator_tests {
         }
 
         // Submission accounting: 3 original chunk calls + 2 retry sub-chunk calls.
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(recorded.len(), 5, "3 chunks + 2 retry sub-chunks");
-        drop(recorded);
 
         // The original chunk-1 row is failed; its two sub-chunk rows are completed.
         let cloud_repo = CloudChunksRepo::new(pool.clone());
@@ -3298,7 +3295,7 @@ mod orchestrator_tests {
 
         // (a) The completed chunk 0 was NOT re-submitted — the only new-chunk
         // runner call is the regenerated tail (Combo 5).
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(
             recorded.len(),
             1,
@@ -3310,7 +3307,6 @@ mod orchestrator_tests {
             vec!["Combo 5".to_string()],
             "restored next_name_idx must continue naming at Combo 5 (no collision)"
         );
-        drop(recorded);
 
         // (b) The in-flight chunk 1 was re-polled exactly once.
         assert_eq!(repoll_calls.lock().unwrap().as_slice(), &["remote-1"]);
@@ -3536,7 +3532,7 @@ mod orchestrator_tests {
 
         // The tail chunk (Combo 5) was generated and submitted at a FRESH index
         // past the existing max (3), i.e. >= 4 — no PK collision.
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(
             recorded.len(),
             1,
@@ -3551,7 +3547,6 @@ mod orchestrator_tests {
             "tail chunk_idx must be past the retry-tail rows (>=4), got {}",
             recorded[0].chunk_idx
         );
-        drop(recorded);
 
         // All rows completed; the tail row exists at the reconciled index.
         let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
@@ -3761,7 +3756,7 @@ mod orchestrator_tests {
 
         // The pre-cursor failed chunk 1 (Combo 3,4) was re-submitted (and nothing
         // else — completed chunks are never re-submitted).
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(
             recorded.len(),
             1,
@@ -3773,7 +3768,6 @@ mod orchestrator_tests {
         );
         // It re-used chunk 1's own row index (not a fresh tail index).
         assert_eq!(recorded[0].chunk_idx, 1);
-        drop(recorded);
 
         // Done with ALL 5 combos, each exactly once (chunk 1's combos recovered).
         let finished = repo.get(&job_id).await.unwrap().unwrap();
@@ -3869,13 +3863,12 @@ mod orchestrator_tests {
         // The failed-with-live-remote chunk 1 was RE-POLLED (Bug B), not regenerated.
         assert_eq!(repoll_calls.lock().unwrap().as_slice(), &["live-remote-1"]);
         // Only the tail (Combo 5) was submitted via the runner — chunk 1 was folded.
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1, "only the tail submits: {recorded:?}");
         assert_eq!(
             combo_names(&recorded[0].simc_input),
             vec!["Combo 5".to_string()]
         );
-        drop(recorded);
 
         // chunk 1 flipped failed→completed via the re-poll.
         let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
@@ -3976,14 +3969,13 @@ mod orchestrator_tests {
 
         // The superseded parent (Combo 3,4) was NOT re-submitted: only the tail
         // (Combo 5) reaches the runner.
-        let recorded = calls.lock().unwrap();
+        let recorded = calls.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1, "only the tail submits: {recorded:?}");
         assert_eq!(
             combo_names(&recorded[0].simc_input),
             vec!["Combo 5".to_string()]
         );
         // The parent stays `failed` (it was legitimately superseded; never resurrected).
-        drop(recorded);
         let rows = cloud_repo.list_for_job(&job_id).await.unwrap();
         assert_eq!(
             rows.iter().find(|r| r.chunk_idx == 1).unwrap().status,

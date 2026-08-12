@@ -419,6 +419,9 @@ pub(crate) async fn spawn_droptimizer_child(
     Ok(job_id)
 }
 
+// Threads the streamed run's full context into the staged phase; grouping these
+// into a struct would only move the same fields behind one more indirection.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handoff_streamed_top_gear_to_staged(
     pool: &sqlx::AnyPool,
     repo: &JobRepo,

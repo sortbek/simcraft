@@ -84,10 +84,10 @@ pub(crate) async fn write_combo_metadata_table_raw_offset(
     }
 }
 
-/// Convenience wrapper for handlers that have `HashMap<String, Vec<Value>>` combo_metadata
-/// (top_gear, upgrade_compare).
-// `write_combo_metadata_table`/`_value` removed: handlers now pre-serialize into
-// `ProfilesetSubmission::combo_metadata_serialized` and write via the `_raw` variant.
+// `write_combo_metadata_table`/`_value` removed — they wrapped handlers holding
+// `HashMap<String, Vec<Value>>` combo_metadata (top_gear, upgrade_compare).
+// Handlers now pre-serialize into `ProfilesetSubmission::combo_metadata_serialized`
+// and write via the `_raw` variant.
 
 /// Load combo_metadata for a job from the `combo_metadata` table.
 /// Returns an empty map for in-memory repos or when no rows exist.
