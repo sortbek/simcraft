@@ -434,6 +434,10 @@
     }
   ],
   "instanceOverrides": [],
+  "encounterDifficultyOverride": {
+    "2883": { "mythic": { "ilvl": 344, "bonus_id": 13848, "quality": 4 } },
+    "2895": { "mythic": { "ilvl": 344, "bonus_id": 13848, "quality": 4 } }
+  },
   "encounterFixedDifficulty": {
     "2711": {
       "lfr":    { "ilvl": 259, "bonus_id": 13789, "quality": 4 },
