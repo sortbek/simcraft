@@ -3,4 +3,4 @@ members = ["core", "server", "calibration"]
 resolver = "2"
 
 [workspace.package]
-version = "4.2.0"
+version = "4.3.0"
