@@ -368,6 +368,7 @@ pub(super) async fn get_season_config() -> HttpResponse {
         season,
         raid_difficulties,
         dungeon_categories,
+        raid_instance_ids: game_data::season_raid_instance_ids(),
         fixed_difficulty_encounters,
     })
 }

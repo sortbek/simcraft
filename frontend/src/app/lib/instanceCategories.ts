@@ -4,7 +4,8 @@ import type { SeasonConfigResponse, DungeonCategory } from './types';
 /**
  * Group raw instances into raids + dungeon categories using the season config.
  *
- * - Raids: instances with `type === 'raid'` and a positive id, sorted by `order`.
+ * - Raids: instances with `type === 'raid'` and a positive id, restricted to
+ *   `seasonConfig.raid_instance_ids` when the backend supplies it, sorted by `order`.
  * - Dungeon categories: one bucket per `seasonConfig.dungeon_categories`, each filled
  *   with the dungeons in its pool instance. Dungeons not matched to any pool fall back
  *   to the last category. Each bucket is sorted by name.
@@ -29,13 +30,17 @@ export function groupInstances(
     }
   }
 
+  const seasonRaids = seasonConfig.raid_instance_ids?.length
+    ? new Set(seasonConfig.raid_instance_ids)
+    : null;
+
   const raidList: Instance[] = [];
   const dcList: { cat: DungeonCategory; instances: Instance[] }[] =
     seasonConfig.dungeon_categories.map((cat) => ({ cat, instances: [] }));
 
   for (const inst of instances) {
     if (inst.type === 'raid' && inst.id > 0) {
-      raidList.push(inst);
+      if (!seasonRaids || seasonRaids.has(inst.id)) raidList.push(inst);
     } else if (inst.type === 'dungeon') {
       let placed = false;
       for (const dc of dcList) {

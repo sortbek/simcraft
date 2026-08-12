@@ -1,5 +1,6 @@
 {
-  "season": "Midnight Season 1",
+  "season": "Midnight Season 2",
+  "raidPoolInstanceId": -102,
   "raidDifficulties": [
     {
       "key": "lfr",
@@ -193,7 +194,7 @@
       "key": "delves",
       "sortOrder": 4,
       "label": "Delves",
-      "poolInstanceId": -92,
+      "poolInstanceId": -98,
       "defaultDifficulty": "delve-bountiful-8",
       "difficultyGroups": [
         {
@@ -238,7 +239,7 @@
       "key": "prey",
       "sortOrder": 5,
       "label": "Prey",
-      "poolInstanceId": -93,
+      "poolInstanceId": -99,
       "defaultDifficulty": "prey-nightmare",
       "difficultyGroups": [
         {
@@ -263,7 +264,7 @@
       "key": "pvp-conquest",
       "sortOrder": 9,
       "label": "PVP Conquest",
-      "poolInstanceId": -85,
+      "poolInstanceId": -95,
       "defaultDifficulty": "pvp-conquest",
       "difficulties": [
         { "key": "pvp-conquest", "label": "Conquest", "track": "Champion", "level": 1, "sortOrder": 1 }
@@ -273,7 +274,7 @@
       "key": "pvp-honor",
       "sortOrder": 10,
       "label": "PVP Honor",
-      "poolInstanceId": -84,
+      "poolInstanceId": -94,
       "defaultDifficulty": "pvp-honor",
       "difficulties": [
         { "key": "pvp-honor", "label": "Honor", "track": null, "level": 0, "sortOrder": 1, "fixedIlvl": 217, "fixedQuality": 3 }
@@ -283,7 +284,7 @@
       "key": "pvp-bloody-tokens",
       "sortOrder": 11,
       "label": "PVP Bloody Tokens",
-      "poolInstanceId": -86,
+      "poolInstanceId": -96,
       "defaultDifficulty": "pvp-bloody-tokens",
       "difficulties": [
         { "key": "pvp-bloody-tokens", "label": "Bloody Tokens", "track": "Veteran", "level": 4, "sortOrder": 1 }
@@ -317,7 +318,7 @@
       "key": "catalyst",
       "sortOrder": 6,
       "label": "Catalyst",
-      "poolInstanceId": -87,
+      "poolInstanceId": -100,
       "defaultDifficulty": "catalyst-champion-1",
       "difficultyGroups": [
         {
@@ -452,6 +453,15 @@
     "mythic": "Myth"
   },
   "encounterUpgradeLevel": {
+    "2888": 1,
+    "2874": 2,
+    "2894": 2,
+    "2882": 3,
+    "2871": 3,
+    "2887": 3,
+    "2883": 4,
+    "2895": 4,
+    "2849": 1,
     "2739": 3,
     "2740": 4,
     "2827": 2,

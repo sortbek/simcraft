@@ -22,6 +22,59 @@ pub fn get_instances() -> &'static Vec<Value> {
     item_db::instances()
 }
 
+/// Raid instances belonging to the current season.
+///
+/// A season's raid pool lists boss encounter IDs, unlike a dungeon pool whose
+/// `encounters` are instance IDs, so membership is resolved by finding which
+/// raids own those bosses. Returns empty when no raid pool is configured or the
+/// pool is missing from the data; callers treat that as "no season filter".
+pub fn season_raid_instance_ids() -> Vec<i64> {
+    let instances = item_db::instances();
+    let pool_id = match item_db::season_cfg()
+        .get("raidPoolInstanceId")
+        .and_then(|v| v.as_i64())
+    {
+        Some(id) => id,
+        None => return Vec::new(),
+    };
+
+    let pool_bosses: std::collections::HashSet<i64> = instances
+        .iter()
+        .find(|i| i.get("id").and_then(|v| v.as_i64()) == Some(pool_id))
+        .and_then(|i| i.get("encounters"))
+        .and_then(|e| e.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.get("id").and_then(|v| v.as_i64()))
+                .collect()
+        })
+        .unwrap_or_default();
+    if pool_bosses.is_empty() {
+        return Vec::new();
+    }
+
+    instances
+        .iter()
+        .filter(|i| i.get("type").and_then(|t| t.as_str()) == Some("raid"))
+        .filter_map(|i| {
+            let id = i.get("id").and_then(|v| v.as_i64())?;
+            if id <= 0 {
+                return None;
+            }
+            let owns_boss = i.get("encounters")?.as_array()?.iter().any(|e| {
+                e.get("id")
+                    .and_then(|v| v.as_i64())
+                    .is_some_and(|eid| pool_bosses.contains(&eid))
+            });
+            if owns_boss {
+                Some(id)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 // ---- Drop Resolver ----
 
 pub fn get_instance_drops(
@@ -575,12 +628,24 @@ pub fn get_drops_by_type(
     let mut merged: HashMap<&str, Vec<Value>> = HashMap::new();
     let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
 
+    // Raids are season-scoped: restrict to this season's raids, which also skips
+    // the raid meta-pools (themselves type "raid") that would otherwise be
+    // scanned redundantly.
+    let season_raids = if instance_type == "raid" {
+        season_raid_instance_ids()
+    } else {
+        Vec::new()
+    };
+
     for inst in instances {
         let itype = inst.get("type").and_then(|t| t.as_str()).unwrap_or("");
         if itype != instance_type {
             continue;
         }
         let inst_id = inst.get("id").and_then(|id| id.as_i64()).unwrap_or(0);
+        if !season_raids.is_empty() && !season_raids.contains(&inst_id) {
+            continue;
+        }
         if let Some(drops) = get_instance_drops(inst_id, class_name, spec_name) {
             for (slot, items) in &drops {
                 if let Some(arr) = items.as_array() {
@@ -634,6 +699,121 @@ pub fn get_drops_by_type(
         None
     } else {
         Some(ordered)
+    }
+}
+
+#[cfg(test)]
+mod season_filter_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    /// The raid pool lists boss encounter IDs, so the resolver has to map them
+    /// back to the raids that own them.
+    #[test]
+    fn season_raid_ids_resolve_pool_bosses_to_owning_raids() {
+        ensure_game_data_loaded();
+        let mut ids = season_raid_instance_ids();
+        ids.sort_unstable();
+        assert_eq!(
+            ids,
+            vec![1317, 1320],
+            "expected The Tidebound Grotto + The Venomous Abyss"
+        );
+    }
+
+    #[test]
+    fn raid_drops_exclude_previous_season_raids() {
+        ensure_game_data_loaded();
+        let drops = get_drops_by_type("raid", None, None).expect("raid drops");
+        let names: std::collections::HashSet<String> = drops
+            .values()
+            .filter_map(|v| v.as_array())
+            .flatten()
+            .filter_map(|i| i.get("instance_name")?.as_str())
+            .map(str::to_string)
+            .collect();
+
+        assert!(
+            names.contains("The Venomous Abyss"),
+            "current-season raid missing, got {names:?}"
+        );
+        for stale in ["The Voidspire", "March on Quel'Danas", "The Dreamrift"] {
+            assert!(!names.contains(stale), "{stale} is last season's raid");
+        }
+        // Neither pool claims these, so the strict filter drops them too.
+        for unpooled in ["World Bosses", "Sporefall"] {
+            assert!(!names.contains(unpooled), "{unpooled} is not in-season");
+        }
+    }
+
+    /// Every in-season raid boss needs an upgrade level, and it should agree
+    /// with the `itemSequenceLevel` the data ships. Without an entry a boss
+    /// silently resolves to the wrong item level.
+    #[test]
+    fn in_season_raid_bosses_have_upgrade_levels_matching_the_data() {
+        ensure_game_data_loaded();
+        let season_raids = season_raid_instance_ids();
+        let mut checked = 0;
+
+        for inst in item_db::instances() {
+            let id = inst.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+            if !season_raids.contains(&id) {
+                continue;
+            }
+            for enc in inst
+                .get("encounters")
+                .and_then(|e| e.as_array())
+                .into_iter()
+                .flatten()
+            {
+                // Trash entries carry no sequence level.
+                let Some(seq) = enc.get("itemSequenceLevel").and_then(|v| v.as_u64()) else {
+                    continue;
+                };
+                let eid = enc.get("id").and_then(|v| v.as_i64()).unwrap();
+                let name = enc.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                assert_eq!(
+                    item_db::encounter_upgrade_level(eid),
+                    Some(seq),
+                    "{name} ({eid}) upgrade level must match itemSequenceLevel"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 9, "expected 9 bosses across this season's raids");
+    }
+
+    /// Guards against the failure that motivated this change: a season rolls
+    /// over, the pool IDs in season-config.json go stale, and they keep
+    /// resolving against the previous season's pools instead of erroring.
+    #[test]
+    fn configured_pool_ids_all_exist() {
+        ensure_game_data_loaded();
+        let known: std::collections::HashSet<i64> = item_db::instances()
+            .iter()
+            .filter_map(|i| i.get("id")?.as_i64())
+            .collect();
+        let cfg = item_db::season_cfg();
+
+        let raid_pool = cfg.get("raidPoolInstanceId").and_then(|v| v.as_i64());
+        assert!(raid_pool.is_some(), "raidPoolInstanceId must be configured");
+        assert!(
+            known.contains(&raid_pool.unwrap()),
+            "raidPoolInstanceId {raid_pool:?} does not exist"
+        );
+
+        let cats = cfg
+            .get("dungeonCategories")
+            .and_then(|v| v.as_array())
+            .expect("dungeonCategories");
+        for cat in cats {
+            let id = cat
+                .get("poolInstanceId")
+                .and_then(|v| v.as_i64())
+                .expect("poolInstanceId");
+            let key = cat.get("key").and_then(|v| v.as_str()).unwrap_or("?");
+            assert!(known.contains(&id), "pool {id} for '{key}' does not exist");
+        }
     }
 }
 
