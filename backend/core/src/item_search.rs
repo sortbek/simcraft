@@ -7,10 +7,13 @@
 //! - [`all_equippable`] searches every equippable item in the DB across all
 //!   expansions, filtered to real gear slots and the class's own armor/weapon types.
 //!
-//! Both project results to `{ item_id, name, icon, inventory_type, quality, ilevel }`,
+//! Both project results to
+//! `{ item_id, name, icon, inventory_type, quality, ilevel, ilvl_options }`,
 //! exact-id first, then name-prefix, then substring; deduped by item_id.
+//! `ilvl_options` (see [`ilvl_options`]) is the per-item list of levels the
+//! frontend's Add-Item dropdown offers.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{json, Value};
 
@@ -36,6 +39,84 @@ const DROP_KEYS: SearchKeys = SearchKeys {
     inventory_type: "inventory_type",
     item_level: "ilevel",
 };
+
+/// Selectable item levels for a search result, highest first, each paired with the
+/// bonus id that produces it.
+///
+/// Drop-catalog items expose their real levels: every step of each difficulty's
+/// upgrade track, or — for fixed-difficulty encounters like Sporefall, whose gear
+/// carries no track — exactly the levels they drop at. Items with no drop data
+/// (the all-expansions search) fall back to the season's full set of track levels,
+/// so gear outside the current season stays freely simmable.
+fn ilvl_options(item: &Value) -> Vec<(u64, u64)> {
+    /// Record `ilvl`; when two tracks share a level, the higher-ranked one wins.
+    fn add(by_ilvl: &mut HashMap<u64, (usize, u64)>, ilvl: u64, bonus_id: u64, rank: usize) {
+        if ilvl == 0 || bonus_id == 0 {
+            return; // levels with no bonus can't be applied to an added item
+        }
+        let entry = by_ilvl.entry(ilvl).or_insert((rank, bonus_id));
+        if rank > entry.0 {
+            *entry = (rank, bonus_id);
+        }
+    }
+
+    let tracks = item_db::upgrade_tracks();
+    let mut by_ilvl: HashMap<u64, (usize, u64)> = HashMap::new();
+    let mut saw_drop_data = false;
+
+    for key in ["difficulty_info", "dungeon_info"] {
+        let Some(entries) = item.get(key).and_then(|v| v.as_object()) else {
+            continue;
+        };
+        saw_drop_data |= !entries.is_empty();
+        for entry in entries.values() {
+            match entry.get("track").and_then(|t| t.as_str()) {
+                // Tracked drop: the item can be upgraded to any step of that track.
+                Some(track) => {
+                    let rank = item_db::track_rank(track).unwrap_or(0);
+                    // `UPGRADE_TRACKS` is keyed (name, level, max): one name can
+                    // carry several series across bonus groups. Match the drop's
+                    // own `max_level` so an item is never offered levels from a
+                    // same-named series it can't reach. Absent max ⇒ any series.
+                    let max_level = entry.get("max_level").and_then(|v| v.as_u64());
+                    for ((name, _, max), (ilvl, bonus_id, _)) in tracks.into_iter().flatten() {
+                        if name == track && max_level.is_none_or(|want| *max == want) {
+                            add(&mut by_ilvl, *ilvl, *bonus_id, rank);
+                        }
+                    }
+                }
+                // Fixed-difficulty drop: this level and no other.
+                None => add(
+                    &mut by_ilvl,
+                    entry.get("ilvl").and_then(|v| v.as_u64()).unwrap_or(0),
+                    entry.get("bonus_id").and_then(|v| v.as_u64()).unwrap_or(0),
+                    0,
+                ),
+            }
+        }
+    }
+
+    // Only genuinely drop-data-less items (the all-expansions search) get the
+    // whole ladder. An item that HAS drop data but expands to nothing must stay
+    // empty — otherwise a mismatched series silently inherits every level.
+    if by_ilvl.is_empty() && !saw_drop_data {
+        for ((name, _, _), (ilvl, bonus_id, _)) in tracks.into_iter().flatten() {
+            add(
+                &mut by_ilvl,
+                *ilvl,
+                *bonus_id,
+                item_db::track_rank(name).unwrap_or(0),
+            );
+        }
+    }
+
+    let mut options: Vec<(u64, u64)> = by_ilvl
+        .into_iter()
+        .map(|(ilvl, (_, bonus_id))| (ilvl, bonus_id))
+        .collect();
+    options.sort_by_key(|o| std::cmp::Reverse(o.0));
+    options
+}
 
 /// Shared core: dedup by id, match each candidate's localized name (or numeric
 /// id), rank (exact id < name-prefix < substring), sort, truncate, and project
@@ -112,6 +193,10 @@ fn rank_candidates<'a>(
                 "inventory_type": item.get(keys.inventory_type).and_then(|v| v.as_u64()).unwrap_or(0),
                 "quality": item.get("quality").and_then(|v| v.as_u64()).unwrap_or(1),
                 "ilevel": item.get(keys.item_level).and_then(|v| v.as_u64()).unwrap_or(0),
+                "ilvl_options": ilvl_options(item)
+                    .into_iter()
+                    .map(|(ilvl, bonus_id)| json!({ "ilvl": ilvl, "bonus_id": bonus_id }))
+                    .collect::<Vec<_>>(),
             })
         })
         .collect()
@@ -198,6 +283,114 @@ pub fn all_equippable(
 mod tests {
     use super::*;
     use crate::test_support::ensure_game_data_loaded;
+
+    #[test]
+    fn fixed_difficulty_items_offer_only_their_own_levels() {
+        ensure_game_data_loaded();
+        // Sporefused-style drop: fixed levels, no upgrade track anywhere.
+        let item = json!({
+            "item_id": 1,
+            "difficulty_info": {
+                "heroic": { "ilvl": 285, "bonus_id": 13787, "quality": 4 },
+                "mythic": { "ilvl": 298, "bonus_id": 13786, "quality": 4 },
+            }
+        });
+        assert_eq!(ilvl_options(&item), vec![(298, 13786), (285, 13787)]);
+    }
+
+    #[test]
+    fn track_items_expand_to_every_step_of_their_track() {
+        ensure_game_data_loaded();
+        let tracks = item_db::upgrade_tracks().expect("season tracks loaded");
+        let myth: Vec<u64> = tracks
+            .iter()
+            .filter(|((name, _, _), _)| name == "Myth")
+            .map(|(_, (ilvl, _, _))| *ilvl)
+            .collect();
+        if myth.is_empty() {
+            eprintln!("SKIP track expansion: loaded season has no Myth track");
+            return;
+        }
+
+        let item = json!({
+            "item_id": 1,
+            "difficulty_info": {
+                "mythic": { "ilvl": myth[0], "bonus_id": 1, "quality": 4,
+                            "track": "Myth", "level": 1, "max_level": 6 },
+            }
+        });
+        let offered: Vec<u64> = ilvl_options(&item).into_iter().map(|(i, _)| i).collect();
+        for ilvl in &myth {
+            assert!(
+                offered.contains(ilvl),
+                "Myth {} should be offered, got {:?}",
+                ilvl,
+                offered
+            );
+        }
+    }
+
+    #[test]
+    fn track_expansion_is_confined_to_the_drops_own_series() {
+        ensure_game_data_loaded();
+        let tracks = item_db::upgrade_tracks().expect("season tracks loaded");
+        let myth: Vec<u64> = tracks
+            .iter()
+            .filter(|((name, _, _), _)| name == "Myth")
+            .map(|(_, (ilvl, _, _))| *ilvl)
+            .collect();
+        if myth.is_empty() {
+            eprintln!("SKIP series confinement: loaded season has no Myth track");
+            return;
+        }
+
+        // `UPGRADE_TRACKS` is keyed (name, level, max) — a name can carry several
+        // series across bonus groups. A drop naming a series that doesn't exist
+        // must not inherit a same-named series' levels.
+        let item = json!({
+            "item_id": 1,
+            "difficulty_info": {
+                "mythic": { "ilvl": 999, "bonus_id": 1, "quality": 4,
+                            "track": "Myth", "level": 1, "max_level": 99 },
+            }
+        });
+        let offered: Vec<u64> = ilvl_options(&item).into_iter().map(|(i, _)| i).collect();
+        for ilvl in &myth {
+            assert!(
+                !offered.contains(ilvl),
+                "max-99 series must not be offered real Myth level {}; got {:?}",
+                ilvl,
+                offered
+            );
+        }
+    }
+
+    #[test]
+    fn items_without_drop_data_fall_back_to_the_season_levels() {
+        ensure_game_data_loaded();
+        // All-expansions search results carry no difficulty info; they stay
+        // freely simmable at any of the season's item levels.
+        let offered = ilvl_options(&json!({ "item_id": 1 }));
+        assert!(!offered.is_empty());
+        assert!(
+            offered.windows(2).all(|w| w[0].0 > w[1].0),
+            "options must be unique and descending: {:?}",
+            offered
+        );
+    }
+
+    #[test]
+    fn search_results_carry_their_item_level_options() {
+        ensure_game_data_loaded();
+        let results = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 5);
+        for r in &results {
+            let opts = r
+                .get("ilvl_options")
+                .and_then(|v| v.as_array())
+                .unwrap_or_else(|| panic!("result missing ilvl_options: {}", r));
+            assert!(!opts.is_empty(), "every result needs at least one level");
+        }
+    }
 
     #[test]
     fn empty_query_returns_nothing() {

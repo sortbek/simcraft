@@ -71,6 +71,10 @@ static CURRENCY_INFO: OnceCell<HashMap<u64, (String, String)>> = OnceCell::new()
 /// Item limit categories: bonus_id → (category_id, max_quantity)
 static ITEM_LIMIT_CATS: OnceCell<HashMap<u64, (u64, u64)>> = OnceCell::new();
 static SEASON_CONFIG: OnceCell<Value> = OnceCell::new();
+/// Bonus IDs that set a fixed per-difficulty item level (from
+/// `encounterFixedDifficulty`). These sit outside the upgrade-track system, so
+/// they carry no track name or seasonId of their own.
+static FIXED_DIFFICULTY_BONUSES: OnceCell<HashSet<u64>> = OnceCell::new();
 static TALENT_TREES: OnceCell<HashMap<u64, Value>> = OnceCell::new();
 /// Localized item names: item_id → { locale → name }
 static ITEM_NAMES: OnceCell<HashMap<u64, HashMap<String, String>>> = OnceCell::new();
@@ -450,6 +454,23 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
             .and_then(|s| s.as_str())
             .unwrap_or("unknown");
         println!("Loaded season config: {}", name);
+        let fixed_difficulty_bonuses: HashSet<u64> = cfg
+            .get("encounterFixedDifficulty")
+            .and_then(|v| v.as_object())
+            .map(|encounters| {
+                encounters
+                    .values()
+                    .filter_map(|diffs| diffs.as_object())
+                    .flat_map(|diffs| diffs.values())
+                    .filter_map(|entry| entry.get("bonus_id")?.as_u64())
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!(
+            "Indexed {} fixed-difficulty bonuses",
+            fixed_difficulty_bonuses.len()
+        );
+        let _ = FIXED_DIFFICULTY_BONUSES.set(fixed_difficulty_bonuses);
         let _ = SEASON_CONFIG.set(cfg);
     }
 
@@ -775,6 +796,16 @@ pub fn catalyst_tier_item(class_id: u64, inv_type: u64) -> Option<&'static Catal
     // Normalize robe (20) → chest (5)
     let inv = if inv_type == 20 { 5 } else { inv_type };
     cat.tier_items.get(&(class_id, inv))
+}
+
+/// Check if `bonus_id` sets a fixed per-difficulty item level for one of this
+/// season's fixed-difficulty encounters (e.g. Sporefall's Sporefused gear).
+/// Such gear is current-season loot even though it carries no upgrade track.
+pub fn is_fixed_difficulty_bonus(bonus_id: u64) -> bool {
+    FIXED_DIFFICULTY_BONUSES
+        .get()
+        .map(|set| set.contains(&bonus_id))
+        .unwrap_or(false)
 }
 
 /// Check if an item_id is a catalyst tier piece.
