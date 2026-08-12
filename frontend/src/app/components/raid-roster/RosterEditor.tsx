@@ -144,10 +144,16 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
 
   const handleRemove = useCallback(
     (memberId: string) => {
-      deleteMember(roster.id, memberId).then(refreshMembers);
+      deleteMember(roster.id, memberId)
+        .catch((e) => console.error('Delete member failed', e))
+        .finally(refreshMembers);
     },
     [roster.id, refreshMembers]
   );
+
+  // Only picks the button label — the backend decides which import path runs. A
+  // `Name-Realm` line can never contain `="`, so this cannot misread one.
+  const profileCount = (text.match(/^[a-z_]+="/gm) ?? []).length;
 
   const handleRefreshAll = useCallback(async () => {
     setRefreshingAll(true);
@@ -168,7 +174,9 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={'One per line, e.g.\nPlayername-Realm\nJaina-Tarren Mill'}
+          placeholder={
+            'Playername-Realm, one per line, e.g.\nJaina-Tarren Mill\n\n…or paste SimC strings to import gear directly.'
+          }
           className="h-32 w-full resize-y rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 font-mono text-[13px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
         />
         <button
@@ -193,7 +201,11 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
               />
             </svg>
           )}
-          {fetching ? 'Fetching…' : 'Fetch gear from armory'}
+          {fetching
+            ? 'Importing…'
+            : profileCount > 0
+              ? `Import ${profileCount} profile${profileCount === 1 ? '' : 's'}`
+              : 'Fetch gear from armory'}
         </button>
       </div>
 
