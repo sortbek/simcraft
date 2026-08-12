@@ -515,10 +515,25 @@ pub fn build_catalyst_item(
     }
 }
 
+/// Whether an item can be fed to the catalyst: current-season gear on at least the
+/// Veteran track, or fixed-difficulty gear (e.g. Sporefused) whose item level comes
+/// from a bonus outside the upgrade-track system and so has no track or season id.
+fn is_catalyst_source(item: &ResolvedItem, tier_item_id: u64) -> bool {
+    if item.is_catalyst || item.item_id == tier_item_id {
+        return false;
+    }
+    if item
+        .bonus_ids
+        .iter()
+        .any(|&b| item_db::is_fixed_difficulty_bonus(b))
+    {
+        return true;
+    }
+    item.season_id == item_db::current_season_id() && is_minimum_veteran(&item.upgrade)
+}
+
 /// Mark all items that are eligible for catalyst conversion with `can_catalyst = true`.
 fn mark_catalyst_eligible(slots: &mut HashMap<String, SlotResolution>, wow_class_id: u64) {
-    let current_season = item_db::current_season_id();
-
     for (slot_key, slot_res) in slots.iter_mut() {
         let inv_type = match slot_to_inv_type(slot_key) {
             Some(t) => t,
@@ -529,20 +544,13 @@ fn mark_catalyst_eligible(slots: &mut HashMap<String, SlotResolution>, wow_class
             None => continue,
         };
 
-        let check = |item: &ResolvedItem| -> bool {
-            !item.is_catalyst
-                && item.season_id == current_season
-                && is_minimum_veteran(&item.upgrade)
-                && item.item_id != tier_info.item_id
-        };
-
         if let Some(ref mut eq) = slot_res.equipped {
-            if check(eq) {
+            if is_catalyst_source(eq, tier_info.item_id) {
                 eq.can_catalyst = true;
             }
         }
         for alt in &mut slot_res.alternatives {
-            if check(alt) {
+            if is_catalyst_source(alt, tier_info.item_id) {
                 alt.can_catalyst = true;
             }
         }
@@ -550,9 +558,10 @@ fn mark_catalyst_eligible(slots: &mut HashMap<String, SlotResolution>, wow_class
 }
 
 /// Generate catalyst alternatives across all slots.
-/// For each slot, checks every item (equipped + bag). If the item is minimum
-/// veteran track and a catalyst conversion exists, creates the catalyst variant
-/// unless an identical or higher-ilevel version already exists in that slot.
+/// For each slot, checks every item (equipped + bag). If the item is a valid
+/// catalyst source (see `is_catalyst_source`) and a catalyst conversion exists,
+/// creates the catalyst variant unless an identical or higher-ilevel version
+/// already exists in that slot.
 fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, wow_class_id: u64) {
     let slot_keys: Vec<String> = slots.keys().cloned().collect();
 
@@ -590,22 +599,11 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
             }
         }
 
-        let current_season = item_db::current_season_id();
-
         // Find the best catalyst candidate: highest ilevel, tiebreak by upgrade track rank
         let mut best: Option<ResolvedItem> = None;
 
         for source in &sources {
-            if source.is_catalyst {
-                continue;
-            }
-            if source.season_id != current_season {
-                continue;
-            }
-            if !is_minimum_veteran(&source.upgrade) {
-                continue;
-            }
-            if source.item_id == tier_info.item_id {
+            if !is_catalyst_source(source, tier_info.item_id) {
                 continue;
             }
 
@@ -790,5 +788,94 @@ pub fn generate_void_forge_alternatives(slots: &mut HashMap<String, SlotResoluti
         }
 
         slot_res.alternatives.extend(additions);
+    }
+}
+
+#[cfg(test)]
+mod catalyst_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    /// A "mythic" bonus id from one of the season's fixed-difficulty encounters
+    /// (e.g. Sporefall's Sporefused gear). These set an item level directly and
+    /// carry no upgrade track, so they exercise the non-track catalyst path.
+    ///
+    /// `None` when the loaded season has no such encounter — fixed-difficulty
+    /// raids are an occasional feature, not a permanent one, so these tests
+    /// report and skip rather than fail a season roll (and, via the pre-commit
+    /// hook, block every commit until someone rewrites them).
+    fn fixed_difficulty_bonus_id() -> Option<u64> {
+        item_db::season_cfg()
+            .get("encounterFixedDifficulty")
+            .and_then(|v| v.as_object())
+            .and_then(|encounters| {
+                encounters
+                    .values()
+                    .filter_map(|diffs| diffs.get("mythic")?.get("bonus_id")?.as_u64())
+                    .next()
+            })
+    }
+
+    /// `fixed_difficulty_bonus_id`, announcing the skip so a silently-inapplicable
+    /// test can't masquerade as a passing one.
+    fn fixed_difficulty_bonus_id_or_skip(test: &str) -> Option<u64> {
+        let found = fixed_difficulty_bonus_id();
+        if found.is_none() {
+            eprintln!("SKIP {test}: loaded season defines no fixed-difficulty encounter");
+        }
+        found
+    }
+
+    /// Equipped head with `bonus_id`. The item id is synthetic: equipped items skip
+    /// the DB-driven armor filter, so the bonus alone drives what's under test.
+    fn resolved_head(bonus_id: u64) -> SlotResolution {
+        let profile = format!(
+            "druid=\"Test\"\nlevel=80\nspec=feral\n\nhead=,id=999001,bonus_id={}\n",
+            bonus_id
+        );
+        let parsed = crate::addon_parser::parse_simc_input(&profile);
+        resolve_gear_with_catalyst(&parsed, Some(1))
+            .slots
+            .remove("head")
+            .expect("head slot resolved")
+    }
+
+    #[test]
+    fn fixed_difficulty_gear_is_catalyst_eligible() {
+        ensure_game_data_loaded();
+        let Some(bonus_id) = fixed_difficulty_bonus_id_or_skip("catalyst_eligible") else {
+            return;
+        };
+        let head = resolved_head(bonus_id);
+        let equipped = head.equipped.as_ref().expect("equipped head");
+
+        assert!(
+            equipped.upgrade.is_empty(),
+            "precondition: fixed-difficulty gear carries no upgrade track"
+        );
+        assert!(
+            equipped.can_catalyst,
+            "fixed-difficulty gear should be catalyst-eligible"
+        );
+    }
+
+    #[test]
+    fn fixed_difficulty_gear_gets_a_catalyst_alternative_at_its_own_ilevel() {
+        ensure_game_data_loaded();
+        let Some(bonus_id) = fixed_difficulty_bonus_id_or_skip("catalyst_alternative") else {
+            return;
+        };
+        let head = resolved_head(bonus_id);
+        let source_ilevel = head.equipped.as_ref().expect("equipped head").ilevel;
+
+        let catalyst = head
+            .alternatives
+            .iter()
+            .find(|a| a.is_catalyst)
+            .expect("a catalyst alternative should be generated");
+        assert_eq!(
+            catalyst.ilevel, source_ilevel,
+            "catalyst piece keeps the source item level"
+        );
     }
 }
