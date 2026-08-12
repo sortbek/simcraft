@@ -299,6 +299,26 @@ pub fn get_instance_drops(
                     }
                 }
 
+                // Difficulties that leave the track for this encounter only (S2:
+                // Mythic on the last two Venomous Abyss bosses is a fixed Myth
+                // 9/6 = 344). No "track" field → resolve_upgrade returns it as
+                // dropped and the upgrade slider is a no-op, as for fixed raids.
+                if let Some(over) =
+                    item_db::encounter_difficulty_override(*eid).and_then(|v| v.as_object())
+                {
+                    for (diff, entry) in over {
+                        let ilvl = entry.get("ilvl").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let bonus_id = entry.get("bonus_id").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let quality = entry.get("quality").and_then(|v| v.as_u64()).unwrap_or(4);
+                        diff_info.insert(
+                            diff.clone(),
+                            serde_json::json!({
+                                "ilvl": ilvl, "bonus_id": bonus_id, "quality": quality,
+                            }),
+                        );
+                    }
+                }
+
                 // Compute per-difficulty info for dungeons/M+
                 let mut dungeon_info = serde_json::Map::new();
                 if upgrade_lvl.is_none() && fixed_diff.is_none() {
@@ -781,6 +801,54 @@ mod season_filter_tests {
             }
         }
         assert_eq!(checked, 9, "expected 9 bosses across this season's raids");
+    }
+
+    /// Mythic loot from the last two Venomous Abyss bosses is Myth 9/6 (344),
+    /// which is off the six-step Myth track, while their other difficulties stay
+    /// on it.
+    #[test]
+    fn last_two_raid_bosses_drop_myth_9_of_6_on_mythic_only() {
+        ensure_game_data_loaded();
+        let drops = get_instance_drops(1320, None, None).expect("Venomous Abyss drops");
+
+        let mut checked = 0;
+        for item in drops.values().filter_map(|v| v.as_array()).flatten() {
+            let eid = item
+                .get("encounter_id")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            if eid != 2883 && eid != 2895 {
+                continue;
+            }
+            let Some(info) = item.get("difficulty_info") else {
+                continue;
+            };
+            let mythic = &info["mythic"];
+            assert_eq!(mythic["ilvl"], serde_json::json!(344), "Mythic is Myth 9/6");
+            assert_eq!(mythic["bonus_id"], serde_json::json!(13848));
+            assert!(
+                mythic.get("track").is_none(),
+                "344 is off-track, so it must not be upgradeable"
+            );
+            // The other difficulties keep the normal track at step 4.
+            assert_eq!(info["lfr"]["ilvl"], serde_json::json!(289));
+            assert_eq!(info["normal"]["ilvl"], serde_json::json!(302));
+            assert_eq!(info["heroic"]["ilvl"], serde_json::json!(315));
+            assert_eq!(info["heroic"]["track"], serde_json::json!("Hero"));
+            checked += 1;
+        }
+        assert!(checked > 0, "no loot found for the last two bosses");
+    }
+
+    /// Off-track bonuses must be indexed as fixed-difficulty, or every feature
+    /// gating on "current season AND a minimum track" silently drops this gear.
+    #[test]
+    fn off_track_override_bonuses_are_indexed_as_fixed_difficulty() {
+        ensure_game_data_loaded();
+        assert!(
+            item_db::is_fixed_difficulty_bonus(13848),
+            "Myth 9/6 (344) carries no track or seasonId of its own"
+        );
     }
 
     /// Guards against the failure that motivated this change: a season rolls

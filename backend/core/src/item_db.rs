@@ -454,18 +454,21 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
             .and_then(|s| s.as_str())
             .unwrap_or("unknown");
         println!("Loaded season config: {}", name);
-        let fixed_difficulty_bonuses: HashSet<u64> = cfg
-            .get("encounterFixedDifficulty")
-            .and_then(|v| v.as_object())
-            .map(|encounters| {
-                encounters
-                    .values()
-                    .filter_map(|diffs| diffs.as_object())
-                    .flat_map(|diffs| diffs.values())
-                    .filter_map(|entry| entry.get("bonus_id")?.as_u64())
-                    .collect()
-            })
-            .unwrap_or_default();
+        // Both config shapes yield bonuses that sit outside the upgrade tracks,
+        // so both must be indexed — anything gating on "current season AND a
+        // minimum track" silently excludes this gear otherwise.
+        let fixed_difficulty_bonuses: HashSet<u64> =
+            ["encounterFixedDifficulty", "encounterDifficultyOverride"]
+                .iter()
+                .filter_map(|key| cfg.get(key)?.as_object())
+                .flat_map(|encounters| {
+                    encounters
+                        .values()
+                        .filter_map(|diffs| diffs.as_object())
+                        .flat_map(|diffs| diffs.values())
+                        .filter_map(|entry| entry.get("bonus_id")?.as_u64())
+                })
+                .collect();
         println!(
             "Indexed {} fixed-difficulty bonuses",
             fixed_difficulty_bonuses.len()
@@ -1603,6 +1606,19 @@ pub fn encounter_upgrade_level(encounter_id: i64) -> Option<u64> {
 pub fn encounter_fixed_difficulty(encounter_id: i64) -> Option<&'static Value> {
     season_cfg()
         .get("encounterFixedDifficulty")
+        .and_then(|m| m.get(encounter_id.to_string()))
+}
+
+/// Per-difficulty overrides for encounters that leave the upgrade track at some
+/// difficulties but not others — unlike `encounter_fixed_difficulty`, which
+/// replaces every difficulty. Midnight S2: Mythic drops from the last two
+/// Venomous Abyss bosses are a fixed Myth 9/6 (ilvl 344), while their LFR,
+/// Normal and Heroic loot stays on the normal track. Returns the season-config
+/// `encounterDifficultyOverride[encounter_id]` object — `{ difficulty: {ilvl,
+/// bonus_id, quality} }` — or None.
+pub fn encounter_difficulty_override(encounter_id: i64) -> Option<&'static Value> {
+    season_cfg()
+        .get("encounterDifficultyOverride")
         .and_then(|m| m.get(encounter_id.to_string()))
 }
 
