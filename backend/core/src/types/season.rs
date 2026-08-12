@@ -12,6 +12,11 @@ pub struct SeasonConfig {
     #[serde(default)]
     pub raid_difficulties: Vec<DifficultyDef>,
 
+    /// Meta-instance holding this season's raid bosses. Unlike a dungeon pool,
+    /// its `encounters` are boss encounter IDs, not instance IDs.
+    #[serde(default)]
+    pub raid_pool_instance_id: Option<i64>,
+
     #[serde(default)]
     pub dungeon_categories: Vec<DungeonCategory>,
 
@@ -89,6 +94,10 @@ pub struct SeasonConfigResponse {
     pub season: String,
     pub raid_difficulties: Vec<DifficultyDef>,
     pub dungeon_categories: Vec<DungeonCategory>,
+    /// Raid instances belonging to the current season, resolved from the season's
+    /// raid pool. Clients list only these in the raid picker.
+    #[serde(default)]
+    pub raid_instance_ids: Vec<i64>,
     /// Encounter IDs whose loot uses fixed per-difficulty item levels with no
     /// upgrade track (e.g. Sporefall). Clients hide the upgrade-track control
     /// when the selected raid's encounters are all in this set.

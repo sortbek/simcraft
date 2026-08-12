@@ -95,6 +95,8 @@ export interface SeasonConfigResponse {
   season: string;
   raid_difficulties: DifficultyDef[];
   dungeon_categories: DungeonCategory[];
+  /** Raid instances in the current season. Empty/absent means no season filter. */
+  raid_instance_ids?: number[];
   /** Encounter IDs whose loot uses fixed per-difficulty ilvls with no upgrade
    *  track (e.g. Sporefall) — hide the upgrade-track control for these raids. */
   fixed_difficulty_encounters?: number[];
