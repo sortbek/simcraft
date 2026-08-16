@@ -9,7 +9,13 @@ import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from '../lib/api';
 import { useComboCount } from '../lib/useComboCount';
 import { SLOT_LABELS } from '../lib/types';
-import { QUALITY_COLORS, getIconUrl, useItemInfo, type ItemQuery } from '../lib/useItemInfo';
+import {
+  QUALITY_COLORS,
+  getIconUrl,
+  onIconError,
+  useItemInfo,
+  type ItemQuery,
+} from '../lib/useItemInfo';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -241,6 +247,8 @@ export default function UpgradeComparePage() {
               >
                 <img
                   src={getIconUrl(c.icon || 'inv_misc_questionmark')}
+                  data-icon={c.icon || 'inv_misc_questionmark'}
+                  onError={onIconError}
                   alt=""
                   className="h-4 w-4 shrink-0 rounded-sm"
                 />
@@ -293,6 +301,8 @@ export default function UpgradeComparePage() {
                     <div className="flex items-center gap-2">
                       <img
                         src={getIconUrl(group.currency?.icon || 'inv_misc_questionmark')}
+                        data-icon={group.currency?.icon || 'inv_misc_questionmark'}
+                        onError={onIconError}
                         alt=""
                         className="h-4 w-4 shrink-0 rounded-sm"
                       />

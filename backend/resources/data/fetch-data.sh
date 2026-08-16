@@ -26,4 +26,15 @@ if [ -f "$SEASON_CONFIG" ]; then
     echo "Copied season-config.json"
 fi
 
+# Refresh the icon FileDataID map. Raidbots only ships icon *names*, and
+# Blizzard's CDN serves newer art by FileDataID only, so names added this patch
+# would 403. Needs Blizzard API credentials; without them the committed map is
+# kept and any new icons fall back to their name.
+if [ -n "$BLIZZARD_CLIENT_ID" ] && [ -n "$BLIZZARD_CLIENT_SECRET" ]; then
+    echo "Refreshing icon FileDataIDs..."
+    python "$SCRIPT_DIR/../../scripts/fetch_icon_file_ids.py" "$OUT_DIR"
+else
+    echo "Skipping icon FileDataIDs (set BLIZZARD_CLIENT_ID/SECRET to refresh)."
+fi
+
 echo "Done."

@@ -12,6 +12,7 @@ import {
   getWowheadUrl,
   localizedEnchantName,
   localizedItemName,
+  onIconError,
   toGemIdList,
   useItemNames,
 } from '../../lib/useItemInfo';
@@ -548,6 +549,8 @@ function ItemTag({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={getIconUrl(icon)}
+          data-icon={icon}
+          onError={onIconError}
           alt=""
           width={16}
           height={16}

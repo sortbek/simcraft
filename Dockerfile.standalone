@@ -54,6 +54,10 @@ COPY backend/core/season-config.json /app/default_season_config.json
 COPY backend/resources/data/mdt_dungeons.json /app/mdt_dungeons.json
 COPY backend/resources/data/mdt-maps/ /app/mdt-maps/
 
+# Bake in the icon FileDataID map. Also offline-generated (it needs Blizzard API
+# credentials), so the entrypoint drops it into DATA_DIR the same way.
+COPY backend/resources/data/icon-file-ids.json /app/icon-file-ids.json
+
 # Bake in the entrypoint
 COPY standalone-entrypoint.sh /app/standalone-entrypoint.sh
 RUN chmod +x /app/standalone-entrypoint.sh

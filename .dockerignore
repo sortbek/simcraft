@@ -9,6 +9,7 @@
 #   backend/migrations/, backend/scripts/compact-data.js,
 #   backend/core/season-config.json,
 #   backend/resources/data/mdt_dungeons.json, backend/resources/data/mdt-maps/
+#   backend/resources/data/icon-file-ids.json
 #   standalone-entrypoint.sh
 .git
 .claude

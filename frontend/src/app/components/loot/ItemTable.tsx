@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
-import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
+import {
+  localizedItemName,
+  useItemNames,
+  getWowheadUrl,
+  getIconUrl,
+  onIconError,
+} from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
 import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import { resolveInherits, type EquippedGear, type SlotInherit } from '../../lib/inheritedGear';
@@ -314,7 +320,9 @@ export default function ItemTable({
                           style={{ borderBottomColor: qualityBorderColor(resolved.quality) }}
                         >
                           <img
-                            src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`}
+                            src={getIconUrl(item.icon)}
+                            data-icon={item.icon}
+                            onError={onIconError}
                             alt=""
                             className={`h-full w-full object-cover ${isOffSpec || embellishDisabled ? 'opacity-60' : ''}`}
                           />

@@ -70,6 +70,10 @@ static CURRENT_SEASON_ID: OnceCell<u64> = OnceCell::new();
 static CURRENCY_INFO: OnceCell<HashMap<u64, (String, String)>> = OnceCell::new();
 /// Item limit categories: bonus_id → (category_id, max_quantity)
 static ITEM_LIMIT_CATS: OnceCell<HashMap<u64, (u64, u64)>> = OnceCell::new();
+/// Icon name → FileDataID, for icons Blizzard's CDN will not serve by name.
+/// Produced by `backend/scripts/fetch_icon_file_ids.py`; absent in dev until
+/// that script has run, in which case icon URLs keep using the name.
+static ICON_FILE_IDS: OnceCell<HashMap<String, u64>> = OnceCell::new();
 static SEASON_CONFIG: OnceCell<Value> = OnceCell::new();
 /// Bonus IDs that set a fixed per-difficulty item level (from
 /// `encounterFixedDifficulty`). These sit outside the upgrade-track system, so
@@ -689,6 +693,18 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
             println!("Loaded {} entries from {}", data.len(), filename);
             let _ = cell.set(data);
         }
+    }
+
+    // icon-file-ids.json — optional; without it icon URLs fall back to names.
+    let icon_ids_path = data_dir.join("icon-file-ids.json");
+    if icon_ids_path.exists() {
+        let raw = read_json_map_str(&icon_ids_path)?;
+        let map: HashMap<String, u64> = raw
+            .into_iter()
+            .filter_map(|(name, v)| Some((name, v.as_u64()?)))
+            .collect();
+        println!("Loaded {} icon FileDataIDs", map.len());
+        let _ = ICON_FILE_IDS.set(map);
     }
 
     Ok(())
@@ -1486,6 +1502,17 @@ pub fn get_upgrade_tracks() -> Value {
         }
     }
     serde_json::json!(result)
+}
+
+// ---- Icon FileDataIDs (API response) ----
+
+/// Icon name → FileDataID for the icons Blizzard's CDN will not serve by name.
+/// Empty when `icon-file-ids.json` has not been generated.
+pub fn get_icon_file_ids() -> Value {
+    match ICON_FILE_IDS.get() {
+        Some(map) => serde_json::json!(map),
+        None => serde_json::json!({}),
+    }
 }
 
 // ---- Upgrade Cost Helpers ----

@@ -17,6 +17,7 @@ import {
 } from '../../lib/talentRules';
 import { useTalentTree } from '../../lib/useTalentTree';
 import type { TalentNode, TalentTreeData } from '../../lib/useTalentTree';
+import { getIconUrl } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 
@@ -512,7 +513,7 @@ function TalentNodeSvg({
       </clipPath>
       {icon && (
         <image
-          href={`https://render.worldofwarcraft.com/icons/56/${icon}.jpg`}
+          href={getIconUrl(icon)}
           x={node.posX - iconHalf}
           y={node.posY - iconHalf}
           width={ICON_SIZE}
@@ -642,7 +643,7 @@ function MiniTreeSvg({
             </clipPath>
             {icon ? (
               <image
-                href={`https://render.worldofwarcraft.com/icons/56/${icon}.jpg`}
+                href={getIconUrl(icon)}
                 x={node.posX - r}
                 y={node.posY - r}
                 width={r * 2}

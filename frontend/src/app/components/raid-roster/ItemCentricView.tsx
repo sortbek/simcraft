@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import type { ReportItem, ReportItemResult, ReportPlayer } from '../../lib/rosters';
 import type { ItemInfo } from '../../lib/useItemInfo';
-import { getIconUrl, getWowheadUrl, getWowheadData } from '../../lib/useItemInfo';
+import { getIconUrl, getWowheadUrl, getWowheadData, onIconError } from '../../lib/useItemInfo';
 import { QUALITY_HEX } from '../../lib/qualityColors';
 import { SLOT_LABELS } from '../../lib/types';
 import VariantBadges from '../loot/VariantBadges';
@@ -129,6 +129,8 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
                         >
                           <img
                             src={getIconUrl(iconName)}
+                            data-icon={iconName}
+                            onError={onIconError}
                             alt={displayName}
                             className="h-7 w-7 object-cover"
                           />

@@ -1,7 +1,7 @@
 'use client';
 import type { ReportItem, ReportItemResult, ReportPlayer } from '../../lib/rosters';
 import type { ItemInfo } from '../../lib/useItemInfo';
-import { getIconUrl, getWowheadUrl, getWowheadData } from '../../lib/useItemInfo';
+import { getIconUrl, getWowheadUrl, getWowheadData, onIconError } from '../../lib/useItemInfo';
 import { QUALITY_HEX } from '../../lib/qualityColors';
 import { heatClasses } from './reportTypes';
 import VariantBadges from '../loot/VariantBadges';
@@ -62,6 +62,8 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
             >
               <img
                 src={getIconUrl(iconName)}
+                data-icon={iconName}
+                onError={onIconError}
                 alt={displayName}
                 className="h-6 w-6 shrink-0 rounded object-cover"
               />

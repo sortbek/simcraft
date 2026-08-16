@@ -9,6 +9,7 @@ import {
   localizedEnchantName,
   localizedGemName,
   localizedItemName,
+  onIconError,
   toGemIdList,
   useItemNames,
 } from '../../lib/useItemInfo';
@@ -105,6 +106,8 @@ export default function GearSlotRow({
       >
         <img
           src={getIconUrl(icon)}
+          data-icon={icon}
+          onError={onIconError}
           alt=""
           width={28}
           height={28}

@@ -1,4 +1,11 @@
-import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from 'react';
+import {
+  type Dispatch,
+  type SetStateAction,
+  type SyntheticEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { API_URL, apiUrl, fetchJsonOr } from './api';
 import { QUALITY_HEX } from './qualityColors';
 
@@ -318,8 +325,51 @@ export function localizedGemName(gem: GemInfo, locale: string): string {
   return itemNamesMap?.[gem.gem_id]?.[locale] ?? gem.name;
 }
 
+const ICON_BASE = 'https://render.worldofwarcraft.com/icons/56';
+const FALLBACK_ICON = 'inv_misc_questionmark';
+
+/** Icon name → FileDataID, for icons Blizzard's CDN refuses to serve by name.
+ *  Blizzard addresses icons by FileDataID; the name path is a legacy alias that
+ *  was never populated for newer art, so those names 403. The backend builds
+ *  this map from `icon-file-ids.json` (see `backend/scripts/fetch_icon_file_ids.py`);
+ *  it is empty until the fetch resolves and when that file hasn't been generated. */
+let iconFileIds: Record<string, number> = {};
+let iconFileIdsPromise: Promise<void> | undefined;
+
+/** Load the FileDataID map once per session. A failed fetch degrades to an empty
+ *  map, leaving every icon on its name — the pre-existing behaviour. */
+export function loadIconFileIds(): Promise<void> {
+  if (!iconFileIdsPromise) {
+    iconFileIdsPromise = fetchJsonOr<Record<string, number>>(apiUrl('/api/icon-file-ids'), {}).then(
+      (map) => {
+        iconFileIds = map;
+      }
+    );
+  }
+  return iconFileIdsPromise;
+}
+
+// Warm the map at import so the common case builds a working URL on first
+// render. Browser-only: during SSR there is no API base to resolve against.
+if (typeof window !== 'undefined') void loadIconFileIds();
+
 export function getIconUrl(iconName: string): string {
-  return `https://render.worldofwarcraft.com/icons/56/${iconName}.jpg`;
+  const fileDataId = iconFileIds[iconName?.toLowerCase()];
+  return `${ICON_BASE}/${fileDataId ?? iconName}.jpg`;
+}
+
+/** `onError` for icon `<img>`s. Icons that raced the map load retry once via
+ *  FileDataID, then settle on the questionmark rather than a broken-image glyph.
+ *  Requires `data-icon={iconName}` on the element to know what to retry. */
+export function onIconError(e: SyntheticEvent<HTMLImageElement>): void {
+  const img = e.currentTarget;
+  if (img.dataset.iconRetried === '1') return;
+  img.dataset.iconRetried = '1';
+  const iconName = img.dataset.icon?.toLowerCase();
+  void loadIconFileIds().then(() => {
+    const fileDataId = iconName ? iconFileIds[iconName] : undefined;
+    img.src = fileDataId ? `${ICON_BASE}/${fileDataId}.jpg` : `${ICON_BASE}/${FALLBACK_ICON}.jpg`;
+  });
 }
 
 const WOWHEAD_DOMAINS: Record<string, string> = {

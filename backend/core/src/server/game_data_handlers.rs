@@ -225,6 +225,10 @@ pub(super) async fn list_upgrade_tracks() -> HttpResponse {
     HttpResponse::Ok().json(game_data::get_upgrade_tracks())
 }
 
+pub(super) async fn list_icon_file_ids() -> HttpResponse {
+    HttpResponse::Ok().json(game_data::get_icon_file_ids())
+}
+
 pub(super) async fn resolve_gear(req: web::Json<ResolveGearRequest>) -> HttpResponse {
     let simc_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)

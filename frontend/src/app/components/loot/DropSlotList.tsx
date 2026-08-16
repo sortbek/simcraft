@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
-import { localizedItemName, useItemNames, getWowheadUrl } from '../../lib/useItemInfo';
+import {
+  localizedItemName,
+  useItemNames,
+  getWowheadUrl,
+  getIconUrl,
+  onIconError,
+} from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
 import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import VariantBadges from './VariantBadges';
@@ -208,7 +214,9 @@ function DropItemCard({
     >
       <div className="relative shrink-0">
         <img
-          src={`https://render.worldofwarcraft.com/icons/56/${item.icon}.jpg`}
+          src={getIconUrl(item.icon)}
+          data-icon={item.icon}
+          onError={onIconError}
           alt=""
           className={`h-6 w-6 rounded ${isOffSpec || embellishDisabled ? 'opacity-60' : ''}`}
         />

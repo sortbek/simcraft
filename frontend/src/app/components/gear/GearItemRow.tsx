@@ -3,6 +3,7 @@
 
 import { cn } from '../../lib/cn';
 import { GEAR_STATUS_STYLES, gearStatusFrom } from '../../lib/statusStyles';
+import { getIconUrl, onIconError } from '../../lib/useItemInfo';
 import Checkbox from '../ui/Checkbox';
 
 interface DetailPart {
@@ -43,10 +44,6 @@ interface GearItemRowProps {
   wowheadData?: string;
   /** Optional content rendered after the details (e.g. upgrade button) */
   children?: React.ReactNode;
-}
-
-function getIconUrl(iconName: string): string {
-  return `https://render.worldofwarcraft.com/icons/56/${iconName}.jpg`;
 }
 
 export default function GearItemRow({
@@ -101,6 +98,8 @@ export default function GearItemRow({
       >
         <img
           src={getIconUrl(icon)}
+          data-icon={icon}
+          onError={onIconError}
           alt=""
           width={32}
           height={32}

@@ -255,6 +255,12 @@ cp /app/mdt_dungeons.json "$DATA_DIR/mdt_dungeons.json"
 mkdir -p "$DATA_DIR/mdt-maps"
 cp -r /app/mdt-maps/. "$DATA_DIR/mdt-maps/"
 
+# Icon FileDataID map — same deal: generated offline with Blizzard credentials
+# and baked in, so it is copied in after compaction rather than fetched here.
+# Items added since it was generated fall back to their icon name.
+echo "==> Installing baked icon FileDataID map..."
+cp /app/icon-file-ids.json "$DATA_DIR/icon-file-ids.json"
+
 export SIMC_DIR="$SIMC_CACHE_DIR"
 export DATA_DIR="$DATA_DIR"
 

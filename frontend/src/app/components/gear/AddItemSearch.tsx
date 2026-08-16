@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiUrl, fetchJson, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { QUALITY_TEXT_CLASS, qualityBorderColor } from '../../lib/qualityColors';
-import { getIconUrl } from '../../lib/useItemInfo';
+import { getIconUrl, onIconError } from '../../lib/useItemInfo';
 import Checkbox from '../ui/Checkbox';
 import { detectClass, detectSpec } from '../loot/types';
 import type { ResolvedItem } from '../../lib/types';
@@ -238,6 +238,8 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                   >
                     <img
                       src={getIconUrl(item.icon)}
+                      data-icon={item.icon}
+                      onError={onIconError}
                       alt=""
                       className="h-full w-full object-cover"
                     />

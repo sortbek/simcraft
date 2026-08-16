@@ -20,10 +20,12 @@ docs/superpowers/
 # Build output and bundled resources
 backend/target/
 backend/resources/data/*
-# ...except the offline-generated MDT route data, which is baked into the
-# standalone image (see Dockerfile.standalone / standalone-entrypoint.sh).
+# ...except the offline-generated data that is baked into the standalone image
+# (see Dockerfile.standalone / standalone-entrypoint.sh): MDT route data, and
+# the icon FileDataID map, which needs Blizzard API credentials to regenerate.
 !backend/resources/data/mdt_dungeons.json
 !backend/resources/data/mdt-maps/
+!backend/resources/data/icon-file-ids.json
 backend/resources/data-full/
 backend/resources/data-compact/
 backend/resources/data-compacted/

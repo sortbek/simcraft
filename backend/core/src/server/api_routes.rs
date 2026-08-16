@@ -167,6 +167,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(game_data_handlers::list_upgrade_tracks),
         )
         .route(
+            "/api/icon-file-ids",
+            web::get().to(game_data_handlers::list_icon_file_ids),
+        )
+        .route(
             "/api/gear/resolve",
             web::post().to(game_data_handlers::resolve_gear),
         )

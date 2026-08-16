@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { formatDps } from '../../lib/format';
+import { getIconUrl, onIconError } from '../../lib/useItemInfo';
 
 interface AbilityRow {
   name: string;
@@ -69,7 +70,9 @@ export default function ResultsChartRow({
       <div className={iconBoxClass}>
         {iconName ? (
           <img
-            src={`https://render.worldofwarcraft.com/icons/56/${iconName}.jpg`}
+            src={getIconUrl(iconName)}
+            data-icon={iconName}
+            onError={onIconError}
             alt=""
             className="h-full w-full object-cover"
           />
