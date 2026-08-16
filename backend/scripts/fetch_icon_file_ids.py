@@ -61,7 +61,12 @@ def load_named_icons(data_dir: Path) -> set:
 
 
 def build_worklist(data_dir: Path, named: set) -> dict:
-    """Map each at-risk icon name to a few ids that use it: {name: (kind, [ids])}."""
+    """Map each at-risk icon name to a few candidates: {name: [(kind, id), ...]}.
+
+    Each candidate carries its own kind — an icon used by both an item and a
+    spell must query each id against its own media endpoint, or the lookup
+    silently returns an unrelated asset's FileDataID.
+    """
     lookup = json.loads((data_dir / "icon-lookup.json").read_text(encoding="utf-8"))
     work = {}
     for kind in KINDS:
@@ -71,9 +76,10 @@ def build_worklist(data_dir: Path, named: set) -> dict:
             icon = icon.lower()
             if icon in named:
                 continue
-            if icon in work and len(work[icon][1]) >= MAX_CANDIDATES:
+            candidates = work.setdefault(icon, [])
+            if len(candidates) >= MAX_CANDIDATES:
                 continue
-            work.setdefault(icon, (kind, []))[1].append(int(entry_id))
+            candidates.append((kind, int(entry_id)))
     return work
 
 
@@ -145,7 +151,8 @@ def main() -> int:
     out_path = data_dir / args.out
     resolved = {}
     if out_path.exists():
-        resolved = {k: int(v) for k, v in json.loads(out_path.read_text()).items()}
+        raw = out_path.read_text(encoding="utf-8")  # written as utf-8 below
+        resolved = {k: int(v) for k, v in json.loads(raw).items()}
         work = {k: v for k, v in work.items() if k not in resolved}
         print(f"{len(resolved):,} already known; {len(work):,} left to fetch")
 
@@ -157,28 +164,35 @@ def main() -> int:
         token = get_token(client_id, client_secret)
 
     def resolve(item):
-        icon, (kind, ids) = item
-        for entry_id in ids[:MAX_CANDIDATES]:
+        icon, candidates = item
+        for kind, entry_id in candidates:
             fdid = fetch_file_data_id(kind, entry_id, token, args.region)
             if fdid:
                 return icon, fdid
         return icon, None
 
-    done = failed = 0
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        for icon, fdid in pool.map(resolve, work.items()):
-            if fdid:
-                resolved[icon] = fdid
-            else:
-                failed += 1
-            done += 1
-            if done % 500 == 0:
-                print(f"  {done:,}/{len(work):,} ({failed:,} unresolved)")
+    def write_out():
+        out_path.write_text(
+            json.dumps(resolved, indent=0, sort_keys=True),
+            encoding="utf-8",
+        )
 
-    out_path.write_text(
-        json.dumps(dict(sorted(resolved.items())), indent=0, sort_keys=True),
-        encoding="utf-8",
-    )
+    # ~8000 credentialed calls: an unhandled error or Ctrl-C partway through must
+    # not discard what already resolved, or the documented resume above is a lie.
+    done = failed = 0
+    try:
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            for icon, fdid in pool.map(resolve, work.items()):
+                if fdid:
+                    resolved[icon] = fdid
+                else:
+                    failed += 1
+                done += 1
+                if done % 500 == 0:
+                    print(f"  {done:,}/{len(work):,} ({failed:,} unresolved)")
+                    write_out()
+    finally:
+        write_out()
     print(f"wrote {out_path} — {len(resolved):,} icons ({failed:,} unresolved)")
     return 0
 

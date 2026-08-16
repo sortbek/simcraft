@@ -7,14 +7,13 @@ import { simRow } from '../../lib/api';
 import { SLOT_LABELS, specDisplayName } from '../../lib/types';
 import {
   QUALITY_COLORS,
-  getIconUrl,
   getWowheadData,
   getWowheadUrl,
   localizedEnchantName,
   localizedItemName,
-  onIconError,
   toGemIdList,
   useItemNames,
+  iconProps,
 } from '../../lib/useItemInfo';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
@@ -548,9 +547,7 @@ function ItemTag({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={getIconUrl(icon)}
-          data-icon={icon}
-          onError={onIconError}
+          {...iconProps(icon)}
           alt=""
           width={16}
           height={16}

@@ -10,9 +10,9 @@ use crate::types::class_data;
 
 pub use crate::item_db::{
     apply_copy_enchants, catalyst_currency_id, catalyst_tier_item, get_currency_info,
-    get_enchant_info, get_gem_info, get_icon_file_ids, get_inventory_type, get_item_armor_subclass,
-    get_item_info, get_item_limit_categories, get_upgrade_cost_between, get_upgrade_options,
-    get_upgrade_tracks, is_catalyst_tier_item, item_limit_categories_for, list_augments,
+    get_enchant_info, get_gem_info, get_inventory_type, get_item_armor_subclass, get_item_info,
+    get_item_limit_categories, get_upgrade_cost_between, get_upgrade_options, get_upgrade_tracks,
+    icon_file_ids_json, is_catalyst_tier_item, item_limit_categories_for, list_augments,
     list_enchants_for_slot, list_flasks, list_foods, list_gems, list_potions, list_temp_enchants,
     load, talent_tree, upgrade_bonus_ids_to_max, upgrade_items_by_slot, upgrade_simc_input,
     CatalystTierItem,
@@ -78,10 +78,18 @@ pub fn season_raid_instance_ids() -> Vec<i64> {
 
 // ---- Drop Resolver ----
 
+/// Drops for one instance, filtered to what `class_name`/`spec_name` can use.
+///
+/// `loot_spec_filter` controls the two restrictions that are about the spec
+/// rather than the character: the item's own spec allowlist (Blizzard's
+/// personal-loot restriction) and its primary stat. With it off, everything the
+/// class can physically equip is included — a Restoration Druid sees a
+/// Strength/Agility trinket. Armor type and weapon eligibility filter either way.
 pub fn get_instance_drops(
     instance_id: i64,
     class_name: Option<&str>,
     spec_name: Option<&str>,
+    loot_spec_filter: bool,
 ) -> Option<serde_json::Map<String, Value>> {
     let instances = item_db::instances();
     let instance = instances
@@ -194,9 +202,12 @@ pub fn get_instance_drops(
                     .unwrap_or(0);
 
                 if item_class == 2 || inv_type == 14 || inv_type == 23 {
-                    // Weapon, shield, or held off-hand — check spec profiles
+                    // Weapon, shield, or held off-hand — check spec profiles.
+                    // With the loot-spec filter off, drop to the class-level check:
+                    // a spec's weapon profile is narrower than its class's, and
+                    // "any gear your class can equip" has to mean exactly that.
                     if let Some(cn) = class_name {
-                        if !active_spec_names.is_empty() {
+                        if loot_spec_filter && !active_spec_names.is_empty() {
                             let any_spec_can_use = active_spec_names.iter().any(|spec| {
                                 if let Some(profile) = class_data::spec_weapon_profile(cn, spec) {
                                     if item_class == 2 {
@@ -218,10 +229,19 @@ pub fn get_instance_drops(
                             if !any_spec_can_use {
                                 continue;
                             }
-                        } else if let Some(weapons) = allowed_weapons {
-                            // No spec info — fall back to class-level weapon check
-                            if item_class == 2 && !weapons.contains(&weapon_sub) {
+                        } else {
+                            // No spec profile to consult — fall back to class level.
+                            // Shields need their own check: they are itemClass 4
+                            // with inv_type 14, so neither the weapon-subclass list
+                            // nor the armor-type gate (which only covers
+                            // ARMOR_INVENTORY_TYPES) would reject them.
+                            if inv_type == 14 && !class_data::class_can_use_shield(cn) {
                                 continue;
+                            }
+                            if let Some(weapons) = allowed_weapons {
+                                if item_class == 2 && !weapons.contains(&weapon_sub) {
+                                    continue;
+                                }
                             }
                         }
                     }
@@ -231,10 +251,13 @@ pub fn get_instance_drops(
                 // stat (e.g. Strength) cannot serve any active spec. Items
                 // without primary-stat entries (most cosmetics, some
                 // effect-only trinkets) are passed through.
-                if let (Some(cn), Some(item_stats)) =
-                    (class_name, class_data::item_primary_stats(item))
-                {
-                    if !active_spec_names.is_empty() {
+                // Guarded rather than folded into the if-let tuple: that form
+                // builds every element first, so `item_primary_stats` would
+                // allocate a HashSet per item even with the filter off.
+                if loot_spec_filter && !active_spec_names.is_empty() {
+                    if let (Some(cn), Some(item_stats)) =
+                        (class_name, class_data::item_primary_stats(item))
+                    {
                         let any_spec_stat_match = active_spec_names.iter().any(|spec| {
                             class_data::spec_weapon_profile(cn, spec)
                                 .map(|p| item_stats.contains(&p.primary_stat))
@@ -248,7 +271,7 @@ pub fn get_instance_drops(
 
                 // Filter spec restrictions (items with explicit spec lists)
                 if let Some(specs) = item.get("specs").and_then(|s| s.as_array()) {
-                    if !allowed_specs.is_empty() {
+                    if loot_spec_filter && !allowed_specs.is_empty() {
                         let item_specs: Vec<u64> =
                             specs.iter().filter_map(|v| v.as_u64()).collect();
                         if !allowed_specs.iter().any(|s| item_specs.contains(s)) {
@@ -667,7 +690,7 @@ pub fn get_drops_by_type(
         if !season_raids.is_empty() && !season_raids.contains(&inst_id) {
             continue;
         }
-        if let Some(drops) = get_instance_drops(inst_id, class_name, spec_name) {
+        if let Some(drops) = get_instance_drops(inst_id, class_name, spec_name, true) {
             for (slot, items) in &drops {
                 if let Some(arr) = items.as_array() {
                     for item in arr {
@@ -810,7 +833,7 @@ mod season_filter_tests {
     #[test]
     fn last_two_raid_bosses_drop_myth_9_of_6_on_mythic_only() {
         ensure_game_data_loaded();
-        let drops = get_instance_drops(1320, None, None).expect("Venomous Abyss drops");
+        let drops = get_instance_drops(1320, None, None, true).expect("Venomous Abyss drops");
 
         let mut checked = 0;
         for item in drops.values().filter_map(|v| v.as_array()).flatten() {
@@ -985,7 +1008,7 @@ mod variant_tests {
     fn add_drop_variants_adds_vf_and_catalyst_siblings() {
         ensure_game_data_loaded();
         // 1307 = The Voidspire, a current raid with weapons + tier armor.
-        let mut map = get_instance_drops(1307, Some("mage"), Some("frost"))
+        let mut map = get_instance_drops(1307, Some("mage"), Some("frost"), true)
             .expect("Voidspire should have mage/frost drops");
         let before: usize = map
             .values()
@@ -1020,7 +1043,7 @@ mod variant_tests {
     #[test]
     fn add_drop_variants_noop_when_both_false() {
         ensure_game_data_loaded();
-        let map = get_instance_drops(1307, Some("mage"), Some("frost")).unwrap();
+        let map = get_instance_drops(1307, Some("mage"), Some("frost"), true).unwrap();
         let mut copy = map.clone();
         add_drop_variants(&mut copy, Some("mage"), false, false);
         assert_eq!(

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiUrl, fetchJson, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { QUALITY_TEXT_CLASS, qualityBorderColor } from '../../lib/qualityColors';
-import { getIconUrl, onIconError } from '../../lib/useItemInfo';
+import { iconProps } from '../../lib/useItemInfo';
 import Checkbox from '../ui/Checkbox';
 import { detectClass, detectSpec } from '../loot/types';
 import type { ResolvedItem } from '../../lib/types';
@@ -68,6 +68,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
   const [adding, setAdding] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [seasonalOnly, setSeasonalOnly] = useState(true);
+  const [lootSpecOnly, setLootSpecOnly] = useState(true);
 
   // Debounced search; an AbortController drops stale responses.
   useEffect(() => {
@@ -84,7 +85,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
     const timer = setTimeout(() => {
       fetchJson<{ items: SearchItem[] }>(
         apiUrl(
-          `/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}${specParam}&seasonal=${seasonalOnly}`
+          `/api/items/search?q=${encodeURIComponent(q)}&locale=${locale}${classParam}${specParam}&seasonal=${seasonalOnly}&loot_spec=${lootSpecOnly}`
         ),
         { signal: controller.signal }
       )
@@ -103,7 +104,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, locale, className, spec, seasonalOnly]);
+  }, [query, locale, className, spec, seasonalOnly, lootSpecOnly]);
 
   const handleAdd = useCallback(
     async (item: SearchItem, option: IlvlOption | undefined) => {
@@ -196,17 +197,37 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
         </div>
       </div>
 
-      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
-        <Checkbox
-          variant="primary"
-          size="sm"
-          checked={seasonalOnly}
-          onChange={() => setSeasonalOnly((v) => !v)}
-          aria-label="Seasonal items only"
-        />
-        Seasonal items only
-        <span className="text-xs text-on-surface-variant/50">(off: search every expansion)</span>
-      </label>
+      <div className="space-y-2">
+        <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+          <Checkbox
+            variant="primary"
+            size="sm"
+            checked={seasonalOnly}
+            onChange={() => setSeasonalOnly((v) => !v)}
+            aria-label="Seasonal items only"
+          />
+          Seasonal items only
+          <span className="text-xs text-on-surface-variant/50">(off: search every expansion)</span>
+        </label>
+
+        {/* The all-expansions search does no spec filtering, so this would be a
+            dead control there. */}
+        {seasonalOnly && (
+          <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+            <Checkbox
+              variant="primary"
+              size="sm"
+              checked={lootSpecOnly}
+              onChange={() => setLootSpecOnly((v) => !v)}
+              aria-label="My loot spec only"
+            />
+            My loot spec only
+            <span className="text-xs text-on-surface-variant/50">
+              (off: any gear your class can equip)
+            </span>
+          </label>
+        )}
+      </div>
 
       {error && (
         <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -236,13 +257,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                     className="h-9 w-9 shrink-0 overflow-hidden rounded-md border-b-2 bg-surface-container-highest"
                     style={{ borderBottomColor: qualityBorderColor(item.quality) }}
                   >
-                    <img
-                      src={getIconUrl(item.icon)}
-                      data-icon={item.icon}
-                      onError={onIconError}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
+                    <img {...iconProps(item.icon)} alt="" className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className={`truncate text-[13px] font-bold ${qualityColor}`}>{item.name}</p>

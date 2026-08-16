@@ -30,6 +30,10 @@ RUN curl -sL -o metadata.json https://www.raidbots.com/static/data/live/metadata
 
 COPY scripts/compact-data.js /compact-data.js
 COPY core/season-config.json /data/full/season-config.json
+# Not a Raidbots file: generated offline by fetch_icon_file_ids.py and committed,
+# so it has to come from the build context or the deployed backend serves an
+# empty map and every new-season icon 403s.
+COPY resources/data/icon-file-ids.json /data/full/icon-file-ids.json
 RUN node /compact-data.js /data/full /data/compact
 
 # --- SimC: download pre-built OR build from source ---

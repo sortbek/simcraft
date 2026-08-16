@@ -9,13 +9,7 @@ import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from '../lib/api';
 import { useComboCount } from '../lib/useComboCount';
 import { SLOT_LABELS } from '../lib/types';
-import {
-  QUALITY_COLORS,
-  getIconUrl,
-  onIconError,
-  useItemInfo,
-  type ItemQuery,
-} from '../lib/useItemInfo';
+import { QUALITY_COLORS, useItemInfo, type ItemQuery, iconProps } from '../lib/useItemInfo';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
@@ -245,13 +239,7 @@ export default function UpgradeComparePage() {
                 key={c.id}
                 className="flex items-center gap-1.5 rounded-md bg-surface-container-high px-2 py-1"
               >
-                <img
-                  src={getIconUrl(c.icon || 'inv_misc_questionmark')}
-                  data-icon={c.icon || 'inv_misc_questionmark'}
-                  onError={onIconError}
-                  alt=""
-                  className="h-4 w-4 shrink-0 rounded-sm"
-                />
+                <img {...iconProps(c.icon)} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
                 <span className="text-[13px] text-on-surface-variant">{c.name}</span>
                 <span className="font-mono text-[13px] tabular-nums text-white">{c.amount}</span>
               </div>
@@ -300,9 +288,7 @@ export default function UpgradeComparePage() {
                   <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <img
-                        src={getIconUrl(group.currency?.icon || 'inv_misc_questionmark')}
-                        data-icon={group.currency?.icon || 'inv_misc_questionmark'}
-                        onError={onIconError}
+                        {...iconProps(group.currency?.icon)}
                         alt=""
                         className="h-4 w-4 shrink-0 rounded-sm"
                       />

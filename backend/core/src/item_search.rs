@@ -40,6 +40,73 @@ const DROP_KEYS: SearchKeys = SearchKeys {
     item_level: "ilevel",
 };
 
+/// Every current-season drop, as owned DropItem values.
+fn season_drop_items(
+    class_name: Option<&str>,
+    spec: Option<&str>,
+    loot_spec_filter: bool,
+) -> Vec<Value> {
+    let mut out = Vec::new();
+    for inst in item_db::instances() {
+        let Some(inst_id) = inst.get("id").and_then(|v| v.as_i64()) else {
+            continue;
+        };
+        let Some(drops) =
+            game_data::get_instance_drops(inst_id, class_name, spec, loot_spec_filter)
+        else {
+            continue;
+        };
+        for (_slot, items) in drops {
+            if let Value::Array(arr) = items {
+                out.extend(arr); // owned already — moving beats cloning ~2k rows
+            }
+        }
+    }
+    out
+}
+
+/// The current-season drop catalog keyed by item id, unfiltered by class/spec.
+/// Built once — game data is immutable after load.
+///
+/// The all-expansions search reads the raw item DB, whose entries carry no drop
+/// data; this is where [`rank_candidates`] recovers an item's real levels.
+fn season_catalog() -> &'static HashMap<u64, Value> {
+    static CATALOG: once_cell::sync::Lazy<HashMap<u64, Value>> = once_cell::sync::Lazy::new(|| {
+        let mut map: HashMap<u64, Value> = HashMap::new();
+        for item in season_drop_items(None, None, true) {
+            let Some(id) = item.get("item_id").and_then(|v| v.as_u64()) else {
+                continue;
+            };
+            // An item can drop in several instances (a raid and the season pool
+            // that aggregates it). Prefer a row that actually carries drop data;
+            // `duplicate_catalog_rows_offer_the_same_levels` guards the case
+            // where two rows would disagree about the levels themselves.
+            match map.entry(id) {
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(item);
+                }
+                std::collections::hash_map::Entry::Occupied(mut e) => {
+                    if !has_drop_data(e.get()) && has_drop_data(&item) {
+                        e.insert(item);
+                    }
+                }
+            }
+        }
+        map
+    });
+    &CATALOG
+}
+
+/// Whether an item carries per-difficulty drop data of its own. Raw item-DB rows
+/// (the all-expansions search) never do; drop-catalog rows always do.
+fn has_drop_data(item: &Value) -> bool {
+    ["difficulty_info", "dungeon_info"].iter().any(|key| {
+        item.get(key)
+            .and_then(|v| v.as_object())
+            .is_some_and(|entries| !entries.is_empty())
+    })
+}
+
 /// Selectable item levels for a search result, highest first, each paired with the
 /// bonus id that produces it.
 ///
@@ -62,13 +129,12 @@ fn ilvl_options(item: &Value) -> Vec<(u64, u64)> {
 
     let tracks = item_db::upgrade_tracks();
     let mut by_ilvl: HashMap<u64, (usize, u64)> = HashMap::new();
-    let mut saw_drop_data = false;
+    let saw_drop_data = has_drop_data(item);
 
     for key in ["difficulty_info", "dungeon_info"] {
         let Some(entries) = item.get(key).and_then(|v| v.as_object()) else {
             continue;
         };
-        saw_drop_data |= !entries.is_empty();
         for entry in entries.values() {
             match entry.get("track").and_then(|t| t.as_str()) {
                 // Tracked drop: the item can be upgraded to any step of that track.
@@ -186,6 +252,15 @@ fn rank_candidates<'a>(
     scored
         .into_iter()
         .map(|(_, _, id, name, item)| {
+            // Raw item-DB rows carry no drop data, so a current-season drop found
+            // by the all-expansions search would fall back to the generic ladder
+            // and lose levels no track holds (an encounter's off-track Mythic).
+            // Read its levels off the catalog row instead.
+            let levels_from = if has_drop_data(item) {
+                item
+            } else {
+                season_catalog().get(&id).unwrap_or(item)
+            };
             json!({
                 "item_id": id,
                 "name": name,
@@ -193,7 +268,7 @@ fn rank_candidates<'a>(
                 "inventory_type": item.get(keys.inventory_type).and_then(|v| v.as_u64()).unwrap_or(0),
                 "quality": item.get("quality").and_then(|v| v.as_u64()).unwrap_or(1),
                 "ilevel": item.get(keys.item_level).and_then(|v| v.as_u64()).unwrap_or(0),
-                "ilvl_options": ilvl_options(item)
+                "ilvl_options": ilvl_options(levels_from)
                     .into_iter()
                     .map(|(ilvl, bonus_id)| json!({ "ilvl": ilvl, "bonus_id": bonus_id }))
                     .collect::<Vec<_>>(),
@@ -203,29 +278,22 @@ fn rank_candidates<'a>(
 }
 
 /// Search the current-season drop catalog (DropFinder's data) by name or id.
+///
+/// `loot_spec_filter` is passed straight to [`game_data::get_instance_drops`]:
+/// off, the search returns everything the class can equip, whatever the item's
+/// loot-spec allowlist or primary stat says.
 pub fn season_drops(
     query: &str,
     class_name: Option<&str>,
     spec: Option<&str>,
     locale: &str,
     limit: usize,
+    loot_spec_filter: bool,
 ) -> Vec<Value> {
     if query.trim().is_empty() {
         return Vec::new();
     }
-    let mut catalog: Vec<Value> = Vec::new();
-    for inst in item_db::instances() {
-        let Some(inst_id) = inst.get("id").and_then(|v| v.as_i64()) else {
-            continue;
-        };
-        if let Some(drops) = game_data::get_instance_drops(inst_id, class_name, spec) {
-            for items in drops.values() {
-                if let Some(arr) = items.as_array() {
-                    catalog.extend(arr.iter().cloned());
-                }
-            }
-        }
-    }
+    let catalog = season_drop_items(class_name, spec, loot_spec_filter);
     rank_candidates(catalog.iter(), &DROP_KEYS, query, locale, limit)
 }
 
@@ -382,7 +450,7 @@ mod tests {
     #[test]
     fn search_results_carry_their_item_level_options() {
         ensure_game_data_loaded();
-        let results = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 5);
+        let results = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 5, true);
         for r in &results {
             let opts = r
                 .get("ilvl_options")
@@ -395,14 +463,22 @@ mod tests {
     #[test]
     fn empty_query_returns_nothing() {
         ensure_game_data_loaded();
-        assert!(season_drops("  ", Some("hunter"), Some("marksmanship"), "en_US", 50).is_empty());
+        assert!(season_drops(
+            "  ",
+            Some("hunter"),
+            Some("marksmanship"),
+            "en_US",
+            50,
+            true
+        )
+        .is_empty());
         assert!(all_equippable("  ", Some("hunter"), "en_US", 50).is_empty());
     }
 
     #[test]
     fn season_search_dedups_and_respects_limit() {
         ensure_game_data_loaded();
-        let results = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 10);
+        let results = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 10, true);
         assert!(results.len() <= 10);
         let ids: HashSet<u64> = results
             .iter()
@@ -418,7 +494,7 @@ mod tests {
     #[test]
     fn season_search_matches_by_exact_name() {
         ensure_game_data_loaded();
-        let broad = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 1);
+        let broad = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 1, true);
         let Some(first) = broad.first() else {
             return;
         };
@@ -428,7 +504,14 @@ mod tests {
             .unwrap()
             .to_string();
         let id = first.get("item_id").and_then(|v| v.as_u64()).unwrap();
-        let results = season_drops(&name, Some("hunter"), Some("marksmanship"), "en_US", 50);
+        let results = season_drops(
+            &name,
+            Some("hunter"),
+            Some("marksmanship"),
+            "en_US",
+            50,
+            true,
+        );
         assert!(results
             .iter()
             .any(|r| r.get("item_id").and_then(|v| v.as_u64()) == Some(id)));
@@ -449,6 +532,254 @@ mod tests {
             "exact id should rank first; got {:?}",
             results.first()
         );
+    }
+
+    /// One spec per armor type, across tank/healer/DPS — the flag is class-agnostic,
+    /// so the properties below must hold for every one of them.
+    const LOOT_SPEC_SAMPLE: [(&str, &str); 4] = [
+        ("priest", "holy"),         // cloth, healer
+        ("druid", "guardian"),      // leather, tank
+        ("hunter", "marksmanship"), // mail, dps
+        ("warrior", "protection"),  // plate, tank
+    ];
+
+    /// Every season drop this spec can see, with the loot-spec allowlist honoured
+    /// or ignored.
+    fn season_ids(class: &str, spec: &str, loot_spec_filter: bool) -> HashSet<u64> {
+        // No truncation: `rank_candidates` truncates after sorting, so a finite
+        // limit would eventually let the relaxed run's extra items push strict-set
+        // items past the cut and fail the subset assertion for the wrong reason.
+        season_drops(
+            "a",
+            Some(class),
+            Some(spec),
+            "en_US",
+            usize::MAX,
+            loot_spec_filter,
+        )
+        .iter()
+        .filter_map(|r| r.get("item_id").and_then(|v| v.as_u64()))
+        .collect()
+    }
+
+    #[test]
+    fn dropping_the_loot_spec_filter_widens_the_season_search() {
+        ensure_game_data_loaded();
+        for (class, spec) in LOOT_SPEC_SAMPLE {
+            let strict = season_ids(class, spec, true);
+            let relaxed = season_ids(class, spec, false);
+            assert!(
+                strict.is_subset(&relaxed),
+                "{}/{}: relaxing the allowlist must only ever add items",
+                class,
+                spec
+            );
+            assert!(
+                relaxed.len() > strict.len(),
+                "{}/{}: no gear is hidden by the loot-spec allowlist ({} items either way)",
+                class,
+                spec,
+                strict.len()
+            );
+        }
+    }
+
+    #[test]
+    fn dropping_the_loot_spec_filter_also_relaxes_primary_stat() {
+        ensure_game_data_loaded();
+        // A caster spec and gear built around a primary stat it can never use:
+        // hidden while the filter is on, offered once it is off.
+        let want = class_data::spec_weapon_profile("druid", "restoration")
+            .expect("resto druid")
+            .primary_stat;
+        let strict = season_ids("druid", "restoration", true);
+        let relaxed = season_ids("druid", "restoration", false);
+
+        // Stats come from the encounter drops, not `item_db::items()` — the
+        // compacted test fixture strips `stats` from the item DB.
+        let by_id: HashMap<u64, &Value> = item_db::drops_by_encounter()
+            .values()
+            .flatten()
+            .filter_map(|item| Some((item.get("id")?.as_u64()?, item)))
+            .collect();
+        let mismatched = relaxed.difference(&strict).any(|id| {
+            by_id
+                .get(id)
+                .and_then(|item| class_data::item_primary_stats(item))
+                .is_some_and(|stats| !stats.contains(&want))
+        });
+        assert!(
+            mismatched,
+            "no primary-stat-mismatched gear was added ({} strict, {} relaxed)",
+            strict.len(),
+            relaxed.len()
+        );
+    }
+
+    #[test]
+    fn dropping_the_loot_spec_filter_keeps_armor_type_filtering() {
+        ensure_game_data_loaded();
+        // The allowlist is the only thing the flag relaxes: a class must still
+        // never be offered another armor type, whichever way it is set.
+        for (class, spec) in LOOT_SPEC_SAMPLE {
+            let own = class_data::class_max_armor(class).expect("class armor type");
+            for item_id in season_ids(class, spec, false) {
+                let Some(item) = item_db::items().get(&item_id) else {
+                    continue;
+                };
+                let inv_type = item
+                    .get("inventoryType")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                if item.get("itemClass").and_then(|v| v.as_u64()) != Some(4)
+                    || !class_data::ARMOR_INVENTORY_TYPES.contains(&inv_type)
+                {
+                    continue; // not body armor — no armor-type restriction applies
+                }
+                let sub = item
+                    .get("itemSubClass")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                assert!(
+                    sub == 0 || sub == own,
+                    "item {} is armor subclass {} — a {} should never be offered it",
+                    item_id,
+                    sub,
+                    class
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dropping_the_loot_spec_filter_still_hides_shields_from_classes_that_cannot_use_them() {
+        ensure_game_data_loaded();
+        // Shields are itemClass 4 / inv_type 14, so they fall through both the
+        // armor-type gate (ARMOR_INVENTORY_TYPES excludes 14) and the weapon
+        // subclass list — `dropping_the_loot_spec_filter_keeps_armor_type_filtering`
+        // skips them by construction and cannot catch a leak here.
+        //
+        // Non-vacuity first: shields must actually drop this season, or the loop
+        // below proves nothing.
+        let shields = season_drop_items(None, None, true)
+            .iter()
+            .filter(|item| item.get("inventory_type").and_then(|v| v.as_u64()) == Some(14))
+            .count();
+        assert!(
+            shields > 0,
+            "no shields in the catalog — test proves nothing"
+        );
+
+        for (class, spec) in [
+            ("priest", "holy"),
+            ("druid", "restoration"),
+            ("mage", "frost"),
+        ] {
+            assert!(
+                !class_data::class_can_use_shield(class),
+                "{} was picked because no spec of it can hold a shield",
+                class
+            );
+            for item_id in season_ids(class, spec, false) {
+                let Some(item) = item_db::items().get(&item_id) else {
+                    continue;
+                };
+                let inv_type = item
+                    .get("inventoryType")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                assert_ne!(
+                    inv_type, 14,
+                    "item {} is a shield — a {} should never be offered it",
+                    item_id, class
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn duplicate_catalog_rows_offer_the_same_levels() {
+        ensure_game_data_loaded();
+        // `season_catalog` keeps one row per item id, so an item that drops in
+        // several instances is only safe to collapse while every row agrees
+        // about its levels. 319 of ~2.2k ids are duplicated today and all agree;
+        // this fails loudly if a future season breaks that.
+        let mut levels_by_id: HashMap<u64, Vec<(u64, u64)>> = HashMap::new();
+        for item in season_drop_items(None, None, true) {
+            let Some(id) = item.get("item_id").and_then(|v| v.as_u64()) else {
+                continue;
+            };
+            let levels = ilvl_options(&item);
+            if let Some(seen) = levels_by_id.get(&id) {
+                assert_eq!(
+                    *seen, levels,
+                    "item {} drops with two different level sets — season_catalog \
+                     would silently keep one of them",
+                    id
+                );
+            } else {
+                levels_by_id.insert(id, levels);
+            }
+        }
+    }
+
+    #[test]
+    fn all_expansions_search_keeps_a_season_drops_own_levels() {
+        ensure_game_data_loaded();
+        // The generic ladder every drop-data-less item falls back to.
+        let ladder: HashSet<u64> = ilvl_options(&json!({}))
+            .into_iter()
+            .map(|(ilvl, _)| ilvl)
+            .collect();
+
+        // A drop can sit off that ladder — an encounter override (Venomous Abyss
+        // Mythic 344) or a fixed-difficulty raid. Those levels are exactly what
+        // the all-expansions search used to lose, so search for such an item.
+        // The candidate must clear the same gate `all_equippable` applies (a real
+        // gear slot — the catalog also holds crafting reagents), and the catalog
+        // is a HashMap, so take the lowest id rather than whichever came out first.
+        let Some((item_id, want)) = season_catalog()
+            .iter()
+            .filter_map(|(id, entry)| {
+                let inv_type = item_db::items()
+                    .get(id)?
+                    .get("inventoryType")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                if inv_type == 0 || class_data::inv_type_to_slots(inv_type, "").is_empty() {
+                    return None;
+                }
+                let off_ladder: Vec<u64> = ilvl_options(entry)
+                    .into_iter()
+                    .map(|(ilvl, _)| ilvl)
+                    .filter(|ilvl| !ladder.contains(ilvl))
+                    .collect();
+                (!off_ladder.is_empty()).then_some((*id, off_ladder))
+            })
+            .min()
+        else {
+            eprintln!("SKIP off-ladder levels: no season drop leaves the track ladder");
+            return;
+        };
+
+        let results = all_equippable(&item_id.to_string(), None, "en_US", 50);
+        let offered: HashSet<u64> = results
+            .first()
+            .and_then(|r| r.get("ilvl_options"))
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| panic!("item {} not found in all-expansions search", item_id))
+            .iter()
+            .filter_map(|o| o.get("ilvl").and_then(|v| v.as_u64()))
+            .collect();
+        for ilvl in want {
+            assert!(
+                offered.contains(&ilvl),
+                "item {} drops at {} but the all-expansions search offers {:?}",
+                item_id,
+                ilvl,
+                offered
+            );
+        }
     }
 
     #[test]

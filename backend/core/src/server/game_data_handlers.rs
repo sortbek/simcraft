@@ -172,6 +172,7 @@ pub(super) async fn search_items(query: web::Query<ItemSearchQuery>) -> HttpResp
             query.spec.as_deref(),
             locale,
             50,
+            query.loot_spec.unwrap_or(true),
         )
     } else {
         crate::item_search::all_equippable(&query.q, query.class_name.as_deref(), locale, 50)
@@ -226,7 +227,11 @@ pub(super) async fn list_upgrade_tracks() -> HttpResponse {
 }
 
 pub(super) async fn list_icon_file_ids() -> HttpResponse {
-    HttpResponse::Ok().json(game_data::get_icon_file_ids())
+    // Changes only when the data build does, so let the browser keep it.
+    HttpResponse::Ok()
+        .insert_header(("Cache-Control", "public, max-age=3600"))
+        .content_type("application/json")
+        .body(game_data::icon_file_ids_json())
 }
 
 pub(super) async fn resolve_gear(req: web::Json<ResolveGearRequest>) -> HttpResponse {
@@ -421,7 +426,7 @@ pub(super) async fn get_instance_drops(
     } else {
         Some(query.spec.as_str())
     };
-    match game_data::get_instance_drops(instance_id, class_name, spec) {
+    match game_data::get_instance_drops(instance_id, class_name, spec, true) {
         Some(mut drops) => {
             game_data::add_drop_variants(&mut drops, class_name, query.void_forge, query.catalyst);
             HttpResponse::Ok().json(drops)

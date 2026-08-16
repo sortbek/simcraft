@@ -624,6 +624,13 @@ pub fn class_allowed_weapons(class_name: &str) -> Option<&'static [u64]> {
     find_class(class_name).map(|c| c.weapons)
 }
 
+/// Whether ANY spec of the class can equip a shield — the class-level
+/// counterpart to `SpecDef::can_use_shield`, for drop filtering that isn't
+/// scoped to one spec. Unknown class ⇒ `true` (filter nothing out).
+pub fn class_can_use_shield(class_name: &str) -> bool {
+    find_class(class_name).is_none_or(|c| c.specs.iter().any(|s| s.can_use_shield))
+}
+
 /// Per-spec weapon eligibility — returns the full `SpecDef`
 /// (`weapon_subclasses`, `can_use_shield`, `can_use_offhand`, ...).
 pub fn spec_weapon_profile(class_name: &str, spec: &str) -> Option<&'static SpecDef> {

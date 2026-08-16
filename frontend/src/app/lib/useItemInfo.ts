@@ -338,7 +338,7 @@ let iconFileIdsPromise: Promise<void> | undefined;
 
 /** Load the FileDataID map once per session. A failed fetch degrades to an empty
  *  map, leaving every icon on its name — the pre-existing behaviour. */
-export function loadIconFileIds(): Promise<void> {
+function loadIconFileIds(): Promise<void> {
   if (!iconFileIdsPromise) {
     iconFileIdsPromise = fetchJsonOr<Record<string, number>>(apiUrl('/api/icon-file-ids'), {}).then(
       (map) => {
@@ -353,23 +353,86 @@ export function loadIconFileIds(): Promise<void> {
 // render. Browser-only: during SSR there is no API base to resolve against.
 if (typeof window !== 'undefined') void loadIconFileIds();
 
-export function getIconUrl(iconName: string): string {
+function getIconUrl(iconName: string): string {
   const fileDataId = iconFileIds[iconName?.toLowerCase()];
   return `${ICON_BASE}/${fileDataId ?? iconName}.jpg`;
 }
 
-/** `onError` for icon `<img>`s. Icons that raced the map load retry once via
+/** `onError` for icon images. Icons that raced the map load retry once via
  *  FileDataID, then settle on the questionmark rather than a broken-image glyph.
- *  Requires `data-icon={iconName}` on the element to know what to retry. */
-export function onIconError(e: SyntheticEvent<HTMLImageElement>): void {
-  const img = e.currentTarget;
-  if (img.dataset.iconRetried === '1') return;
-  img.dataset.iconRetried = '1';
-  const iconName = img.dataset.icon?.toLowerCase();
+ *  Requires `data-icon={iconName}` on the element to know what to retry —
+ *  `iconProps` wires that up for you.
+ *
+ *  Handles both `<img>` and SVG `<image>`, which carry their URL on different
+ *  attributes (TalentTree renders icons inside an SVG). */
+type IconEl = HTMLImageElement | SVGImageElement;
+
+const iconSrc = (el: IconEl): string =>
+  el instanceof SVGImageElement ? (el.getAttribute('href') ?? '') : el.src;
+
+function setIconSrc(el: IconEl, url: string): void {
+  if (el instanceof SVGImageElement) el.setAttribute('href', url);
+  else el.src = url;
+}
+
+function onIconError(e: SyntheticEvent<IconEl>): void {
+  const el = e.currentTarget;
+  const iconName = el.dataset.icon?.toLowerCase() ?? '';
+  const fallbackUrl = getIconUrl(FALLBACK_ICON);
+  // Key the guard to the icon name, not the element: React reuses the same
+  // <img> node when a gear slot's item changes, and a plain "already retried"
+  // flag would cost every later icon in that slot its retry for the session.
+  const stage = el.dataset.iconRetryFor === iconName ? el.dataset.iconRetryStage : undefined;
+  if (stage === 'settled') return; // the questionmark itself failed — nothing left
+  el.dataset.iconRetryFor = iconName;
+
+  const settle = () => {
+    el.dataset.iconRetryStage = 'fallback';
+    setIconSrc(el, fallbackUrl);
+  };
+  if (stage === 'fallback') {
+    // Either the questionmark we applied has now failed, or React re-rendered
+    // this element back to a URL for the same icon that still fails (slot A → B
+    // → A). Tell them apart by what is actually on the element, so the second
+    // case still gets a questionmark instead of a broken-image glyph.
+    if (iconSrc(el) === fallbackUrl) el.dataset.iconRetryStage = 'settled';
+    else settle();
+    return;
+  }
+  if (stage === 'retried') {
+    settle(); // the FileDataID URL failed too
+    return;
+  }
+  el.dataset.iconRetryStage = 'retried';
   void loadIconFileIds().then(() => {
-    const fileDataId = iconName ? iconFileIds[iconName] : undefined;
-    img.src = fileDataId ? `${ICON_BASE}/${fileDataId}.jpg` : `${ICON_BASE}/${FALLBACK_ICON}.jpg`;
+    // The element may have been reused for a different icon while the map was
+    // in flight; writing now would clobber an image that loaded perfectly well.
+    if ((el.dataset.icon?.toLowerCase() ?? '') !== iconName) return;
+    const mapped = iconName ? iconFileIds[iconName] : undefined;
+    if (!mapped) {
+      settle();
+      return;
+    }
+    // The map may already have been applied at render time, in which case the
+    // retry URL is the one that just failed; go straight to the questionmark.
+    const next = getIconUrl(iconName);
+    if (next === iconSrc(el)) settle();
+    else setIconSrc(el, next);
   });
+}
+
+/** Everything an icon `<img>` needs: URL, the name the retry reads back, and the
+ *  retry handler. Spread it — `<img {...iconProps(item.icon)} alt="" />` — so a
+ *  new icon site can't half-adopt the mechanism and silently lose its retry. */
+export function iconProps(iconName: string | undefined | null) {
+  const name = iconName || FALLBACK_ICON;
+  return { src: getIconUrl(name), 'data-icon': name, onError: onIconError };
+}
+
+/** `iconProps` for SVG `<image>`, which uses `href` rather than `src`. */
+export function iconHrefProps(iconName: string | undefined | null) {
+  const name = iconName || FALLBACK_ICON;
+  return { href: getIconUrl(name), 'data-icon': name, onError: onIconError };
 }
 
 const WOWHEAD_DOMAINS: Record<string, string> = {

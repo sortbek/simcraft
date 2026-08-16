@@ -3,7 +3,7 @@
 
 import { cn } from '../../lib/cn';
 import { GEAR_STATUS_STYLES, gearStatusFrom } from '../../lib/statusStyles';
-import { getIconUrl, onIconError } from '../../lib/useItemInfo';
+import { iconProps } from '../../lib/useItemInfo';
 import Checkbox from '../ui/Checkbox';
 
 interface DetailPart {
@@ -97,9 +97,7 @@ export default function GearItemRow({
         onClick={href ? (e) => e.preventDefault() : undefined}
       >
         <img
-          src={getIconUrl(icon)}
-          data-icon={icon}
-          onError={onIconError}
+          {...iconProps(icon)}
           alt=""
           width={32}
           height={32}

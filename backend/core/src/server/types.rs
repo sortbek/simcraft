@@ -304,6 +304,11 @@ pub(super) struct ItemSearchQuery {
     /// search all equippable items across every expansion.
     #[serde(default)]
     pub seasonal: Option<bool>,
+    /// When true/absent, the seasonal search honours each item's loot-spec
+    /// allowlist and primary stat; when false it returns everything the class can
+    /// equip. Ignored by the all-expansions search, which does no spec filtering.
+    #[serde(default)]
+    pub loot_spec: Option<bool>,
 }
 
 fn default_iterations() -> u32 {

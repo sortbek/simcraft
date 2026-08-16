@@ -698,11 +698,14 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
     // icon-file-ids.json — optional; without it icon URLs fall back to names.
     let icon_ids_path = data_dir.join("icon-file-ids.json");
     if icon_ids_path.exists() {
-        let raw = read_json_map_str(&icon_ids_path)?;
-        let map: HashMap<String, u64> = raw
-            .into_iter()
-            .filter_map(|(name, v)| Some((name, v.as_u64()?)))
-            .collect();
+        // Deserialize straight into the target type — going via `Value` would
+        // allocate a number per entry only to throw them all away.
+        let map: HashMap<String, u64> = {
+            let file = fs::File::open(&icon_ids_path)
+                .map_err(|e| format!("open {}: {}", icon_ids_path.display(), e))?;
+            serde_json::from_reader(std::io::BufReader::new(file))
+                .map_err(|e| format!("parse {}: {}", icon_ids_path.display(), e))?
+        };
         println!("Loaded {} icon FileDataIDs", map.len());
         let _ = ICON_FILE_IDS.set(map);
     }
@@ -1506,12 +1509,21 @@ pub fn get_upgrade_tracks() -> Value {
 
 // ---- Icon FileDataIDs (API response) ----
 
-/// Icon name → FileDataID for the icons Blizzard's CDN will not serve by name.
-/// Empty when `icon-file-ids.json` has not been generated.
-pub fn get_icon_file_ids() -> Value {
+/// Icon name → FileDataID for the icons Blizzard's CDN will not serve by name,
+/// as a pre-serialized response body. Empty when `icon-file-ids.json` has not
+/// been generated.
+///
+/// The map is immutable after `load()`, so it is serialized once rather than
+/// rebuilt into a fresh `Value` and re-serialized on every request.
+pub fn icon_file_ids_json() -> &'static str {
+    static JSON: OnceCell<String> = OnceCell::new();
+    // Only memoize once the map exists: a call before `load()` would otherwise
+    // pin "{}" for the process lifetime with no way back.
     match ICON_FILE_IDS.get() {
-        Some(map) => serde_json::json!(map),
-        None => serde_json::json!({}),
+        Some(map) => {
+            JSON.get_or_init(|| serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string()))
+        }
+        None => "{}",
     }
 }
 

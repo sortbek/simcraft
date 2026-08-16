@@ -24,7 +24,7 @@ pub fn build_drop_items(
     void_forge: bool,
     catalyst: bool,
 ) -> Vec<Value> {
-    match game_data::get_instance_drops(instance_id, Some(class), Some(spec)) {
+    match game_data::get_instance_drops(instance_id, Some(class), Some(spec), true) {
         Some(mut by_slot) => {
             game_data::add_drop_variants(&mut by_slot, Some(class), void_forge, catalyst);
             drop_items_from_slots(&by_slot, difficulty, upgrade_level, encounter_ids, tracks)

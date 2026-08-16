@@ -32,7 +32,10 @@ fi
 # kept and any new icons fall back to their name.
 if [ -n "$BLIZZARD_CLIENT_ID" ] && [ -n "$BLIZZARD_CLIENT_SECRET" ]; then
     echo "Refreshing icon FileDataIDs..."
-    python "$SCRIPT_DIR/../../scripts/fetch_icon_file_ids.py" "$OUT_DIR"
+    # `python` is absent on distros that ship only python3; `set -e` would abort
+    # the whole refresh after every file had already downloaded.
+    "$(command -v python3 || command -v python)" \
+        "$SCRIPT_DIR/../../scripts/fetch_icon_file_ids.py" "$OUT_DIR"
 else
     echo "Skipping icon FileDataIDs (set BLIZZARD_CLIENT_ID/SECRET to refresh)."
 fi

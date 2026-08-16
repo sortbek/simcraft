@@ -12,6 +12,10 @@ target
 # Dockerfile.standalone, which builds from the repo root and so is unaffected
 # by this file.
 resources
+# ...except the icon FileDataID map, which no fetch produces — it is generated
+# offline by scripts/fetch_icon_file_ids.py and committed. server/Dockerfile
+# copies it into the fetcher stage.
+!resources/data/icon-file-ids.json
 
 *.db
 *.db-shm

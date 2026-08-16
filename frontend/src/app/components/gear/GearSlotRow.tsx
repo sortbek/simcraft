@@ -3,15 +3,14 @@
 
 import {
   QUALITY_COLORS,
-  getIconUrl,
   getWowheadData,
   getWowheadUrl,
   localizedEnchantName,
   localizedGemName,
   localizedItemName,
-  onIconError,
   toGemIdList,
   useItemNames,
+  iconProps,
 } from '../../lib/useItemInfo';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
@@ -105,9 +104,7 @@ export default function GearSlotRow({
         onClick={(e) => e.preventDefault()}
       >
         <img
-          src={getIconUrl(icon)}
-          data-icon={icon}
-          onError={onIconError}
+          {...iconProps(icon)}
           alt=""
           width={28}
           height={28}

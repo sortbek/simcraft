@@ -166,9 +166,15 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             "/api/upgrade-tracks",
             web::get().to(game_data_handlers::list_upgrade_tracks),
         )
-        .route(
-            "/api/icon-file-ids",
-            web::get().to(game_data_handlers::list_icon_file_ids),
+        // Compression is scoped to this resource rather than wrapped around the
+        // App: actix's encoder inspects neither Content-Type nor status, so a
+        // global Compress would re-encode the already-compressed images served
+        // by actix_files and corrupt 206 range responses, whose Content-Range
+        // still describes uncompressed offsets. ~360 KB → ~74 KB gzip here.
+        .service(
+            web::resource("/api/icon-file-ids")
+                .wrap(actix_web::middleware::Compress::default())
+                .route(web::get().to(game_data_handlers::list_icon_file_ids)),
         )
         .route(
             "/api/gear/resolve",
