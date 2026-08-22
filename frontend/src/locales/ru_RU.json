@@ -21,6 +21,7 @@
   "layout.saveNewRoute": "Сохранить новый маршрут",
   "layout.updateAvailable": "Доступно обновление",
   "layout.updateReady": "SimHammer v{version} готов к установке.",
+  "layout.updateTo": "Обновить до v{version}",
   "layout.downloading": "Загрузка {progress}%",
   "layout.installRestart": "Установить и перезапустить",
   "layout.later": "Позже",

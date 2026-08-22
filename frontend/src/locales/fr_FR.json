@@ -21,6 +21,7 @@
   "layout.saveNewRoute": "Enregistrer le nouveau parcours",
   "layout.updateAvailable": "Mise à jour disponible",
   "layout.updateReady": "SimHammer v{version} est prêt à être installé.",
+  "layout.updateTo": "Mettre à jour vers v{version}",
   "layout.downloading": "Téléchargement {progress}%",
   "layout.installRestart": "Installer et redémarrer",
   "layout.later": "Plus tard",
