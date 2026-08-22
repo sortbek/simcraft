@@ -381,7 +381,7 @@ pub(crate) async fn spawn_droptimizer_child(
     let base_profile = parse_result.base_profile.clone();
 
     let (generated_input, combo_count, combo_metadata) =
-        crate::profileset_generator::generate_droptimizer_input(&base_profile, drop_items);
+        crate::profileset_generator::generate_droptimizer_input(&base_profile, drop_items, None);
 
     let generated_input = inject_expert_fields(&generated_input, options);
 

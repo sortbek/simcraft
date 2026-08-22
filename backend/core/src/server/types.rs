@@ -192,6 +192,10 @@ pub struct TopGearRequest {
 pub struct DroptimizerRequest {
     pub simc_input: String,
     pub drop_items: Vec<Value>,
+    /// Chosen secondary-stat IDs (e.g. `[49, 36]` = Mastery/Haste) applied to
+    /// every crafted candidate; order irrelevant. Only sent for crafted runs.
+    #[serde(default)]
+    pub preferred_crafted_stats: Option<[u64; 2]>,
     #[serde(flatten)]
     pub options: SimOptions,
 }

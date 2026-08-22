@@ -461,11 +461,16 @@ export function getWowheadData(
   bonusIds?: number[],
   ilevel?: number,
   enchantId?: number,
-  gemIds?: number[]
+  gemIds?: number[],
+  // Rendered via a `crafted-stats=` param, not as bonus IDs.
+  craftedStats?: number[]
 ): string {
   const parts: string[] = [];
   if (bonusIds && bonusIds.length > 0) {
     parts.push(`bonus=${bonusIds.join(':')}`);
+  }
+  if (craftedStats && craftedStats.length > 0) {
+    parts.push(`crafted-stats=${craftedStats.join(':')}`);
   }
   if (ilevel && ilevel > 0) {
     parts.push(`ilvl=${ilevel}`);

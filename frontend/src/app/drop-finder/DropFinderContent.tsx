@@ -87,6 +87,8 @@ export default function DropFinderContent() {
           upgradeLevel,
           upgradeTracks,
           hasSelection,
+          isCrafted,
+          preferredStats,
         }: LootBrowserRenderState) => {
           const buildPayload = () => {
             if (!hasSelection) return null;
@@ -110,7 +112,12 @@ export default function DropFinderContent() {
                 ],
               };
             });
-            return { simc_input: simcInput, drop_items: dropItems, compute_provider: compute };
+            return {
+              simc_input: simcInput,
+              drop_items: dropItems,
+              compute_provider: compute,
+              ...(isCrafted ? { preferred_crafted_stats: preferredStats } : {}),
+            };
           };
           return (
             <DropFinderFooter

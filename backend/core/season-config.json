@@ -1,6 +1,7 @@
 {
   "season": "Midnight Season 2",
   "raidPoolInstanceId": -102,
+  "crafted_secondary_stats": { "32": 11136, "49": 11137, "36": 11138, "40": 11139 },
   "raidDifficulties": [
     {
       "key": "lfr",
