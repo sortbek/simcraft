@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiUrl, fetchJsonOr } from '../../lib/api';
 import GearItemRow from './GearItemRow';
 import type { ResolvedItem } from '../../lib/types';
+import { getWowheadUrl } from '../../lib/useItemInfo';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import Switch from '../ui/Switch';
 import CollapsibleSection from '../ui/CollapsibleSection';
@@ -63,8 +65,9 @@ export default function GemSelector({
   defaultOpen,
   storageKey,
 }: GemSelectorProps) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [gemOptions, setGemOptions] = useState<GemOption[]>([]);
+  useWowheadTooltips([gemOptions]);
 
   const socketedSlots = useMemo(
     () =>
@@ -200,6 +203,7 @@ export default function GemSelector({
                     icon={d.itemIcon || ''}
                     name={d.itemName || d.displayName}
                     nameColor={isSelected ? 'text-amber-400' : 'text-on-surface'}
+                    href={getWowheadUrl(gemItemId, locale)}
                     details={gemDetails(d)}
                     selectable
                     checked={isSelected}
@@ -245,6 +249,7 @@ export default function GemSelector({
                       icon={g.itemIcon || ''}
                       name={g.itemName || g.displayName}
                       nameColor="text-on-surface"
+                      href={getWowheadUrl(gemItemId, locale)}
                       details={gemDetails(g)}
                       selectable
                       checked={isSelected}

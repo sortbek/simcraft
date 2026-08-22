@@ -153,7 +153,21 @@ export default function GearSlotRow({
           {gems.length > 0 ? (
             <span className="text-sky-400/70">
               {' '}
-              · {gems.map((g) => localizedGemName(g, locale)).join(', ')}
+              ·{' '}
+              {gems.map((g, i) => (
+                <span key={`${g.gem_id}-${i}`}>
+                  {i > 0 && ', '}
+                  <a
+                    href={getWowheadUrl(g.gem_id, locale)}
+                    className="no-underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    {localizedGemName(g, locale)}
+                  </a>
+                </span>
+              ))}
             </span>
           ) : (
             (info?.sockets ?? 0) > 0 && (
@@ -163,9 +177,27 @@ export default function GearSlotRow({
               </span>
             )
           )}
-          {enchant?.name && (
-            <span className="text-emerald-400/70"> · {localizedEnchantName(enchant, locale)}</span>
-          )}
+          {enchant?.name &&
+            (enchant.item_id ? (
+              <span className="text-emerald-400/70">
+                {' '}
+                ·{' '}
+                <a
+                  href={getWowheadUrl(enchant.item_id, locale)}
+                  className="no-underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.preventDefault()}
+                >
+                  {localizedEnchantName(enchant, locale)}
+                </a>
+              </span>
+            ) : (
+              <span className="text-emerald-400/70">
+                {' '}
+                · {localizedEnchantName(enchant, locale)}
+              </span>
+            ))}
         </p>
       </div>
     </div>

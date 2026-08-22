@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../../lib/api';
 import GearItemRow from './GearItemRow';
 import type { ResolvedItem } from '../../lib/types';
+import { getWowheadUrl } from '../../lib/useItemInfo';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { statLabel, type ItemOption } from './itemOptions';
@@ -61,8 +63,9 @@ export default function EnchantSelector({
   onSelectAllEnchants,
   onDeselectAllEnchants,
 }: EnchantSelectorProps) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [enchantOptions, setItemOptions] = useState<Record<string, ItemOption[]>>({});
+  useWowheadTooltips([enchantOptions]);
 
   const enchantableSlots = useMemo(
     () => ENCHANT_SLOT_ORDER.filter((s) => equippedSlots[s]),
@@ -163,6 +166,11 @@ export default function EnchantSelector({
                   icon={equippedOption?.itemIcon || ''}
                   name={equippedName}
                   nameColor="text-on-surface"
+                  href={
+                    equippedOption?.itemId
+                      ? getWowheadUrl(equippedOption.itemId, locale)
+                      : undefined
+                  }
                   details={equippedOption ? enchantDetails(equippedOption) : undefined}
                   equipped
                 />
@@ -180,6 +188,7 @@ export default function EnchantSelector({
                     icon={e.itemIcon || ''}
                     name={e.itemName || e.displayName}
                     nameColor="text-on-surface"
+                    href={e.itemId ? getWowheadUrl(e.itemId, locale) : undefined}
                     details={enchantDetails(e)}
                     selectable
                     checked={isSelected}
