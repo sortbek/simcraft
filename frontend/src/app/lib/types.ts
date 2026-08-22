@@ -25,6 +25,7 @@ export interface ResolvedItem {
   gem_name: string;
   gem_icon: string;
   is_catalyst?: boolean;
+  source_item_id?: number;
   can_catalyst?: boolean;
   is_void_forge?: boolean;
   can_void_forge?: boolean;

@@ -226,6 +226,7 @@ fn resolved_item_to_value(item: &crate::types::ResolvedItem, is_equipped: bool) 
     });
     if item.is_catalyst {
         v["is_catalyst"] = json!(true);
+        v["source_item_id"] = json!(item.source_item_id);
     }
     v
 }

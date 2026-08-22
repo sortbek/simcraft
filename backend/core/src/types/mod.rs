@@ -179,6 +179,9 @@ pub struct ResolvedItem {
     /// Whether this item is a catalyst-generated tier alternative.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_catalyst: bool,
+    /// Item this was catalysed from; its secondaries carry over.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub source_item_id: u64,
     /// Whether this item can be converted via Revival Catalyst.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub can_catalyst: bool,

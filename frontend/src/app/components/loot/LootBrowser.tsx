@@ -636,16 +636,19 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
                 {t('dropFinder.includeVoidForge')}
               </label>
             )}
-            <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
-              <Checkbox
-                variant="primary"
-                size="sm"
-                checked={includeCatalyst}
-                onChange={() => setIncludeCatalyst((v) => !v)}
-                aria-label={t('dropFinder.includeCatalyst')}
-              />
-              {t('dropFinder.includeCatalyst')}
-            </label>
+            {/* Crafted gear can't be catalysed. */}
+            {!isCrafted && (
+              <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+                <Checkbox
+                  variant="primary"
+                  size="sm"
+                  checked={includeCatalyst}
+                  onChange={() => setIncludeCatalyst((v) => !v)}
+                  aria-label={t('dropFinder.includeCatalyst')}
+                />
+                {t('dropFinder.includeCatalyst')}
+              </label>
+            )}
           </div>
         </div>
       )}
@@ -805,6 +808,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
           equippedEmbellishments={equippedEmbellishments}
           equippedGear={equippedGear}
           spec={specName ?? ''}
+          craftedStats={isCrafted ? preferredStats : undefined}
         />
       )}
 

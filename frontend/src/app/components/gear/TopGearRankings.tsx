@@ -11,7 +11,6 @@ import {
   getWowheadUrl,
   localizedEnchantName,
   localizedItemName,
-  toGemIdList,
   useItemNames,
   iconProps,
 } from '../../lib/useItemInfo';
@@ -525,16 +524,7 @@ function ItemTag({
     locale
   );
   const icon = info?.icon || 'inv_misc_questionmark';
-  const wowheadData =
-    item.item_id > 0
-      ? getWowheadData(
-          item.bonus_ids,
-          item.ilevel,
-          item.enchant_id,
-          toGemIdList(item),
-          item.crafted_stats
-        )
-      : undefined;
+  const wowheadData = item.item_id > 0 ? getWowheadData(item) : undefined;
   const slotName = SLOT_LABELS[item.slot] || item.slot;
 
   return (

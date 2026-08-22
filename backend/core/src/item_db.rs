@@ -802,7 +802,10 @@ pub fn is_crafted_item(item_id: u64) -> bool {
                 .find(|c| c.get("key").and_then(|k| k.as_str()) == Some("crafted"))
                 .and_then(|c| c.get("poolInstanceId").and_then(|v| v.as_i64()));
             let mut set = std::collections::HashSet::new();
-            if let (Some(pool_id), Some(drops)) = (pool_id, DROPS_BY_ENCOUNTER.get()) {
+            // Loud like the sibling accessors: caching an empty set here would
+            // silently reject every crafted item for the life of the process.
+            let drops = DROPS_BY_ENCOUNTER.get().expect("Game data not loaded");
+            if let Some(pool_id) = pool_id {
                 for items in drops.values() {
                     for it in items {
                         if it.get("_source_instance_id").and_then(|v| v.as_i64()) == Some(pool_id) {
@@ -927,13 +930,13 @@ pub fn season_cfg() -> &'static Value {
 }
 
 /// Secondary-stat ID (32 Crit, 49 Mastery, 36 Haste, 40 Vers) → the current
-/// season's crafted bonus ID, from season-config `crafted_secondary_stats`.
+/// season's crafted bonus ID, from season-config `craftedSecondaryStats`.
 pub fn crafted_stat_bonus_id(stat_id: u64) -> Option<u64> {
     crafted_stat_bonus_id_from(season_cfg(), stat_id)
 }
 
 fn crafted_stat_bonus_id_from(cfg: &Value, stat_id: u64) -> Option<u64> {
-    cfg.get("crafted_secondary_stats")?
+    cfg.get("craftedSecondaryStats")?
         .get(stat_id.to_string())?
         .as_u64()
 }
@@ -1729,7 +1732,7 @@ mod tests {
     #[test]
     fn crafted_stat_bonus_id_maps_via_season_config() {
         let cfg = json!({
-            "crafted_secondary_stats": { "32": 11136, "49": 11137, "36": 11138, "40": 11139 }
+            "craftedSecondaryStats": { "32": 11136, "49": 11137, "36": 11138, "40": 11139 }
         });
         assert_eq!(crafted_stat_bonus_id_from(&cfg, 32), Some(11136));
         assert_eq!(crafted_stat_bonus_id_from(&cfg, 49), Some(11137));
@@ -1739,7 +1742,7 @@ mod tests {
 
     #[test]
     fn crafted_stat_bonus_id_unknown_stat_is_none() {
-        let cfg = json!({ "crafted_secondary_stats": { "32": 11136 } });
+        let cfg = json!({ "craftedSecondaryStats": { "32": 11136 } });
         assert_eq!(crafted_stat_bonus_id_from(&cfg, 99), None);
         let empty = json!({});
         assert_eq!(crafted_stat_bonus_id_from(&empty, 32), None);

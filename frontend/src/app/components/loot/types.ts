@@ -1,5 +1,6 @@
 import type { SlotInherit } from '../../lib/inheritedGear';
 import { QUALITY_TEXT_CLASS } from '../../lib/qualityColors';
+import { getWowheadData } from '../../lib/useItemInfo';
 
 export type { SlotInherit };
 
@@ -58,6 +59,26 @@ export function dropUid(item: DropItem): string {
   if (item.is_void_forge) return `${item.item_id}:vf`;
   if (item.is_catalyst) return `${item.item_id}:cat:${item.source_item_id ?? 0}`;
   return `${item.item_id}`;
+}
+
+/** `data-wowhead` attribute for a drop row, in every Drop Finder view.
+ *  `craftedStats` is the Preferred Stats pair, so the tooltip matches what the
+ *  sim will actually run. */
+export function dropWowheadAttr(
+  item: DropItem,
+  bonusId?: number,
+  inherit?: SlotInherit,
+  craftedStats?: number[]
+): string {
+  const params = getWowheadData({
+    bonus_ids: bonusId ? [bonusId] : undefined,
+    crafted_stats: craftedStats,
+    enchant_id: inherit?.enchant_id,
+    gem_id: inherit?.gem_id,
+    is_catalyst: item.is_catalyst,
+    source_item_id: item.source_item_id,
+  });
+  return `item=${item.item_id}${params ? `&${params}` : ''}`;
 }
 
 /**

@@ -149,6 +149,7 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         gem_icon,
         season_id,
         is_catalyst: false,
+        source_item_id: 0,
         can_catalyst: false,
         is_void_forge: false,
         can_void_forge: false,
@@ -451,6 +452,10 @@ pub fn build_catalyst_item(
     if !bonus_str.is_empty() {
         simc_parts.push(format!(",bonus_id={}", bonus_str));
     }
+    // Catalysed pieces keep the source item's secondary stats.
+    if source.item_id > 0 {
+        simc_parts.push(format!(",redirected_base_stats={}", source.item_id));
+    }
     if source.enchant_id > 0 {
         simc_parts.push(format!(",enchant_id={}", source.enchant_id));
     }
@@ -478,12 +483,15 @@ pub fn build_catalyst_item(
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
         .join(":");
+    // Source id included: two sources convert to the same tier piece but keep
+    // their own secondaries, so they are distinct items.
     let uid = format!(
-        "{}:{}:{}:{}",
+        "{}:{}:{}:{}:{}",
         tier_item_id,
         bonus_key,
         source.origin.as_str(),
-        slot
+        slot,
+        source.item_id
     );
 
     ResolvedItem {
@@ -509,6 +517,7 @@ pub fn build_catalyst_item(
         gem_icon: source.gem_icon.clone(),
         season_id: source.season_id,
         is_catalyst: true,
+        source_item_id: source.item_id,
         can_catalyst: false,
         is_void_forge: false,
         can_void_forge: false,
@@ -599,8 +608,10 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
             }
         }
 
-        // Find the best catalyst candidate: highest ilevel, tiebreak by upgrade track rank
-        let mut best: Option<ResolvedItem> = None;
+        // One conversion per source: sources that tie on ilevel still differ in
+        // secondary stats (see `redirected_base_stats`), so collapsing to a
+        // single "best" would pick one arbitrarily and hide the rest.
+        let mut candidates: Vec<ResolvedItem> = Vec::new();
 
         for source in &sources {
             if !is_catalyst_source(source, tier_info.item_id) {
@@ -616,30 +627,23 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
                 }
             }
 
-            let dominated = if let Some(ref current_best) = best {
-                if catalyst_item.ilevel > current_best.ilevel {
-                    false
-                } else if catalyst_item.ilevel < current_best.ilevel {
-                    true
-                } else {
-                    // Same ilevel — compare upgrade track rank (higher = better)
-                    let new_rank = item_db::track_rank(&catalyst_item.upgrade).unwrap_or(0);
-                    let cur_rank = item_db::track_rank(&current_best.upgrade).unwrap_or(0);
-                    new_rank <= cur_rank
-                }
-            } else {
-                false
-            };
-
-            if !dominated {
-                best = Some(catalyst_item);
-            }
+            candidates.push(catalyst_item);
         }
 
-        if let Some(catalyst_item) = best {
-            if let Some(slot_res) = slots.get_mut(slot_key.as_str()) {
-                slot_res.alternatives.push(catalyst_item);
-            }
+        // Best-first and deterministic: ilevel, then upgrade track rank, then source id.
+        candidates.sort_by(|a, b| {
+            b.ilevel
+                .cmp(&a.ilevel)
+                .then_with(|| {
+                    item_db::track_rank(&b.upgrade)
+                        .unwrap_or(0)
+                        .cmp(&item_db::track_rank(&a.upgrade).unwrap_or(0))
+                })
+                .then_with(|| a.source_item_id.cmp(&b.source_item_id))
+        });
+
+        if let Some(slot_res) = slots.get_mut(slot_key.as_str()) {
+            slot_res.alternatives.extend(candidates);
         }
     }
 }
@@ -876,6 +880,35 @@ mod catalyst_tests {
         assert_eq!(
             catalyst.ilevel, source_ilevel,
             "catalyst piece keeps the source item level"
+        );
+    }
+
+    #[test]
+    fn catalyst_item_redirects_base_stats_to_the_source() {
+        ensure_game_data_loaded();
+        let profile = "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=251199\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear_with_catalyst(&parsed, Some(1));
+        let head = resolved.slots.get("head").expect("head slot resolved");
+        let source = head.equipped.as_ref().expect("equipped head");
+
+        let class_id = class_data::class_wow_id("mage").expect("mage class id");
+        let tier = item_db::catalyst_tier_item(class_id, 1).expect("mage head tier item");
+        let catalyst = build_catalyst_item(source, tier, "head");
+
+        assert!(
+            catalyst
+                .simc_string
+                .contains(&format!("redirected_base_stats={}", source.item_id)),
+            "catalyst simc string must redirect base stats to the source item, got: {}",
+            catalyst.simc_string
+        );
+        assert!(
+            catalyst
+                .simc_string
+                .contains(&format!("id={}", catalyst.item_id)),
+            "catalyst simc string keeps the tier item id, got: {}",
+            catalyst.simc_string
         );
     }
 }

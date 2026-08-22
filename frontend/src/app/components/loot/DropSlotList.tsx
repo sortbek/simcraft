@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl, iconProps } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
-import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
+import { dropUid, dropWowheadAttr, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import VariantBadges from './VariantBadges';
 
 const SLOT_ORDER = [
@@ -235,7 +235,7 @@ function DropItemCard({
         <span className="flex items-center gap-1.5">
           <a
             href={getWowheadUrl(item.item_id, locale)}
-            data-wowhead={`item=${item.item_id}${effectiveBonusId ? `&bonus=${effectiveBonusId}` : ''}`}
+            data-wowhead={dropWowheadAttr(item, effectiveBonusId)}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}

@@ -160,6 +160,9 @@ pub(super) fn generate_droptimizer_input(
         }
 
         let mut base_simc_str = format!(",id={},ilevel={}", item_id, ilevel);
+        if let Some(src) = source_item_id.filter(|s| is_catalyst && *s > 0) {
+            base_simc_str.push_str(&format!(",redirected_base_stats={}", src));
+        }
         // Crafted stat bonus IDs go into the simc string, not `bonus_ids`.
         let crafted_bonus_ids = crafted_stats.map(|cs| cs.bonus_ids).into_iter().flatten();
         let bonus_str = bonus_ids
@@ -294,6 +297,65 @@ mod tests {
     }
 
     #[test]
+    fn catalyst_drop_redirects_base_stats_to_source() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let mut item = drop(271564, 1, vec![13575]); // tier helm + set marker bonus
+        item["is_catalyst"] = json!(true);
+        item["source_item_id"] = json!(251199); // Worldroot Canopy (Mastery/Crit)
+        let drops = vec![item];
+
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops, None);
+
+        assert!(
+            input.contains("head=,id=271564"),
+            "catalysed drop keeps the tier item id, got:\n{input}"
+        );
+        assert!(
+            input.contains("redirected_base_stats=251199"),
+            "catalysed drop must redirect base stats to the source, got:\n{input}"
+        );
+        assert!(
+            input.contains("bonus_id=13575"),
+            "tier set marker bonus must survive, got:\n{input}"
+        );
+        let combo = metadata.get("Combo 2").expect("missing combo");
+        assert_eq!(
+            combo[0]["item_id"],
+            json!(271564),
+            "metadata keeps the tier piece id for display"
+        );
+        assert_eq!(combo[0]["source_item_id"], json!(251199));
+    }
+
+    /// Two sources converting to the same tier piece must not produce identical
+    /// profilesets — the whole point of one row per source.
+    #[test]
+    fn catalyst_drops_from_different_sources_are_distinct_sims() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let mut a = drop(271564, 1, vec![13575]);
+        a["is_catalyst"] = json!(true);
+        a["source_item_id"] = json!(251199);
+        let mut b = drop(271564, 1, vec![13575]);
+        b["is_catalyst"] = json!(true);
+        b["source_item_id"] = json!(251232);
+
+        let (input, count, _) = generate_droptimizer_input(profile, &[a, b], None);
+
+        assert_eq!(count, 2, "both sources need their own combo, got:\n{input}");
+        let head_lines: Vec<&str> = input
+            .lines()
+            .filter(|l| l.starts_with("profileset.") && l.contains("id=271564"))
+            .collect();
+        assert_eq!(head_lines.len(), 2, "expected two head lines:\n{input}");
+        assert_ne!(
+            head_lines[0], head_lines[1],
+            "same tier piece from different sources must sim differently:\n{input}"
+        );
+    }
+
+    #[test]
     fn unknown_inv_type_skipped() {
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![drop(999, 99, vec![])]; // inv_type 99 = no slots
@@ -390,6 +452,7 @@ mod tests {
 
     #[test]
     fn no_preferred_stats_leaves_bonus_ids_unchanged() {
+        crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![drop(207157, 11, vec![12345])];
         let (input, _, _) = generate_droptimizer_input(profile, &drops, None);

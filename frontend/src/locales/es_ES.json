@@ -265,6 +265,7 @@
   "dropFinder.selectDungeon": "Seleccionar mazmorra",
   "dropFinder.difficulty": "Dificultad",
   "dropFinder.upgradeLevel": "Nivel de mejora",
+  "dropFinder.preferredStats": "Estadísticas preferidas",
   "dropFinder.base": "Base",
   "dropFinder.showingLoot": "Mostrando botín para {class}",
   "dropFinder.mainSpec": "principal",

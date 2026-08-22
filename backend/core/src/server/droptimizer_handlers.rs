@@ -34,6 +34,11 @@ pub(super) async fn create_droptimizer_sim(
 
     let crafted_stats = match req.preferred_crafted_stats {
         None => None,
+        Some([primary, secondary]) if primary == secondary => {
+            return HttpResponse::BadRequest().json(json!({
+                "detail": "Crafted preferred stats must be two different secondary stats."
+            }))
+        }
         Some([primary, secondary]) => {
             match (
                 crate::item_db::crafted_stat_bonus_id(primary),
@@ -107,6 +112,7 @@ pub(super) async fn create_droptimizer_sim(
         "base_profile": base_profile,
         "drop_items": req.drop_items,
         "options": req.options.to_json(),
+        "preferred_crafted_stats": req.preferred_crafted_stats,
     });
 
     let combo_metadata_serialized = serialize_combo_metadata_value(&combo_metadata);

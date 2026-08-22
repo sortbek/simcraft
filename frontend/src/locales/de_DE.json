@@ -265,6 +265,7 @@
   "dropFinder.selectDungeon": "Dungeon auswählen",
   "dropFinder.difficulty": "Schwierigkeit",
   "dropFinder.upgradeLevel": "Upgrade-Stufe",
+  "dropFinder.preferredStats": "Bevorzugte Werte",
   "dropFinder.base": "Basis",
   "dropFinder.showingLoot": "Zeige Beute für {class}",
   "dropFinder.mainSpec": "Haupt",

@@ -1,5 +1,5 @@
 import type { ResolvedItem } from '../../lib/types';
-import { getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
+import { getWowheadData, getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import GearItemRow from './GearItemRow';
 import { buildAlternativeKey } from './topGearIdentity';
@@ -40,15 +40,6 @@ interface TopGearGroupCardProps {
   addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
   t: (key: string, values?: Record<string, string | number>) => string;
-}
-
-function getWowheadData(item: ResolvedItem): string {
-  const parts: string[] = [];
-  if (item.bonus_ids.length > 0) parts.push(`bonus=${item.bonus_ids.join(':')}`);
-  if (item.ilevel > 0) parts.push(`ilvl=${item.ilevel}`);
-  if (item.enchant_id > 0) parts.push(`ench=${item.enchant_id}`);
-  if (item.gem_id > 0) parts.push(`gems=${item.gem_id}`);
-  return parts.join('&');
 }
 
 function canAddSocket(item: ResolvedItem): boolean {

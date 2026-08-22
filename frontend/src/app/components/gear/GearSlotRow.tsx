@@ -67,10 +67,7 @@ export default function GearSlotRow({
     locale
   );
   const icon = info?.icon || 'inv_misc_questionmark';
-  const wowheadData =
-    item.item_id > 0
-      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, gemIdList)
-      : undefined;
+  const wowheadData = item.item_id > 0 ? getWowheadData(item) : undefined;
   const fadeDir = rtl ? 'to left' : 'to right';
 
   return (

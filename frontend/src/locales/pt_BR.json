@@ -265,6 +265,7 @@
   "dropFinder.selectDungeon": "Selecionar Masmorra",
   "dropFinder.difficulty": "Dificuldade",
   "dropFinder.upgradeLevel": "Nível de Melhoria",
+  "dropFinder.preferredStats": "Atributos preferidos",
   "dropFinder.base": "Base",
   "dropFinder.showingLoot": "Mostrando loot para {class}",
   "dropFinder.mainSpec": "principal",

@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl, iconProps } from '../../lib/useItemInfo';
 import type { DropItem, UpgradeTracks } from './types';
-import { dropUid, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
-import { resolveInherits, type EquippedGear, type SlotInherit } from '../../lib/inheritedGear';
+import { dropUid, dropWowheadAttr, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
+import { resolveInherits, type EquippedGear } from '../../lib/inheritedGear';
 import { qualityBorderColor } from '../../lib/qualityColors';
 import Checkbox from '../ui/Checkbox';
 import VariantBadges from './VariantBadges';
@@ -39,6 +39,8 @@ interface ItemTableProps {
   equippedEmbellishments?: number;
   equippedGear: EquippedGear;
   spec: string;
+  /** Preferred Stats pair, so crafted tooltips match what the sim runs. */
+  craftedStats?: number[];
 }
 
 export default function ItemTable({
@@ -55,6 +57,7 @@ export default function ItemTable({
   equippedEmbellishments = 0,
   equippedGear,
   spec,
+  craftedStats,
 }: ItemTableProps) {
   const { t, locale } = useLanguage();
   useItemNames();
@@ -279,7 +282,12 @@ export default function ItemTable({
               const embellishDisabled = isEmbellished && embellishmentsFull && !isSelected;
               const qualityColor = QUALITY_COLORS[resolved.quality] || 'text-gray-400';
               const inherits = resolveInherits(item.inventory_type, spec, equippedGear);
-              const wowheadAttr = buildWowheadAttr(item.item_id, effectiveBonusId, inherits[0]);
+              const wowheadAttr = dropWowheadAttr(
+                item,
+                effectiveBonusId,
+                inherits[0],
+                craftedStats
+              );
 
               return (
                 <div
@@ -378,16 +386,4 @@ export default function ItemTable({
       )}
     </div>
   );
-}
-
-function buildWowheadAttr(
-  itemId: number,
-  bonusId: number | undefined,
-  inherit: SlotInherit | undefined
-): string {
-  let s = `item=${itemId}`;
-  if (bonusId) s += `&bonus=${bonusId}`;
-  if (inherit?.enchant_id) s += `&ench=${inherit.enchant_id}`;
-  if (inherit?.gem_id) s += `&gems=${inherit.gem_id}`;
-  return s;
 }

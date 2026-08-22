@@ -265,6 +265,7 @@
   "dropFinder.selectDungeon": "Выбрать подземелье",
   "dropFinder.difficulty": "Сложность",
   "dropFinder.upgradeLevel": "Уровень улучшения",
+  "dropFinder.preferredStats": "Предпочитаемые характеристики",
   "dropFinder.base": "Базовый",
   "dropFinder.showingLoot": "Показана добыча для {class}",
   "dropFinder.mainSpec": "основная",

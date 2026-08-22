@@ -265,6 +265,7 @@
   "dropFinder.selectDungeon": "Sélectionner un donjon",
   "dropFinder.difficulty": "Difficulté",
   "dropFinder.upgradeLevel": "Niveau d'amélioration",
+  "dropFinder.preferredStats": "Stats préférées",
   "dropFinder.base": "Base",
   "dropFinder.showingLoot": "Butin affiché pour {class}",
   "dropFinder.mainSpec": "principale",
