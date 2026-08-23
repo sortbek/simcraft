@@ -4,51 +4,74 @@ use std::collections::{HashMap, HashSet};
 use crate::game_data;
 use crate::types::class_data::{self, ARMOR_SLOTS, GEAR_SLOTS};
 
-fn make_item_uid(item: &Value) -> String {
-    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+/// Catalyst uids append the conversion source (`gear_resolver::build_catalyst_item`),
+/// so two sources converting to the same tier piece stay distinct.
+fn catalyst_source_suffix(item: &Value) -> String {
+    let is_catalyst = item
+        .get("is_catalyst")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    match item.get("source_item_id").and_then(|v| v.as_u64()) {
+        Some(src) if is_catalyst && src > 0 => format!(":{}", src),
+        _ => String::new(),
+    }
+}
+
+fn sorted_bonus_key(item: &Value) -> String {
     let mut bonus_ids: Vec<u64> = item
         .get("bonus_ids")
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
         .unwrap_or_default();
     bonus_ids.sort();
-    let bonus_key = bonus_ids
+    bonus_ids
         .iter()
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
-        .join(":");
+        .join(":")
+}
+
+fn make_item_uid(item: &Value) -> String {
+    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
     let origin = item
         .get("origin")
         .and_then(|v| v.as_str())
         .unwrap_or("bags");
     let slot = item.get("slot").and_then(|v| v.as_str()).unwrap_or("");
-    format!("{}:{}:{}:{}", item_id, bonus_key, origin, slot)
+    format!(
+        "{}:{}:{}:{}{}",
+        item_id,
+        sorted_bonus_key(item),
+        origin,
+        slot,
+        catalyst_source_suffix(item)
+    )
 }
 
 fn make_item_identity(item: &Value) -> String {
     let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-    let mut bonus_ids: Vec<u64> = item
-        .get("bonus_ids")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|b| b.as_u64()).collect())
-        .unwrap_or_default();
-    bonus_ids.sort();
-    let bonus_key = bonus_ids
-        .iter()
-        .map(|b| b.to_string())
-        .collect::<Vec<_>>()
-        .join(":");
     let origin = item
         .get("origin")
         .and_then(|v| v.as_str())
         .unwrap_or("bags");
-    format!("{}:{}:{}", item_id, bonus_key, origin)
+    format!(
+        "{}:{}:{}{}",
+        item_id,
+        sorted_bonus_key(item),
+        origin,
+        catalyst_source_suffix(item)
+    )
 }
 
+/// Identity = uid minus its slot segment. Slot names never collide with the
+/// other segments (numeric ids, origin words), and catalyst uids carry a
+/// trailing source id, so drop the slot token wherever it sits rather than
+/// assuming it is last.
 fn uid_identity(uid: &str) -> String {
-    uid.rsplit_once(':')
-        .map(|(prefix, _)| prefix.to_string())
-        .unwrap_or_else(|| uid.to_string())
+    uid.split(':')
+        .filter(|seg| !GEAR_SLOTS.contains(seg))
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 pub(super) fn build_slot_candidates(
@@ -254,6 +277,33 @@ mod tests {
         assert!(
             f2.iter().any(|i| i["item_id"] == 999),
             "expected finger2 to include 999 via paired identity"
+        );
+    }
+
+    #[test]
+    fn selected_catalyst_item_matches_five_part_uid() {
+        ensure_game_data_loaded();
+        // Catalyst alternatives carry `uid = item:bonus:origin:slot:source_item_id`
+        // (gear_resolver::build_catalyst_item); selection must match that form.
+        let profile = "mage=test\n";
+        let equipped = make(100, "head", true, vec![]);
+        let mut catalyst = make(271564, "head", false, vec![12852]);
+        catalyst["is_catalyst"] = Value::Bool(true);
+        catalyst["source_item_id"] = 251199u64.into();
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped, catalyst]);
+
+        let mut selected = HashMap::new();
+        selected.insert(
+            "head".to_string(),
+            vec!["271564:12852:bags:head:251199".to_string()],
+        );
+
+        let result = build_slot_candidates(profile, &items_by_slot, &selected);
+        let head = result.get("head").expect("head missing");
+        assert!(
+            head.iter().any(|i| i["item_id"] == 271564),
+            "selected catalyst item must be included in candidates"
         );
     }
 

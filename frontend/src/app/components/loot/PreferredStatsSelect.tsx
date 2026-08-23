@@ -11,24 +11,38 @@ const STAT_KEY: Record<number, string> = {
   40: 'stat.versatility',
 };
 
-// Crafted gear takes two equal, unorderable secondary stats: the 6 pairs.
+// Display order for the classic four; also the fallback when the season
+// config doesn't supply its own stat list.
 const STAT_ORDER = [32, 36, 49, 40];
-export const PREFERRED_STAT_COMBOS: [number, number][] = STAT_ORDER.flatMap((a, i) =>
-  STAT_ORDER.slice(i + 1).map((b): [number, number] => [a, b])
-);
 
 export const DEFAULT_PREFERRED_STATS: [number, number] = [32, 36]; // Crit/Haste
 
 interface PreferredStatsSelectProps {
   value: [number, number];
   onChange: (value: [number, number]) => void;
+  /** This season's missive stat ids (season-config `craftedSecondaryStats`). */
+  statIds?: number[];
 }
 
-export default function PreferredStatsSelect({ value, onChange }: PreferredStatsSelectProps) {
+export default function PreferredStatsSelect({
+  value,
+  onChange,
+  statIds,
+}: PreferredStatsSelectProps) {
   const { t } = useLanguage();
-  const options = PREFERRED_STAT_COMBOS.map((combo) => ({
+  const stats =
+    statIds && statIds.length >= 2
+      ? [
+          ...STAT_ORDER.filter((s) => statIds.includes(s)),
+          ...statIds.filter((s) => !STAT_ORDER.includes(s)),
+        ]
+      : STAT_ORDER;
+  // Crafted gear takes two equal, unorderable secondary stats: all pairs.
+  const combos = stats.flatMap((a, i) => stats.slice(i + 1).map((b): [number, number] => [a, b]));
+  const statLabel = (id: number) => (STAT_KEY[id] ? t(STAT_KEY[id]) : `#${id}`);
+  const options = combos.map((combo) => ({
     value: combo,
-    label: `${t(STAT_KEY[combo[0]])}/${t(STAT_KEY[combo[1]])}`,
+    label: `${statLabel(combo[0])}/${statLabel(combo[1])}`,
   }));
 
   return (

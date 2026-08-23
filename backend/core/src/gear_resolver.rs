@@ -453,9 +453,10 @@ pub fn build_catalyst_item(
         simc_parts.push(format!(",bonus_id={}", bonus_str));
     }
     // Catalysed pieces keep the source item's secondary stats.
-    if source.item_id > 0 {
-        simc_parts.push(format!(",redirected_base_stats={}", source.item_id));
-    }
+    simc_parts.push(item_db::redirected_base_stats_fragment(
+        true,
+        source.item_id,
+    ));
     if source.enchant_id > 0 {
         simc_parts.push(format!(",enchant_id={}", source.enchant_id));
     }
@@ -527,8 +528,9 @@ pub fn build_catalyst_item(
 /// Whether an item can be fed to the catalyst: current-season gear on at least the
 /// Veteran track, or fixed-difficulty gear (e.g. Sporefused) whose item level comes
 /// from a bonus outside the upgrade-track system and so has no track or season id.
+/// Crafted gear never qualifies.
 fn is_catalyst_source(item: &ResolvedItem, tier_item_id: u64) -> bool {
-    if item.is_catalyst || item.item_id == tier_item_id {
+    if item.is_catalyst || item.item_id == tier_item_id || item_db::is_crafted_item(item.item_id) {
         return false;
     }
     if item
@@ -631,15 +633,12 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
         }
 
         // Best-first and deterministic: ilevel, then upgrade track rank, then source id.
-        candidates.sort_by(|a, b| {
-            b.ilevel
-                .cmp(&a.ilevel)
-                .then_with(|| {
-                    item_db::track_rank(&b.upgrade)
-                        .unwrap_or(0)
-                        .cmp(&item_db::track_rank(&a.upgrade).unwrap_or(0))
-                })
-                .then_with(|| a.source_item_id.cmp(&b.source_item_id))
+        candidates.sort_by_cached_key(|c| {
+            (
+                std::cmp::Reverse(c.ilevel),
+                std::cmp::Reverse(item_db::track_rank(&c.upgrade).unwrap_or(0)),
+                c.source_item_id,
+            )
         });
 
         if let Some(slot_res) = slots.get_mut(slot_key.as_str()) {

@@ -160,9 +160,10 @@ pub(super) fn generate_droptimizer_input(
         }
 
         let mut base_simc_str = format!(",id={},ilevel={}", item_id, ilevel);
-        if let Some(src) = source_item_id.filter(|s| is_catalyst && *s > 0) {
-            base_simc_str.push_str(&format!(",redirected_base_stats={}", src));
-        }
+        base_simc_str.push_str(&crate::item_db::redirected_base_stats_fragment(
+            is_catalyst,
+            source_item_id.unwrap_or(0),
+        ));
         // Crafted stat bonus IDs go into the simc string, not `bonus_ids`.
         let crafted_bonus_ids = crafted_stats.map(|cs| cs.bonus_ids).into_iter().flatten();
         let bonus_str = bonus_ids

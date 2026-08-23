@@ -1030,7 +1030,7 @@ fn get_profileset_results(raw: &Value) -> &[Value] {
 // captures the combo name. Quotes are required: the streamed-mode iterator
 // always emits the form `profileset."Combo N"+=...`, and the legacy top-gear
 // path uses the same quoted form.
-static PROFILESET_NAME_RE: Lazy<Regex> =
+pub(crate) static PROFILESET_NAME_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"^\s*profileset\."(Combo \d+)""#).unwrap());
 static COMBO_HEADER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^###\s+(Combo \d+)").unwrap());
 /// SimC progress frame parser. Hoisted to a `Lazy` so each `run_simc_subprocess`

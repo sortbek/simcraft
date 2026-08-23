@@ -32,41 +32,15 @@ pub(super) async fn create_droptimizer_sim(
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let base_profile = parse_result.base_profile.clone();
 
-    let crafted_stats = match req.preferred_crafted_stats {
-        None => None,
-        Some([primary, secondary]) if primary == secondary => {
-            return HttpResponse::BadRequest().json(json!({
-                "detail": "Crafted preferred stats must be two different secondary stats."
-            }))
-        }
-        Some([primary, secondary]) => {
-            match (
-                crate::item_db::crafted_stat_bonus_id(primary),
-                crate::item_db::crafted_stat_bonus_id(secondary),
-            ) {
-                (Some(a), Some(b)) => Some(profileset_generator::CraftedStats {
-                    stat_ids: [primary, secondary],
-                    bonus_ids: [a, b],
-                }),
-                // Fail loud rather than silently simming crafted items statless.
-                _ => {
-                    return HttpResponse::BadRequest().json(json!({
-                        "detail": "Unsupported crafted preferred stats for the current season."
-                    }))
-                }
-            }
-        }
-    };
+    let crafted_stats =
+        match profileset_generator::CraftedStats::resolve(req.preferred_crafted_stats) {
+            Ok(cs) => cs,
+            Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+        };
 
     // Enforce crafted-only at the trust boundary, not just via the frontend
     // gate, so a stray request can't graft missives onto non-craftable gear.
-    if crafted_stats.is_some()
-        && !req.drop_items.iter().all(|it| {
-            it.get("item_id")
-                .and_then(|v| v.as_u64())
-                .is_some_and(crate::item_db::is_crafted_item)
-        })
-    {
+    if crafted_stats.is_some() && !crate::item_db::all_crafted_items(&req.drop_items) {
         return HttpResponse::BadRequest().json(json!({
             "detail": "Preferred crafted stats can only be applied to crafted items."
         }));

@@ -16,6 +16,7 @@ import {
 } from '../../lib/useItemInfo';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
 import { gemBadgeClass, groupResults } from './topGearResultsUtils';
 
@@ -292,6 +293,9 @@ function RankedResults({
 }) {
   const [visibleCount, setVisibleCount] = useState(VISIBLE_STEP);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // Newly revealed rows mount fresh wowhead anchors after the info maps have
+  // settled, so the map-keyed refresh in TopGearResults never re-fires for them.
+  useWowheadTooltips([visibleCount]);
 
   useEffect(() => {
     setVisibleCount(VISIBLE_STEP);

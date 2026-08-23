@@ -373,12 +373,20 @@ pub(super) async fn get_season_config() -> HttpResponse {
         .map(|m| m.keys().filter_map(|k| k.parse::<i64>().ok()).collect())
         .unwrap_or_default();
 
+    let mut crafted_secondary_stats: Vec<u64> = cfg
+        .get("craftedSecondaryStats")
+        .and_then(|v| v.as_object())
+        .map(|m| m.keys().filter_map(|k| k.parse::<u64>().ok()).collect())
+        .unwrap_or_default();
+    crafted_secondary_stats.sort_unstable();
+
     HttpResponse::Ok().json(SeasonConfigResponse {
         season,
         raid_difficulties,
         dungeon_categories,
         raid_instance_ids: game_data::season_raid_instance_ids(),
         fixed_difficulty_encounters,
+        crafted_secondary_stats,
     })
 }
 

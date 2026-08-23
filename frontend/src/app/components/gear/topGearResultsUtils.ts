@@ -47,8 +47,9 @@ export function dedupeEncounterResults(
     // Include slot: a ring/trinket is simmed in BOTH slots (finger1 vs finger2,
     // trinket1 vs trinket2) and each is a distinct result — they must NOT collapse
     // into one row, or the better slot's verdict hides the other's (matches the
-    // per-slot breakdown shown by Raidbots).
-    const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}_${item.slot || ''}`;
+    // per-slot breakdown shown by Raidbots). Same for the catalyst source: two
+    // sources convert to the same tier piece but sim different secondaries.
+    const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}_${item.slot || ''}_${item.source_item_id || ''}`;
     const existing = bestByItem.get(key);
     if (!existing || result.dps > existing.dps) {
       bestByItem.set(key, result);
@@ -151,6 +152,10 @@ export function diffGearSets(
           item.enchant_id ?? 0,
           toGemIdList(item).join(':'),
           [...(item.bonus_ids ?? [])].sort((x, y) => x - y).join(':'),
+          // Catalyst source and missives change the simmed stats without
+          // changing the item id — same-looking slots can still differ.
+          item.source_item_id ?? 0,
+          (item.crafted_stats ?? []).join(':'),
         ].join('|')
       : '';
 

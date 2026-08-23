@@ -6,6 +6,7 @@ import { startRun, getRun, type Roster, type RosterReport } from '../../lib/rost
 import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup } from '../../lib/types';
 import type { Instance, UpgradeTracks } from '../loot/types';
 import { groupInstances } from '../../lib/instanceCategories';
+import PreferredStatsSelect, { DEFAULT_PREFERRED_STATS } from '../loot/PreferredStatsSelect';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import RosterReportView from './RosterReportView';
 import FightStyleSelector from '../sim-config/FightStyleSelector';
@@ -27,6 +28,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
   const [selectedBosses, setSelectedBosses] = useState<Set<number>>(new Set());
   const [voidForge, setVoidForge] = useState(false);
   const [catalyst, setCatalyst] = useState(false);
+  const [preferredStats, setPreferredStats] = useState<[number, number]>(DEFAULT_PREFERRED_STATS);
 
   // Sim options
   const [targetError, setTargetError] = useState<number>(0.1);
@@ -198,6 +200,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
       upgrade_level: upgradeLevel,
       void_forge: voidForge,
       catalyst: catalyst,
+      ...(isCrafted ? { preferred_crafted_stats: preferredStats } : {}),
       ...(encounters && encounters.length ? { encounters } : {}),
     });
     if (!started) {
@@ -235,6 +238,8 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     upgradeLevel,
     voidForge,
     catalyst,
+    isCrafted,
+    preferredStats,
     isRaid,
     selectedRaidId,
     selectedBosses,
@@ -302,6 +307,21 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
                   value={upgradeLevel}
                   onChange={setUpgradeLevel}
                   options={upgradeLevelOptions}
+                />
+              </div>
+            </div>
+          )}
+
+          {isCrafted && (
+            <div className="space-y-1">
+              <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                Preferred stats
+              </label>
+              <div className={running ? 'pointer-events-none opacity-50' : ''}>
+                <PreferredStatsSelect
+                  value={preferredStats}
+                  onChange={setPreferredStats}
+                  statIds={seasonConfig?.crafted_secondary_stats}
                 />
               </div>
             </div>

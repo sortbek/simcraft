@@ -135,9 +135,9 @@ export interface LootBrowserRenderState {
   upgradeLevel: number;
   upgradeTracks: UpgradeTracks;
   hasSelection: boolean;
-  /** Crafted category is active, so `preferredStats` applies to every drop. */
-  isCrafted: boolean;
-  preferredStats: [number, number];
+  /** Missive stat pair when the crafted category is active; null otherwise, so
+   * consumers can't apply crafted stats to a non-crafted run. */
+  craftedPreferredStats: [number, number] | null;
 }
 
 export interface LootBrowserProps {
@@ -536,8 +536,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
     upgradeLevel,
     upgradeTracks,
     hasSelection: selectedDrops.length > 0,
-    isCrafted,
-    preferredStats,
+    craftedPreferredStats: isCrafted ? preferredStats : null,
   };
 
   return (
@@ -618,7 +617,11 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
           {isCrafted && (
             <div>
               <label className="label-text">{t('dropFinder.preferredStats')}</label>
-              <PreferredStatsSelect value={preferredStats} onChange={setPreferredStats} />
+              <PreferredStatsSelect
+                value={preferredStats}
+                onChange={setPreferredStats}
+                statIds={seasonConfig?.crafted_secondary_stats}
+              />
             </div>
           )}
 

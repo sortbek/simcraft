@@ -579,6 +579,11 @@ fn build_catalyst_variant(item: &Value, class_id: u64, inv_type: u64) -> Option<
     if source_item_id == tier.item_id {
         return None;
     }
+    // Crafted gear can't be catalysed; owning the rule here covers every caller
+    // (tier rows in the crafted pool would also break the crafted-only sim guard).
+    if item_db::is_crafted_item(source_item_id) {
+        return None;
+    }
 
     let mut variant = item.clone();
     let obj = variant.as_object_mut()?;
@@ -635,14 +640,7 @@ pub fn add_drop_variants(
                 }
             }
             if include_catalyst {
-                // Crafted gear can't be catalysed. Emitting tier rows into the
-                // crafted pool also breaks the crafted-only guard on the sim
-                // request, so refuse here rather than relying on the UI.
-                let is_crafted = item
-                    .get("item_id")
-                    .and_then(|v| v.as_u64())
-                    .is_some_and(item_db::is_crafted_item);
-                if let (Some(cid), false) = (class_id, is_crafted) {
+                if let Some(cid) = class_id {
                     // One row per source: each is a different boss to farm.
                     if let Some(v) = build_catalyst_variant(item, cid, inv_type) {
                         variants.push(v);
@@ -993,6 +991,16 @@ mod variant_tests {
                 .collect();
             assert!(extra.contains(&item_db::tier_set_bonus_id()));
         }
+    }
+
+    #[test]
+    fn build_catalyst_variant_refuses_crafted_source() {
+        crate::test_support::ensure_game_data_loaded();
+        let item = serde_json::json!({ "item_id": 237830u64, "inventory_type": 5 });
+        assert!(
+            build_catalyst_variant(&item, 1, 5).is_none(),
+            "crafted gear must not be catalysable"
+        );
     }
 
     #[test]

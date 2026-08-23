@@ -23,6 +23,9 @@ pub struct StartRunRequest {
     pub void_forge: bool,
     #[serde(default)]
     pub catalyst: bool,
+    /// Missive stat pair for crafted-pool runs, like the droptimizer request.
+    #[serde(default)]
+    pub preferred_crafted_stats: Option<[u64; 2]>,
     #[serde(flatten)]
     pub options: SimOptions,
 }
@@ -60,6 +63,12 @@ pub(super) async fn start_run(
         }
     };
 
+    let crafted_stats =
+        match crate::profileset_generator::CraftedStats::resolve(req.preferred_crafted_stats) {
+            Ok(cs) => cs,
+            Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+        };
+
     // Build per-member drops up front so the same data feeds both the workload
     // estimate (for provider resolution) and the spawn loop — avoids computing
     // drops twice. Only members that are importable AND have eligible drops are
@@ -87,6 +96,17 @@ pub(super) async fn start_run(
             }
         })
         .collect();
+
+    // Same trust-boundary rule as the droptimizer handler.
+    if crafted_stats.is_some()
+        && !eligible
+            .iter()
+            .all(|(_, drops)| crate::item_db::all_crafted_items(drops))
+    {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "Preferred crafted stats can only be applied to crafted items."
+        }));
+    }
 
     let max_combos = eligible.iter().map(|(_, d)| d.len()).max().unwrap_or(0);
 
@@ -124,6 +144,7 @@ pub(super) async fn start_run(
             &member.source_simc,
             drops,
             &batch_id,
+            crafted_stats,
             &req.options,
             provider.clone(),
             &avail,

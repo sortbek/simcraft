@@ -101,6 +101,7 @@ export interface SeasonConfigResponse {
   /** Encounter IDs whose loot uses fixed per-difficulty ilvls with no upgrade
    *  track (e.g. Sporefall) — hide the upgrade-track control for these raids. */
   fixed_difficulty_encounters?: number[];
+  crafted_secondary_stats?: number[];
 }
 
 // Gear slots constant (matches backend)

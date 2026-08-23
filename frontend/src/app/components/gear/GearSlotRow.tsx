@@ -189,11 +189,11 @@ export default function GearSlotRow({
               </span>
             )
           )}
-          {enchant?.name &&
-            (enchant.item_id ? (
-              <span className="text-emerald-400/70">
-                {' '}
-                ·{' '}
+          {enchant?.name && (
+            <span className="text-emerald-400/70">
+              {' '}
+              ·{' '}
+              {enchant.item_id ? (
                 <a
                   href={getWowheadUrl(enchant.item_id, locale)}
                   className="no-underline"
@@ -203,13 +203,11 @@ export default function GearSlotRow({
                 >
                   {localizedEnchantName(enchant, locale)}
                 </a>
-              </span>
-            ) : (
-              <span className="text-emerald-400/70">
-                {' '}
-                · {localizedEnchantName(enchant, locale)}
-              </span>
-            ))}
+              ) : (
+                localizedEnchantName(enchant, locale)
+              )}
+            </span>
+          )}
         </p>
       </div>
     </div>

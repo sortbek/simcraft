@@ -630,12 +630,18 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
                     }
                 }
 
-                // Determine catalyst currency ID from season config or default
-                // Current season: 3465 (Venomblight Manaflux, Midnight S2)
+                // Season config owns the per-season currency id. 0 (charges
+                // visibly unavailable) beats a hardcoded constant that would
+                // silently read last season's currency after a season roll.
                 let catalyst_currency_id = season_cfg()
                     .get("catalystCurrencyId")
                     .and_then(|v| v.as_u64())
-                    .unwrap_or(3465);
+                    .unwrap_or_else(|| {
+                        eprintln!(
+                            "season-config.json missing catalystCurrencyId — catalyst charges disabled"
+                        );
+                        0
+                    });
 
                 println!(
                     "Loaded {} catalyst items (group {}, currency {})",
@@ -794,13 +800,19 @@ static CRAFTED_ITEM_IDS: OnceCell<std::collections::HashSet<u64>> = OnceCell::ne
 pub fn is_crafted_item(item_id: u64) -> bool {
     CRAFTED_ITEM_IDS
         .get_or_init(|| {
+            // Parse per element through the typed schema (types::season) so this
+            // stays in lockstep with the config shape; per-element keeps one
+            // malformed category from blanking the whole set.
             let pool_id = season_cfg()
                 .get("dungeonCategories")
                 .and_then(|v| v.as_array())
                 .into_iter()
                 .flatten()
-                .find(|c| c.get("key").and_then(|k| k.as_str()) == Some("crafted"))
-                .and_then(|c| c.get("poolInstanceId").and_then(|v| v.as_i64()));
+                .filter_map(|c| {
+                    serde_json::from_value::<crate::types::season::DungeonCategory>(c.clone()).ok()
+                })
+                .find(|c| c.key == "crafted")
+                .map(|c| c.pool_instance_id);
             let mut set = std::collections::HashSet::new();
             // Loud like the sibling accessors: caching an empty set here would
             // silently reject every crafted item for the life of the process.
@@ -819,6 +831,15 @@ pub fn is_crafted_item(item_id: u64) -> bool {
             set
         })
         .contains(&item_id)
+}
+
+/// Whether every item in the list is from the crafted pool (by `item_id`).
+pub fn all_crafted_items(items: &[Value]) -> bool {
+    items.iter().all(|it| {
+        it.get("item_id")
+            .and_then(|v| v.as_u64())
+            .is_some_and(is_crafted_item)
+    })
 }
 
 pub fn talent_tree(spec_id: u64) -> Option<&'static Value> {
@@ -862,6 +883,16 @@ pub fn is_fixed_difficulty_bonus(bonus_id: u64) -> bool {
         .get()
         .map(|set| set.contains(&bonus_id))
         .unwrap_or(false)
+}
+
+/// `,redirected_base_stats=<source>` simc fragment for a catalysed piece
+/// (keeps the source item's secondaries); empty when not applicable.
+pub fn redirected_base_stats_fragment(is_catalyst: bool, source_item_id: u64) -> String {
+    if is_catalyst && source_item_id > 0 {
+        format!(",redirected_base_stats={}", source_item_id)
+    } else {
+        String::new()
+    }
 }
 
 /// Check if an item_id is a catalyst tier piece.
@@ -912,10 +943,7 @@ pub fn current_season_id() -> u64 {
 }
 
 pub fn catalyst_currency_id() -> u64 {
-    CATALYST
-        .get()
-        .map(|c| c.catalyst_currency_id)
-        .unwrap_or(3465)
+    CATALYST.get().map(|c| c.catalyst_currency_id).unwrap_or(0)
 }
 
 pub fn upgrade_tracks() -> Option<&'static HashMap<UpgradeTrackKey, UpgradeTrackValue>> {

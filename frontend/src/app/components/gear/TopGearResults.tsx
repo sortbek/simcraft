@@ -9,7 +9,12 @@ import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import type { GearItem } from './gearOverviewTypes';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
-import type { GroupMode, TopGearResult, TopGearResultsProps } from './topGearResultsTypes';
+import type {
+  GroupMode,
+  ResultItem,
+  TopGearResult,
+  TopGearResultsProps,
+} from './topGearResultsTypes';
 import {
   buildBestGearSet,
   collectDowngradeSlots,
@@ -84,25 +89,6 @@ export default function TopGearResults({
     () => (isComparing ? buildBestGearSet(equippedGear, compareResult) : {}),
     [isComparing, equippedGear, compareResult]
   );
-  // Compare highlight sets. Each panel rings only the disagreeing slots its OWN set
-  // changed vs equipped — a slot the set kept stays unmarked even when the other side
-  // changed it (the ring on the opposite panel's row carries the disagreement).
-  // `shared` = slots where both sets carry the same change vs equipped.
-  const compareSlots = useMemo(() => {
-    const empty = () => new Set<string>();
-    if (!isComparing) {
-      return { selectedDiff: empty(), compareDiff: empty(), shared: empty() };
-    }
-    const diff = diffGearSets(bestGearSet, compareGearSet);
-    const equippedSet = buildBestGearSet(equippedGear, null);
-    const changedA = diffGearSets(bestGearSet, equippedSet);
-    const changedB = diffGearSets(compareGearSet, equippedSet);
-    return {
-      selectedDiff: new Set([...changedA].filter((slot) => diff.has(slot))),
-      compareDiff: new Set([...changedB].filter((slot) => diff.has(slot))),
-      shared: new Set([...changedA].filter((slot) => changedB.has(slot) && !diff.has(slot))),
-    };
-  }, [isComparing, equippedGear, bestGearSet, compareGearSet]);
 
   const allItemQueries = useMemo(() => {
     return collectItemQueries(results, equippedGear);
@@ -161,9 +147,7 @@ export default function TopGearResults({
             compareResult={compareResult}
             selectedGearSet={bestGearSet}
             compareGearSet={compareGearSet}
-            selectedDiffSlots={compareSlots.selectedDiff}
-            compareDiffSlots={compareSlots.compareDiff}
-            sharedSlots={compareSlots.shared}
+            equippedGear={equippedGear}
             onClear={() => setCompareResultName(null)}
             itemInfoMap={itemInfoMap}
             enchantInfoMap={enchantInfoMap}
@@ -215,9 +199,7 @@ function CompareOverview({
   compareResult,
   selectedGearSet,
   compareGearSet,
-  selectedDiffSlots,
-  compareDiffSlots,
-  sharedSlots,
+  equippedGear,
   onClear,
   itemInfoMap,
   enchantInfoMap,
@@ -227,11 +209,7 @@ function CompareOverview({
   compareResult: TopGearResult;
   selectedGearSet: Record<string, GearItem>;
   compareGearSet: Record<string, GearItem>;
-  /** Disagreeing slots the selected set itself changed vs equipped (left panel's rings). */
-  selectedDiffSlots: Set<string>;
-  /** Disagreeing slots the compare target itself changed vs equipped (right panel's rings). */
-  compareDiffSlots: Set<string>;
-  sharedSlots: Set<string>;
+  equippedGear?: Record<string, ResultItem>;
   onClear: () => void;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
@@ -241,6 +219,22 @@ function CompareOverview({
   const delta = selectedResult.dps - compareResult.dps;
   const deltaPct = compareResult.dps > 0 ? (delta / compareResult.dps) * 100 : 0;
   const selectedWins = delta >= 0;
+
+  // Each panel rings only the disagreeing slots its OWN set changed vs equipped —
+  // a slot the set kept stays unmarked even when the other side changed it (the
+  // opposite panel's ring carries the disagreement). `shared` = both sets carry
+  // the same change vs equipped.
+  const { selectedDiffSlots, compareDiffSlots, sharedSlots } = useMemo(() => {
+    const diff = diffGearSets(selectedGearSet, compareGearSet);
+    const equippedSet = buildBestGearSet(equippedGear, null);
+    const changedA = diffGearSets(selectedGearSet, equippedSet);
+    const changedB = diffGearSets(compareGearSet, equippedSet);
+    return {
+      selectedDiffSlots: new Set([...changedA].filter((slot) => diff.has(slot))),
+      compareDiffSlots: new Set([...changedB].filter((slot) => diff.has(slot))),
+      sharedSlots: new Set([...changedA].filter((slot) => changedB.has(slot) && !diff.has(slot))),
+    };
+  }, [selectedGearSet, compareGearSet, equippedGear]);
 
   return (
     <div className="space-y-3">

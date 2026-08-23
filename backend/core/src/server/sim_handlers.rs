@@ -228,13 +228,17 @@ fn profileset_overrides_to_direct(profileset_simc: &str) -> String {
 }
 
 /// Extract one combo's `profileset."<name>"+=` lines from a job's stored simc
-/// input — eager jobs bake them into the input instead of combo_metadata. The
-/// prefix includes the closing quote, so "Combo 1" never matches "Combo 10".
+/// input — eager jobs bake them into the input instead of combo_metadata.
+/// Matches via the runner's shared PROFILESET_NAME_RE so emitter and extractor
+/// can't drift on the line grammar.
 fn extract_profileset_lines(simc_input: &str, combo_name: &str) -> String {
-    let prefix = format!("profileset.\"{}\"+=", combo_name);
     simc_input
         .lines()
-        .filter(|line| line.trim_start().starts_with(&prefix))
+        .filter(|line| {
+            simc_runner::PROFILESET_NAME_RE
+                .captures(line)
+                .is_some_and(|c| &c[1] == combo_name)
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -262,9 +266,12 @@ pub(super) async fn sim_row(
         }
     };
 
-    if source.sim_type != "top_gear" && source.sim_type != "droptimizer" {
+    if !matches!(
+        source.sim_type.as_str(),
+        "top_gear" | "droptimizer" | "upgrade_compare"
+    ) {
         return HttpResponse::BadRequest().json(json!({
-            "detail": "sim-row is only supported for top_gear and droptimizer jobs"
+            "detail": "sim-row is only supported for gear-comparison jobs"
         }));
     }
 
@@ -303,8 +310,12 @@ pub(super) async fn sim_row(
     let mut profileset_simc = String::new();
     if let Some(pool) = repo.pool() {
         let metadata_repo = ComboMetadataRepo::new(pool.clone());
-        if let Ok(Some(row)) = metadata_repo.get_by_name(&source_id, &combo_name).await {
-            profileset_simc = row.profileset_simc;
+        match metadata_repo.get_by_name(&source_id, &combo_name).await {
+            Ok(Some(row)) => profileset_simc = row.profileset_simc,
+            Ok(None) => {}
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+            }
         }
     }
     if profileset_simc.is_empty() {
@@ -370,7 +381,7 @@ pub(super) async fn sim_row(
     );
 
     let mut job = Job::new(
-        display_input,
+        display_input.clone(),
         "quick".to_string(),
         iterations,
         fight_style,
@@ -393,9 +404,11 @@ pub(super) async fn sim_row(
     let job_id_clone = job_id.clone();
     let jid_logs = job_id.clone();
     let created_at_for_task = created_at.clone();
-    let mut options_with_raw = options.clone();
-    options_with_raw["raw"] = json!(true);
-    let input_for_task = combined_input.clone();
+    // Run the BUILT input (options inlined): `raw` on the bare combined_input
+    // would drop the precision/fight options and sim at SimC defaults.
+    let mut options_run = options.clone();
+    options_run["prebuilt"] = json!(true);
+    let input_for_task = display_input.clone();
 
     tokio::spawn(async move {
         if let Err(e) = repo_clone
@@ -418,7 +431,7 @@ pub(super) async fn sim_row(
             &simc,
             &job_id_clone,
             &input_for_task,
-            &options_with_raw,
+            &options_run,
             move |line| {
                 logs_cb.push_line(&jid_cb, line.to_string());
             },
@@ -520,5 +533,24 @@ mod sim_row_tests {
     #[test]
     fn extraction_returns_empty_when_combo_absent() {
         assert_eq!(extract_profileset_lines(EAGER_INPUT, "Combo 99"), "");
+    }
+
+    /// Emitter↔extractor contract: lines produced by the real generator must be
+    /// recoverable by name, so a format change breaks this test, not sim-row.
+    #[test]
+    fn extraction_round_trips_generator_output() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let drops = vec![serde_json::json!({
+            "item_id": 200001, "ilevel": 600, "name": "Drop", "encounter": "Boss",
+            "inventory_type": 1, "bonus_ids": [13575],
+        })];
+        let (input, _, _) =
+            crate::profileset_generator::generate_droptimizer_input(profile, &drops, None);
+        let lines = extract_profileset_lines(&input, "Combo 2");
+        assert!(
+            !lines.is_empty() && lines.lines().all(|l| l.contains("\"Combo 2\"")),
+            "generator output must be extractable by combo name, got:\n{input}"
+        );
     }
 }

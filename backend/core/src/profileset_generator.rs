@@ -195,6 +195,30 @@ pub struct CraftedStats {
     pub bonus_ids: [u64; 2],
 }
 
+impl CraftedStats {
+    /// Resolve a stat pair to this season's missive bonus ids. `Ok(None)` when
+    /// no pair was given; `Err(detail)` on invalid or unsupported pairs — fail
+    /// loud rather than silently simming crafted items statless.
+    pub fn resolve(pair: Option<[u64; 2]>) -> Result<Option<Self>, String> {
+        let Some([primary, secondary]) = pair else {
+            return Ok(None);
+        };
+        if primary == secondary {
+            return Err("Crafted preferred stats must be two different secondary stats.".into());
+        }
+        match (
+            crate::item_db::crafted_stat_bonus_id(primary),
+            crate::item_db::crafted_stat_bonus_id(secondary),
+        ) {
+            (Some(a), Some(b)) => Ok(Some(Self {
+                stat_ids: [primary, secondary],
+                bonus_ids: [a, b],
+            })),
+            _ => Err("Unsupported crafted preferred stats for the current season.".into()),
+        }
+    }
+}
+
 pub fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],
