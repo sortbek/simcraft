@@ -1,4 +1,4 @@
-import type { ItemQuery } from '../../lib/useItemInfo';
+import { toGemIdList, type ItemQuery } from '../../lib/useItemInfo';
 import type { GearItem } from './GearOverview';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
 
@@ -136,6 +136,31 @@ export function buildBestGearSet(
   }
 
   return gearSet;
+}
+
+/** Slots whose materialized items differ between two gear sets (item, level, bonuses, gems, or enchant). */
+export function diffGearSets(
+  a: Record<string, GearItem>,
+  b: Record<string, GearItem>
+): Set<string> {
+  const itemKey = (item?: GearItem) =>
+    item
+      ? [
+          item.item_id,
+          item.ilevel,
+          item.enchant_id ?? 0,
+          toGemIdList(item).join(':'),
+          [...(item.bonus_ids ?? [])].sort((x, y) => x - y).join(':'),
+        ].join('|')
+      : '';
+
+  const slots = new Set<string>();
+  for (const slot of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (itemKey(a[slot]) !== itemKey(b[slot])) {
+      slots.add(slot);
+    }
+  }
+  return slots;
 }
 
 function collectChangedSlots(

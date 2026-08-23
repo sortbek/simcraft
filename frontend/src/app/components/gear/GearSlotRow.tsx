@@ -22,6 +22,8 @@ interface GearSlotRowProps {
   item?: GearItem;
   isUpgrade?: boolean;
   isDowngrade?: boolean;
+  /** Compare mode: both sets carry the same change vs equipped in this slot. */
+  isShared?: boolean;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -33,6 +35,7 @@ export default function GearSlotRow({
   item,
   isUpgrade,
   isDowngrade,
+  isShared,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -86,6 +89,15 @@ export default function GearSlotRow({
       {isDowngrade && (
         <div
           className="pointer-events-none absolute inset-0 rounded-lg bg-red-500/[0.15] ring-1 ring-red-500/30"
+          style={{
+            maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+            WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+          }}
+        />
+      )}
+      {isShared && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-lg bg-sky-500/[0.15] ring-1 ring-sky-500/30"
           style={{
             maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
             WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
