@@ -102,7 +102,7 @@ struct CatalystData {
     tier_items: HashMap<(u64, u64), CatalystTierItem>,
     /// Set of all tier item IDs (for "is this already a tier piece?" checks).
     tier_item_ids: HashSet<u64>,
-    /// Currency ID for catalyst charges (e.g. 3378 for Midnight Catalyst).
+    /// Currency ID for catalyst charges (e.g. 3465, Venomblight Manaflux, for Midnight S2).
     pub catalyst_currency_id: u64,
 }
 
@@ -631,11 +631,11 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
                 }
 
                 // Determine catalyst currency ID from season config or default
-                // Current season: 3378 (Midnight Catalyst)
+                // Current season: 3465 (Venomblight Manaflux, Midnight S2)
                 let catalyst_currency_id = season_cfg()
-                    .get("catalyst_currency_id")
+                    .get("catalystCurrencyId")
                     .and_then(|v| v.as_u64())
-                    .unwrap_or(3378);
+                    .unwrap_or(3465);
 
                 println!(
                     "Loaded {} catalyst items (group {}, currency {})",
@@ -915,7 +915,7 @@ pub fn catalyst_currency_id() -> u64 {
     CATALYST
         .get()
         .map(|c| c.catalyst_currency_id)
-        .unwrap_or(3378)
+        .unwrap_or(3465)
 }
 
 pub fn upgrade_tracks() -> Option<&'static HashMap<UpgradeTrackKey, UpgradeTrackValue>> {

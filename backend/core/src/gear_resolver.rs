@@ -883,6 +883,49 @@ mod catalyst_tests {
         );
     }
 
+    /// A Veteran-or-better upgrade-track bonus id for the given season, from the
+    /// loaded bonus data. `None` when that season has no such track in the data.
+    fn veteran_track_bonus_id(season_id: u64) -> Option<u64> {
+        item_db::bonuses().iter().find_map(|(bid, bonus)| {
+            let upgrade = bonus.get("upgrade")?;
+            if upgrade.get("seasonId")?.as_u64()? != season_id {
+                return None;
+            }
+            let full_name = upgrade.get("fullName")?.as_str()?;
+            item_db::is_minimum_track(full_name, "Veteran").then_some(*bid)
+        })
+    }
+
+    #[test]
+    fn previous_season_gear_is_not_catalyst_eligible() {
+        ensure_game_data_loaded();
+        let current = item_db::current_season_id();
+
+        // Current-season control first: proves this harness produces eligible
+        // items at all, so the previous-season assertion can't pass vacuously.
+        let current_bonus =
+            veteran_track_bonus_id(current).expect("current season has Veteran+ track bonuses");
+        let head = resolved_head(current_bonus);
+        assert!(
+            head.equipped.as_ref().expect("equipped head").can_catalyst,
+            "current-season Veteran+ gear should be catalyst-eligible"
+        );
+
+        let Some(previous_bonus) = (1..current).rev().find_map(veteran_track_bonus_id) else {
+            eprintln!("SKIP previous_season: loaded data has only one season of upgrade bonuses");
+            return;
+        };
+        let head = resolved_head(previous_bonus);
+        assert!(
+            !head.equipped.as_ref().expect("equipped head").can_catalyst,
+            "previous-season gear must not be catalyst-eligible"
+        );
+        assert!(
+            !head.alternatives.iter().any(|a| a.is_catalyst),
+            "previous-season gear must not generate catalyst alternatives"
+        );
+    }
+
     #[test]
     fn catalyst_item_redirects_base_stats_to_the_source() {
         ensure_game_data_loaded();
