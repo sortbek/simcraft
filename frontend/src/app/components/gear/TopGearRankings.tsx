@@ -493,7 +493,7 @@ const ResultRow = memo(function ResultRow({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
           <span
             className={`flex items-center gap-1.5 font-headline font-mono text-[15px] tabular-nums ${
               result.delta > 0

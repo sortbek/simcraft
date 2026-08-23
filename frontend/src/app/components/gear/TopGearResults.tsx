@@ -85,21 +85,25 @@ export default function TopGearResults({
     () => (isComparing ? buildBestGearSet(equippedGear, compareResult) : {}),
     [isComparing, equippedGear, compareResult]
   );
-  const compareDiffSlots = useMemo(
-    () => (isComparing ? diffGearSets(bestGearSet, compareGearSet) : new Set<string>()),
-    [isComparing, bestGearSet, compareGearSet]
-  );
-  // Slots where both sets carry the SAME change vs equipped gear — invisible to the
-  // A-vs-B diff, but part of what either result would change on the character.
-  const compareSharedSlots = useMemo(() => {
-    if (!isComparing) return new Set<string>();
+  // Compare highlight sets. Each panel rings only the disagreeing slots its OWN set
+  // changed vs equipped — a slot the set kept stays unmarked even when the other side
+  // changed it (the ring on the opposite panel's row carries the disagreement).
+  // `shared` = slots where both sets carry the same change vs equipped.
+  const compareSlots = useMemo(() => {
+    const empty = () => new Set<string>();
+    if (!isComparing) {
+      return { selectedDiff: empty(), compareDiff: empty(), shared: empty() };
+    }
+    const diff = diffGearSets(bestGearSet, compareGearSet);
     const equippedSet = buildBestGearSet(equippedGear, null);
     const changedA = diffGearSets(bestGearSet, equippedSet);
     const changedB = diffGearSets(compareGearSet, equippedSet);
-    return new Set(
-      [...changedA].filter((slot) => changedB.has(slot) && !compareDiffSlots.has(slot))
-    );
-  }, [isComparing, equippedGear, bestGearSet, compareGearSet, compareDiffSlots]);
+    return {
+      selectedDiff: new Set([...changedA].filter((slot) => diff.has(slot))),
+      compareDiff: new Set([...changedB].filter((slot) => diff.has(slot))),
+      shared: new Set([...changedA].filter((slot) => changedB.has(slot) && !diff.has(slot))),
+    };
+  }, [isComparing, equippedGear, bestGearSet, compareGearSet]);
 
   const allItemQueries = useMemo(() => {
     return collectItemQueries(results, equippedGear);
@@ -158,8 +162,9 @@ export default function TopGearResults({
             compareResult={compareResult}
             selectedGearSet={bestGearSet}
             compareGearSet={compareGearSet}
-            diffSlots={compareDiffSlots}
-            sharedSlots={compareSharedSlots}
+            selectedDiffSlots={compareSlots.selectedDiff}
+            compareDiffSlots={compareSlots.compareDiff}
+            sharedSlots={compareSlots.shared}
             onClear={() => setCompareResultName(null)}
             itemInfoMap={itemInfoMap}
             enchantInfoMap={enchantInfoMap}
@@ -212,7 +217,8 @@ function CompareOverview({
   compareResult,
   selectedGearSet,
   compareGearSet,
-  diffSlots,
+  selectedDiffSlots,
+  compareDiffSlots,
   sharedSlots,
   onClear,
   itemInfoMap,
@@ -223,7 +229,10 @@ function CompareOverview({
   compareResult: TopGearResult;
   selectedGearSet: Record<string, GearItem>;
   compareGearSet: Record<string, GearItem>;
-  diffSlots: Set<string>;
+  /** Disagreeing slots the selected set itself changed vs equipped (left panel's rings). */
+  selectedDiffSlots: Set<string>;
+  /** Disagreeing slots the compare target itself changed vs equipped (right panel's rings). */
+  compareDiffSlots: Set<string>;
   sharedSlots: Set<string>;
   onClear: () => void;
   itemInfoMap: Record<number, ItemInfo>;
@@ -281,8 +290,8 @@ function CompareOverview({
         <GearOverview
           gear={selectedGearSet}
           title={selectedResult.name}
-          upgradeSlots={selectedWins ? diffSlots : undefined}
-          downgradeSlots={selectedWins ? undefined : diffSlots}
+          upgradeSlots={selectedWins ? selectedDiffSlots : undefined}
+          downgradeSlots={selectedWins ? undefined : selectedDiffSlots}
           sharedSlots={sharedSlots}
           itemInfoMap={itemInfoMap}
           enchantInfoMap={enchantInfoMap}
@@ -291,8 +300,8 @@ function CompareOverview({
         <GearOverview
           gear={compareGearSet}
           title={compareResult.name}
-          upgradeSlots={selectedWins ? undefined : diffSlots}
-          downgradeSlots={selectedWins ? diffSlots : undefined}
+          upgradeSlots={selectedWins ? undefined : compareDiffSlots}
+          downgradeSlots={selectedWins ? compareDiffSlots : undefined}
           sharedSlots={sharedSlots}
           itemInfoMap={itemInfoMap}
           enchantInfoMap={enchantInfoMap}
