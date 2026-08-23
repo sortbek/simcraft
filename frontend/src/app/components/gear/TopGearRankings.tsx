@@ -121,7 +121,6 @@ interface TopGearRankingsProps {
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
   sourceJobId?: string;
-  sourceIsStreamed?: boolean;
 }
 
 export default function TopGearRankings({
@@ -140,11 +139,9 @@ export default function TopGearRankings({
   enchantInfoMap,
   gemInfoMap,
   sourceJobId,
-  sourceIsStreamed,
 }: TopGearRankingsProps) {
   const { t } = useLanguage();
   const grouped = useMemo(() => groupResults(results, groupMode), [results, groupMode]);
-  const verifyEnabled = !!sourceJobId && !!sourceIsStreamed;
 
   return (
     <div className="card p-5">
@@ -238,7 +235,7 @@ export default function TopGearRankings({
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
                       targetError={targetError}
-                      sourceJobId={verifyEnabled ? sourceJobId : undefined}
+                      sourceJobId={sourceJobId}
                     />
                   ))}
                 </div>
@@ -259,7 +256,7 @@ export default function TopGearRankings({
           onSelectResult={onSelectResult}
           compareResultName={compareResultName}
           onCompareResult={onCompareResult}
-          sourceJobId={verifyEnabled ? sourceJobId : undefined}
+          sourceJobId={sourceJobId}
         />
       )}
     </div>
@@ -374,8 +371,7 @@ const ResultRow = memo(function ResultRow({
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
-  /** When present, the row shows a "Sim" button that re-runs this combo as a high-precision
-   * Quick Sim. Omitted for non-streamed source jobs. */
+  /** When present, "Combo N" rows show a "Sim" button re-running the combo as a Quick Sim. */
   sourceJobId?: string;
 }) {
   const { t } = useLanguage();
