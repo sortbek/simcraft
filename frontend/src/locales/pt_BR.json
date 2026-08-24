@@ -269,7 +269,7 @@
   "topGear.chargesTooltip": "Quantas peças do catalisador podem ser usadas ao mesmo tempo em um único conjunto de equipamento.",
   "topGear.voidForge": "Armas e berloques Void Forge",
   "topGear.largeLocalSimTitle": "Simulação muito grande",
-  "topGear.largeLocalSimBody": "Cerca de {count} combinações serão simuladas em aproximadamente {batches} lotes sequenciais, o que pode levar muitas horas nesta máquina. Desmarque alguns itens ou aumente o erro alvo.",
+  "topGear.largeLocalSimBody": "Cerca de {count} combinações serão simuladas, o que pode levar muitas horas nesta máquina. Desmarque alguns itens ou aumente o erro alvo.",
   "dropFinder.source": "Fonte",
   "dropFinder.selectRaid": "Selecionar Raide",
   "dropFinder.selectDungeon": "Selecionar Masmorra",

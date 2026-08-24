@@ -31,10 +31,9 @@ import { useComputeChoice } from '../lib/useComputeChoice';
 import { buildAlternativeKey } from '../components/gear/topGearIdentity';
 import { mergeAlternative, selectAlternative } from '../components/gear/topGearSelection';
 
-// A local run works through the combos in sequential SimC batches, so a
-// six-figure count is hours of work. Warn past this line, never block.
+// A local run works through every combo on this machine, so a six-figure
+// count is hours of work. Warn past this line, never block.
 const LARGE_LOCAL_SIM_THRESHOLD = 20_000;
-const LOCAL_SIM_BATCH_SIZE = 100;
 
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (
@@ -617,7 +616,7 @@ export default function TopGearScreen() {
   const largeLocalSim = !isCloudCompute && comboCount >= LARGE_LOCAL_SIM_THRESHOLD;
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className={`space-y-6 ${largeLocalSim ? 'pb-32' : 'pb-20'}`}>
       <div>
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
           {t('nav.topGear')}
@@ -720,18 +719,6 @@ export default function TopGearScreen() {
       <SimcDownloadBanner />
       <ErrorAlert message={error} />
 
-      {largeLocalSim && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
-          <p className="text-sm font-bold text-amber-300">{t('topGear.largeLocalSimTitle')}</p>
-          <p className="mt-1 text-sm">
-            {t('topGear.largeLocalSimBody', {
-              count: comboCount.toLocaleString(bcp47),
-              batches: Math.ceil(comboCount / LOCAL_SIM_BATCH_SIZE).toLocaleString(bcp47),
-            })}
-          </p>
-        </div>
-      )}
-
       <ConfigFooter
         onSubmit={submit}
         submitting={submitting}
@@ -740,6 +727,17 @@ export default function TopGearScreen() {
         compute={compute}
         onComputeChange={setCompute}
         subLabel={creditsSubLabel}
+        notice={
+          largeLocalSim ? (
+            <div className="border-t border-amber-500/30 bg-amber-950/95 backdrop-blur-xl">
+              <p className="mx-auto max-w-screen-2xl px-8 py-3 text-sm text-amber-100">
+                <span className="font-bold text-amber-300">{t('topGear.largeLocalSimTitle')}</span>{' '}
+                <span className="opacity-50">·</span>{' '}
+                {t('topGear.largeLocalSimBody', { count: comboCount.toLocaleString(bcp47) })}
+              </p>
+            </div>
+          ) : undefined
+        }
         status={
           resolved ? (
             <div

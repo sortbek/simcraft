@@ -21,6 +21,8 @@ interface ConfigFooterProps {
   subLabel?: ReactNode;
   /** Optional status segment in the footer's left info group (e.g. combo count). */
   status?: ReactNode;
+  /** Optional full-width notice pinned directly above the footer bar (e.g. a large-sim warning). */
+  notice?: ReactNode;
 }
 
 export default function ConfigFooter({
@@ -35,6 +37,7 @@ export default function ConfigFooter({
   computeTargetDisabledReasons,
   subLabel,
   status,
+  notice,
 }: ConfigFooterProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'simulation' | 'buffs' | 'expert'>('simulation');
@@ -59,6 +62,8 @@ export default function ConfigFooter({
           {children}
         </ConfigDrawer>
       )}
+
+      {notice}
 
       <ConfigFooterBar
         drawerOpen={drawerOpen}

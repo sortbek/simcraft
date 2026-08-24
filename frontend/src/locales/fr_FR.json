@@ -269,7 +269,7 @@
   "topGear.chargesTooltip": "Combien de pièces du catalyseur peuvent être portées en même temps dans un même ensemble d'équipement.",
   "topGear.voidForge": "Armes et bijoux Void Forge",
   "topGear.largeLocalSimTitle": "Simulation très volumineuse",
-  "topGear.largeLocalSimBody": "Environ {count} combinaisons seront simulées en à peu près {batches} lots successifs, ce qui peut prendre de nombreuses heures sur cette machine. Désélectionne des objets ou augmente l'erreur cible.",
+  "topGear.largeLocalSimBody": "Environ {count} combinaisons seront simulées, ce qui peut prendre de nombreuses heures sur cette machine. Désélectionne des objets ou augmente l'erreur cible.",
   "dropFinder.source": "Source",
   "dropFinder.selectRaid": "Sélectionner un raid",
   "dropFinder.selectDungeon": "Sélectionner un donjon",

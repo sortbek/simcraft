@@ -269,7 +269,7 @@
   "topGear.chargesTooltip": "Cuántas piezas de catalizador se pueden llevar al mismo tiempo en un mismo conjunto de equipo.",
   "topGear.voidForge": "Armas y abalorios Void Forge",
   "topGear.largeLocalSimTitle": "Simulación muy grande",
-  "topGear.largeLocalSimBody": "Se simularán unas {count} combinaciones en aproximadamente {batches} lotes secuenciales, lo que puede tardar muchas horas en este equipo. Deselecciona algunos objetos o aumenta el error objetivo.",
+  "topGear.largeLocalSimBody": "Se simularán unas {count} combinaciones, lo que puede tardar muchas horas en este equipo. Deselecciona algunos objetos o aumenta el error objetivo.",
   "dropFinder.source": "Fuente",
   "dropFinder.selectRaid": "Seleccionar banda",
   "dropFinder.selectDungeon": "Seleccionar mazmorra",
