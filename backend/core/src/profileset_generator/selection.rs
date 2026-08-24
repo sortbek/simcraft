@@ -31,7 +31,15 @@ fn sorted_bonus_key(item: &Value) -> String {
         .join(":")
 }
 
+/// The resolver's own uid when the value carries one (manual items suffix theirs
+/// with gem/enchant content that reconstruction can't reproduce); otherwise
+/// rebuild it from the item fields.
 fn make_item_uid(item: &Value) -> String {
+    if let Some(uid) = item.get("uid").and_then(|v| v.as_str()) {
+        if !uid.is_empty() {
+            return uid.to_string();
+        }
+    }
     let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
     let origin = item
         .get("origin")
@@ -49,6 +57,11 @@ fn make_item_uid(item: &Value) -> String {
 }
 
 fn make_item_identity(item: &Value) -> String {
+    if let Some(uid) = item.get("uid").and_then(|v| v.as_str()) {
+        if !uid.is_empty() {
+            return uid_identity(uid);
+        }
+    }
     let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
     let origin = item
         .get("origin")
@@ -350,5 +363,28 @@ mod tests {
         let result = build_slot_candidates(profile, &items_by_slot, &selected);
         let head = result.get("head").expect("head missing");
         assert_eq!(head.len(), 1, "equipped should not appear twice");
+    }
+
+    #[test]
+    fn stored_uid_preferred_over_reconstruction() {
+        ensure_game_data_loaded();
+        // Manual items carry a content-suffixed uid that reconstruction can't
+        // produce; selection must honor the stored value.
+        let profile = "mage=test\n";
+        let equipped = make(100, "neck", true, vec![]);
+        let mut manual = make(100, "neck", false, vec![]);
+        manual["uid"] = Value::String("100::bags:neck:m:e7340:g213473".to_string());
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("neck".to_string(), vec![equipped, manual]);
+
+        let mut selected = HashMap::new();
+        selected.insert(
+            "neck".to_string(),
+            vec!["100::bags:neck:m:e7340:g213473".to_string()],
+        );
+
+        let result = build_slot_candidates(profile, &items_by_slot, &selected);
+        let neck = result.get("neck").expect("neck missing");
+        assert_eq!(neck.len(), 2, "manual copy must match via its stored uid");
     }
 }
