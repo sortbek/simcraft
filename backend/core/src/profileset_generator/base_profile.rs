@@ -63,6 +63,10 @@ pub(super) fn item_meta(item: &Value, slot: &str) -> Value {
         .unwrap_or(false)
     {
         meta["is_catalyst"] = json!(true);
+        meta["source_item_id"] = item
+            .get("source_item_id")
+            .cloned()
+            .unwrap_or_else(|| json!(0));
     }
     meta
 }

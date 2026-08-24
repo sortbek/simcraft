@@ -107,13 +107,6 @@ async function fetchGameData(dataDir) {
     }
   }
 
-  // Copy season-config.json (manually maintained, not on Raidbots)
-  const seasonConfig = path.join(BACKEND_DIR, "core", "season-config.json");
-  if (fs.existsSync(seasonConfig)) {
-    fs.copyFileSync(seasonConfig, path.join(dataDir, "season-config.json"));
-    console.log("[dev] Copied season-config.json");
-  }
-
   // Fetch Blizzard data (season + instance images)
   for (const [file, url] of [
     ["blizzard-season.json", "https://simhammer.com/api/blizzard/season"],
@@ -128,6 +121,17 @@ async function fetchGameData(dataDir) {
       console.log("skipped (unreachable)");
     }
   }
+}
+
+function syncSeasonConfig(dataDir) {
+  const src = path.join(BACKEND_DIR, "core", "season-config.json");
+  if (!fs.existsSync(src)) return;
+  const dest = path.join(dataDir, "season-config.json");
+  fs.mkdirSync(dataDir, { recursive: true });
+  const next = fs.readFileSync(src);
+  if (fs.existsSync(dest) && fs.readFileSync(dest).equals(next)) return;
+  fs.writeFileSync(dest, next);
+  console.log("[dev] Updated season-config.json");
 }
 
 async function ensureResources() {
@@ -181,6 +185,11 @@ async function ensureResources() {
     console.log("[dev] Game data missing — downloading from Raidbots...");
     await fetchGameData(dataDir);
   }
+
+  // season-config.json is hand-maintained in core/ but the backend reads it from
+  // DATA_DIR, so copy it every run — not just when game data is refetched, or an
+  // existing data dir keeps serving a stale config.
+  syncSeasonConfig(dataDir);
 
   console.log("[dev] Resources up to date.");
 }

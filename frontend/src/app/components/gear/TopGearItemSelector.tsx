@@ -6,6 +6,7 @@ import type { ItemOrigin, ResolveGearResponse, ResolvedItem } from '../../lib/ty
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, localizedUpgrade, useItemNames } from '../../lib/useItemInfo';
+import GemEnchantEditDialog from './GemEnchantEditDialog';
 import TopGearGroupCard from './TopGearGroupCard';
 import TopGearQuickSelectBar from './TopGearQuickSelectBar';
 import { buildAlternativeKey, buildResolvedCopy } from './topGearIdentity';
@@ -35,6 +36,7 @@ interface TopGearItemSelectorProps {
   onSelectionChange: (selected: Record<string, Set<string>>) => void;
   onResolvedChange: (resolved: ResolveGearResponse) => void;
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
+  onManualItemAdded: (item: ResolvedItem) => void;
   addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
 }
@@ -47,6 +49,7 @@ export default function TopGearItemSelector({
   onSelectionChange,
   onResolvedChange,
   onItemAdded,
+  onManualItemAdded,
   addedKeys,
   onRemoveAdded,
 }: TopGearItemSelectorProps) {
@@ -55,6 +58,7 @@ export default function TopGearItemSelector({
   const [upgradeMenuFor, setUpgradeMenuFor] = useState<string | null>(null);
   const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOption[]>([]);
   const [loadingUpgrades, setLoadingUpgrades] = useState(false);
+  const [editItem, setEditItem] = useState<ResolvedItem | null>(null);
 
   useWowheadTooltips([resolved]);
 
@@ -128,6 +132,35 @@ export default function TopGearItemSelector({
     [resolved, onResolvedChange, selectedUids, onSelectionChange]
   );
 
+  const applyItemEdit = useCallback(
+    async (item: ResolvedItem, gemIds: number[], enchantId: number) => {
+      setUpgradeMenuFor(null);
+      try {
+        const response = await fetch(`${API_URL}/api/gear/modify-item`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item, gem_ids: gemIds, enchant_id: enchantId }),
+        });
+        if (!response.ok) return;
+
+        const modified: ResolvedItem = await response.json();
+        const duplicate = (resolved.slots[item.slot]?.alternatives ?? []).find(
+          (alt) => buildAlternativeKey(alt) === buildAlternativeKey(modified)
+        );
+        if (duplicate) {
+          onSelectionChange(selectAlternative(selectedUids, item.slot, duplicate.uid));
+          return;
+        }
+        onResolvedChange(mergeAlternative(resolved, item.slot, modified));
+        onManualItemAdded(modified);
+        onSelectionChange(selectAlternative(selectedUids, item.slot, modified.uid));
+      } catch {
+        // Intentionally ignored so the selector stays usable.
+      }
+    },
+    [resolved, onResolvedChange, onManualItemAdded, selectedUids, onSelectionChange]
+  );
+
   const addUpgradedCopy = useCallback(
     (item: ResolvedItem, option: UpgradeOption) => {
       const currentUpgradeBonusId = upgradeOptions.find((entry) =>
@@ -173,6 +206,7 @@ export default function TopGearItemSelector({
         simc_string: newSimcString,
         sockets: 1,
         gem_id: 0,
+        gem_ids: [],
         gem_name: '',
         gem_icon: '',
       });
@@ -187,23 +221,10 @@ export default function TopGearItemSelector({
 
   const removeGemCopy = useCallback(
     (item: ResolvedItem) => {
-      if (!item.gem_id) return;
-
-      const newSimcString = item.simc_string.replace(/,?gem_id=\d+/, '');
-      const copy = buildResolvedCopy(item, {
-        origin: 'bags',
-        simc_string: newSimcString,
-        gem_id: 0,
-        gem_name: '',
-        gem_icon: '',
-      });
-
-      onResolvedChange(mergeAlternative(resolved, item.slot, copy));
-      onItemAdded(item.slot, newSimcString, 'bags');
-      onSelectionChange(selectAlternative(selectedUids, item.slot, copy.uid));
-      setUpgradeMenuFor(null);
+      if (item.gem_ids.length === 0) return;
+      void applyItemEdit(item, [], item.enchant_id);
     },
-    [resolved, onResolvedChange, onItemAdded, selectedUids, onSelectionChange]
+    [applyItemEdit]
   );
 
   const visibleGroups = useMemo(() => buildVisibleGroups(resolved), [resolved]);
@@ -319,12 +340,27 @@ export default function TopGearItemSelector({
             onVoidForgeConvert={convertToVoidForge}
             onAddSocket={addSocketCopy}
             onRemoveGem={removeGemCopy}
+            onEditGemsEnchant={(item) => {
+              setUpgradeMenuFor(null);
+              setEditItem(item);
+            }}
             addedKeys={addedKeys}
             onRemoveAdded={onRemoveAdded}
             t={t}
           />
         ))}
       </div>
+
+      {editItem && (
+        <GemEnchantEditDialog
+          item={editItem}
+          onClose={() => setEditItem(null)}
+          onConfirm={async (gemIds, enchantId) => {
+            await applyItemEdit(editItem, gemIds, enchantId);
+            setEditItem(null);
+          }}
+        />
+      )}
     </div>
   );
 }

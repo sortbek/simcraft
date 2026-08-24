@@ -61,6 +61,7 @@ pub(super) fn drop_to_raw_item(drop: &Value) -> Option<RawParsedItem> {
         enchant_id: 0,
         gem_id: 0,
         origin: ItemOrigin::Bags,
+        manual: false,
     })
 }
 

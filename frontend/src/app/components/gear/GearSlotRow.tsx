@@ -22,6 +22,8 @@ interface GearSlotRowProps {
   item?: GearItem;
   isUpgrade?: boolean;
   isDowngrade?: boolean;
+  /** Compare mode: both sets carry the same change vs equipped in this slot. */
+  isShared?: boolean;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -33,6 +35,7 @@ export default function GearSlotRow({
   item,
   isUpgrade,
   isDowngrade,
+  isShared,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -67,10 +70,7 @@ export default function GearSlotRow({
     locale
   );
   const icon = info?.icon || 'inv_misc_questionmark';
-  const wowheadData =
-    item.item_id > 0
-      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, gemIdList)
-      : undefined;
+  const wowheadData = item.item_id > 0 ? getWowheadData(item) : undefined;
   const fadeDir = rtl ? 'to left' : 'to right';
 
   return (
@@ -89,6 +89,15 @@ export default function GearSlotRow({
       {isDowngrade && (
         <div
           className="pointer-events-none absolute inset-0 rounded-lg bg-red-500/[0.15] ring-1 ring-red-500/30"
+          style={{
+            maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+            WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
+          }}
+        />
+      )}
+      {isShared && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-lg bg-sky-500/[0.15] ring-1 ring-sky-500/30"
           style={{
             maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
             WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
@@ -156,7 +165,21 @@ export default function GearSlotRow({
           {gems.length > 0 ? (
             <span className="text-sky-400/70">
               {' '}
-              · {gems.map((g) => localizedGemName(g, locale)).join(', ')}
+              ·{' '}
+              {gems.map((g, i) => (
+                <span key={`${g.gem_id}-${i}`}>
+                  {i > 0 && ', '}
+                  <a
+                    href={getWowheadUrl(g.gem_id, locale)}
+                    className="no-underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    {localizedGemName(g, locale)}
+                  </a>
+                </span>
+              ))}
             </span>
           ) : (
             (info?.sockets ?? 0) > 0 && (
@@ -167,7 +190,23 @@ export default function GearSlotRow({
             )
           )}
           {enchant?.name && (
-            <span className="text-emerald-400/70"> · {localizedEnchantName(enchant, locale)}</span>
+            <span className="text-emerald-400/70">
+              {' '}
+              ·{' '}
+              {enchant.item_id ? (
+                <a
+                  href={getWowheadUrl(enchant.item_id, locale)}
+                  className="no-underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.preventDefault()}
+                >
+                  {localizedEnchantName(enchant, locale)}
+                </a>
+              ) : (
+                localizedEnchantName(enchant, locale)
+              )}
+            </span>
           )}
         </p>
       </div>

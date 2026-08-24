@@ -675,6 +675,13 @@ export default function TopGearScreen() {
             onItemAdded={(slot, simcString, origin) =>
               setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])
             }
+            onManualItemAdded={(item) => {
+              setLocalItems((previous) => [
+                ...previous,
+                toLocalItem(item.slot, item.simc_string, 'bags', true),
+              ]);
+              setAddedLootItems((previous) => [...previous, item]);
+            }}
             addedKeys={addedKeys}
             onRemoveAdded={handleRemoveAdded}
           />

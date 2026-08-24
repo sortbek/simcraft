@@ -4,4 +4,5 @@ export interface TopGearLocalItem {
   slot: string;
   simc_string: string;
   origin: ItemOrigin;
+  manual?: boolean;
 }

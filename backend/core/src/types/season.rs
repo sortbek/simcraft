@@ -98,6 +98,10 @@ pub struct SeasonConfigResponse {
     /// raid pool. Clients list only these in the raid picker.
     #[serde(default)]
     pub raid_instance_ids: Vec<i64>,
+    /// Stat ids with a crafted missive bonus this season (craftedSecondaryStats
+    /// keys) — the client derives the preferred-stats options from these.
+    #[serde(default)]
+    pub crafted_secondary_stats: Vec<u64>,
     /// Encounter IDs whose loot uses fixed per-difficulty item levels with no
     /// upgrade track (e.g. Sporefall). Clients hide the upgrade-track control
     /// when the selected raid's encounters are all in this set.

@@ -457,24 +457,32 @@ export function toGemIdList(opts: { gem_id?: number; gem_ids?: number[] }): numb
   return raw.filter((g) => g > 0);
 }
 
-export function getWowheadData(
-  bonusIds?: number[],
-  ilevel?: number,
-  enchantId?: number,
-  gemIds?: number[]
-): string {
+export interface WowheadItem {
+  bonus_ids?: number[];
+  ilevel?: number;
+  enchant_id?: number;
+  gem_id?: number;
+  gem_ids?: number[];
+  crafted_stats?: number[];
+  /** Catalysed pieces keep the source item's secondaries; `original-item` is
+   *  Wowhead's equivalent of simc's `redirected_base_stats`. Only set on a
+   *  catalyst variant — `source_item_id` means something else on Void Forged rows. */
+  is_catalyst?: boolean;
+  source_item_id?: number;
+}
+
+/** Wowhead tooltip params for an item. The single builder for these — adding a
+ *  new param here reaches every tooltip in the app. */
+export function getWowheadData(item: WowheadItem): string {
   const parts: string[] = [];
-  if (bonusIds && bonusIds.length > 0) {
-    parts.push(`bonus=${bonusIds.join(':')}`);
+  const gemIds = toGemIdList(item);
+  if (item.bonus_ids?.length) parts.push(`bonus=${item.bonus_ids.join(':')}`);
+  if (item.crafted_stats?.length) parts.push(`crafted-stats=${item.crafted_stats.join(':')}`);
+  if (item.is_catalyst && item.source_item_id) {
+    parts.push(`original-item=${item.source_item_id}`);
   }
-  if (ilevel && ilevel > 0) {
-    parts.push(`ilvl=${ilevel}`);
-  }
-  if (enchantId && enchantId > 0) {
-    parts.push(`ench=${enchantId}`);
-  }
-  if (gemIds && gemIds.length > 0) {
-    parts.push(`gems=${gemIds.join(':')}`);
-  }
+  if (item.ilevel && item.ilevel > 0) parts.push(`ilvl=${item.ilevel}`);
+  if (item.enchant_id && item.enchant_id > 0) parts.push(`ench=${item.enchant_id}`);
+  if (gemIds.length > 0) parts.push(`gems=${gemIds.join(':')}`);
   return parts.join('&');
 }

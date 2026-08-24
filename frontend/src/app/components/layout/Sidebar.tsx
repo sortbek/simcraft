@@ -117,7 +117,6 @@ export default function Sidebar() {
           <span className="font-headline text-xl font-black uppercase tracking-tighter text-primary">
             SimHammer
           </span>
-          <UpdateChecker />
         </div>
       </div>
 
@@ -162,6 +161,8 @@ export default function Sidebar() {
             icon={<IGear />}
           />
         )}
+
+        <UpdateChecker />
 
         <div className="flex items-center justify-around border-t border-outline-variant/20 px-4 py-1.5">
           <FooterIcon

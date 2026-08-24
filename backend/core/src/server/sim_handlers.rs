@@ -17,7 +17,7 @@ use crate::game_data;
 use crate::jobs::finalize::{finalize_job_outcome, inject_realm, inject_total_elapsed};
 use crate::jobs::request_json::NormalizedRequest;
 use crate::log_buffer::LogBuffer;
-use crate::models::{Job, JobStatus, SimcInputMode};
+use crate::models::{Job, JobStatus};
 use crate::result_parser;
 use crate::simc_runner;
 
@@ -227,10 +227,26 @@ fn profileset_overrides_to_direct(profileset_simc: &str) -> String {
         .join("\n")
 }
 
-/// Re-run a single Top Gear result row as a high-precision Quick Sim: source
-/// `base_profile` (from `request_json`) + the row's gear/talents (from
-/// `combo_metadata.profileset_simc`) applied directly to the base actor. Returns
-/// the new job_id.
+/// Extract one combo's `profileset."<name>"+=` lines from a job's stored simc
+/// input — eager jobs bake them into the input instead of combo_metadata.
+/// Matches via the runner's shared PROFILESET_NAME_RE so emitter and extractor
+/// can't drift on the line grammar.
+fn extract_profileset_lines(simc_input: &str, combo_name: &str) -> String {
+    simc_input
+        .lines()
+        .filter(|line| {
+            simc_runner::PROFILESET_NAME_RE
+                .captures(line)
+                .is_some_and(|c| &c[1] == combo_name)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Re-run a single Top Gear or Droptimizer result row as a high-precision
+/// Quick Sim: `base_profile` (request_json) + the row's overrides — from
+/// combo_metadata (streamed) or extracted from the stored simc input (eager) —
+/// applied directly to the base actor. Returns the new job_id.
 pub(super) async fn sim_row(
     path: web::Path<String>,
     req: web::Json<SimRowRequest>,
@@ -250,14 +266,12 @@ pub(super) async fn sim_row(
         }
     };
 
-    if source.sim_type != "top_gear" {
+    if !matches!(
+        source.sim_type.as_str(),
+        "top_gear" | "droptimizer" | "upgrade_compare"
+    ) {
         return HttpResponse::BadRequest().json(json!({
-            "detail": "sim-row is only supported for top_gear jobs"
-        }));
-    }
-    if source.simc_input_mode != SimcInputMode::Streamed {
-        return HttpResponse::BadRequest().json(json!({
-            "detail": "sim-row requires a streamed-mode (large combo count) source job"
+            "detail": "sim-row is only supported for gear-comparison jobs"
         }));
     }
 
@@ -290,32 +304,33 @@ pub(super) async fn sim_row(
         }
     };
 
-    let pool = match repo.pool() {
-        Some(p) => p.clone(),
-        None => {
-            return HttpResponse::BadRequest().json(json!({
-                "detail": "sim-row requires SQLite-backed storage"
-            }))
-        }
-    };
-    let metadata_repo = ComboMetadataRepo::new(pool);
+    // Streamed jobs persist per-combo lines in combo_metadata; eager jobs
+    // bake them into the stored input. Metadata first, extraction fallback.
     let combo_name = format!("Combo {}", req.combo_id);
-    let row = match metadata_repo.get_by_name(&source_id, &combo_name).await {
-        Ok(Some(r)) => r,
-        Ok(None) => {
-            return HttpResponse::NotFound().json(json!({
-                "detail": format!("{} not found in source job's metadata", combo_name)
-            }))
+    let mut profileset_simc = String::new();
+    if let Some(pool) = repo.pool() {
+        let metadata_repo = ComboMetadataRepo::new(pool.clone());
+        match metadata_repo.get_by_name(&source_id, &combo_name).await {
+            Ok(Some(row)) => profileset_simc = row.profileset_simc,
+            Ok(None) => {}
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
+            }
         }
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"detail": e.to_string()}))
-        }
-    };
+    }
+    if profileset_simc.is_empty() {
+        profileset_simc = extract_profileset_lines(&source.simc_input, &combo_name);
+    }
+    if profileset_simc.is_empty() {
+        return HttpResponse::NotFound().json(json!({
+            "detail": format!("{} not found in the source job's metadata or simc input", combo_name)
+        }));
+    }
 
     // Apply the combo's overrides directly to the base actor — simc parses
     // top-to-bottom, so the trailing slot= / talents= lines override the
     // matching lines in base_profile.
-    let direct_overrides = profileset_overrides_to_direct(&row.profileset_simc);
+    let direct_overrides = profileset_overrides_to_direct(&profileset_simc);
     let combined_input = format!(
         "{}\n# Sim-row verification of combo {} from job {}\n{}\n",
         base_profile.trim_end(),
@@ -366,7 +381,7 @@ pub(super) async fn sim_row(
     );
 
     let mut job = Job::new(
-        display_input,
+        display_input.clone(),
         "quick".to_string(),
         iterations,
         fight_style,
@@ -389,9 +404,11 @@ pub(super) async fn sim_row(
     let job_id_clone = job_id.clone();
     let jid_logs = job_id.clone();
     let created_at_for_task = created_at.clone();
-    let mut options_with_raw = options.clone();
-    options_with_raw["raw"] = json!(true);
-    let input_for_task = combined_input.clone();
+    // Run the BUILT input (options inlined): `raw` on the bare combined_input
+    // would drop the precision/fight options and sim at SimC defaults.
+    let mut options_run = options.clone();
+    options_run["prebuilt"] = json!(true);
+    let input_for_task = display_input.clone();
 
     tokio::spawn(async move {
         if let Err(e) = repo_clone
@@ -414,7 +431,7 @@ pub(super) async fn sim_row(
             &simc,
             &job_id_clone,
             &input_for_task,
-            &options_with_raw,
+            &options_run,
             move |line| {
                 logs_cb.push_line(&jid_cb, line.to_string());
             },
@@ -488,5 +505,52 @@ mod sim_row_tests {
         let input = "# comment\nhead=,id=99";
         let out = profileset_overrides_to_direct(input);
         assert_eq!(out, "# comment\nhead=,id=99");
+    }
+
+    const EAGER_INPUT: &str = "\
+        mage=\"Test\"\n\
+        level=80\n\
+        profileset.\"Combo 1\"+=head=,id=11\n\
+        profileset.\"Combo 1\"+=talents=AAA\n\
+        profileset.\"Combo 10\"+=head=,id=22\n\
+        profileset.\"Combo 2\"+=neck=,id=33\n";
+
+    #[test]
+    fn extracts_only_the_requested_combo() {
+        let out = extract_profileset_lines(EAGER_INPUT, "Combo 2");
+        assert_eq!(out, "profileset.\"Combo 2\"+=neck=,id=33");
+    }
+
+    #[test]
+    fn combo_name_matches_exactly_not_as_prefix() {
+        let out = extract_profileset_lines(EAGER_INPUT, "Combo 1");
+        assert_eq!(
+            out, "profileset.\"Combo 1\"+=head=,id=11\nprofileset.\"Combo 1\"+=talents=AAA",
+            "Combo 1 must not pick up Combo 10's lines"
+        );
+    }
+
+    #[test]
+    fn extraction_returns_empty_when_combo_absent() {
+        assert_eq!(extract_profileset_lines(EAGER_INPUT, "Combo 99"), "");
+    }
+
+    /// Emitter↔extractor contract: lines produced by the real generator must be
+    /// recoverable by name, so a format change breaks this test, not sim-row.
+    #[test]
+    fn extraction_round_trips_generator_output() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let drops = vec![serde_json::json!({
+            "item_id": 200001, "ilevel": 600, "name": "Drop", "encounter": "Boss",
+            "inventory_type": 1, "bonus_ids": [13575],
+        })];
+        let (input, _, _) =
+            crate::profileset_generator::generate_droptimizer_input(profile, &drops, None);
+        let lines = extract_profileset_lines(&input, "Combo 2");
+        assert!(
+            !lines.is_empty() && lines.lines().all(|l| l.contains("\"Combo 2\"")),
+            "generator output must be extractable by combo name, got:\n{input}"
+        );
     }
 }

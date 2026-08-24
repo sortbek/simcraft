@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { simRow } from '../../lib/api';
 import { SLOT_LABELS, specDisplayName } from '../../lib/types';
@@ -11,12 +11,12 @@ import {
   getWowheadUrl,
   localizedEnchantName,
   localizedItemName,
-  toGemIdList,
   useItemNames,
   iconProps,
 } from '../../lib/useItemInfo';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
 import { gemBadgeClass, groupResults } from './topGearResultsUtils';
 
@@ -99,9 +99,10 @@ function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number 
   );
 }
 
-/** Cap on surfaced rows: past ~10, deltas dwindle into per-row CI noise and add clutter without
- * changing decisions. Grouped views (slot/boss) are bounded by group size, so they skip this cap. */
-const MAX_VISIBLE = 10;
+/** Rows revealed per step. The ranked list starts here and grows by this much whenever the
+ * scroll sentinel comes into view, so every result is reachable without mounting a huge sim's
+ * full set upfront. Grouped views (slot/boss) are bounded by group size and render in full. */
+const VISIBLE_STEP = 50;
 
 interface TopGearRankingsProps {
   results: TopGearResult[];
@@ -114,11 +115,13 @@ interface TopGearRankingsProps {
   onGroupModeChange: (mode: GroupMode) => void;
   selectedResultName: string | null;
   onSelectResult: (name: string) => void;
+  /** Result pinned as the comparison target ("B" side); rows show a "vs" button to pin/unpin. */
+  compareResultName: string | null;
+  onCompareResult: (name: string) => void;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
   sourceJobId?: string;
-  sourceIsStreamed?: boolean;
 }
 
 export default function TopGearRankings({
@@ -131,15 +134,15 @@ export default function TopGearRankings({
   onGroupModeChange,
   selectedResultName,
   onSelectResult,
+  compareResultName,
+  onCompareResult,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
   sourceJobId,
-  sourceIsStreamed,
 }: TopGearRankingsProps) {
   const { t } = useLanguage();
   const grouped = useMemo(() => groupResults(results, groupMode), [results, groupMode]);
-  const verifyEnabled = !!sourceJobId && !!sourceIsStreamed;
 
   return (
     <div className="card p-5">
@@ -227,11 +230,13 @@ export default function TopGearRankings({
                       isBest={result === results[0] && result.delta > 0}
                       isSelected={result.name === (selectedResultName || results[0]?.name)}
                       onSelect={onSelectResult}
+                      isCompareTarget={result.name === compareResultName}
+                      onCompare={onCompareResult}
                       itemInfoMap={itemInfoMap}
                       enchantInfoMap={enchantInfoMap}
                       gemInfoMap={gemInfoMap}
                       targetError={targetError}
-                      sourceJobId={verifyEnabled ? sourceJobId : undefined}
+                      sourceJobId={sourceJobId}
                     />
                   ))}
                 </div>
@@ -250,7 +255,9 @@ export default function TopGearRankings({
           gemInfoMap={gemInfoMap}
           selectedResultName={selectedResultName}
           onSelectResult={onSelectResult}
-          sourceJobId={verifyEnabled ? sourceJobId : undefined}
+          compareResultName={compareResultName}
+          onCompareResult={onCompareResult}
+          sourceJobId={sourceJobId}
         />
       )}
     </div>
@@ -267,6 +274,8 @@ function RankedResults({
   gemInfoMap,
   selectedResultName,
   onSelectResult,
+  compareResultName,
+  onCompareResult,
   sourceJobId,
 }: {
   results: TopGearResult[];
@@ -278,9 +287,38 @@ function RankedResults({
   gemInfoMap: Record<number, GemInfo>;
   selectedResultName: string | null;
   onSelectResult: (name: string) => void;
+  compareResultName: string | null;
+  onCompareResult: (name: string) => void;
   sourceJobId?: string;
 }) {
-  const visible = results.slice(0, MAX_VISIBLE);
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_STEP);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  // Newly revealed rows mount fresh wowhead anchors after the info maps have
+  // settled, so the map-keyed refresh in TopGearResults never re-fires for them.
+  useWowheadTooltips([visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(VISIBLE_STEP);
+  }, [results]);
+
+  // Re-created on every reveal so a sentinel still in view (tall viewport, short list
+  // growth) immediately fires the next step instead of waiting for another scroll.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || visibleCount >= results.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((count) => Math.min(count + VISIBLE_STEP, results.length));
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [results, visibleCount]);
+
+  const visible = results.slice(0, visibleCount);
 
   return (
     <div className="space-y-1">
@@ -295,12 +333,15 @@ function RankedResults({
           isBest={idx === 0 && result.delta > 0}
           isSelected={result.name === (selectedResultName || results[0]?.name)}
           onSelect={onSelectResult}
+          isCompareTarget={result.name === compareResultName}
+          onCompare={onCompareResult}
           itemInfoMap={itemInfoMap}
           enchantInfoMap={enchantInfoMap}
           gemInfoMap={gemInfoMap}
           sourceJobId={sourceJobId}
         />
       ))}
+      {visibleCount < results.length && <div ref={sentinelRef} className="h-px" />}
     </div>
   );
 }
@@ -314,6 +355,8 @@ const ResultRow = memo(function ResultRow({
   isBest,
   isSelected,
   onSelect,
+  isCompareTarget,
+  onCompare,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -327,11 +370,12 @@ const ResultRow = memo(function ResultRow({
   isBest: boolean;
   isSelected?: boolean;
   onSelect?: (name: string) => void;
+  isCompareTarget?: boolean;
+  onCompare?: (name: string) => void;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
-  /** When present, the row shows a "Sim" button that re-runs this combo as a high-precision
-   * Quick Sim. Omitted for non-streamed source jobs. */
+  /** When present, "Combo N" rows show a "Sim" button re-running the combo as a Quick Sim. */
   sourceJobId?: string;
 }) {
   const { t } = useLanguage();
@@ -375,14 +419,16 @@ const ResultRow = memo(function ResultRow({
   return (
     <div
       onClick={() => onSelect?.(result.name)}
-      className={`relative cursor-pointer overflow-hidden rounded-lg transition-colors hover:bg-white/[0.04] ${
+      className={`relative cursor-pointer overflow-hidden rounded-lg transition-colors [contain-intrinsic-size:auto_37px] [content-visibility:auto] hover:bg-white/[0.04] ${
         isSelected && !isBest
           ? 'bg-emerald-500/[0.04] ring-1 ring-emerald-500/50'
           : isBest
             ? `ring-1 ring-gold/30 ${isSelected ? 'bg-gold/[0.05]' : 'bg-transparent'}`
-            : isEquipped
-              ? 'ring-1 ring-white/5'
-              : ''
+            : isCompareTarget
+              ? 'bg-sky-500/[0.04] ring-1 ring-sky-500/50'
+              : isEquipped
+                ? 'ring-1 ring-white/5'
+                : ''
       }`}
     >
       <div
@@ -447,7 +493,7 @@ const ResultRow = memo(function ResultRow({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
           <span
             className={`flex items-center gap-1.5 font-headline font-mono text-[15px] tabular-nums ${
               result.delta > 0
@@ -479,6 +525,22 @@ const ResultRow = memo(function ResultRow({
               <PrecisionDot pct={result.precision_pct} targetError={targetError} />
             )}
           </span>
+          {onCompare && !isEquipped && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCompare(result.name);
+              }}
+              title={t('gear.compareRowTitle')}
+              className={`rounded border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider transition-colors ${
+                isCompareTarget
+                  ? 'border-sky-500/40 bg-sky-500/15 text-sky-300'
+                  : 'border-outline-variant/20 bg-surface-container-high/60 text-on-surface-variant hover:bg-sky-500/10 hover:text-sky-300'
+              }`}
+            >
+              {t('gear.compareVs')}
+            </button>
+          )}
           {showVerifyButton && (
             <button
               onClick={async (e) => {
@@ -525,10 +587,7 @@ function ItemTag({
     locale
   );
   const icon = info?.icon || 'inv_misc_questionmark';
-  const wowheadData =
-    item.item_id > 0
-      ? getWowheadData(item.bonus_ids, item.ilevel, item.enchant_id, toGemIdList(item))
-      : undefined;
+  const wowheadData = item.item_id > 0 ? getWowheadData(item) : undefined;
   const slotName = SLOT_LABELS[item.slot] || item.slot;
 
   return (

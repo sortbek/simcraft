@@ -1,6 +1,8 @@
 {
   "season": "Midnight Season 2",
+  "catalystCurrencyId": 3465,
   "raidPoolInstanceId": -102,
+  "craftedSecondaryStats": { "32": 11136, "49": 11137, "36": 11138, "40": 11139 },
   "raidDifficulties": [
     {
       "key": "lfr",

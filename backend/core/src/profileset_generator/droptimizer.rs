@@ -77,6 +77,7 @@ fn most_used_gem(equipped: &HashMap<String, String>, gem_re: &Regex) -> Option<u
 pub(super) fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],
+    crafted_stats: Option<super::CraftedStats>,
 ) -> (String, usize, HashMap<String, Value>) {
     let (base_lines, equipped_gear, talents_string, spec) = parse_base_profile(base_profile);
 
@@ -159,12 +160,20 @@ pub(super) fn generate_droptimizer_input(
         }
 
         let mut base_simc_str = format!(",id={},ilevel={}", item_id, ilevel);
-        if !bonus_ids.is_empty() {
-            let bonus_str = bonus_ids
-                .iter()
-                .map(|b| b.to_string())
-                .collect::<Vec<_>>()
-                .join("/");
+        base_simc_str.push_str(&crate::item_db::redirected_base_stats_fragment(
+            is_catalyst,
+            source_item_id.unwrap_or(0),
+        ));
+        // Crafted stat bonus IDs go into the simc string, not `bonus_ids`.
+        let crafted_bonus_ids = crafted_stats.map(|cs| cs.bonus_ids).into_iter().flatten();
+        let bonus_str = bonus_ids
+            .iter()
+            .copied()
+            .chain(crafted_bonus_ids)
+            .map(|b| b.to_string())
+            .collect::<Vec<_>>()
+            .join("/");
+        if !bonus_str.is_empty() {
             base_simc_str.push_str(&format!(",bonus_id={}", bonus_str));
         }
 
@@ -200,6 +209,8 @@ pub(super) fn generate_droptimizer_input(
             // curated overrides, and the per-slot guaranteed-socket floor (necks/rings
             // always carry a socket this season). SimC applies exactly the gems we
             // list (it does not cap to real sockets), so the count must be accurate.
+            // `bonus_ids` holds only inherent bonuses here — crafted stat bonus IDs
+            // are kept separate and never reach socket lookups.
             let drop_sockets = crate::item_db::item_socket_count(item_id, &bonus_ids)
                 .max(crate::item_db::inv_type_guaranteed_sockets(inv_type));
             if drop_sockets > 0 {
@@ -253,6 +264,7 @@ pub(super) fn generate_droptimizer_input(
                     "ilevel": ilevel,
                     "name": name,
                     "bonus_ids": bonus_ids,
+                    "crafted_stats": crafted_stats.map(|cs| cs.stat_ids.to_vec()).unwrap_or_default(),
                     "enchant_id": applied_enchant,
                     "gem_id": applied_gem,
                     "is_kept": false,
@@ -286,11 +298,170 @@ mod tests {
     }
 
     #[test]
+    fn catalyst_drop_redirects_base_stats_to_source() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let mut item = drop(271564, 1, vec![13575]); // tier helm + set marker bonus
+        item["is_catalyst"] = json!(true);
+        item["source_item_id"] = json!(251199); // Worldroot Canopy (Mastery/Crit)
+        let drops = vec![item];
+
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops, None);
+
+        assert!(
+            input.contains("head=,id=271564"),
+            "catalysed drop keeps the tier item id, got:\n{input}"
+        );
+        assert!(
+            input.contains("redirected_base_stats=251199"),
+            "catalysed drop must redirect base stats to the source, got:\n{input}"
+        );
+        assert!(
+            input.contains("bonus_id=13575"),
+            "tier set marker bonus must survive, got:\n{input}"
+        );
+        let combo = metadata.get("Combo 2").expect("missing combo");
+        assert_eq!(
+            combo[0]["item_id"],
+            json!(271564),
+            "metadata keeps the tier piece id for display"
+        );
+        assert_eq!(combo[0]["source_item_id"], json!(251199));
+    }
+
+    /// Two sources converting to the same tier piece must not produce identical
+    /// profilesets — the whole point of one row per source.
+    #[test]
+    fn catalyst_drops_from_different_sources_are_distinct_sims() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let mut a = drop(271564, 1, vec![13575]);
+        a["is_catalyst"] = json!(true);
+        a["source_item_id"] = json!(251199);
+        let mut b = drop(271564, 1, vec![13575]);
+        b["is_catalyst"] = json!(true);
+        b["source_item_id"] = json!(251232);
+
+        let (input, count, _) = generate_droptimizer_input(profile, &[a, b], None);
+
+        assert_eq!(count, 2, "both sources need their own combo, got:\n{input}");
+        let head_lines: Vec<&str> = input
+            .lines()
+            .filter(|l| l.starts_with("profileset.") && l.contains("id=271564"))
+            .collect();
+        assert_eq!(head_lines.len(), 2, "expected two head lines:\n{input}");
+        assert_ne!(
+            head_lines[0], head_lines[1],
+            "same tier piece from different sources must sim differently:\n{input}"
+        );
+    }
+
+    #[test]
     fn unknown_inv_type_skipped() {
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![drop(999, 99, vec![])]; // inv_type 99 = no slots
-        let (_, count, _) = generate_droptimizer_input(profile, &drops);
+        let (_, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn crafted_stat_bonus_ids_go_into_the_simc_string() {
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let drops = vec![drop(207157, 11, vec![])]; // finger, no inherent bonus IDs
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats {
+                stat_ids: [49, 36],
+                bonus_ids: [11137, 11138],
+            }),
+        );
+        assert!(
+            input.contains("bonus_id=11137/11138"),
+            "expected crafted stat bonus IDs in the simc string, got:\n{input}"
+        );
+    }
+
+    #[test]
+    fn crafted_stats_surface_in_metadata_not_display_bonus_ids() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let drops = vec![drop(207157, 11, vec![12345])];
+        let (_, _, metadata) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats {
+                stat_ids: [49, 36],
+                bonus_ids: [11137, 11138],
+            }),
+        );
+        let entry = &metadata.values().next().unwrap()[0];
+        assert_eq!(entry["bonus_ids"], json!([12345]));
+        assert_eq!(entry["crafted_stats"], json!([49, 36]));
+    }
+
+    #[test]
+    fn crafted_stats_appended_after_existing_bonus_ids() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let drops = vec![drop(207157, 11, vec![12345])];
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats {
+                stat_ids: [49, 36],
+                bonus_ids: [11137, 11138],
+            }),
+        );
+        assert!(
+            input.contains("bonus_id=12345/11137/11138"),
+            "expected crafted stat bonus IDs appended after the upgrade bonus, got:\n{input}"
+        );
+    }
+
+    #[test]
+    fn crafted_socketless_drop_does_not_inherit_equipped_gem() {
+        // Regression: a socketless crafted drop (empty inherent bonus_ids) must
+        // not inherit the equipped gem just because missives were appended.
+        // Uses head (inv type 1): neck/ring carry a guaranteed socket floor this
+        // season, so they always gem regardless of bonus IDs.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100,gem_id=999\n";
+        let drops = vec![drop(207157, 1, vec![])];
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats {
+                stat_ids: [49, 36],
+                bonus_ids: [11137, 11138],
+            }),
+        );
+        assert!(
+            input.contains("bonus_id=11137/11138"),
+            "stats still applied:\n{input}"
+        );
+        // The gem appears in the baseline (Combo 1); assert the drop lines don't.
+        let drop_lines_inherit_gem = input
+            .lines()
+            .filter(|l| l.starts_with("profileset.") && l.contains("id=207157"))
+            .any(|l| l.contains("gem_id=999"));
+        assert!(
+            !drop_lines_inherit_gem,
+            "socketless crafted drop must not inherit the equipped gem:\n{input}"
+        );
+    }
+
+    #[test]
+    fn no_preferred_stats_leaves_bonus_ids_unchanged() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nhead=,id=100\n";
+        let drops = vec![drop(207157, 11, vec![12345])];
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None);
+        assert!(input.contains("bonus_id=12345"), "got:\n{input}");
+        assert!(
+            !input.contains("11137"),
+            "no crafted bonus expected, got:\n{input}"
+        );
     }
 
     #[test]
@@ -301,7 +472,7 @@ spec=arms\n\
 main_hand=,id=200\n\
 off_hand=,id=201\n";
         let drops = vec![drop(999, 17, vec![])]; // inv_type 17 = 2H weapon
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 1);
         assert!(input.contains("main_hand=,id=999"));
         assert!(
@@ -318,7 +489,7 @@ spec=fury\n\
 main_hand=,id=200\n\
 off_hand=,id=201\n";
         let drops = vec![drop(999, 17, vec![])];
-        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None);
         // Fury can wield two 2H weapons → off_hand should NOT be cleared
         assert!(
             !input.contains("profileset.\"Combo 2\"+=off_hand=,\n"),
@@ -330,7 +501,7 @@ off_hand=,id=201\n";
     fn drop_inherits_enchant_from_equipped_slot() {
         let profile = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7777\n";
         let drops = vec![drop(999, 1, vec![])];
-        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops, None);
         assert!(
             input.contains(",enchant_id=7777"),
             "expected enchant inheritance from equipped slot:\n{input}"
@@ -346,7 +517,7 @@ off_hand=,id=201\n";
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nneck=,id=100,gem_id=213453\n";
         let drops = vec![drop(999, 2, vec![13534])]; // inv_type 2 = neck
-        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops, None);
         assert!(
             input.contains(",gem_id=213453"),
             "expected gem inheritance from equipped neck:\n{input}"
@@ -361,7 +532,7 @@ off_hand=,id=201\n";
         // inheritance (gated on the drop's socket count) must not apply.
         let profile = "mage=test\nspec=frost\nwrist=,id=100,gem_id=213453\n";
         let drops = vec![drop(999, 9, vec![])]; // inv_type 9 = wrist, no sockets
-        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops, None);
         let combo2_line = input
             .lines()
             .find(|l| l.contains("Combo 2") && l.contains("wrist=,id=999"))
@@ -382,7 +553,7 @@ off_hand=,id=201\n";
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nfinger1=,id=100,gem_id=5000\nfinger2=,id=101\n";
         let drops = vec![drop(999, 11, vec![])]; // ring drop, NO socket bonus
-        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None);
         assert!(
             input.contains("finger1=,id=999,ilevel=600,gem_id=5000"),
             "ring drop must be gemmed via the per-slot socket floor:\n{input}"
@@ -405,7 +576,7 @@ off_hand=,id=201\n";
             // pick up enchant_id 7777 from the equipped head.
             "slot_inherits": [{ "slot": "head", "enchant_id": 0, "gem_id": 0 }]
         })];
-        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None);
         assert!(
             input.contains(",enchant_id=7777"),
             "slot_inherits=0 should NOT suppress equipped-derived enchant:\n{input}"
@@ -421,7 +592,7 @@ warrior=test\n\
 spec=arms\n\
 main_hand=,id=200\n";
         let drops = vec![drop(999, 17, vec![])];
-        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None);
         assert!(input.contains("profileset.\"Combo 2\"+=off_hand=,"));
     }
 
@@ -429,7 +600,7 @@ main_hand=,id=200\n";
     fn drop_carries_talents_when_present() {
         let profile = "mage=test\nspec=frost\nhead=,id=100\ntalents=ABCDEF\n";
         let drops = vec![drop(999, 1, vec![])];
-        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None);
         assert!(input.contains("profileset.\"Combo 2\"+=talents=ABCDEF"));
     }
 
@@ -441,7 +612,7 @@ main_hand=,id=200\n";
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![drop(999, 1, vec![10, 20, 30])];
-        let (input, _, _) = generate_droptimizer_input(profile, &drops);
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None);
         assert!(input.contains("bonus_id=10/20/30"));
     }
 
@@ -450,7 +621,7 @@ main_hand=,id=200\n";
         // inv_type 11 → finger1 + finger2 → 2 emits
         let profile = "mage=test\nspec=frost\nfinger1=,id=100\nfinger2=,id=101\n";
         let drops = vec![drop(999, 11, vec![])];
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 2);
         assert!(input.contains("profileset.\"Combo 2\"+=finger1=,id=999"));
         assert!(input.contains("profileset.\"Combo 3\"+=finger2=,id=999"));
@@ -462,7 +633,7 @@ main_hand=,id=200\n";
         // unique-equipped, so only the finger1 replacement combo emits.
         let profile = "mage=test\nspec=frost\nfinger1=,id=500\nfinger2=,id=101\n";
         let drops = vec![drop(500, 11, vec![])];
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(
             count, 1,
             "expected only 1 combo (finger1 replacement):\n{input}"
@@ -482,7 +653,7 @@ main_hand=,id=200\n";
         // Same unique-equipped rule for trinkets.
         let profile = "mage=test\nspec=frost\ntrinket1=,id=900\ntrinket2=,id=901\n";
         let drops = vec![drop(900, 12, vec![])];
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 1);
         assert!(input.contains("trinket1=,id=900"));
         assert!(!input.contains("trinket2=,id=900"));
@@ -492,7 +663,7 @@ main_hand=,id=200\n";
     fn trinket_drop_emits_two_combos_one_per_trinket() {
         let profile = "mage=test\nspec=frost\ntrinket1=,id=100\ntrinket2=,id=101\n";
         let drops = vec![drop(999, 12, vec![])];
-        let (_, count, _) = generate_droptimizer_input(profile, &drops);
+        let (_, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 2);
     }
 
@@ -501,7 +672,7 @@ main_hand=,id=200\n";
         // inv_type 14 = shield → off_hand only
         let profile = "warrior=test\nspec=protection\nmain_hand=,id=100\noff_hand=,id=101\n";
         let drops = vec![drop(999, 14, vec![])];
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 1);
         assert!(input.contains("profileset.\"Combo 2\"+=off_hand=,id=999"));
     }
@@ -511,7 +682,7 @@ main_hand=,id=200\n";
         // inv_type 13 = 1H, fury can dual wield
         let profile = "warrior=test\nspec=fury\nmain_hand=,id=100\noff_hand=,id=101\n";
         let drops = vec![drop(999, 13, vec![])];
-        let (_, count, _) = generate_droptimizer_input(profile, &drops);
+        let (_, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 2);
     }
 
@@ -520,7 +691,7 @@ main_hand=,id=200\n";
         // Arms warrior cannot dual wield 1H
         let profile = "warrior=test\nspec=arms\nmain_hand=,id=100\n";
         let drops = vec![drop(999, 13, vec![])];
-        let (_, count, _) = generate_droptimizer_input(profile, &drops);
+        let (_, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 1);
     }
 
@@ -528,7 +699,7 @@ main_hand=,id=200\n";
     fn back_drop_targets_back_slot_only() {
         let profile = "mage=test\nspec=frost\nback=,id=100\n";
         let drops = vec![drop(999, 16, vec![])];
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 1);
         assert!(input.contains("profileset.\"Combo 2\"+=back=,id=999"));
     }
@@ -546,7 +717,7 @@ finger1=,id=100,enchant_id=7000,gem_id=5000\n\
 finger2=,id=101,gem_id=6000\n\
 main_hand=,id=200,gem_id=6000\n"; // 6000 is most-used (x2)
         let drops = vec![drop(999, 11, vec![13534])];
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         assert_eq!(count, 2);
         assert!(
             input.contains("finger1=,id=999,ilevel=600,bonus_id=13534,enchant_id=7000,gem_id=5000"),
@@ -576,7 +747,7 @@ neck=,id=100,gem_id=1111\n\
 finger1=,id=101,gem_id=2222\n\
 finger2=,id=102,gem_id=2222\n"; // 2222 is most-used (x2)
         let drops = vec![drop(250247, 2, vec![])]; // neck, no socket bonus on the drop
-        let (input, _, metadata) = generate_droptimizer_input(profile, &drops);
+        let (input, _, metadata) = generate_droptimizer_input(profile, &drops, None);
         assert!(
             input.contains("neck=,id=250247,ilevel=600,gem_id=1111/2222"),
             "expected equipped gem 1111 + most-used 2222 on the override neck:\n{input}"
@@ -593,7 +764,7 @@ finger2=,id=102,gem_id=2222\n"; // 2222 is most-used (x2)
             drop(902, 5, vec![]),  // chest
             drop(903, 16, vec![]), // back (no equipped slot for this profile, but inv_type maps it)
         ];
-        let (input, count, _) = generate_droptimizer_input(profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None);
         // 3 drops, each emitting once. Even back works (it doesn't need equipped slot).
         assert_eq!(count, 3);
         assert!(input.contains("### Combo 2"));
@@ -612,7 +783,7 @@ finger2=,id=102,gem_id=2222\n"; // 2222 is most-used (x2)
             "inventory_type": 1,
             "bonus_ids": []
         })];
-        let (_, _, metadata) = generate_droptimizer_input(profile, &drops);
+        let (_, _, metadata) = generate_droptimizer_input(profile, &drops, None);
         let combo = metadata.get("Combo 2").expect("missing combo");
         assert_eq!(combo[0]["encounter"], "Specific Boss Name");
     }

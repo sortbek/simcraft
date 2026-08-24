@@ -19,6 +19,10 @@ static RE_SLOT: Lazy<Regex> = Lazy::new(|| {
     let pattern = format!(r"^({})=(.*)", GEAR_SLOTS.join("|"));
     Regex::new(&pattern).unwrap()
 });
+static RE_MANUAL_SLOT: Lazy<Regex> = Lazy::new(|| {
+    let pattern = format!(r"^manual\.({})=(.*)", GEAR_SLOTS.join("|"));
+    Regex::new(&pattern).unwrap()
+});
 static RE_HEADER: Lazy<Regex> = Lazy::new(|| Regex::new(r"^#+\s*(.+?)\s*\(?(\d+)\)?\s*$").unwrap());
 static RE_TALENTS: Lazy<Regex> = Lazy::new(|| Regex::new(r"^talents=(.+)").unwrap());
 
@@ -150,6 +154,28 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                 continue;
             }
 
+            // User-edited copy (gem/enchant variant) → manual bag item
+            if let Some(caps) = RE_MANUAL_SLOT.captures(clean) {
+                let slot = caps[1].to_lowercase();
+                let item_str = caps[2].to_string();
+                let props = parse_item_props(&item_str);
+                pending_name.clear();
+                pending_ilevel = 0;
+                items.push(RawParsedItem {
+                    raw_slot: slot,
+                    simc_string: item_str,
+                    item_id: props.item_id,
+                    ilevel: props.ilevel,
+                    name: props.name,
+                    bonus_ids: props.bonus_ids,
+                    enchant_id: props.enchant_id,
+                    gem_id: props.gem_id,
+                    origin: ItemOrigin::Bags,
+                    manual: true,
+                });
+                continue;
+            }
+
             // Commented-out gear line → bag/vault item
             if let Some(caps) = slot_re.captures(clean) {
                 let slot = caps[1].to_lowercase();
@@ -183,6 +209,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     enchant_id: props.enchant_id,
                     gem_id: props.gem_id,
                     origin,
+                    manual: false,
                 });
             } else if let Some(caps) = header_re.captures(stripped) {
                 pending_name = caps[1].to_string();
@@ -250,6 +277,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     enchant_id: props.enchant_id,
                     gem_id: props.gem_id,
                     origin: ItemOrigin::Equipped,
+                    manual: false,
                 });
             }
             pending_label.clear();
@@ -290,7 +318,7 @@ pub fn parse_upgrade_currencies(simc_input: &str) -> HashMap<u64, u64> {
 /// Extract catalyst charge count from a SimC addon string.
 ///
 /// Parses lines like: `# catalyst_currencies=3269:8/3378:5/2813:8/3116:8`
-/// Returns the charge count for the given currency_id (e.g. 3378 for Midnight Catalyst).
+/// Returns the charge count for the given currency_id (e.g. 3465 for the Midnight S2 catalyst).
 pub fn parse_catalyst_charges(simc_input: &str, currency_id: u64) -> Option<u32> {
     for line in simc_input.lines() {
         if let Some(caps) = RE_CATALYST_LINE.captures(line.trim()) {

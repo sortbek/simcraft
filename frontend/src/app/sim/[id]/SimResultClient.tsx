@@ -374,7 +374,6 @@ export default function SimResultClient() {
             targetError={r.target_error}
             elapsedTime={r.total_elapsed_seconds ?? r.elapsed_time_seconds}
             sourceJobId={typeof id === 'string' ? id : undefined}
-            sourceIsStreamed={job?.simc_input_mode === 'streamed'}
             backLink={
               hasTopGearState ? (
                 <a

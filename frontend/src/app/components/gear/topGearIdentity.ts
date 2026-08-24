@@ -8,9 +8,13 @@ export function buildTopGearUid(
   itemId: number,
   bonusIds: number[],
   origin: ItemOrigin,
-  slot: string
+  slot: string,
+  // Catalyst uids append the conversion source (mirrors the backend resolver):
+  // two sources converting to the same tier piece are distinct items.
+  catalystSourceItemId?: number
 ): string {
-  return `${itemId}:${sortBonusIds(bonusIds).join(':')}:${origin}:${slot}`;
+  const source = catalystSourceItemId ? `:${catalystSourceItemId}` : '';
+  return `${itemId}:${sortBonusIds(bonusIds).join(':')}:${origin}:${slot}${source}`;
 }
 
 export function buildResolvedCopy(
@@ -27,7 +31,13 @@ export function buildResolvedCopy(
     origin,
     bonus_ids: bonusIds,
     slot,
-    uid: buildTopGearUid(item.item_id, bonusIds, origin, slot),
+    uid: buildTopGearUid(
+      item.item_id,
+      bonusIds,
+      origin,
+      slot,
+      item.is_catalyst ? item.source_item_id : undefined
+    ),
   };
 }
 

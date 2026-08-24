@@ -188,11 +188,43 @@ pub fn count_top_gear_combos_with_talents(
     )
 }
 
+/// Crafted "Preferred Stats": bonus IDs for the sim, stat IDs for display.
+#[derive(Clone, Copy, Debug)]
+pub struct CraftedStats {
+    pub stat_ids: [u64; 2],
+    pub bonus_ids: [u64; 2],
+}
+
+impl CraftedStats {
+    /// Resolve a stat pair to this season's missive bonus ids. `Ok(None)` when
+    /// no pair was given; `Err(detail)` on invalid or unsupported pairs — fail
+    /// loud rather than silently simming crafted items statless.
+    pub fn resolve(pair: Option<[u64; 2]>) -> Result<Option<Self>, String> {
+        let Some([primary, secondary]) = pair else {
+            return Ok(None);
+        };
+        if primary == secondary {
+            return Err("Crafted preferred stats must be two different secondary stats.".into());
+        }
+        match (
+            crate::item_db::crafted_stat_bonus_id(primary),
+            crate::item_db::crafted_stat_bonus_id(secondary),
+        ) {
+            (Some(a), Some(b)) => Ok(Some(Self {
+                stat_ids: [primary, secondary],
+                bonus_ids: [a, b],
+            })),
+            _ => Err("Unsupported crafted preferred stats for the current season.".into()),
+        }
+    }
+}
+
 pub fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],
+    crafted_stats: Option<CraftedStats>,
 ) -> (String, usize, HashMap<String, Value>) {
-    droptimizer::generate_droptimizer_input(base_profile, drop_items)
+    droptimizer::generate_droptimizer_input(base_profile, drop_items, crafted_stats)
 }
 
 pub fn generate_upgrade_compare_input(
@@ -272,7 +304,8 @@ main_hand=,id=200\n";
             "bonus_ids": [123, 456]
         })];
 
-        let (input, combo_count, metadata) = generate_droptimizer_input(base_profile, &drop_items);
+        let (input, combo_count, metadata) =
+            generate_droptimizer_input(base_profile, &drop_items, None);
 
         assert_eq!(combo_count, 1);
         assert!(input.contains("profileset.\"Combo 2\"+=head=,id=999,ilevel=671,bonus_id=123/456"));
@@ -301,7 +334,8 @@ main_hand=,id=200\n";
             "bonus_ids": [13534],
         })];
 
-        let (input, combo_count, metadata) = generate_droptimizer_input(base_profile, &drop_items);
+        let (input, combo_count, metadata) =
+            generate_droptimizer_input(base_profile, &drop_items, None);
 
         assert_eq!(combo_count, 2);
         assert!(
@@ -344,7 +378,8 @@ main_hand=,id=200,enchant_id=7459\n";
             ]
         })];
 
-        let (input, combo_count, _metadata) = generate_droptimizer_input(base_profile, &drop_items);
+        let (input, combo_count, _metadata) =
+            generate_droptimizer_input(base_profile, &drop_items, None);
 
         assert_eq!(combo_count, 1);
         assert!(
@@ -370,7 +405,8 @@ main_hand=,id=200\n";
             "bonus_ids": []
         })];
 
-        let (input, combo_count, _metadata) = generate_droptimizer_input(base_profile, &drop_items);
+        let (input, combo_count, _metadata) =
+            generate_droptimizer_input(base_profile, &drop_items, None);
 
         assert_eq!(combo_count, 1);
         assert!(
@@ -1255,7 +1291,7 @@ finger2=,id=101\n";
     #[test]
     fn droptimizer_returns_zero_combos_for_empty_drops() {
         let base_profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let (_, count, metadata) = generate_droptimizer_input(base_profile, &[]);
+        let (_, count, metadata) = generate_droptimizer_input(base_profile, &[], None);
         assert_eq!(count, 0);
         assert!(metadata.is_empty());
     }
@@ -1282,7 +1318,7 @@ finger2=,id=101\n";
                 "bonus_ids": [99]
             }),
         ];
-        let (input, count, _) = generate_droptimizer_input(base_profile, &drops);
+        let (input, count, _) = generate_droptimizer_input(base_profile, &drops, None);
         assert_eq!(count, 2);
         assert!(input.contains(",id=1001,ilevel=600"));
         assert!(input.contains(",id=1002,ilevel=610,bonus_id=99"));
@@ -1299,7 +1335,7 @@ finger2=,id=101\n";
             "inventory_type": 1,
             "bonus_ids": []
         })];
-        let (input, _, _) = generate_droptimizer_input(base_profile, &drops);
+        let (input, _, _) = generate_droptimizer_input(base_profile, &drops, None);
         // Should NOT have ",bonus_id=" for this drop
         let combo_line = input
             .lines()

@@ -4,6 +4,9 @@ export interface GearItem {
   ilevel: number;
   name: string;
   bonus_ids?: number[];
+  crafted_stats?: number[];
+  is_catalyst?: boolean;
+  source_item_id?: number;
   enchant_id?: number;
   gem_id?: number;
   /** All gem IDs (one per socket); necks/crafted items hold 2+ but `gem_id` only carries the first, so prefer `gem_ids` when present. */

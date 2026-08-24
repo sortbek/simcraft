@@ -212,6 +212,7 @@ pub(super) fn resolve_to_items_by_slot(
 
 fn resolved_item_to_value(item: &crate::types::ResolvedItem, is_equipped: bool) -> Value {
     let mut v = json!({
+        "uid": item.uid,
         "slot": item.slot,
         "simc_string": item.simc_string,
         "is_equipped": is_equipped,
@@ -226,6 +227,10 @@ fn resolved_item_to_value(item: &crate::types::ResolvedItem, is_equipped: bool) 
     });
     if item.is_catalyst {
         v["is_catalyst"] = json!(true);
+        v["source_item_id"] = json!(item.source_item_id);
+    }
+    if item.is_manual {
+        v["manual"] = json!(true);
     }
     v
 }

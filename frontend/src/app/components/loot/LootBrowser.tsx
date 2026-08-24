@@ -11,6 +11,7 @@ import ItemTable from './ItemTable';
 import DungeonDrawer from './DungeonDrawer';
 import DifficultySelect from './DifficultySelect';
 import UpgradeSelect from './UpgradeSelect';
+import PreferredStatsSelect, { DEFAULT_PREFERRED_STATS } from './PreferredStatsSelect';
 import CategorySelector from './CategorySelector';
 import TalentPicker from '../talents/TalentPicker';
 import { useLanguage } from '../../lib/i18n';
@@ -134,6 +135,9 @@ export interface LootBrowserRenderState {
   upgradeLevel: number;
   upgradeTracks: UpgradeTracks;
   hasSelection: boolean;
+  /** Missive stat pair when the crafted category is active; null otherwise, so
+   * consumers can't apply crafted stats to a non-crafted run. */
+  craftedPreferredStats: [number, number] | null;
 }
 
 export interface LootBrowserProps {
@@ -214,6 +218,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
   const [difficulty, setDifficulty] = useState('heroic');
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
   const [upgradeLevel, setUpgradeLevel] = useState(0);
+  const [preferredStats, setPreferredStats] = useState<[number, number]>(DEFAULT_PREFERRED_STATS);
   // Instance pool: set of instance IDs that are "checked" (multi-select)
   const [dungeonPool, setDungeonPool] = useState<Set<string>>(new Set());
   const [raidPool, setRaidPool] = useState<Set<string>>(new Set());
@@ -531,6 +536,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
     upgradeLevel,
     upgradeTracks,
     hasSelection: selectedDrops.length > 0,
+    craftedPreferredStats: isCrafted ? preferredStats : null,
   };
 
   return (
@@ -571,7 +577,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
           {/* Difficulty + upgrade level */}
           {activeDifficulties.length > 0 && (
             <div
-              className={`grid gap-4 ${currentTrackInfo && drops ? 'grid-cols-1 sm:grid-cols-2' : ''}`}
+              className={`grid gap-4 ${currentTrackInfo && drops && !isCrafted ? 'grid-cols-1 sm:grid-cols-2' : ''}`}
             >
               <div>
                 <label className="label-text">{t('dropFinder.difficulty')}</label>
@@ -593,7 +599,8 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
                 />
               </div>
 
-              {currentTrackInfo && drops && (
+              {/* Crafted gear has no in-game upgrade track. */}
+              {currentTrackInfo && drops && !isCrafted && (
                 <div>
                   <label className="label-text">{t('dropFinder.upgradeLevel')}</label>
                   <UpgradeSelect
@@ -603,6 +610,18 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Crafted gear: choose the two secondary stats (via missives) */}
+          {isCrafted && (
+            <div>
+              <label className="label-text">{t('dropFinder.preferredStats')}</label>
+              <PreferredStatsSelect
+                value={preferredStats}
+                onChange={setPreferredStats}
+                statIds={seasonConfig?.crafted_secondary_stats}
+              />
             </div>
           )}
 
@@ -620,16 +639,19 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
                 {t('dropFinder.includeVoidForge')}
               </label>
             )}
-            <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
-              <Checkbox
-                variant="primary"
-                size="sm"
-                checked={includeCatalyst}
-                onChange={() => setIncludeCatalyst((v) => !v)}
-                aria-label={t('dropFinder.includeCatalyst')}
-              />
-              {t('dropFinder.includeCatalyst')}
-            </label>
+            {/* Crafted gear can't be catalysed. */}
+            {!isCrafted && (
+              <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+                <Checkbox
+                  variant="primary"
+                  size="sm"
+                  checked={includeCatalyst}
+                  onChange={() => setIncludeCatalyst((v) => !v)}
+                  aria-label={t('dropFinder.includeCatalyst')}
+                />
+                {t('dropFinder.includeCatalyst')}
+              </label>
+            )}
           </div>
         </div>
       )}
@@ -789,6 +811,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
           equippedEmbellishments={equippedEmbellishments}
           equippedGear={equippedGear}
           spec={specName ?? ''}
+          craftedStats={isCrafted ? preferredStats : undefined}
         />
       )}
 

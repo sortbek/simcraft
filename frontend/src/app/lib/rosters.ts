@@ -148,6 +148,7 @@ export interface RunOptions {
   encounters?: number[];
   void_forge?: boolean;
   catalyst?: boolean;
+  preferred_crafted_stats?: [number, number];
 }
 
 export async function startRun(

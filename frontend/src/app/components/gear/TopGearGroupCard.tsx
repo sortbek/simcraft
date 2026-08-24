@@ -1,7 +1,8 @@
 import type { ResolvedItem } from '../../lib/types';
-import { getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
+import { getWowheadData, getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import GearItemRow from './GearItemRow';
+import { ENCHANT_SLOTS } from './itemOptions';
 import { buildAlternativeKey } from './topGearIdentity';
 import type { DisplayGroup } from './topGearSelection';
 
@@ -37,18 +38,10 @@ interface TopGearGroupCardProps {
   onVoidForgeConvert: (item: ResolvedItem) => void;
   onAddSocket: (item: ResolvedItem) => void;
   onRemoveGem: (item: ResolvedItem) => void;
+  onEditGemsEnchant: (item: ResolvedItem) => void;
   addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
   t: (key: string, values?: Record<string, string | number>) => string;
-}
-
-function getWowheadData(item: ResolvedItem): string {
-  const parts: string[] = [];
-  if (item.bonus_ids.length > 0) parts.push(`bonus=${item.bonus_ids.join(':')}`);
-  if (item.ilevel > 0) parts.push(`ilvl=${item.ilevel}`);
-  if (item.enchant_id > 0) parts.push(`ench=${item.enchant_id}`);
-  if (item.gem_id > 0) parts.push(`gems=${item.gem_id}`);
-  return parts.join('&');
 }
 
 function canAddSocket(item: ResolvedItem): boolean {
@@ -56,6 +49,17 @@ function canAddSocket(item: ResolvedItem): boolean {
     item.sockets === 0 &&
     ['head', 'neck', 'wrist', 'waist', 'finger1', 'finger2'].includes(item.slot)
   );
+}
+
+// Copies of catalyst/void-forge/vault items would re-resolve as plain bag
+// items and escape the catalyst-charge and vault gear-set constraints.
+function canManualCopy(item: ResolvedItem): boolean {
+  return !item.is_catalyst && !item.is_void_forge && item.origin !== 'vault';
+}
+
+function canEditGemsEnchant(item: ResolvedItem): boolean {
+  if (!canManualCopy(item)) return false;
+  return item.sockets > 0 || item.gem_ids.length > 0 || ENCHANT_SLOTS.includes(item.slot);
 }
 
 export default function TopGearGroupCard({
@@ -76,6 +80,7 @@ export default function TopGearGroupCard({
   onVoidForgeConvert,
   onAddSocket,
   onRemoveGem,
+  onEditGemsEnchant,
   addedKeys,
   onRemoveAdded,
   t,
@@ -108,7 +113,10 @@ export default function TopGearGroupCard({
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
             onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
-            onRemoveGem={item.gem_id > 0 ? () => onRemoveGem(item) : undefined}
+            onRemoveGem={
+              item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
+            }
+            onEditGemsEnchant={canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined}
             t={t}
           />
         </GearItemRow>
@@ -169,7 +177,10 @@ export default function TopGearGroupCard({
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
             onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
-            onRemoveGem={item.gem_id > 0 ? () => onRemoveGem(item) : undefined}
+            onRemoveGem={
+              item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
+            }
+            onEditGemsEnchant={canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined}
             t={t}
           />
         </GearItemRow>
@@ -189,6 +200,7 @@ function UpgradeButton({
   onVoidForgeConvert: onVoidForgeConvertProp,
   onAddSocket,
   onRemoveGem,
+  onEditGemsEnchant,
   t,
 }: {
   item: ResolvedItem;
@@ -201,12 +213,20 @@ function UpgradeButton({
   onVoidForgeConvert?: () => void;
   onAddSocket?: () => void;
   onRemoveGem?: () => void;
+  onEditGemsEnchant?: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   // Gated once so the surrounding menu guards agree with the button itself and
   // the menu never renders empty with Void Forge as its only action.
   const onVoidForgeConvert = VOID_FORGE_ENABLED ? onVoidForgeConvertProp : undefined;
-  if (!item.upgrade && !onCatalystConvert && !onVoidForgeConvert && !onAddSocket && !onRemoveGem)
+  if (
+    !item.upgrade &&
+    !onCatalystConvert &&
+    !onVoidForgeConvert &&
+    !onAddSocket &&
+    !onRemoveGem &&
+    !onEditGemsEnchant
+  )
     return null;
   const isMenuOpen = upgradeMenuFor === item.uid;
 
@@ -295,6 +315,29 @@ function UpgradeButton({
               {t('gear.addSocket')}
             </button>
           )}
+          {onEditGemsEnchant && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                onEditGemsEnchant();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-gold/90 hover:bg-gold/10 hover:text-gold"
+            >
+              <svg
+                className="h-3 w-3 shrink-0"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              >
+                <path d="M11.5 2.5l2 2L6 12l-2.5.5L4 10l7.5-7.5z" />
+              </svg>
+              {t('gear.editGemsEnchant')}
+            </button>
+          )}
           {onRemoveGem && (
             <button
               type="button"
@@ -319,7 +362,11 @@ function UpgradeButton({
               {t('gear.removeGem')}
             </button>
           )}
-          {(onCatalystConvert || onVoidForgeConvert || onAddSocket || onRemoveGem) &&
+          {(onCatalystConvert ||
+            onVoidForgeConvert ||
+            onAddSocket ||
+            onRemoveGem ||
+            onEditGemsEnchant) &&
             item.upgrade && <div className="my-1 border-t border-outline-variant/20" />}
           {item.upgrade && (
             <>

@@ -299,6 +299,11 @@ pub(super) async fn void_forge_convert(
     HttpResponse::Ok().json(vf_item)
 }
 
+pub(super) async fn modify_item(req: web::Json<super::types::ModifyItemRequest>) -> HttpResponse {
+    let modified = gear_resolver::build_modified_item(&req.item, &req.gem_ids, req.enchant_id);
+    HttpResponse::Ok().json(modified)
+}
+
 pub(super) async fn get_talent_tree(path: web::Path<u64>) -> HttpResponse {
     let spec_id = path.into_inner();
     let tree = match game_data::talent_tree(spec_id) {
@@ -373,12 +378,20 @@ pub(super) async fn get_season_config() -> HttpResponse {
         .map(|m| m.keys().filter_map(|k| k.parse::<i64>().ok()).collect())
         .unwrap_or_default();
 
+    let mut crafted_secondary_stats: Vec<u64> = cfg
+        .get("craftedSecondaryStats")
+        .and_then(|v| v.as_object())
+        .map(|m| m.keys().filter_map(|k| k.parse::<u64>().ok()).collect())
+        .unwrap_or_default();
+    crafted_secondary_stats.sort_unstable();
+
     HttpResponse::Ok().json(SeasonConfigResponse {
         season,
         raid_difficulties,
         dungeon_categories,
         raid_instance_ids: game_data::season_raid_instance_ids(),
         fixed_difficulty_encounters,
+        crafted_secondary_stats,
     })
 }
 

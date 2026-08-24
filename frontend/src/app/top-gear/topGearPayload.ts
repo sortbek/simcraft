@@ -27,7 +27,9 @@ export function appendLocalItems(simcInput: string, localItems: TopGearLocalItem
   }
 
   if (bagItems.length > 0) {
-    const bagLines = bagItems.map((item) => `# ${item.slot}=${item.simc_string}`).join('\n');
+    const bagLines = bagItems
+      .map((item) => `# ${item.manual ? `manual.${item.slot}` : item.slot}=${item.simc_string}`)
+      .join('\n');
     result = `${result}\n${bagLines}`;
   }
 
@@ -47,7 +49,8 @@ export function serializeSelectionMap<T extends number | string>(
 export function toLocalItem(
   slot: string,
   simcString: string,
-  origin: ItemOrigin
+  origin: ItemOrigin,
+  manual = false
 ): TopGearLocalItem {
-  return { slot, simc_string: simcString, origin };
+  return { slot, simc_string: simcString, origin, ...(manual ? { manual } : {}) };
 }

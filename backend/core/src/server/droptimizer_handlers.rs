@@ -32,8 +32,26 @@ pub(super) async fn create_droptimizer_sim(
     let parse_result = addon_parser::parse_simc_input(&simc_input);
     let base_profile = parse_result.base_profile.clone();
 
+    let crafted_stats =
+        match profileset_generator::CraftedStats::resolve(req.preferred_crafted_stats) {
+            Ok(cs) => cs,
+            Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+        };
+
+    // Enforce crafted-only at the trust boundary, not just via the frontend
+    // gate, so a stray request can't graft missives onto non-craftable gear.
+    if crafted_stats.is_some() && !crate::item_db::all_crafted_items(&req.drop_items) {
+        return HttpResponse::BadRequest().json(json!({
+            "detail": "Preferred crafted stats can only be applied to crafted items."
+        }));
+    }
+
     let (generated_input, combo_count, combo_metadata) =
-        profileset_generator::generate_droptimizer_input(&base_profile, &req.drop_items);
+        profileset_generator::generate_droptimizer_input(
+            &base_profile,
+            &req.drop_items,
+            crafted_stats,
+        );
 
     if combo_count == 0 {
         return HttpResponse::BadRequest().json(json!({
@@ -68,6 +86,7 @@ pub(super) async fn create_droptimizer_sim(
         "base_profile": base_profile,
         "drop_items": req.drop_items,
         "options": req.options.to_json(),
+        "preferred_crafted_stats": req.preferred_crafted_stats,
     });
 
     let combo_metadata_serialized = serialize_combo_metadata_value(&combo_metadata);

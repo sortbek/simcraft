@@ -16,6 +16,22 @@ use crate::types::*;
 // Pattern intentionally omits ':' — preserves gear_resolver's original behavior.
 static RE_BONUS_ID_NO_COLON: Lazy<Regex> = Lazy::new(|| Regex::new(r"bonus_id=([0-9/]+)").unwrap());
 
+/// Suffix for manual (user-edited) items so gem/enchant variants of the same
+/// base item keep distinct uids and dedup keys. Must stay deterministic from
+/// the simc string alone: build_modified_item reproduces it for the frontend.
+pub(crate) fn manual_suffix(simc: &str) -> String {
+    let gems = crate::simc_string::extract_gem_ids(simc)
+        .iter()
+        .map(|g| g.to_string())
+        .collect::<Vec<_>>()
+        .join("/");
+    format!(
+        ":m:e{}:g{}",
+        crate::simc_string::extract_enchant_id(simc),
+        gems
+    )
+}
+
 /// Build a stable UID for deduplication: "item_id:sorted_bonus_ids:origin:raw_slot"
 fn make_uid(item: &RawParsedItem) -> String {
     let mut sorted = item.bonus_ids.clone();
@@ -25,13 +41,17 @@ fn make_uid(item: &RawParsedItem) -> String {
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
         .join(":");
-    format!(
+    let mut uid = format!(
         "{}:{}:{}:{}",
         item.item_id,
         bonus_key,
         item.origin.as_str(),
         item.raw_slot
-    )
+    );
+    if item.manual {
+        uid.push_str(&manual_suffix(&item.simc_string));
+    }
+    uid
 }
 
 /// Dedup key: item_id + sorted bonus_ids (ignores origin/slot).
@@ -43,7 +63,50 @@ fn dedup_key(item: &RawParsedItem) -> String {
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
         .join(":");
-    format!("{}:{}", item.item_id, bonus_key)
+    let mut key = format!("{}:{}", item.item_id, bonus_key);
+    if item.manual {
+        key.push_str(&manual_suffix(&item.simc_string));
+    }
+    key
+}
+
+/// Enchant display name + scroll item id (empty/0 when unenchanted).
+fn enchant_display(enchant_id: u64) -> (String, u64) {
+    if enchant_id == 0 {
+        return (String::new(), 0);
+    }
+    item_db::get_enchant_info(enchant_id)
+        .map(|e| {
+            let name = e
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
+            let item_id = e.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+            (name, item_id)
+        })
+        .unwrap_or_default()
+}
+
+/// Gem display name + icon (empty when unsocketed).
+fn gem_display(gem_id: u64) -> (String, String) {
+    if gem_id == 0 {
+        return (String::new(), String::new());
+    }
+    item_db::get_gem_info(gem_id)
+        .map(|g| {
+            (
+                g.get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                g.get("icon")
+                    .and_then(|i| i.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        })
+        .unwrap_or_default()
 }
 
 /// Enrich a raw item with display info from the item DB.
@@ -91,40 +154,8 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         db_ilevel
     };
 
-    let (enchant_name, enchant_item_id) = if item.enchant_id > 0 {
-        item_db::get_enchant_info(item.enchant_id)
-            .map(|e| {
-                let name = e
-                    .get("name")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let item_id = e.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-                (name, item_id)
-            })
-            .unwrap_or_default()
-    } else {
-        (String::new(), 0)
-    };
-
-    let (gem_name, gem_icon) = if item.gem_id > 0 {
-        item_db::get_gem_info(item.gem_id)
-            .map(|g| {
-                (
-                    g.get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("")
-                        .to_string(),
-                    g.get("icon")
-                        .and_then(|i| i.as_str())
-                        .unwrap_or("")
-                        .to_string(),
-                )
-            })
-            .unwrap_or_default()
-    } else {
-        (String::new(), String::new())
-    };
+    let (enchant_name, enchant_item_id) = enchant_display(item.enchant_id);
+    let (gem_name, gem_icon) = gem_display(item.gem_id);
 
     ResolvedItem {
         uid: make_uid(item),
@@ -136,6 +167,8 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         bonus_ids: item.bonus_ids.clone(),
         enchant_id: item.enchant_id,
         gem_id: item.gem_id,
+        gem_ids: crate::simc_string::extract_gem_ids(&item.simc_string),
+        is_manual: item.manual,
         name,
         icon,
         quality,
@@ -149,6 +182,7 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         gem_icon,
         season_id,
         is_catalyst: false,
+        source_item_id: 0,
         can_catalyst: false,
         is_void_forge: false,
         can_void_forge: false,
@@ -451,6 +485,11 @@ pub fn build_catalyst_item(
     if !bonus_str.is_empty() {
         simc_parts.push(format!(",bonus_id={}", bonus_str));
     }
+    // Catalysed pieces keep the source item's secondary stats.
+    simc_parts.push(item_db::redirected_base_stats_fragment(
+        true,
+        source.item_id,
+    ));
     if source.enchant_id > 0 {
         simc_parts.push(format!(",enchant_id={}", source.enchant_id));
     }
@@ -478,12 +517,15 @@ pub fn build_catalyst_item(
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
         .join(":");
+    // Source id included: two sources convert to the same tier piece but keep
+    // their own secondaries, so they are distinct items.
     let uid = format!(
-        "{}:{}:{}:{}",
+        "{}:{}:{}:{}:{}",
         tier_item_id,
         bonus_key,
         source.origin.as_str(),
-        slot
+        slot,
+        source.item_id
     );
 
     ResolvedItem {
@@ -496,6 +538,13 @@ pub fn build_catalyst_item(
         bonus_ids: catalyst_bonus_ids,
         enchant_id: source.enchant_id,
         gem_id: source.gem_id,
+        // The built string emits at most the source's single gem.
+        gem_ids: if source.gem_id > 0 {
+            vec![source.gem_id]
+        } else {
+            Vec::new()
+        },
+        is_manual: source.is_manual,
         name,
         icon,
         quality,
@@ -509,17 +558,75 @@ pub fn build_catalyst_item(
         gem_icon: source.gem_icon.clone(),
         season_id: source.season_id,
         is_catalyst: true,
+        source_item_id: source.item_id,
         can_catalyst: false,
         is_void_forge: false,
         can_void_forge: false,
     }
 }
 
+/// Build a user-edited copy of an item with the given gems and enchant applied.
+/// The uid carries the manual suffix so the copy round-trips through
+/// `# manual.{slot}=` lines and resolve with an identical identity.
+pub fn build_modified_item(
+    source: &ResolvedItem,
+    gem_ids: &[u64],
+    enchant_id: u64,
+) -> ResolvedItem {
+    let with_gems = crate::simc_string::set_gem_ids(&source.simc_string, gem_ids);
+    let new_simc = if enchant_id > 0 {
+        crate::simc_string::set_enchant_id(&with_gems, enchant_id)
+    } else {
+        crate::simc_string::strip_enchant_id(&with_gems)
+    };
+
+    let (enchant_name, enchant_item_id) = enchant_display(enchant_id);
+    let first_gem = gem_ids.first().copied().unwrap_or(0);
+    let (gem_name, gem_icon) = gem_display(first_gem);
+
+    let mut sorted = source.bonus_ids.clone();
+    sorted.sort();
+    let bonus_key = sorted
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    let uid = format!(
+        "{}:{}:{}:{}{}",
+        source.item_id,
+        bonus_key,
+        ItemOrigin::Bags.as_str(),
+        source.slot,
+        manual_suffix(&new_simc)
+    );
+
+    ResolvedItem {
+        uid,
+        simc_string: new_simc,
+        origin: ItemOrigin::Bags,
+        enchant_id,
+        gem_id: first_gem,
+        gem_ids: gem_ids.to_vec(),
+        is_manual: true,
+        enchant_name,
+        enchant_item_id,
+        gem_name,
+        gem_icon,
+        is_catalyst: false,
+        source_item_id: 0,
+        can_catalyst: false,
+        is_void_forge: false,
+        can_void_forge: false,
+        ..source.clone()
+    }
+}
+
 /// Whether an item can be fed to the catalyst: current-season gear on at least the
 /// Veteran track, or fixed-difficulty gear (e.g. Sporefused) whose item level comes
 /// from a bonus outside the upgrade-track system and so has no track or season id.
+/// Crafted gear never qualifies.
 fn is_catalyst_source(item: &ResolvedItem, tier_item_id: u64) -> bool {
-    if item.is_catalyst || item.item_id == tier_item_id {
+    if item.is_catalyst || item.item_id == tier_item_id || item_db::is_crafted_item(item.item_id) {
         return false;
     }
     if item
@@ -599,8 +706,10 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
             }
         }
 
-        // Find the best catalyst candidate: highest ilevel, tiebreak by upgrade track rank
-        let mut best: Option<ResolvedItem> = None;
+        // One conversion per source: sources that tie on ilevel still differ in
+        // secondary stats (see `redirected_base_stats`), so collapsing to a
+        // single "best" would pick one arbitrarily and hide the rest.
+        let mut candidates: Vec<ResolvedItem> = Vec::new();
 
         for source in &sources {
             if !is_catalyst_source(source, tier_info.item_id) {
@@ -616,30 +725,20 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
                 }
             }
 
-            let dominated = if let Some(ref current_best) = best {
-                if catalyst_item.ilevel > current_best.ilevel {
-                    false
-                } else if catalyst_item.ilevel < current_best.ilevel {
-                    true
-                } else {
-                    // Same ilevel — compare upgrade track rank (higher = better)
-                    let new_rank = item_db::track_rank(&catalyst_item.upgrade).unwrap_or(0);
-                    let cur_rank = item_db::track_rank(&current_best.upgrade).unwrap_or(0);
-                    new_rank <= cur_rank
-                }
-            } else {
-                false
-            };
-
-            if !dominated {
-                best = Some(catalyst_item);
-            }
+            candidates.push(catalyst_item);
         }
 
-        if let Some(catalyst_item) = best {
-            if let Some(slot_res) = slots.get_mut(slot_key.as_str()) {
-                slot_res.alternatives.push(catalyst_item);
-            }
+        // Best-first and deterministic: ilevel, then upgrade track rank, then source id.
+        candidates.sort_by_cached_key(|c| {
+            (
+                std::cmp::Reverse(c.ilevel),
+                std::cmp::Reverse(item_db::track_rank(&c.upgrade).unwrap_or(0)),
+                c.source_item_id,
+            )
+        });
+
+        if let Some(slot_res) = slots.get_mut(slot_key.as_str()) {
+            slot_res.alternatives.extend(candidates);
         }
     }
 }
@@ -713,6 +812,7 @@ pub fn build_void_forge_item(source: &ResolvedItem, vf_bonus_id: u64) -> Resolve
         ilevel,
         tag,
         upgrade,
+        gem_ids: crate::simc_string::extract_gem_ids(&new_simc),
         simc_string: new_simc,
         is_void_forge: true,
         can_void_forge: false,
@@ -876,6 +976,220 @@ mod catalyst_tests {
         assert_eq!(
             catalyst.ilevel, source_ilevel,
             "catalyst piece keeps the source item level"
+        );
+    }
+
+    /// A Veteran-or-better upgrade-track bonus id for the given season, from the
+    /// loaded bonus data. `None` when that season has no such track in the data.
+    fn veteran_track_bonus_id(season_id: u64) -> Option<u64> {
+        item_db::bonuses().iter().find_map(|(bid, bonus)| {
+            let upgrade = bonus.get("upgrade")?;
+            if upgrade.get("seasonId")?.as_u64()? != season_id {
+                return None;
+            }
+            let full_name = upgrade.get("fullName")?.as_str()?;
+            item_db::is_minimum_track(full_name, "Veteran").then_some(*bid)
+        })
+    }
+
+    #[test]
+    fn previous_season_gear_is_not_catalyst_eligible() {
+        ensure_game_data_loaded();
+        let current = item_db::current_season_id();
+
+        // Current-season control first: proves this harness produces eligible
+        // items at all, so the previous-season assertion can't pass vacuously.
+        let current_bonus =
+            veteran_track_bonus_id(current).expect("current season has Veteran+ track bonuses");
+        let head = resolved_head(current_bonus);
+        assert!(
+            head.equipped.as_ref().expect("equipped head").can_catalyst,
+            "current-season Veteran+ gear should be catalyst-eligible"
+        );
+
+        let Some(previous_bonus) = (1..current).rev().find_map(veteran_track_bonus_id) else {
+            eprintln!("SKIP previous_season: loaded data has only one season of upgrade bonuses");
+            return;
+        };
+        let head = resolved_head(previous_bonus);
+        assert!(
+            !head.equipped.as_ref().expect("equipped head").can_catalyst,
+            "previous-season gear must not be catalyst-eligible"
+        );
+        assert!(
+            !head.alternatives.iter().any(|a| a.is_catalyst),
+            "previous-season gear must not generate catalyst alternatives"
+        );
+    }
+
+    #[test]
+    fn catalyst_item_redirects_base_stats_to_the_source() {
+        ensure_game_data_loaded();
+        let profile = "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=251199\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear_with_catalyst(&parsed, Some(1));
+        let head = resolved.slots.get("head").expect("head slot resolved");
+        let source = head.equipped.as_ref().expect("equipped head");
+
+        let class_id = class_data::class_wow_id("mage").expect("mage class id");
+        let tier = item_db::catalyst_tier_item(class_id, 1).expect("mage head tier item");
+        let catalyst = build_catalyst_item(source, tier, "head");
+
+        assert!(
+            catalyst
+                .simc_string
+                .contains(&format!("redirected_base_stats={}", source.item_id)),
+            "catalyst simc string must redirect base stats to the source item, got: {}",
+            catalyst.simc_string
+        );
+        assert!(
+            catalyst
+                .simc_string
+                .contains(&format!("id={}", catalyst.item_id)),
+            "catalyst simc string keeps the tier item id, got: {}",
+            catalyst.simc_string
+        );
+    }
+
+    #[test]
+    fn catalyst_copy_inherits_is_manual_from_its_source() {
+        ensure_game_data_loaded();
+        let profile = "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=251199\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear_with_catalyst(&parsed, Some(1));
+        let source = resolved.slots["head"]
+            .equipped
+            .as_ref()
+            .expect("equipped head");
+
+        let class_id = class_data::class_wow_id("mage").expect("mage class id");
+        let tier = item_db::catalyst_tier_item(class_id, 1).expect("mage head tier item");
+
+        assert!(!build_catalyst_item(source, tier, "head").is_manual);
+        // The copy carries the source's enchant verbatim, so a manual source's
+        // cleared enchant must stay exempt from copy-enchants after conversion.
+        let manual = build_modified_item(source, &[], 0);
+        assert!(build_catalyst_item(&manual, tier, "head").is_manual);
+    }
+}
+
+#[cfg(test)]
+mod gem_ids_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    #[test]
+    fn enrich_populates_full_gem_id_list() {
+        ensure_game_data_loaded();
+        let profile = "druid=\"T\"\nlevel=80\nspec=feral\n\nneck=,id=999001,gem_id=213470/213473,enchant_id=7334\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear(&parsed);
+        let equipped = resolved.slots["neck"]
+            .equipped
+            .as_ref()
+            .expect("equipped neck");
+        assert_eq!(equipped.gem_ids, vec![213470, 213473]);
+        assert_eq!(equipped.gem_id, 213470);
+    }
+}
+
+#[cfg(test)]
+mod manual_item_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    const BASE: &str =
+        "druid=\"T\"\nlevel=80\nspec=feral\n\nneck=,id=999001,gem_id=213470,enchant_id=7334\n";
+
+    #[test]
+    fn plain_bag_copy_with_same_bonus_ids_is_deduped() {
+        ensure_game_data_loaded();
+        let input = format!("{BASE}# neck=,id=999001,gem_id=213473,enchant_id=7334\n");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        // Documents the existing dedup behavior the manual channel exists to bypass.
+        assert!(resolved.slots["neck"].alternatives.is_empty());
+    }
+
+    #[test]
+    fn manual_copy_survives_dedup_with_suffixed_uid() {
+        ensure_game_data_loaded();
+        let input =
+            format!("{BASE}# manual.neck=,id=999001,gem_id=213473/213470,enchant_id=7340\n");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        let alts = &resolved.slots["neck"].alternatives;
+        assert_eq!(alts.len(), 1);
+        assert_eq!(alts[0].uid, "999001::bags:neck:m:e7340:g213473/213470");
+        assert_eq!(alts[0].gem_ids, vec![213473, 213470]);
+        assert_eq!(alts[0].enchant_id, 7340);
+    }
+
+    #[test]
+    fn manual_line_sets_is_manual() {
+        ensure_game_data_loaded();
+        let input = format!("{BASE}# manual.neck=,id=999001,enchant_id=7340\n");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        assert!(resolved.slots["neck"].alternatives[0].is_manual);
+        assert!(!resolved.slots["neck"].equipped.as_ref().unwrap().is_manual);
+    }
+
+    #[test]
+    fn identical_manual_copies_collapse() {
+        ensure_game_data_loaded();
+        let line = "# manual.neck=,id=999001,gem_id=213473,enchant_id=7340\n";
+        let input = format!("{BASE}{line}{line}");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        assert_eq!(resolved.slots["neck"].alternatives.len(), 1);
+    }
+
+    #[test]
+    fn distinct_manual_gem_variants_both_survive() {
+        ensure_game_data_loaded();
+        let input = format!(
+            "{BASE}# manual.neck=,id=999001,gem_id=213473,enchant_id=7334\n# manual.neck=,id=999001,enchant_id=7334\n"
+        );
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        assert_eq!(resolved.slots["neck"].alternatives.len(), 2);
+    }
+
+    #[test]
+    fn build_modified_item_sets_and_clears() {
+        ensure_game_data_loaded();
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(BASE));
+        let equipped = resolved.slots["neck"].equipped.clone().unwrap();
+
+        let set = build_modified_item(&equipped, &[213473, 213470], 7340);
+        assert!(set.simc_string.contains("gem_id=213473/213470"));
+        assert!(set.simc_string.contains("enchant_id=7340"));
+        assert_eq!(set.gem_ids, vec![213473, 213470]);
+        assert_eq!(set.gem_id, 213473);
+        assert_eq!(set.enchant_id, 7340);
+        assert_eq!(set.origin, ItemOrigin::Bags);
+
+        let cleared = build_modified_item(&equipped, &[], 0);
+        assert!(!cleared.simc_string.contains("gem_id="));
+        assert!(!cleared.simc_string.contains("enchant_id="));
+        assert!(cleared.gem_ids.is_empty());
+        assert_eq!(cleared.enchant_id, 0);
+        assert_eq!(cleared.gem_name, "");
+        assert_eq!(cleared.enchant_name, "");
+    }
+
+    #[test]
+    fn modified_item_uid_round_trips_through_resolve() {
+        ensure_game_data_loaded();
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(BASE));
+        let equipped = resolved.slots["neck"].equipped.clone().unwrap();
+        let modified = build_modified_item(&equipped, &[213473, 213470], 7340);
+
+        let with_manual = format!("{BASE}# manual.neck={}\n", modified.simc_string);
+        let re_resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&with_manual));
+        let alt = re_resolved.slots["neck"]
+            .alternatives
+            .iter()
+            .find(|a| a.uid == modified.uid);
+        assert!(
+            alt.is_some(),
+            "manual copy must resolve with an identical uid"
         );
     }
 }

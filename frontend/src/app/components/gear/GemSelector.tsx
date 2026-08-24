@@ -4,14 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiUrl, fetchJsonOr } from '../../lib/api';
 import GearItemRow from './GearItemRow';
 import type { ResolvedItem } from '../../lib/types';
+import { getWowheadUrl } from '../../lib/useItemInfo';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import Switch from '../ui/Switch';
 import CollapsibleSection from '../ui/CollapsibleSection';
-import { statLabel, type ItemOption } from './itemOptions';
-
-interface GemOption extends ItemOption {
-  algariColor?: string;
-}
+import { statLabel, filterDiamonds, groupGemsByColor, type GemOption } from './itemOptions';
 
 interface GemSelectorProps {
   equippedSlots: Record<string, ResolvedItem>;
@@ -63,8 +61,9 @@ export default function GemSelector({
   defaultOpen,
   storageKey,
 }: GemSelectorProps) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [gemOptions, setGemOptions] = useState<GemOption[]>([]);
+  useWowheadTooltips([gemOptions]);
 
   const socketedSlots = useMemo(
     () =>
@@ -81,28 +80,10 @@ export default function GemSelector({
   }, [hasSocketedSlots]);
 
   // Diamonds = quality 4, crafted rank 2 (separate from regular gems)
-  const diamonds = useMemo(
-    () => gemOptions.filter((g) => g.craftingQuality === 2 && (g.quality ?? 0) === 4),
-    [gemOptions]
-  );
+  const diamonds = useMemo(() => filterDiamonds(gemOptions), [gemOptions]);
 
   // Regular gems grouped by color: rank 2 crafted, quality 3 (Flawless rare)
-  const gemGroups = useMemo(() => {
-    const filtered = gemOptions.filter((g) => g.craftingQuality === 2 && (g.quality ?? 0) === 3);
-    const groups: Record<string, GemOption[]> = {};
-    for (const g of filtered) {
-      const color = g.algariColor || 'other';
-      if (!groups[color]) groups[color] = [];
-      groups[color].push(g);
-    }
-    for (const arr of Object.values(groups)) {
-      arr.sort((a, b) => (a.itemName || a.displayName).localeCompare(b.itemName || b.displayName));
-    }
-    const colorOrder = ['amethyst', 'garnet', 'lapis', 'peridot', 'other'];
-    return colorOrder
-      .filter((c) => groups[c]?.length > 0)
-      .map((c) => ({ color: c, gems: groups[c] }));
-  }, [gemOptions]);
+  const gemGroups = useMemo(() => groupGemsByColor(gemOptions), [gemOptions]);
 
   const allGemIds = useMemo(
     () => gemGroups.flatMap((g) => g.gems.map((gem) => gem.itemId!).filter(Boolean)),
@@ -200,6 +181,7 @@ export default function GemSelector({
                     icon={d.itemIcon || ''}
                     name={d.itemName || d.displayName}
                     nameColor={isSelected ? 'text-amber-400' : 'text-on-surface'}
+                    href={getWowheadUrl(gemItemId, locale)}
                     details={gemDetails(d)}
                     selectable
                     checked={isSelected}
@@ -245,6 +227,7 @@ export default function GemSelector({
                       icon={g.itemIcon || ''}
                       name={g.itemName || g.displayName}
                       nameColor="text-on-surface"
+                      href={getWowheadUrl(gemItemId, locale)}
                       details={gemDetails(g)}
                       selectable
                       checked={isSelected}

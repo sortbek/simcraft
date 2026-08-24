@@ -326,8 +326,8 @@ async fn insert_and_spawn_profileset_job(
 
     repo.insert(&job).await?;
 
-    // Non-streamed (eager) jobs never sim-row, so no per-combo override lines are
-    // persisted here (`&[]` → profileset_simc stays empty).
+    // Eager jobs keep their profileset lines in the stored simc input and
+    // sim-row extracts from there, so no per-combo lines are persisted (`&[]`).
     write_combo_metadata_table_raw(repo, &job_id, &submission.combo_metadata_serialized, &[]).await;
 
     let sim_type = submission.sim_type.to_string();
@@ -366,6 +366,7 @@ pub(crate) async fn spawn_droptimizer_child(
     simc_input: &str,
     drop_items: &[Value],
     batch_id: &str,
+    crafted_stats: Option<crate::profileset_generator::CraftedStats>,
     options: &SimOptions,
     provider: Arc<dyn crate::compute::SimcProvider>,
     avail: &crate::compute::ProviderAvailability,
@@ -381,7 +382,11 @@ pub(crate) async fn spawn_droptimizer_child(
     let base_profile = parse_result.base_profile.clone();
 
     let (generated_input, combo_count, combo_metadata) =
-        crate::profileset_generator::generate_droptimizer_input(&base_profile, drop_items);
+        crate::profileset_generator::generate_droptimizer_input(
+            &base_profile,
+            drop_items,
+            crafted_stats,
+        );
 
     let generated_input = inject_expert_fields(&generated_input, options);
 
@@ -389,6 +394,7 @@ pub(crate) async fn spawn_droptimizer_child(
         "base_profile": base_profile,
         "drop_items": drop_items,
         "options": options.to_json(),
+        "preferred_crafted_stats": crafted_stats.map(|cs| cs.stat_ids),
     });
 
     let combo_metadata_serialized =

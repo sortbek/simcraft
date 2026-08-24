@@ -13,6 +13,7 @@ export interface ResolvedItem {
   bonus_ids: number[];
   enchant_id: number;
   gem_id: number;
+  gem_ids: number[];
   name: string;
   icon: string;
   quality: number;
@@ -25,9 +26,11 @@ export interface ResolvedItem {
   gem_name: string;
   gem_icon: string;
   is_catalyst?: boolean;
+  source_item_id?: number;
   can_catalyst?: boolean;
   is_void_forge?: boolean;
   can_void_forge?: boolean;
+  is_manual?: boolean;
 }
 
 export interface SlotResolution {
@@ -100,6 +103,7 @@ export interface SeasonConfigResponse {
   /** Encounter IDs whose loot uses fixed per-difficulty ilvls with no upgrade
    *  track (e.g. Sporefall) — hide the upgrade-track control for these raids. */
   fixed_difficulty_encounters?: number[];
+  crafted_secondary_stats?: number[];
 }
 
 // Gear slots constant (matches backend)

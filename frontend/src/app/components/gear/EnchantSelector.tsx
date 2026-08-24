@@ -4,23 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../../lib/api';
 import GearItemRow from './GearItemRow';
 import type { ResolvedItem } from '../../lib/types';
+import { getWowheadUrl } from '../../lib/useItemInfo';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import CollapsibleSection from '../ui/CollapsibleSection';
-import { statLabel, type ItemOption } from './itemOptions';
-
-// Slots that support enchants, in display order
-const ENCHANT_SLOT_ORDER = [
-  'main_hand',
-  'head',
-  'shoulder',
-  'back',
-  'chest',
-  'wrist',
-  'legs',
-  'feet',
-  'finger1',
-  'finger2',
-];
+import { statLabel, ENCHANT_SLOTS, type ItemOption } from './itemOptions';
 
 const SLOT_DISPLAY: Record<string, string> = {
   main_hand: 'slot.mainHand',
@@ -61,11 +49,12 @@ export default function EnchantSelector({
   onSelectAllEnchants,
   onDeselectAllEnchants,
 }: EnchantSelectorProps) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [enchantOptions, setItemOptions] = useState<Record<string, ItemOption[]>>({});
+  useWowheadTooltips([enchantOptions]);
 
   const enchantableSlots = useMemo(
-    () => ENCHANT_SLOT_ORDER.filter((s) => equippedSlots[s]),
+    () => ENCHANT_SLOTS.filter((s) => equippedSlots[s]),
     [equippedSlots]
   );
 
@@ -106,7 +95,7 @@ export default function EnchantSelector({
   }, [enchantableSlots, enchantOptions]);
 
   const enchantSlots = useMemo(
-    () => ENCHANT_SLOT_ORDER.filter((s) => sortedEnchants[s]?.length > 0),
+    () => ENCHANT_SLOTS.filter((s) => sortedEnchants[s]?.length > 0),
     [sortedEnchants]
   );
 
@@ -163,6 +152,11 @@ export default function EnchantSelector({
                   icon={equippedOption?.itemIcon || ''}
                   name={equippedName}
                   nameColor="text-on-surface"
+                  href={
+                    equippedOption?.itemId
+                      ? getWowheadUrl(equippedOption.itemId, locale)
+                      : undefined
+                  }
                   details={equippedOption ? enchantDetails(equippedOption) : undefined}
                   equipped
                 />
@@ -180,6 +174,7 @@ export default function EnchantSelector({
                     icon={e.itemIcon || ''}
                     name={e.itemName || e.displayName}
                     nameColor="text-on-surface"
+                    href={e.itemId ? getWowheadUrl(e.itemId, locale) : undefined}
                     details={enchantDetails(e)}
                     selectable
                     checked={isSelected}

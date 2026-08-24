@@ -49,6 +49,10 @@ pub struct RawParsedItem {
     pub enchant_id: u64,
     pub gem_id: u64,
     pub origin: ItemOrigin,
+    /// True for user-edited copies injected via `# manual.{slot}=` lines;
+    /// these bypass the item_id+bonus dedup and carry a content-suffixed uid.
+    #[serde(default)]
+    pub manual: bool,
 }
 
 // ---- Character Info ----
@@ -156,6 +160,12 @@ pub struct ResolvedItem {
     pub bonus_ids: Vec<u64>,
     pub enchant_id: u64,
     pub gem_id: u64,
+    /// All gem item ids from `gem_id=A/B/...` (empty when unsocketed).
+    #[serde(default)]
+    pub gem_ids: Vec<u64>,
+    /// User-edited copy; its gem/enchant state is an explicit choice.
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    pub is_manual: bool,
     /// Display info from item DB.
     pub name: String,
     pub icon: String,
@@ -179,6 +189,9 @@ pub struct ResolvedItem {
     /// Whether this item is a catalyst-generated tier alternative.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_catalyst: bool,
+    /// Item this was catalysed from; its secondaries carry over.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub source_item_id: u64,
     /// Whether this item can be converted via Revival Catalyst.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub can_catalyst: bool,

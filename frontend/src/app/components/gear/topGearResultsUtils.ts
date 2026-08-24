@@ -1,4 +1,4 @@
-import type { ItemQuery } from '../../lib/useItemInfo';
+import { toGemIdList, type ItemQuery } from '../../lib/useItemInfo';
 import type { GearItem } from './GearOverview';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
 
@@ -47,8 +47,9 @@ export function dedupeEncounterResults(
     // Include slot: a ring/trinket is simmed in BOTH slots (finger1 vs finger2,
     // trinket1 vs trinket2) and each is a distinct result — they must NOT collapse
     // into one row, or the better slot's verdict hides the other's (matches the
-    // per-slot breakdown shown by Raidbots).
-    const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}_${item.slot || ''}`;
+    // per-slot breakdown shown by Raidbots). Same for the catalyst source: two
+    // sources convert to the same tier piece but sim different secondaries.
+    const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}_${item.slot || ''}_${item.source_item_id || ''}`;
     const existing = bestByItem.get(key);
     if (!existing || result.dps > existing.dps) {
       bestByItem.set(key, result);
@@ -136,6 +137,35 @@ export function buildBestGearSet(
   }
 
   return gearSet;
+}
+
+/** Slots whose materialized items differ between two gear sets (item, level, bonuses, gems, or enchant). */
+export function diffGearSets(
+  a: Record<string, GearItem>,
+  b: Record<string, GearItem>
+): Set<string> {
+  const itemKey = (item?: GearItem) =>
+    item
+      ? [
+          item.item_id,
+          item.ilevel,
+          item.enchant_id ?? 0,
+          toGemIdList(item).join(':'),
+          [...(item.bonus_ids ?? [])].sort((x, y) => x - y).join(':'),
+          // Catalyst source and missives change the simmed stats without
+          // changing the item id — same-looking slots can still differ.
+          item.source_item_id ?? 0,
+          (item.crafted_stats ?? []).join(':'),
+        ].join('|')
+      : '';
+
+  const slots = new Set<string>();
+  for (const slot of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (itemKey(a[slot]) !== itemKey(b[slot])) {
+      slots.add(slot);
+    }
+  }
+  return slots;
 }
 
 function collectChangedSlots(

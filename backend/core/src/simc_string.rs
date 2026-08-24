@@ -19,6 +19,7 @@ static ITEM_ID_CAPTURE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"id=(\d+)").un
 static AFTER_ITEM_ID_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(,id=\d+)").unwrap());
 static BONUS_ID_CAPTURE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"bonus_id=([0-9/:]+)").unwrap());
 static STRIP_GEM_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r",?gem_id=[\d/]+").unwrap());
+static STRIP_ENCHANT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r",?enchant_id=\d+").unwrap());
 
 /// Replace the existing `enchant_id=N` if present, otherwise insert one right after `,id=N`.
 pub fn set_enchant_id(simc: &str, enchant_id: u64) -> String {
@@ -65,6 +66,11 @@ pub fn set_gem_ids(simc: &str, gem_ids: &[u64]) -> String {
 /// Strip any existing `gem_id=…` from a simc gear line (leading comma included).
 pub fn strip_gem_id(simc: &str) -> String {
     STRIP_GEM_RE.replace(simc, "").to_string()
+}
+
+/// Strip any existing `enchant_id=N` from a simc gear line (leading comma included).
+pub fn strip_enchant_id(simc: &str) -> String {
+    STRIP_ENCHANT_RE.replace(simc, "").to_string()
 }
 
 pub fn extract_enchant_id(simc: &str) -> u64 {
@@ -172,5 +178,17 @@ mod gem_tests {
     fn strip_gem_id_handles_multi() {
         let s = ",id=100,gem_id=111/222,bonus_id=12";
         assert_eq!(strip_gem_id(s), ",id=100,bonus_id=12");
+    }
+
+    #[test]
+    fn strip_enchant_id_removes_with_leading_comma() {
+        let s = ",id=100,enchant_id=7449,bonus_id=12";
+        assert_eq!(strip_enchant_id(s), ",id=100,bonus_id=12");
+    }
+
+    #[test]
+    fn strip_enchant_id_noop_when_absent() {
+        let s = ",id=100,bonus_id=12";
+        assert_eq!(strip_enchant_id(s), ",id=100,bonus_id=12");
     }
 }

@@ -19,6 +19,8 @@ interface GearOverviewProps {
   characterRenderUrl?: string | null;
   upgradeSlots?: Set<string>;
   downgradeSlots?: Set<string>;
+  /** Compare mode: slots where both sets carry the same change vs equipped. */
+  sharedSlots?: Set<string>;
   itemInfoMap: Record<number, ItemInfo>;
   enchantInfoMap: Record<number, EnchantInfo>;
   gemInfoMap: Record<number, GemInfo>;
@@ -32,6 +34,7 @@ export default function GearOverview({
   characterRenderUrl,
   upgradeSlots,
   downgradeSlots,
+  sharedSlots,
   itemInfoMap,
   enchantInfoMap,
   gemInfoMap,
@@ -76,6 +79,7 @@ export default function GearOverview({
                 item={gear[slot]}
                 isUpgrade={upgradeSlots?.has(slot)}
                 isDowngrade={downgradeSlots?.has(slot)}
+                isShared={sharedSlots?.has(slot)}
                 itemInfoMap={itemInfoMap}
                 enchantInfoMap={enchantInfoMap}
                 gemInfoMap={gemInfoMap}
@@ -91,6 +95,7 @@ export default function GearOverview({
                 item={gear[slot]}
                 isUpgrade={upgradeSlots?.has(slot)}
                 isDowngrade={downgradeSlots?.has(slot)}
+                isShared={sharedSlots?.has(slot)}
                 itemInfoMap={itemInfoMap}
                 enchantInfoMap={enchantInfoMap}
                 gemInfoMap={gemInfoMap}
@@ -107,6 +112,7 @@ export default function GearOverview({
               item={gear[slot]}
               isUpgrade={upgradeSlots?.has(slot)}
               isDowngrade={downgradeSlots?.has(slot)}
+              isShared={sharedSlots?.has(slot)}
               itemInfoMap={itemInfoMap}
               enchantInfoMap={enchantInfoMap}
               gemInfoMap={gemInfoMap}

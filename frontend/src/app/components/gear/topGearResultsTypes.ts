@@ -33,8 +33,6 @@ export interface TopGearResultsProps {
   backLink?: ReactNode;
   /** Source job id — enables the per-row "Sim" verify button. Omit on historical/imported views where re-running isn't applicable. */
   sourceJobId?: string;
-  /** Whether the source job ran streamed (precondition for the sim-row endpoint); button is hidden when false. */
-  sourceIsStreamed?: boolean;
 }
 
 export type GroupMode = 'rank' | 'encounter' | 'slot';

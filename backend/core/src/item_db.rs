@@ -102,7 +102,7 @@ struct CatalystData {
     tier_items: HashMap<(u64, u64), CatalystTierItem>,
     /// Set of all tier item IDs (for "is this already a tier piece?" checks).
     tier_item_ids: HashSet<u64>,
-    /// Currency ID for catalyst charges (e.g. 3378 for Midnight Catalyst).
+    /// Currency ID for catalyst charges (e.g. 3465, Venomblight Manaflux, for Midnight S2).
     pub catalyst_currency_id: u64,
 }
 
@@ -630,12 +630,18 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
                     }
                 }
 
-                // Determine catalyst currency ID from season config or default
-                // Current season: 3378 (Midnight Catalyst)
+                // Season config owns the per-season currency id. 0 (charges
+                // visibly unavailable) beats a hardcoded constant that would
+                // silently read last season's currency after a season roll.
                 let catalyst_currency_id = season_cfg()
-                    .get("catalyst_currency_id")
+                    .get("catalystCurrencyId")
                     .and_then(|v| v.as_u64())
-                    .unwrap_or(3378);
+                    .unwrap_or_else(|| {
+                        eprintln!(
+                            "season-config.json missing catalystCurrencyId — catalyst charges disabled"
+                        );
+                        0
+                    });
 
                 println!(
                     "Loaded {} catalyst items (group {}, currency {})",
@@ -787,6 +793,55 @@ pub fn drops_by_encounter() -> &'static HashMap<i64, Vec<Value>> {
     DROPS_BY_ENCOUNTER.get().expect("Game data not loaded")
 }
 
+static CRAFTED_ITEM_IDS: OnceCell<std::collections::HashSet<u64>> = OnceCell::new();
+
+/// Whether an item is from the crafted pool (season-config `poolInstanceId`).
+/// Lazily built on first use, once game data + season config are loaded.
+pub fn is_crafted_item(item_id: u64) -> bool {
+    CRAFTED_ITEM_IDS
+        .get_or_init(|| {
+            // Parse per element through the typed schema (types::season) so this
+            // stays in lockstep with the config shape; per-element keeps one
+            // malformed category from blanking the whole set.
+            let pool_id = season_cfg()
+                .get("dungeonCategories")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|c| {
+                    serde_json::from_value::<crate::types::season::DungeonCategory>(c.clone()).ok()
+                })
+                .find(|c| c.key == "crafted")
+                .map(|c| c.pool_instance_id);
+            let mut set = std::collections::HashSet::new();
+            // Loud like the sibling accessors: caching an empty set here would
+            // silently reject every crafted item for the life of the process.
+            let drops = DROPS_BY_ENCOUNTER.get().expect("Game data not loaded");
+            if let Some(pool_id) = pool_id {
+                for items in drops.values() {
+                    for it in items {
+                        if it.get("_source_instance_id").and_then(|v| v.as_i64()) == Some(pool_id) {
+                            if let Some(id) = it.get("id").and_then(|v| v.as_u64()) {
+                                set.insert(id);
+                            }
+                        }
+                    }
+                }
+            }
+            set
+        })
+        .contains(&item_id)
+}
+
+/// Whether every item in the list is from the crafted pool (by `item_id`).
+pub fn all_crafted_items(items: &[Value]) -> bool {
+    items.iter().all(|it| {
+        it.get("item_id")
+            .and_then(|v| v.as_u64())
+            .is_some_and(is_crafted_item)
+    })
+}
+
 pub fn talent_tree(spec_id: u64) -> Option<&'static Value> {
     TALENT_TREES.get()?.get(&spec_id)
 }
@@ -828,6 +883,16 @@ pub fn is_fixed_difficulty_bonus(bonus_id: u64) -> bool {
         .get()
         .map(|set| set.contains(&bonus_id))
         .unwrap_or(false)
+}
+
+/// `,redirected_base_stats=<source>` simc fragment for a catalysed piece
+/// (keeps the source item's secondaries); empty when not applicable.
+pub fn redirected_base_stats_fragment(is_catalyst: bool, source_item_id: u64) -> String {
+    if is_catalyst && source_item_id > 0 {
+        format!(",redirected_base_stats={}", source_item_id)
+    } else {
+        String::new()
+    }
 }
 
 /// Check if an item_id is a catalyst tier piece.
@@ -878,10 +943,7 @@ pub fn current_season_id() -> u64 {
 }
 
 pub fn catalyst_currency_id() -> u64 {
-    CATALYST
-        .get()
-        .map(|c| c.catalyst_currency_id)
-        .unwrap_or(3378)
+    CATALYST.get().map(|c| c.catalyst_currency_id).unwrap_or(0)
 }
 
 pub fn upgrade_tracks() -> Option<&'static HashMap<UpgradeTrackKey, UpgradeTrackValue>> {
@@ -893,6 +955,18 @@ static EMPTY_SEASON_CONFIG: once_cell::sync::Lazy<Value> =
 
 pub fn season_cfg() -> &'static Value {
     SEASON_CONFIG.get().unwrap_or(&EMPTY_SEASON_CONFIG)
+}
+
+/// Secondary-stat ID (32 Crit, 49 Mastery, 36 Haste, 40 Vers) → the current
+/// season's crafted bonus ID, from season-config `craftedSecondaryStats`.
+pub fn crafted_stat_bonus_id(stat_id: u64) -> Option<u64> {
+    crafted_stat_bonus_id_from(season_cfg(), stat_id)
+}
+
+fn crafted_stat_bonus_id_from(cfg: &Value, stat_id: u64) -> Option<u64> {
+    cfg.get("craftedSecondaryStats")?
+        .get(stat_id.to_string())?
+        .as_u64()
 }
 
 /// Most common max upgrade level across all tracks.
@@ -1468,7 +1542,12 @@ pub fn apply_copy_enchants(
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 let current_ench = item.get("enchant_id").and_then(|e| e.as_u64()).unwrap_or(0);
-                if is_equipped || current_ench != 0 {
+                // A manual item's missing enchant is a deliberate clear, not a gap.
+                let is_manual = item
+                    .get("manual")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if is_equipped || current_ench != 0 || is_manual {
                     return item.clone();
                 }
 
@@ -1683,6 +1762,51 @@ mod tests {
     use crate::test_support::{ensure_game_data_loaded, TestItem};
     use serde_json::json;
 
+    #[test]
+    fn crafted_stat_bonus_id_maps_via_season_config() {
+        let cfg = json!({
+            "craftedSecondaryStats": { "32": 11136, "49": 11137, "36": 11138, "40": 11139 }
+        });
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 32), Some(11136));
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 49), Some(11137));
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 36), Some(11138));
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 40), Some(11139));
+    }
+
+    #[test]
+    fn crafted_stat_bonus_id_unknown_stat_is_none() {
+        let cfg = json!({ "craftedSecondaryStats": { "32": 11136 } });
+        assert_eq!(crafted_stat_bonus_id_from(&cfg, 99), None);
+        let empty = json!({});
+        assert_eq!(crafted_stat_bonus_id_from(&empty, 32), None);
+    }
+
+    #[test]
+    fn is_crafted_item_recognizes_crafted_pool() {
+        ensure_game_data_loaded();
+        assert!(
+            is_crafted_item(237830),
+            "Spellbreaker's Girdle is crafted-pool"
+        );
+        assert!(
+            !is_crafted_item(49802),
+            "Garfrost's hammer is a normal drop"
+        );
+    }
+
+    #[test]
+    fn committed_season_config_maps_all_four_secondaries() {
+        // All four secondaries must map, else the dropdown silently drops stats.
+        let raw = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/season-config.json"));
+        let cfg: Value = serde_json::from_str(raw).expect("season-config.json parses");
+        for stat in [32u64, 49, 36, 40] {
+            assert!(
+                crafted_stat_bonus_id_from(&cfg, stat).is_some(),
+                "season-config.json missing crafted bonus ID for secondary stat {stat}"
+            );
+        }
+    }
+
     fn item(
         id: u64,
         is_equipped: bool,
@@ -1778,6 +1902,27 @@ mod tests {
             alt_simc.contains("id=200,enchant_id=7777,bonus_id=12"),
             "expected enchant inserted after id=; got: {alt_simc}"
         );
+    }
+
+    #[test]
+    fn copy_enchants_skips_manual_items() {
+        // A manual item's enchant_id=0 is a deliberate clear, not a gap to fill.
+        let mut manual = item(300, false, 0, ",id=300", vec![]);
+        manual["manual"] = json!(true);
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert(
+            "head".to_string(),
+            vec![
+                item(100, true, 7449, ",id=100,enchant_id=7449", vec![]),
+                item(200, false, 0, ",id=200", vec![]),
+                manual,
+            ],
+        );
+        let result = apply_copy_enchants(&items_by_slot);
+        let head = result.get("head").unwrap();
+        assert_eq!(head[1]["enchant_id"], 7449);
+        assert_eq!(head[2]["enchant_id"], 0);
+        assert_eq!(head[2]["simc_string"], ",id=300");
     }
 
     #[test]

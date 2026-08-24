@@ -579,6 +579,11 @@ fn build_catalyst_variant(item: &Value, class_id: u64, inv_type: u64) -> Option<
     if source_item_id == tier.item_id {
         return None;
     }
+    // Crafted gear can't be catalysed; owning the rule here covers every caller
+    // (tier rows in the crafted pool would also break the crafted-only sim guard).
+    if item_db::is_crafted_item(source_item_id) {
+        return None;
+    }
 
     let mut variant = item.clone();
     let obj = variant.as_object_mut()?;
@@ -623,10 +628,6 @@ pub fn add_drop_variants(
             None => continue,
         };
         let mut variants: Vec<Value> = Vec::new();
-        // Many source items in a slot convert to the SAME class tier piece; keep
-        // only the first so we don't emit duplicate identical catalyst rows/sims.
-        let mut catalyst_tier_seen: std::collections::HashSet<u64> =
-            std::collections::HashSet::new();
         for item in arr.iter() {
             let inv_type = item
                 .get("inventory_type")
@@ -640,11 +641,9 @@ pub fn add_drop_variants(
             }
             if include_catalyst {
                 if let Some(cid) = class_id {
+                    // One row per source: each is a different boss to farm.
                     if let Some(v) = build_catalyst_variant(item, cid, inv_type) {
-                        let tier_id = v.get("item_id").and_then(|x| x.as_u64()).unwrap_or(0);
-                        if catalyst_tier_seen.insert(tier_id) {
-                            variants.push(v);
-                        }
+                        variants.push(v);
                     }
                 }
             }
@@ -995,6 +994,16 @@ mod variant_tests {
     }
 
     #[test]
+    fn build_catalyst_variant_refuses_crafted_source() {
+        crate::test_support::ensure_game_data_loaded();
+        let item = serde_json::json!({ "item_id": 237830u64, "inventory_type": 5 });
+        assert!(
+            build_catalyst_variant(&item, 1, 5).is_none(),
+            "crafted gear must not be catalysable"
+        );
+    }
+
+    #[test]
     fn build_catalyst_variant_returns_none_when_already_tier() {
         ensure_game_data_loaded();
         let class_id = class_data::class_wow_id("mage").unwrap();
@@ -1049,6 +1058,39 @@ mod variant_tests {
         assert_eq!(
             copy, map,
             "roster path (both false) must leave map unchanged"
+        );
+    }
+
+    #[test]
+    fn add_drop_variants_emits_one_catalyst_row_per_source() {
+        ensure_game_data_loaded();
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "Head".to_string(),
+            json!([
+                { "item_id": 900001, "name": "Helm A", "icon": "i",
+                  "ilevel": 700, "inventory_type": 1, "encounter": "Boss A" },
+                { "item_id": 900002, "name": "Helm B", "icon": "i",
+                  "ilevel": 700, "inventory_type": 1, "encounter": "Boss B" },
+                { "item_id": 900003, "name": "Helm C", "icon": "i",
+                  "ilevel": 690, "inventory_type": 1, "encounter": "Boss C" },
+            ]),
+        );
+
+        add_drop_variants(&mut map, Some("mage"), false, true);
+
+        let mut sources: Vec<u64> = map["Head"]
+            .as_array()
+            .expect("head slot array")
+            .iter()
+            .filter(|i| i.get("is_catalyst").and_then(|v| v.as_bool()) == Some(true))
+            .filter_map(|i| i.get("source_item_id").and_then(|v| v.as_u64()))
+            .collect();
+        sources.sort_unstable();
+        assert_eq!(
+            sources,
+            vec![900001, 900002, 900003],
+            "each eligible source needs its own catalyst row"
         );
     }
 }
