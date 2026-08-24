@@ -49,6 +49,9 @@ interface JobData {
   provider_id: string;
 }
 
+// Consecutive status-poll failures tolerated before giving up (~2 min at 2s).
+const MAX_POLL_FAILURES = 60;
+
 export default function SimResultClient() {
   const { t } = useLanguage();
   const params = useParams();
@@ -66,6 +69,8 @@ export default function SimResultClient() {
   const caps = useProviderCaps(job?.provider_id ?? '');
   const providerMeta = useProviderMeta(job?.provider_id ?? '');
   const [fetchError, setFetchError] = useState('');
+  const [notFound, setNotFound] = useState(false);
+  const pollFailuresRef = useRef(0);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(true);
   const logCursorRef = useRef(0);
@@ -97,16 +102,23 @@ export default function SimResultClient() {
     async () => {
       try {
         const res = await fetch(`${API_URL}/api/sim/${id}`);
+        if (res.status === 404) {
+          setNotFound(true);
+          return null;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: JobData = await res.json();
+        pollFailuresRef.current = 0;
         setFetchError(''); // preserve the original per-poll error reset on success
         setJob(data);
         return data.status === 'pending' || data.status === 'running' || data.status === 'paused'
           ? 2000
           : null;
       } catch (err) {
+        // Transient failures (network, 5xx) keep polling so the page recovers.
+        pollFailuresRef.current += 1;
         setFetchError(err instanceof Error ? err.message : t('simResult.failedToFetchStatus'));
-        return null;
+        return pollFailuresRef.current >= MAX_POLL_FAILURES ? null : 2000;
       }
     },
     !!id && id !== '_',
@@ -189,6 +201,21 @@ export default function SimResultClient() {
       return next;
     });
   }, [id, t]);
+
+  if (notFound) {
+    return (
+      <div className="card border-amber-500/20 bg-amber-500/[0.03] p-6 text-center">
+        <p className="mb-1 text-sm font-semibold text-amber-400">{t('simResult.notFoundTitle')}</p>
+        <p className="mb-4 text-sm text-on-surface-variant/60">{t('simResult.notFoundBody')}</p>
+        <a
+          href={ROUTES.sims}
+          className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
+        >
+          {t('simResult.backToSims')}
+        </a>
+      </div>
+    );
+  }
 
   if (fetchError) {
     return (
