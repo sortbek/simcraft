@@ -622,8 +622,9 @@ pub fn build_modified_item(
 }
 
 /// Whether an item can be fed to the catalyst: current-season gear on at least the
-/// Veteran track, or fixed-difficulty gear (e.g. Sporefused) whose item level comes
-/// from a bonus outside the upgrade-track system and so has no track or season id.
+/// Veteran track, or current-season fixed-difficulty gear whose item level comes
+/// from a bonus outside the upgrade-track system and so has no track or season id
+/// (`is_fixed_difficulty_bonus` only indexes this season's encounters).
 /// Crafted gear never qualifies.
 fn is_catalyst_source(item: &ResolvedItem, tier_item_id: u64) -> bool {
     if item.is_catalyst || item.item_id == tier_item_id || item_db::is_crafted_item(item.item_id) {
@@ -896,24 +897,50 @@ mod catalyst_tests {
     use super::*;
     use crate::test_support::ensure_game_data_loaded;
 
-    /// A "mythic" bonus id from one of the season's fixed-difficulty encounters
-    /// (e.g. Sporefall's Sporefused gear). These set an item level directly and
-    /// carry no upgrade track, so they exercise the non-track catalyst path.
+    /// `(encounter_id, "mythic" bonus_id)` pairs from both fixed-difficulty
+    /// config shapes (`encounterFixedDifficulty` + `encounterDifficultyOverride`).
+    fn fixed_difficulty_encounter_bonuses() -> Vec<(i64, u64)> {
+        ["encounterFixedDifficulty", "encounterDifficultyOverride"]
+            .iter()
+            .filter_map(|key| item_db::season_cfg().get(key)?.as_object())
+            .flat_map(|encounters| {
+                encounters.iter().filter_map(|(eid, diffs)| {
+                    let bonus = diffs.get("mythic")?.get("bonus_id")?.as_u64()?;
+                    Some((eid.parse::<i64>().ok()?, bonus))
+                })
+            })
+            .collect()
+    }
+
+    /// A "mythic" bonus id from one of the *current season's* fixed-difficulty
+    /// encounters (its encounter is in the season raid pool). These set an item
+    /// level directly and carry no upgrade track, so they exercise the
+    /// non-track catalyst path.
     ///
     /// `None` when the loaded season has no such encounter — fixed-difficulty
-    /// raids are an occasional feature, not a permanent one, so these tests
+    /// encounters are an occasional feature, not a permanent one, so these tests
     /// report and skip rather than fail a season roll (and, via the pre-commit
     /// hook, block every commit until someone rewrites them).
     fn fixed_difficulty_bonus_id() -> Option<u64> {
-        item_db::season_cfg()
-            .get("encounterFixedDifficulty")
-            .and_then(|v| v.as_object())
-            .and_then(|encounters| {
-                encounters
-                    .values()
-                    .filter_map(|diffs| diffs.get("mythic")?.get("bonus_id")?.as_u64())
-                    .next()
-            })
+        let pool = item_db::season_pool_encounter_ids();
+        fixed_difficulty_encounter_bonuses()
+            .into_iter()
+            .find(|(eid, _)| pool.contains(eid))
+            .map(|(_, bonus)| bonus)
+    }
+
+    /// A fixed-difficulty bonus id whose encounter is NOT in the current season
+    /// raid pool (e.g. Sporefall's Sporefused gear after the S2 roll). `None`
+    /// when every configured entry is current-season or no pool is configured.
+    fn previous_season_fixed_difficulty_bonus_id() -> Option<u64> {
+        let pool = item_db::season_pool_encounter_ids();
+        if pool.is_empty() {
+            return None;
+        }
+        fixed_difficulty_encounter_bonuses()
+            .into_iter()
+            .find(|(eid, _)| !pool.contains(eid))
+            .map(|(_, bonus)| bonus)
     }
 
     /// `fixed_difficulty_bonus_id`, announcing the skip so a silently-inapplicable
@@ -1019,6 +1046,26 @@ mod catalyst_tests {
         assert!(
             !head.alternatives.iter().any(|a| a.is_catalyst),
             "previous-season gear must not generate catalyst alternatives"
+        );
+    }
+
+    #[test]
+    fn previous_season_fixed_difficulty_gear_is_not_catalyst_eligible() {
+        ensure_game_data_loaded();
+        let Some(bonus_id) = previous_season_fixed_difficulty_bonus_id() else {
+            eprintln!(
+                "SKIP previous_season_fixed_difficulty: config has no out-of-pool fixed-difficulty encounter"
+            );
+            return;
+        };
+        let head = resolved_head(bonus_id);
+        assert!(
+            !head.equipped.as_ref().expect("equipped head").can_catalyst,
+            "previous-season fixed-difficulty gear must not be catalyst-eligible"
+        );
+        assert!(
+            !head.alternatives.iter().any(|a| a.is_catalyst),
+            "previous-season fixed-difficulty gear must not generate catalyst alternatives"
         );
     }
 

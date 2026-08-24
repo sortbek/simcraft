@@ -460,15 +460,25 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
         println!("Loaded season config: {}", name);
         // Both config shapes yield bonuses that sit outside the upgrade tracks,
         // so both must be indexed — anything gating on "current season AND a
-        // minimum track" silently excludes this gear otherwise.
+        // minimum track" silently excludes this gear otherwise. Scope to the
+        // season raid pool (INSTANCES is loaded above): the config keeps
+        // entries for previous-season raids (e.g. Sporefall) so their drops
+        // still resolve, but their gear must not count as current-season.
+        let pool_encounters = pool_encounter_ids(&cfg);
         let fixed_difficulty_bonuses: HashSet<u64> =
             ["encounterFixedDifficulty", "encounterDifficultyOverride"]
                 .iter()
                 .filter_map(|key| cfg.get(key)?.as_object())
                 .flat_map(|encounters| {
                     encounters
-                        .values()
-                        .filter_map(|diffs| diffs.as_object())
+                        .iter()
+                        .filter(|(eid, _)| {
+                            pool_encounters.is_empty()
+                                || eid
+                                    .parse::<i64>()
+                                    .is_ok_and(|id| pool_encounters.contains(&id))
+                        })
+                        .filter_map(|(_, diffs)| diffs.as_object())
                         .flat_map(|diffs| diffs.values())
                         .filter_map(|entry| entry.get("bonus_id")?.as_u64())
                 })
@@ -875,14 +885,41 @@ pub fn catalyst_tier_item(class_id: u64, inv_type: u64) -> Option<&'static Catal
     cat.tier_items.get(&(class_id, inv))
 }
 
-/// Check if `bonus_id` sets a fixed per-difficulty item level for one of this
-/// season's fixed-difficulty encounters (e.g. Sporefall's Sporefused gear).
-/// Such gear is current-season loot even though it carries no upgrade track.
+/// Check if `bonus_id` sets a fixed per-difficulty item level for one of the
+/// current season's fixed-difficulty encounters. Such gear is current-season
+/// loot even though it carries no upgrade track. Entries kept in the config
+/// for previous-season raids (so their drops still resolve) are not indexed.
 pub fn is_fixed_difficulty_bonus(bonus_id: u64) -> bool {
     FIXED_DIFFICULTY_BONUSES
         .get()
         .map(|set| set.contains(&bonus_id))
         .unwrap_or(false)
+}
+
+/// Encounter ids of the season's raid pool (`raidPoolInstanceId`). Empty when
+/// no pool is configured or the pool is missing from the data; callers treat
+/// that as "no season filter" (same contract as `season_raid_instance_ids`).
+pub fn season_pool_encounter_ids() -> HashSet<i64> {
+    pool_encounter_ids(season_cfg())
+}
+
+fn pool_encounter_ids(cfg: &Value) -> HashSet<i64> {
+    let Some(pool_id) = cfg.get("raidPoolInstanceId").and_then(|v| v.as_i64()) else {
+        return HashSet::new();
+    };
+    let Some(instances) = INSTANCES.get() else {
+        return HashSet::new();
+    };
+    instances
+        .iter()
+        .find(|i| i.get("id").and_then(|v| v.as_i64()) == Some(pool_id))
+        .and_then(|pool| pool.get("encounters").and_then(|e| e.as_array()))
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.get("id").and_then(|v| v.as_i64()))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// `,redirected_base_stats=<source>` simc fragment for a catalysed piece
