@@ -432,6 +432,63 @@ fn format_eta_suffix(
     }
 }
 
+/// Format the trailing " · {done} of {total} combos" segment shared by the
+/// Triage and staged-pipeline progress messages, so a long run shows absolute
+/// position instead of only a batch ordinal. Empty when the total is unknown
+/// (0), which keeps callers without a total on their batch-only wording.
+pub(super) fn format_combos_suffix(combos_done: u64, total_combos: u64) -> String {
+    if total_combos == 0 {
+        return String::new();
+    }
+    format!(
+        " \u{00b7} {} of {} combos",
+        with_thousands(combos_done),
+        with_thousands(total_combos)
+    )
+}
+
+fn with_thousands(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+#[cfg(test)]
+mod combos_suffix_tests {
+    use super::*;
+
+    #[test]
+    fn empty_when_total_unknown() {
+        assert_eq!(format_combos_suffix(100, 0), "");
+    }
+
+    #[test]
+    fn groups_thousands() {
+        assert_eq!(
+            format_combos_suffix(1_180, 193_535),
+            " \u{00b7} 1,180 of 193,535 combos"
+        );
+        assert_eq!(format_combos_suffix(0, 999), " \u{00b7} 0 of 999 combos");
+    }
+
+    /// Batch 2 of size 100 starts after 100 combos are done — the cumulative
+    /// number must be the batch boundary, not the in-batch index.
+    #[test]
+    fn cumulative_at_batch_boundary() {
+        let batch_size = 100u64;
+        let combos_before_batch_2 = batch_size;
+        assert!(format_combos_suffix(combos_before_batch_2, 193_535).contains("100 of"));
+        // Mid-batch-2 the count carries the batch's completed profilesets.
+        assert!(format_combos_suffix(combos_before_batch_2 + 40, 193_535).contains("140 of"));
+    }
+}
+
 #[cfg(test)]
 mod eta_tests {
     use super::*;
@@ -894,6 +951,10 @@ pub async fn run_triage_with_constants(
             format!("Preparing batch {}", state.next_batch_idx + 1),
         );
 
+        // Captured before pre_simc_phase advances next_combo_id: combos accepted
+        // by earlier batches. Survives a pause because next_combo_id is checkpointed.
+        let combos_before_batch = state.next_combo_id.saturating_sub(1).max(0) as u64;
+
         let pre = driver
             .pre_simc_phase(&mut iter, &mut state, target, constants)
             .await
@@ -915,9 +976,10 @@ pub async fn run_triage_with_constants(
             ((pre.batch_idx as f64 / state.estimated_total_batches.max(1) as f64) * 100.0)
                 .min(100.0) as u8,
             format!(
-                "Triage batch {} \u{00b7} simc on {} profilesets{}",
+                "Triage batch {} \u{00b7} simc on {} profilesets{}{}",
                 pre.batch_idx + 1,
                 pre.accepted.len(),
+                format_combos_suffix(combos_before_batch, estimated_total_combos),
                 eta_suffix
             ),
         );
@@ -965,8 +1027,14 @@ pub async fn run_triage_with_constants(
                 (inputs.on_progress)(
                     pct,
                     format!(
-                        "Triage batch {}: {}/{} profilesets",
-                        batch_number, current, total
+                        "Triage batch {}: {}/{} profilesets{}",
+                        batch_number,
+                        current,
+                        total,
+                        format_combos_suffix(
+                            combos_before_batch + current as u64,
+                            estimated_total_combos
+                        )
                     ),
                 );
                 inputs.log_buffer.push_line(

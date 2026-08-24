@@ -10,6 +10,7 @@ use super::iterator::{ProfilesetCandidate, ProfilesetIterator, ProfilesetIterato
 use super::survivor_policy::{
     mean_error_from_result, prune_global, CandidateResult, PruneOutcome, PruneStats, SurvivorPolicy,
 };
+use super::triage::format_combos_suffix;
 use crate::db::{
     ComboDedupRepo, ComboMetadataInsert, ComboMetadataRepo, ComboMetadataRow, StageBatchesRepo,
     StageResultInsert, StageResultRow, StageResultsRepo,
@@ -562,6 +563,7 @@ async fn process_batch(
     stage: &StagePlan,
     batch: &PreparedBatch,
     total_batches_hint: usize,
+    stage_total_combos: usize,
     stage_progress_start: u8,
     stage_progress_end: u8,
 ) -> Result<BatchOutcome, String> {
@@ -573,6 +575,9 @@ async fn process_batch(
         .collect::<Vec<_>>()
         .join("\n");
     let total_hint = total_batches_hint.max(batch_idx + 1);
+    // Survivor batches are fixed-size slices of the stage input, so the batch
+    // index alone gives the combos this stage finished before this batch.
+    let combos_before_batch = (batch_idx * stage.batch_policy.max_profilesets.max(1)) as u64;
     (inputs.on_progress)(
         progress_between(
             stage_progress_start,
@@ -580,10 +585,11 @@ async fn process_batch(
             batch_idx as f64 / total_hint as f64,
         ),
         format!(
-            "{} batch {}: simc on {} profilesets",
+            "{} batch {}: simc on {} profilesets{}",
             stage.name,
             batch_idx + 1,
-            batch.candidates.len()
+            batch.candidates.len(),
+            format_combos_suffix(combos_before_batch, stage_total_combos as u64)
         ),
     );
 
@@ -609,11 +615,15 @@ async fn process_batch(
             (inputs.on_progress)(
                 progress_between(stage_progress_start, stage_progress_end, stage_fraction),
                 format!(
-                    "{} batch {}: {}/{} profilesets",
+                    "{} batch {}: {}/{} profilesets{}",
                     stage.name,
                     batch_idx + 1,
                     current,
-                    total
+                    total,
+                    format_combos_suffix(
+                        combos_before_batch + current as u64,
+                        stage_total_combos as u64
+                    )
                 ),
             );
         },
@@ -691,11 +701,14 @@ async fn run_pruning_stage(
         .await?;
     }
 
-    let total_hint = match stage.source {
-        CandidateSource::PreviousStageSurvivors => {
-            (input_survivor_ids.len() / stage.batch_policy.max_profilesets.max(1)) + 1
-        }
-        CandidateSource::GeneratedCombinations => 1,
+    // A survivor stage knows its exact input size; the generated stage's combo
+    // total is not in scope here, so 0 keeps its progress detail batch-only.
+    let (total_hint, stage_total_combos) = match stage.source {
+        CandidateSource::PreviousStageSurvivors => (
+            (input_survivor_ids.len() / stage.batch_policy.max_profilesets.max(1)) + 1,
+            input_survivor_ids.len(),
+        ),
+        CandidateSource::GeneratedCombinations => (1, 0),
     };
 
     let mut batch_idx = start_batch_idx;
@@ -738,6 +751,7 @@ async fn run_pruning_stage(
             stage,
             &prepared,
             total_hint,
+            stage_total_combos,
             stage_progress_start,
             stage_progress_end,
         )
