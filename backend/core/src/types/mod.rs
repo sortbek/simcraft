@@ -49,6 +49,10 @@ pub struct RawParsedItem {
     pub enchant_id: u64,
     pub gem_id: u64,
     pub origin: ItemOrigin,
+    /// True for user-edited copies injected via `# manual.{slot}=` lines;
+    /// these bypass the item_id+bonus dedup and carry a content-suffixed uid.
+    #[serde(default)]
+    pub manual: bool,
 }
 
 // ---- Character Info ----

@@ -16,6 +16,22 @@ use crate::types::*;
 // Pattern intentionally omits ':' — preserves gear_resolver's original behavior.
 static RE_BONUS_ID_NO_COLON: Lazy<Regex> = Lazy::new(|| Regex::new(r"bonus_id=([0-9/]+)").unwrap());
 
+/// Suffix for manual (user-edited) items so gem/enchant variants of the same
+/// base item keep distinct uids and dedup keys. Must stay deterministic from
+/// the simc string alone: build_modified_item reproduces it for the frontend.
+pub(crate) fn manual_suffix(simc: &str) -> String {
+    let gems = crate::simc_string::extract_gem_ids(simc)
+        .iter()
+        .map(|g| g.to_string())
+        .collect::<Vec<_>>()
+        .join("/");
+    format!(
+        ":m:e{}:g{}",
+        crate::simc_string::extract_enchant_id(simc),
+        gems
+    )
+}
+
 /// Build a stable UID for deduplication: "item_id:sorted_bonus_ids:origin:raw_slot"
 fn make_uid(item: &RawParsedItem) -> String {
     let mut sorted = item.bonus_ids.clone();
@@ -25,13 +41,17 @@ fn make_uid(item: &RawParsedItem) -> String {
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
         .join(":");
-    format!(
+    let mut uid = format!(
         "{}:{}:{}:{}",
         item.item_id,
         bonus_key,
         item.origin.as_str(),
         item.raw_slot
-    )
+    );
+    if item.manual {
+        uid.push_str(&manual_suffix(&item.simc_string));
+    }
+    uid
 }
 
 /// Dedup key: item_id + sorted bonus_ids (ignores origin/slot).
@@ -43,7 +63,11 @@ fn dedup_key(item: &RawParsedItem) -> String {
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
         .join(":");
-    format!("{}:{}", item.item_id, bonus_key)
+    let mut key = format!("{}:{}", item.item_id, bonus_key);
+    if item.manual {
+        key.push_str(&manual_suffix(&item.simc_string));
+    }
+    key
 }
 
 /// Enrich a raw item with display info from the item DB.
@@ -980,5 +1004,55 @@ mod gem_ids_tests {
             .expect("equipped neck");
         assert_eq!(equipped.gem_ids, vec![213470, 213473]);
         assert_eq!(equipped.gem_id, 213470);
+    }
+}
+
+#[cfg(test)]
+mod manual_item_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    const BASE: &str =
+        "druid=\"T\"\nlevel=80\nspec=feral\n\nneck=,id=999001,gem_id=213470,enchant_id=7334\n";
+
+    #[test]
+    fn plain_bag_copy_with_same_bonus_ids_is_deduped() {
+        ensure_game_data_loaded();
+        let input = format!("{BASE}# neck=,id=999001,gem_id=213473,enchant_id=7334\n");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        // Documents the existing dedup behavior the manual channel exists to bypass.
+        assert!(resolved.slots["neck"].alternatives.is_empty());
+    }
+
+    #[test]
+    fn manual_copy_survives_dedup_with_suffixed_uid() {
+        ensure_game_data_loaded();
+        let input =
+            format!("{BASE}# manual.neck=,id=999001,gem_id=213473/213470,enchant_id=7340\n");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        let alts = &resolved.slots["neck"].alternatives;
+        assert_eq!(alts.len(), 1);
+        assert_eq!(alts[0].uid, "999001::bags:neck:m:e7340:g213473/213470");
+        assert_eq!(alts[0].gem_ids, vec![213473, 213470]);
+        assert_eq!(alts[0].enchant_id, 7340);
+    }
+
+    #[test]
+    fn identical_manual_copies_collapse() {
+        ensure_game_data_loaded();
+        let line = "# manual.neck=,id=999001,gem_id=213473,enchant_id=7340\n";
+        let input = format!("{BASE}{line}{line}");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        assert_eq!(resolved.slots["neck"].alternatives.len(), 1);
+    }
+
+    #[test]
+    fn distinct_manual_gem_variants_both_survive() {
+        ensure_game_data_loaded();
+        let input = format!(
+            "{BASE}# manual.neck=,id=999001,gem_id=213473,enchant_id=7334\n# manual.neck=,id=999001,enchant_id=7334\n"
+        );
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        assert_eq!(resolved.slots["neck"].alternatives.len(), 2);
     }
 }

@@ -19,6 +19,10 @@ static RE_SLOT: Lazy<Regex> = Lazy::new(|| {
     let pattern = format!(r"^({})=(.*)", GEAR_SLOTS.join("|"));
     Regex::new(&pattern).unwrap()
 });
+static RE_MANUAL_SLOT: Lazy<Regex> = Lazy::new(|| {
+    let pattern = format!(r"^manual\.({})=(.*)", GEAR_SLOTS.join("|"));
+    Regex::new(&pattern).unwrap()
+});
 static RE_HEADER: Lazy<Regex> = Lazy::new(|| Regex::new(r"^#+\s*(.+?)\s*\(?(\d+)\)?\s*$").unwrap());
 static RE_TALENTS: Lazy<Regex> = Lazy::new(|| Regex::new(r"^talents=(.+)").unwrap());
 
@@ -150,6 +154,28 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                 continue;
             }
 
+            // User-edited copy (gem/enchant variant) → manual bag item
+            if let Some(caps) = RE_MANUAL_SLOT.captures(clean) {
+                let slot = caps[1].to_lowercase();
+                let item_str = caps[2].to_string();
+                let props = parse_item_props(&item_str);
+                pending_name.clear();
+                pending_ilevel = 0;
+                items.push(RawParsedItem {
+                    raw_slot: slot,
+                    simc_string: item_str,
+                    item_id: props.item_id,
+                    ilevel: props.ilevel,
+                    name: props.name,
+                    bonus_ids: props.bonus_ids,
+                    enchant_id: props.enchant_id,
+                    gem_id: props.gem_id,
+                    origin: ItemOrigin::Bags,
+                    manual: true,
+                });
+                continue;
+            }
+
             // Commented-out gear line → bag/vault item
             if let Some(caps) = slot_re.captures(clean) {
                 let slot = caps[1].to_lowercase();
@@ -183,6 +209,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     enchant_id: props.enchant_id,
                     gem_id: props.gem_id,
                     origin,
+                    manual: false,
                 });
             } else if let Some(caps) = header_re.captures(stripped) {
                 pending_name = caps[1].to_string();
@@ -250,6 +277,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     enchant_id: props.enchant_id,
                     gem_id: props.gem_id,
                     origin: ItemOrigin::Equipped,
+                    manual: false,
                 });
             }
             pending_label.clear();
