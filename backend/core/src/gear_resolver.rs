@@ -168,6 +168,7 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         enchant_id: item.enchant_id,
         gem_id: item.gem_id,
         gem_ids: crate::simc_string::extract_gem_ids(&item.simc_string),
+        is_manual: item.manual,
         name,
         icon,
         quality,
@@ -543,6 +544,7 @@ pub fn build_catalyst_item(
         } else {
             Vec::new()
         },
+        is_manual: false,
         name,
         icon,
         quality,
@@ -605,6 +607,7 @@ pub fn build_modified_item(
         enchant_id,
         gem_id: first_gem,
         gem_ids: gem_ids.to_vec(),
+        is_manual: true,
         enchant_name,
         enchant_item_id,
         gem_name,
@@ -1097,6 +1100,15 @@ mod manual_item_tests {
         assert_eq!(alts[0].uid, "999001::bags:neck:m:e7340:g213473/213470");
         assert_eq!(alts[0].gem_ids, vec![213473, 213470]);
         assert_eq!(alts[0].enchant_id, 7340);
+    }
+
+    #[test]
+    fn manual_line_sets_is_manual() {
+        ensure_game_data_loaded();
+        let input = format!("{BASE}# manual.neck=,id=999001,enchant_id=7340\n");
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
+        assert!(resolved.slots["neck"].alternatives[0].is_manual);
+        assert!(!resolved.slots["neck"].equipped.as_ref().unwrap().is_manual);
     }
 
     #[test]

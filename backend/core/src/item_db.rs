@@ -1542,7 +1542,12 @@ pub fn apply_copy_enchants(
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 let current_ench = item.get("enchant_id").and_then(|e| e.as_u64()).unwrap_or(0);
-                if is_equipped || current_ench != 0 {
+                // A manual item's missing enchant is a deliberate clear, not a gap.
+                let is_manual = item
+                    .get("manual")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if is_equipped || current_ench != 0 || is_manual {
                     return item.clone();
                 }
 
@@ -1897,6 +1902,27 @@ mod tests {
             alt_simc.contains("id=200,enchant_id=7777,bonus_id=12"),
             "expected enchant inserted after id=; got: {alt_simc}"
         );
+    }
+
+    #[test]
+    fn copy_enchants_skips_manual_items() {
+        // A manual item's enchant_id=0 is a deliberate clear, not a gap to fill.
+        let mut manual = item(300, false, 0, ",id=300", vec![]);
+        manual["manual"] = json!(true);
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert(
+            "head".to_string(),
+            vec![
+                item(100, true, 7449, ",id=100,enchant_id=7449", vec![]),
+                item(200, false, 0, ",id=200", vec![]),
+                manual,
+            ],
+        );
+        let result = apply_copy_enchants(&items_by_slot);
+        let head = result.get("head").unwrap();
+        assert_eq!(head[1]["enchant_id"], 7449);
+        assert_eq!(head[2]["enchant_id"], 0);
+        assert_eq!(head[2]["simc_string"], ",id=300");
     }
 
     #[test]

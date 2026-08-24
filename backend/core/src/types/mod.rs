@@ -163,6 +163,9 @@ pub struct ResolvedItem {
     /// All gem item ids from `gem_id=A/B/...` (empty when unsocketed).
     #[serde(default)]
     pub gem_ids: Vec<u64>,
+    /// User-edited copy; its gem/enchant state is an explicit choice.
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    pub is_manual: bool,
     /// Display info from item DB.
     pub name: String,
     pub icon: String,
