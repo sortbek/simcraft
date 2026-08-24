@@ -228,10 +228,27 @@ impl JobRepo {
         }
     }
 
+    /// Drops the oldest-by-insertion terminal jobs beyond `MAX_JOBS`. Active jobs
+    /// are never dropped and never count against the cap. The Vec is push-ordered,
+    /// so `retain` walks it in insertion order — no timestamp is consulted.
     fn gc_memory_jobs(jobs: &mut Vec<Job>) {
         let max_jobs = super::MAX_JOBS.load(Ordering::Relaxed);
-        jobs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        jobs.truncate(max_jobs);
+        let terminal_count = jobs
+            .iter()
+            .filter(|j| JobStatusFilter::Terminal.includes(&j.status))
+            .count();
+        let mut to_drop = terminal_count.saturating_sub(max_jobs);
+        if to_drop == 0 {
+            return;
+        }
+        jobs.retain(|j| {
+            if to_drop > 0 && JobStatusFilter::Terminal.includes(&j.status) {
+                to_drop -= 1;
+                false
+            } else {
+                true
+            }
+        });
     }
 
     pub async fn insert(&self, job: &Job) -> Result<(), sqlx::Error> {
@@ -242,9 +259,9 @@ impl JobRepo {
                     "INSERT INTO jobs (id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, batch_id,
-                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id)
+                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id, seq)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                             $16, $17, $18, $19, $20)",
+                             $16, $17, $18, $19, $20, (SELECT COALESCE(MAX(seq), 0) + 1 FROM jobs))",
                 )
                 .bind(&job.id)
                 .bind(Self::status_to_str(&job.status))
@@ -269,14 +286,15 @@ impl JobRepo {
                 .execute(pool)
                 .await?;
 
+                // Cap terminal jobs only, ordered by insertion (seq), never by
+                // created_at — a wrong clock must not evict live jobs.
                 let max_jobs = super::MAX_JOBS.load(Ordering::Relaxed) as i32;
-                sqlx::query(
-                    "DELETE FROM jobs WHERE id NOT IN (SELECT id FROM jobs ORDER BY created_at DESC LIMIT $1)",
-                )
-                .bind(max_jobs)
-                .execute(pool)
-                .await
-                .ok();
+                let status_clause = JobStatusFilter::Terminal.sql_where();
+                let gc_sql = format!(
+                    "DELETE FROM jobs WHERE {status_clause} AND id NOT IN \
+                     (SELECT id FROM jobs WHERE {status_clause} ORDER BY seq DESC LIMIT $1)"
+                );
+                sqlx::query(&gc_sql).bind(max_jobs).execute(pool).await.ok();
             }
             JobBackend::Memory(jobs) => {
                 let mut jobs = jobs.lock().unwrap();
@@ -961,8 +979,9 @@ mod tests {
                     sqlx::query(
                         "INSERT INTO jobs (id, status, sim_type, simc_input, iterations, \
                             fight_style, target_error, created_at, progress_pct, \
-                            simc_input_mode, pause_requested) \
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                            simc_input_mode, pause_requested, seq) \
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, \
+                            (SELECT COALESCE(MAX(seq), 0) + 1 FROM jobs))",
                     )
                     .bind(&job.id)
                     .bind(status)
@@ -980,6 +999,147 @@ mod tests {
                     Ok(())
                 }
             }
+        }
+    }
+
+    async fn sqlite_repo() -> JobRepo {
+        sqlx::any::install_default_drivers();
+        let db = crate::db::Database::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        JobRepo::new(db.pool.clone())
+    }
+
+    fn max_jobs() -> usize {
+        crate::db::MAX_JOBS.load(Ordering::Relaxed)
+    }
+
+    /// Seeds terminal jobs stamped far in the future — the wrong-clock rows that
+    /// made the GC delete freshly inserted jobs in production.
+    async fn seed_future_dated_terminal_jobs(repo: &JobRepo, count: usize) {
+        for i in 0..count {
+            let mut job = make_test_job(&format!("future-{i}"), JobStatus::Done);
+            job.created_at = format!("2099-01-01T00:00:00.{i:05}Z");
+            repo.insert_test_job(job).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn insert_keeps_new_job_when_db_is_full_of_future_dated_jobs() {
+        let repo = sqlite_repo().await;
+        seed_future_dated_terminal_jobs(&repo, max_jobs()).await;
+
+        repo.insert(&make_test_job("fresh-1", JobStatus::Pending))
+            .await
+            .unwrap();
+
+        assert!(
+            repo.get("fresh-1").await.unwrap().is_some(),
+            "a just-inserted job must not be GC'd by future-dated rows"
+        );
+        let active = repo.list_active(10).await.unwrap();
+        assert!(
+            active.iter().any(|s| s.id == "fresh-1"),
+            "the new job must show up as active, not run invisibly"
+        );
+    }
+
+    #[tokio::test]
+    async fn gc_never_deletes_active_jobs() {
+        let repo = sqlite_repo().await;
+        seed_future_dated_terminal_jobs(&repo, max_jobs()).await;
+        let mut running = make_test_job("running-1", JobStatus::Running);
+        running.created_at = "2020-01-01T00:00:00Z".to_string();
+        repo.insert_test_job(running).await.unwrap();
+
+        repo.insert(&make_test_job("fresh-1", JobStatus::Done))
+            .await
+            .unwrap();
+
+        assert!(
+            repo.get("running-1").await.unwrap().is_some(),
+            "a running job must survive GC regardless of its age or the cap"
+        );
+    }
+
+    #[tokio::test]
+    async fn gc_caps_terminal_jobs_by_insertion_order() {
+        let repo = sqlite_repo().await;
+        let cap = max_jobs();
+        let extra = 3;
+        for i in 0..cap + extra {
+            let mut job = make_test_job(&format!("t-{i}"), JobStatus::Done);
+            // created_at descends as insertion advances, so timestamp order is
+            // the exact reverse of insertion order.
+            job.created_at = format!("2026-05-17T00:00:00.{:05}Z", cap + extra - i);
+            repo.insert(&job).await.unwrap();
+        }
+
+        for i in 0..extra {
+            assert!(
+                repo.get(&format!("t-{i}")).await.unwrap().is_none(),
+                "t-{i} was inserted first and must be GC'd past the cap"
+            );
+        }
+        for i in extra..cap + extra {
+            assert!(
+                repo.get(&format!("t-{i}")).await.unwrap().is_some(),
+                "t-{i} is among the newest {cap} inserted and must survive"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn memory_insert_keeps_new_job_when_full_of_future_dated_jobs() {
+        let repo = JobRepo::new_memory();
+        seed_future_dated_terminal_jobs(&repo, max_jobs()).await;
+
+        repo.insert(&make_test_job("fresh-1", JobStatus::Pending))
+            .await
+            .unwrap();
+
+        assert!(repo.get("fresh-1").await.unwrap().is_some());
+        let active = repo.list_active(10).await.unwrap();
+        assert!(active.iter().any(|s| s.id == "fresh-1"));
+    }
+
+    #[tokio::test]
+    async fn memory_gc_never_deletes_active_jobs() {
+        let repo = JobRepo::new_memory();
+        seed_future_dated_terminal_jobs(&repo, max_jobs()).await;
+        let mut running = make_test_job("running-1", JobStatus::Running);
+        running.created_at = "2020-01-01T00:00:00Z".to_string();
+        repo.insert_test_job(running).await.unwrap();
+
+        repo.insert(&make_test_job("fresh-1", JobStatus::Done))
+            .await
+            .unwrap();
+
+        assert!(repo.get("running-1").await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn memory_gc_caps_terminal_jobs_by_insertion_order() {
+        let repo = JobRepo::new_memory();
+        let cap = max_jobs();
+        let extra = 3;
+        for i in 0..cap + extra {
+            let mut job = make_test_job(&format!("t-{i}"), JobStatus::Done);
+            job.created_at = format!("2026-05-17T00:00:00.{:05}Z", cap + extra - i);
+            repo.insert(&job).await.unwrap();
+        }
+
+        for i in 0..extra {
+            assert!(
+                repo.get(&format!("t-{i}")).await.unwrap().is_none(),
+                "t-{i} was inserted first and must be GC'd past the cap"
+            );
+        }
+        for i in extra..cap + extra {
+            assert!(
+                repo.get(&format!("t-{i}")).await.unwrap().is_some(),
+                "t-{i} is among the newest {cap} inserted and must survive"
+            );
         }
     }
 
