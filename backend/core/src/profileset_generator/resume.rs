@@ -186,6 +186,7 @@ async fn resume_local_stage(
         .simc_bins
         .resolve(simc_branch_from_payload(&envelope.payload))
         .map_err(|e| format!("Failed to resolve simc binary: {}", e))?;
+    let exact_combos = exact_combos_from_payload(&envelope.payload);
 
     let pool_for_task = inputs.pool.clone();
     let repo_for_task = inputs.repo.clone();
@@ -247,6 +248,7 @@ async fn resume_local_stage(
             base_profile: &base_profile_owned,
             log_buffer: log_buffer_for_task.clone(),
             simc_input_mode: SimcInputMode::Streamed,
+            estimated_total_combos: exact_combos,
             on_progress: Box::new(on_progress),
             on_stage_complete: Box::new({
                 let repo = repo_for_task.clone();
@@ -290,6 +292,13 @@ async fn resume_local_stage(
     });
 
     Ok(())
+}
+
+/// Read the exact combo count persisted with a streamed request. `None` for an
+/// envelope written before the field existed, which resumes the job on the
+/// batch-only progress detail rather than inventing a denominator.
+fn exact_combos_from_payload(payload: &serde_json::Value) -> Option<u64> {
+    payload.get("exact_combos").and_then(|v| v.as_u64())
 }
 
 /// Read `options.simc_branch` from a parsed envelope payload. Returns `""`
@@ -732,6 +741,23 @@ mod tests {
             local_survivor_count: None,
             status: status.to_string(),
         }
+    }
+
+    #[test]
+    fn exact_combos_read_from_payload() {
+        let payload = serde_json::json!({ "streaming": true, "exact_combos": 193_535u64 });
+        assert_eq!(exact_combos_from_payload(&payload), Some(193_535));
+    }
+
+    /// A job paused before `exact_combos` was persisted must still resume — the
+    /// missing field reads as `None` and the run falls back to batch-only detail.
+    #[test]
+    fn exact_combos_absent_in_older_envelope() {
+        let payload = serde_json::json!({ "streaming": true, "estimate": 500_000u64 });
+        assert_eq!(exact_combos_from_payload(&payload), None);
+        // Non-numeric junk degrades the same way rather than panicking.
+        let junk = serde_json::json!({ "exact_combos": "lots" });
+        assert_eq!(exact_combos_from_payload(&junk), None);
     }
 
     #[test]

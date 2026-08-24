@@ -65,6 +65,10 @@ pub struct StagePipelineInputs<'a> {
     pub base_profile: &'a str,
     pub log_buffer: Arc<LogBuffer>,
     pub simc_input_mode: SimcInputMode,
+    /// Exact combo count the generated stage will enumerate, for the
+    /// position-in-total progress detail. `None` when unknown — a job whose
+    /// request envelope predates the field resumes on the batch-only wording.
+    pub estimated_total_combos: Option<u64>,
     pub on_progress: Box<dyn Fn(u8, String) + Send + Sync + 'a>,
     pub on_stage_complete: Box<dyn Fn(String) + Send + Sync + 'a>,
 }
@@ -555,6 +559,23 @@ async fn pre_simc_survivor(
     }))
 }
 
+/// Combos this stage consumed before `batch_idx`. Batch sizing is deterministic
+/// per source — `pre_simc_generated` probe-sizes batch 0 then uses
+/// `max_profilesets`, `pre_simc_survivor` slices the stage input at
+/// `batch_idx * max_profilesets` — so a closed form stays correct across a
+/// mid-stage resume, where a running counter would restart at zero.
+fn combos_before_batch(stage: &StagePlan, batch_idx: usize) -> u64 {
+    let chunk = stage.batch_policy.max_profilesets.max(1);
+    let done = match (stage.source, batch_idx) {
+        (CandidateSource::PreviousStageSurvivors, n) => n * chunk,
+        (CandidateSource::GeneratedCombinations, 0) => 0,
+        (CandidateSource::GeneratedCombinations, n) => {
+            stage.batch_policy.probe_size + (n - 1) * chunk
+        }
+    };
+    done as u64
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn process_batch(
     inputs: &StagePipelineInputs<'_>,
@@ -563,7 +584,7 @@ async fn process_batch(
     stage: &StagePlan,
     batch: &PreparedBatch,
     total_batches_hint: usize,
-    stage_total_combos: usize,
+    stage_total_combos: u64,
     stage_progress_start: u8,
     stage_progress_end: u8,
 ) -> Result<BatchOutcome, String> {
@@ -575,9 +596,7 @@ async fn process_batch(
         .collect::<Vec<_>>()
         .join("\n");
     let total_hint = total_batches_hint.max(batch_idx + 1);
-    // Survivor batches are fixed-size slices of the stage input, so the batch
-    // index alone gives the combos this stage finished before this batch.
-    let combos_before_batch = (batch_idx * stage.batch_policy.max_profilesets.max(1)) as u64;
+    let combos_done = combos_before_batch(stage, batch_idx);
     (inputs.on_progress)(
         progress_between(
             stage_progress_start,
@@ -589,7 +608,7 @@ async fn process_batch(
             stage.name,
             batch_idx + 1,
             batch.candidates.len(),
-            format_combos_suffix(combos_before_batch, stage_total_combos as u64)
+            format_combos_suffix(combos_done, stage_total_combos)
         ),
     );
 
@@ -620,10 +639,7 @@ async fn process_batch(
                     batch_idx + 1,
                     current,
                     total,
-                    format_combos_suffix(
-                        combos_before_batch + current as u64,
-                        stage_total_combos as u64
-                    )
+                    format_combos_suffix(combos_done + current as u64, stage_total_combos)
                 ),
             );
         },
@@ -701,14 +717,14 @@ async fn run_pruning_stage(
         .await?;
     }
 
-    // A survivor stage knows its exact input size; the generated stage's combo
-    // total is not in scope here, so 0 keeps its progress detail batch-only.
+    // A survivor stage knows its exact input size; the generated stage takes the
+    // caller's exact combo count, or 0 (batch-only detail) when it has none.
     let (total_hint, stage_total_combos) = match stage.source {
         CandidateSource::PreviousStageSurvivors => (
             (input_survivor_ids.len() / stage.batch_policy.max_profilesets.max(1)) + 1,
-            input_survivor_ids.len(),
+            input_survivor_ids.len() as u64,
         ),
-        CandidateSource::GeneratedCombinations => (1, 0),
+        CandidateSource::GeneratedCombinations => (1, inputs.estimated_total_combos.unwrap_or(0)),
     };
 
     let mut batch_idx = start_batch_idx;
@@ -1297,5 +1313,28 @@ mod tests {
             mk_stage(1, CandidateSource::PreviousStageSurvivors),
         ];
         assert_eq!(generated_stage_count(&single), 1);
+    }
+
+    /// The generated stage's batch 0 is probe-sized, so the cumulative combo
+    /// count at each batch boundary is not `batch_idx * max_profilesets`.
+    #[test]
+    fn combos_before_batch_accounts_for_the_probe_batch() {
+        let mut generated = mk_stage(0, CandidateSource::GeneratedCombinations);
+        generated.batch_policy = BatchPolicy {
+            max_profilesets: 250,
+            probe_size: 100,
+        };
+        assert_eq!(combos_before_batch(&generated, 0), 0);
+        assert_eq!(combos_before_batch(&generated, 1), 100);
+        assert_eq!(combos_before_batch(&generated, 2), 350);
+
+        // Survivor stages slice their input in fixed chunks — no probe batch.
+        let mut survivors = mk_stage(1, CandidateSource::PreviousStageSurvivors);
+        survivors.batch_policy = BatchPolicy {
+            max_profilesets: 500,
+            probe_size: 100,
+        };
+        assert_eq!(combos_before_batch(&survivors, 0), 0);
+        assert_eq!(combos_before_batch(&survivors, 2), 1_000);
     }
 }

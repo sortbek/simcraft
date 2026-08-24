@@ -84,7 +84,7 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
         catalyst_charges,
         max_combinations,
         estimate,
-        exact_combos: _,
+        exact_combos,
         provider_id,
         provider: _provider,
         provider_auth: _provider_auth,
@@ -154,6 +154,9 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
             "options": req.options.to_json(),
             "streaming": true,
             "estimate": estimate,
+            // Exact enumerated count. Persisted so a resumed run reports the same
+            // progress denominator; `estimate` is an upper bound and can saturate.
+            "exact_combos": exact_combos,
         }),
     );
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
@@ -244,6 +247,7 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
             base_profile: &base_profile_owned,
             log_buffer: log_buffer_owned.clone(),
             simc_input_mode: SimcInputMode::Streamed,
+            estimated_total_combos: Some(exact_combos),
             on_progress: Box::new(on_progress),
             on_stage_complete: Box::new({
                 let repo = repo_for_task.clone();
