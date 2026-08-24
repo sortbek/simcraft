@@ -13,6 +13,7 @@ export interface ResolvedItem {
   bonus_ids: number[];
   enchant_id: number;
   gem_id: number;
+  gem_ids: number[];
   name: string;
   icon: string;
   quality: number;
@@ -29,6 +30,7 @@ export interface ResolvedItem {
   can_catalyst?: boolean;
   is_void_forge?: boolean;
   can_void_forge?: boolean;
+  is_manual?: boolean;
 }
 
 export interface SlotResolution {

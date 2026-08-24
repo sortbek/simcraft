@@ -99,7 +99,7 @@ export default function TopGearGroupCard({
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
             onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
-            onRemoveGem={item.gem_id > 0 ? () => onRemoveGem(item) : undefined}
+            onRemoveGem={item.gem_ids.length > 0 ? () => onRemoveGem(item) : undefined}
             t={t}
           />
         </GearItemRow>
@@ -160,7 +160,7 @@ export default function TopGearGroupCard({
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
             onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
-            onRemoveGem={item.gem_id > 0 ? () => onRemoveGem(item) : undefined}
+            onRemoveGem={item.gem_ids.length > 0 ? () => onRemoveGem(item) : undefined}
             t={t}
           />
         </GearItemRow>
