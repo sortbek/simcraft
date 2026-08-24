@@ -265,6 +265,15 @@ pub(super) struct VoidForgeConvertRequest {
     pub item: crate::types::ResolvedItem,
 }
 
+#[derive(Debug, Deserialize)]
+pub(super) struct ModifyItemRequest {
+    pub item: crate::types::ResolvedItem,
+    #[serde(default)]
+    pub gem_ids: Vec<u64>,
+    #[serde(default)]
+    pub enchant_id: u64,
+}
+
 #[derive(Deserialize)]
 pub(super) struct LogsQuery {
     #[serde(default)]

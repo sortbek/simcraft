@@ -299,6 +299,11 @@ pub(super) async fn void_forge_convert(
     HttpResponse::Ok().json(vf_item)
 }
 
+pub(super) async fn modify_item(req: web::Json<super::types::ModifyItemRequest>) -> HttpResponse {
+    let modified = gear_resolver::build_modified_item(&req.item, &req.gem_ids, req.enchant_id);
+    HttpResponse::Ok().json(modified)
+}
+
 pub(super) async fn get_talent_tree(path: web::Path<u64>) -> HttpResponse {
     let spec_id = path.into_inner();
     let tree = match game_data::talent_tree(spec_id) {

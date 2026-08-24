@@ -70,6 +70,45 @@ fn dedup_key(item: &RawParsedItem) -> String {
     key
 }
 
+/// Enchant display name + scroll item id (empty/0 when unenchanted).
+fn enchant_display(enchant_id: u64) -> (String, u64) {
+    if enchant_id == 0 {
+        return (String::new(), 0);
+    }
+    item_db::get_enchant_info(enchant_id)
+        .map(|e| {
+            let name = e
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
+            let item_id = e.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+            (name, item_id)
+        })
+        .unwrap_or_default()
+}
+
+/// Gem display name + icon (empty when unsocketed).
+fn gem_display(gem_id: u64) -> (String, String) {
+    if gem_id == 0 {
+        return (String::new(), String::new());
+    }
+    item_db::get_gem_info(gem_id)
+        .map(|g| {
+            (
+                g.get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                g.get("icon")
+                    .and_then(|i| i.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        })
+        .unwrap_or_default()
+}
+
 /// Enrich a raw item with display info from the item DB.
 fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
     let info = item_db::get_item_info(item.item_id, Some(&item.bonus_ids));
@@ -115,40 +154,8 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         db_ilevel
     };
 
-    let (enchant_name, enchant_item_id) = if item.enchant_id > 0 {
-        item_db::get_enchant_info(item.enchant_id)
-            .map(|e| {
-                let name = e
-                    .get("name")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let item_id = e.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-                (name, item_id)
-            })
-            .unwrap_or_default()
-    } else {
-        (String::new(), 0)
-    };
-
-    let (gem_name, gem_icon) = if item.gem_id > 0 {
-        item_db::get_gem_info(item.gem_id)
-            .map(|g| {
-                (
-                    g.get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("")
-                        .to_string(),
-                    g.get("icon")
-                        .and_then(|i| i.as_str())
-                        .unwrap_or("")
-                        .to_string(),
-                )
-            })
-            .unwrap_or_default()
-    } else {
-        (String::new(), String::new())
-    };
+    let (enchant_name, enchant_item_id) = enchant_display(item.enchant_id);
+    let (gem_name, gem_icon) = gem_display(item.gem_id);
 
     ResolvedItem {
         uid: make_uid(item),
@@ -553,6 +560,61 @@ pub fn build_catalyst_item(
         can_catalyst: false,
         is_void_forge: false,
         can_void_forge: false,
+    }
+}
+
+/// Build a user-edited copy of an item with the given gems and enchant applied.
+/// The uid carries the manual suffix so the copy round-trips through
+/// `# manual.{slot}=` lines and resolve with an identical identity.
+pub fn build_modified_item(
+    source: &ResolvedItem,
+    gem_ids: &[u64],
+    enchant_id: u64,
+) -> ResolvedItem {
+    let with_gems = crate::simc_string::set_gem_ids(&source.simc_string, gem_ids);
+    let new_simc = if enchant_id > 0 {
+        crate::simc_string::set_enchant_id(&with_gems, enchant_id)
+    } else {
+        crate::simc_string::strip_enchant_id(&with_gems)
+    };
+
+    let (enchant_name, enchant_item_id) = enchant_display(enchant_id);
+    let first_gem = gem_ids.first().copied().unwrap_or(0);
+    let (gem_name, gem_icon) = gem_display(first_gem);
+
+    let mut sorted = source.bonus_ids.clone();
+    sorted.sort();
+    let bonus_key = sorted
+        .iter()
+        .map(|b| b.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    let uid = format!(
+        "{}:{}:{}:{}{}",
+        source.item_id,
+        bonus_key,
+        ItemOrigin::Bags.as_str(),
+        source.slot,
+        manual_suffix(&new_simc)
+    );
+
+    ResolvedItem {
+        uid,
+        simc_string: new_simc,
+        origin: ItemOrigin::Bags,
+        enchant_id,
+        gem_id: first_gem,
+        gem_ids: gem_ids.to_vec(),
+        enchant_name,
+        enchant_item_id,
+        gem_name,
+        gem_icon,
+        is_catalyst: false,
+        source_item_id: 0,
+        can_catalyst: false,
+        is_void_forge: false,
+        can_void_forge: false,
+        ..source.clone()
     }
 }
 
@@ -1054,5 +1116,47 @@ mod manual_item_tests {
         );
         let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&input));
         assert_eq!(resolved.slots["neck"].alternatives.len(), 2);
+    }
+
+    #[test]
+    fn build_modified_item_sets_and_clears() {
+        ensure_game_data_loaded();
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(BASE));
+        let equipped = resolved.slots["neck"].equipped.clone().unwrap();
+
+        let set = build_modified_item(&equipped, &[213473, 213470], 7340);
+        assert!(set.simc_string.contains("gem_id=213473/213470"));
+        assert!(set.simc_string.contains("enchant_id=7340"));
+        assert_eq!(set.gem_ids, vec![213473, 213470]);
+        assert_eq!(set.gem_id, 213473);
+        assert_eq!(set.enchant_id, 7340);
+        assert_eq!(set.origin, ItemOrigin::Bags);
+
+        let cleared = build_modified_item(&equipped, &[], 0);
+        assert!(!cleared.simc_string.contains("gem_id="));
+        assert!(!cleared.simc_string.contains("enchant_id="));
+        assert!(cleared.gem_ids.is_empty());
+        assert_eq!(cleared.enchant_id, 0);
+        assert_eq!(cleared.gem_name, "");
+        assert_eq!(cleared.enchant_name, "");
+    }
+
+    #[test]
+    fn modified_item_uid_round_trips_through_resolve() {
+        ensure_game_data_loaded();
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(BASE));
+        let equipped = resolved.slots["neck"].equipped.clone().unwrap();
+        let modified = build_modified_item(&equipped, &[213473, 213470], 7340);
+
+        let with_manual = format!("{BASE}# manual.neck={}\n", modified.simc_string);
+        let re_resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&with_manual));
+        let alt = re_resolved.slots["neck"]
+            .alternatives
+            .iter()
+            .find(|a| a.uid == modified.uid);
+        assert!(
+            alt.is_some(),
+            "manual copy must resolve with an identical uid"
+        );
     }
 }
