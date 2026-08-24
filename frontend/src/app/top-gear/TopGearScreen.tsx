@@ -616,7 +616,7 @@ export default function TopGearScreen() {
   const largeLocalSim = !isCloudCompute && comboCount >= LARGE_LOCAL_SIM_THRESHOLD;
 
   return (
-    <div className={`space-y-6 ${largeLocalSim ? 'pb-32' : 'pb-20'}`}>
+    <div className={`space-y-6 ${largeLocalSim ? 'pb-36' : 'pb-20'}`}>
       <div>
         <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
           {t('nav.topGear')}

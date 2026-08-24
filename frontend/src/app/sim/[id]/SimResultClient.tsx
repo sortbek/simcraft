@@ -144,8 +144,12 @@ export default function SimResultClient() {
       }
       return 1000;
     },
-    showLogs && !!id && id !== '_' && (job?.status === 'pending' || job?.status === 'running'),
-    [showLogs, id, job?.status]
+    showLogs &&
+      !!id &&
+      id !== '_' &&
+      !notFound &&
+      (job?.status === 'pending' || job?.status === 'running'),
+    [showLogs, id, job?.status, notFound]
   );
 
   // Final flush: the log poll stops on terminal status, so fetch any trailing
