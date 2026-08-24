@@ -8,21 +8,7 @@ import { getWowheadUrl } from '../../lib/useItemInfo';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import CollapsibleSection from '../ui/CollapsibleSection';
-import { statLabel, type ItemOption } from './itemOptions';
-
-// Slots that support enchants, in display order
-const ENCHANT_SLOT_ORDER = [
-  'main_hand',
-  'head',
-  'shoulder',
-  'back',
-  'chest',
-  'wrist',
-  'legs',
-  'feet',
-  'finger1',
-  'finger2',
-];
+import { statLabel, ENCHANT_SLOTS, type ItemOption } from './itemOptions';
 
 const SLOT_DISPLAY: Record<string, string> = {
   main_hand: 'slot.mainHand',
@@ -68,7 +54,7 @@ export default function EnchantSelector({
   useWowheadTooltips([enchantOptions]);
 
   const enchantableSlots = useMemo(
-    () => ENCHANT_SLOT_ORDER.filter((s) => equippedSlots[s]),
+    () => ENCHANT_SLOTS.filter((s) => equippedSlots[s]),
     [equippedSlots]
   );
 
@@ -109,7 +95,7 @@ export default function EnchantSelector({
   }, [enchantableSlots, enchantOptions]);
 
   const enchantSlots = useMemo(
-    () => ENCHANT_SLOT_ORDER.filter((s) => sortedEnchants[s]?.length > 0),
+    () => ENCHANT_SLOTS.filter((s) => sortedEnchants[s]?.length > 0),
     [sortedEnchants]
   );
 
