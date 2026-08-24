@@ -144,8 +144,11 @@ export default function TopGearItemSelector({
         if (!response.ok) return;
 
         const modified: ResolvedItem = await response.json();
-        if (addedKeys.has(buildAlternativeKey(modified))) {
-          onSelectionChange(selectAlternative(selectedUids, item.slot, modified.uid));
+        const duplicate = (resolved.slots[item.slot]?.alternatives ?? []).find(
+          (alt) => buildAlternativeKey(alt) === buildAlternativeKey(modified)
+        );
+        if (duplicate) {
+          onSelectionChange(selectAlternative(selectedUids, item.slot, duplicate.uid));
           return;
         }
         onResolvedChange(mergeAlternative(resolved, item.slot, modified));
@@ -155,7 +158,7 @@ export default function TopGearItemSelector({
         // Intentionally ignored so the selector stays usable.
       }
     },
-    [resolved, onResolvedChange, onManualItemAdded, selectedUids, onSelectionChange, addedKeys]
+    [resolved, onResolvedChange, onManualItemAdded, selectedUids, onSelectionChange]
   );
 
   const addUpgradedCopy = useCallback(
