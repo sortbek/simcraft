@@ -6,6 +6,7 @@ import type { ItemOrigin, ResolveGearResponse, ResolvedItem } from '../../lib/ty
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, localizedUpgrade, useItemNames } from '../../lib/useItemInfo';
+import GemEnchantEditDialog from './GemEnchantEditDialog';
 import TopGearGroupCard from './TopGearGroupCard';
 import TopGearQuickSelectBar from './TopGearQuickSelectBar';
 import { buildAlternativeKey, buildResolvedCopy } from './topGearIdentity';
@@ -57,6 +58,7 @@ export default function TopGearItemSelector({
   const [upgradeMenuFor, setUpgradeMenuFor] = useState<string | null>(null);
   const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOption[]>([]);
   const [loadingUpgrades, setLoadingUpgrades] = useState(false);
+  const [editItem, setEditItem] = useState<ResolvedItem | null>(null);
 
   useWowheadTooltips([resolved]);
 
@@ -142,6 +144,10 @@ export default function TopGearItemSelector({
         if (!response.ok) return;
 
         const modified: ResolvedItem = await response.json();
+        if (addedKeys.has(buildAlternativeKey(modified))) {
+          onSelectionChange(selectAlternative(selectedUids, item.slot, modified.uid));
+          return;
+        }
         onResolvedChange(mergeAlternative(resolved, item.slot, modified));
         onManualItemAdded(modified);
         onSelectionChange(selectAlternative(selectedUids, item.slot, modified.uid));
@@ -149,7 +155,7 @@ export default function TopGearItemSelector({
         // Intentionally ignored so the selector stays usable.
       }
     },
-    [resolved, onResolvedChange, onManualItemAdded, selectedUids, onSelectionChange]
+    [resolved, onResolvedChange, onManualItemAdded, selectedUids, onSelectionChange, addedKeys]
   );
 
   const addUpgradedCopy = useCallback(
@@ -331,12 +337,27 @@ export default function TopGearItemSelector({
             onVoidForgeConvert={convertToVoidForge}
             onAddSocket={addSocketCopy}
             onRemoveGem={removeGemCopy}
+            onEditGemsEnchant={(item) => {
+              setUpgradeMenuFor(null);
+              setEditItem(item);
+            }}
             addedKeys={addedKeys}
             onRemoveAdded={onRemoveAdded}
             t={t}
           />
         ))}
       </div>
+
+      {editItem && (
+        <GemEnchantEditDialog
+          item={editItem}
+          onClose={() => setEditItem(null)}
+          onConfirm={async (gemIds, enchantId) => {
+            await applyItemEdit(editItem, gemIds, enchantId);
+            setEditItem(null);
+          }}
+        />
+      )}
     </div>
   );
 }
