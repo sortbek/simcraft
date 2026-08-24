@@ -322,9 +322,13 @@ async function compactFile(inputPath, outputPath, config, inputDir, outputDir) {
   let data;
   try {
     data = JSON.parse(raw);
-  } catch {
-    console.warn(`  SKIP ${path.basename(inputPath)} (not valid JSON)`);
-    return;
+  } catch (err) {
+    // A present-but-unparseable file means a corrupted fetch (truncated
+    // download, HTML error page). Skipping would either crash on the missing
+    // output later or silently ship a previous run's stale copy — abort.
+    throw new Error(
+      `${path.basename(inputPath)} is not valid JSON (corrupt download?): ${err.message}`
+    );
   }
 
   if (config === null) {
