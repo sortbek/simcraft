@@ -906,6 +906,20 @@ mod season_filter_tests {
             assert!(known.contains(&id), "pool {id} for '{key}' does not exist");
         }
     }
+
+    /// The loaded data dir must carry the season's catalyst currency: without
+    /// it charge parsing returns None and the Revival Catalyst toggle silently
+    /// disappears from release builds. Tests load the compacted output, so a
+    /// stale or mis-staged season-config.json fails here instead of shipping.
+    #[test]
+    fn season_config_defines_catalyst_currency() {
+        ensure_game_data_loaded();
+        assert_ne!(
+            item_db::catalyst_currency_id(),
+            0,
+            "season-config.json in the loaded data dir lacks catalystCurrencyId"
+        );
+    }
 }
 
 #[cfg(test)]

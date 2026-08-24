@@ -63,7 +63,9 @@ jobs:
           for f in $(node -e "const m=require('./metadata.json'); m.files.forEach(f=>console.log(f))"); do
             curl -sL -o "$f" "https://www.raidbots.com/static/data/live/$f"
           done
-          cp ../../core/season-config.json ./season-config.json 2>/dev/null || true
+          # Must fail loudly — a missing season-config would otherwise let tests
+          # fall back to the crate-root copy and mask a broken staging step.
+          cp ../../core/season-config.json ./season-config.json
 
       - name: Compact game data
         working-directory: .

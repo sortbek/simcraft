@@ -378,9 +378,18 @@ async function main() {
   // Process only JSON files listed in the MANIFEST.
   const manifestFiles = Object.keys(MANIFEST);
 
+  // Files whose absence must fail the build: a silent SKIP here ships an app
+  // with the feature disabled (season-config staging once missed
+  // catalystCurrencyId and releases lost the catalyst toggle).
+  const REQUIRED = new Set(["season-config.json"]);
+
   for (const filename of manifestFiles) {
     const inputPath = path.join(inputDir, filename);
     if (!fs.existsSync(inputPath)) {
+      if (REQUIRED.has(filename)) {
+        console.error(`  MISSING required ${filename} — aborting`);
+        process.exit(1);
+      }
       console.warn(`  SKIP ${filename} (not found)`);
       continue;
     }
