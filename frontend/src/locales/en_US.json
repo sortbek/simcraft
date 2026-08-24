@@ -331,6 +331,8 @@
   "topGear.runCreditsAvailable": "~{credits} credits · {available} available",
   "topGear.runCreditsOnly": "~{credits} credits",
   "topGear.insufficientCredits": "insufficient credits",
+  "topGear.largeLocalSimTitle": "Very large sim",
+  "topGear.largeLocalSimBody": "About {count} combinations will be simulated in roughly {batches} sequential batches, which can take many hours on this machine. Consider deselecting items or raising the Target Error.",
   "dropFinder.source": "Source",
   "dropFinder.selectRaid": "Select Raid",
   "dropFinder.selectDungeon": "Select Dungeon",

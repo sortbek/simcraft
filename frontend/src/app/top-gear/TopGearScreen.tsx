@@ -31,6 +31,11 @@ import { useComputeChoice } from '../lib/useComputeChoice';
 import { buildAlternativeKey } from '../components/gear/topGearIdentity';
 import { mergeAlternative, selectAlternative } from '../components/gear/topGearSelection';
 
+// A local run works through the combos in sequential SimC batches, so a
+// six-figure count is hours of work. Warn past this line, never block.
+const LARGE_LOCAL_SIM_THRESHOLD = 20_000;
+const LOCAL_SIM_BATCH_SIZE = 100;
+
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (
     <span
@@ -583,11 +588,12 @@ export default function TopGearScreen() {
     onBeforeNavigate: saveState,
   });
 
+  const bcp47 = locale.replace(/_/g, '-');
+
   // Cloud cost estimate shown as the Run-button subline. Same gate as the
   // former inline row: only for streaming-sized cloud jobs.
   let creditsSubLabel: ReactNode;
   if (isCloudCompute && cloudEstimate && cloudEstimate.would_stream && cloudEstimate.combos > 0) {
-    const bcp47 = locale.replace(/_/g, '-');
     const credits = cloudEstimate.est_credits.toLocaleString(bcp47);
     const text =
       cloudEstimate.available_credits !== null
@@ -607,6 +613,8 @@ export default function TopGearScreen() {
       </span>
     );
   }
+
+  const largeLocalSim = !isCloudCompute && comboCount >= LARGE_LOCAL_SIM_THRESHOLD;
 
   return (
     <div className="space-y-6 pb-20">
@@ -711,6 +719,18 @@ export default function TopGearScreen() {
 
       <SimcDownloadBanner />
       <ErrorAlert message={error} />
+
+      {largeLocalSim && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
+          <p className="text-sm font-bold text-amber-300">{t('topGear.largeLocalSimTitle')}</p>
+          <p className="mt-1 text-sm">
+            {t('topGear.largeLocalSimBody', {
+              count: comboCount.toLocaleString(bcp47),
+              batches: Math.ceil(comboCount / LOCAL_SIM_BATCH_SIZE).toLocaleString(bcp47),
+            })}
+          </p>
+        </div>
+      )}
 
       <ConfigFooter
         onSubmit={submit}

@@ -268,6 +268,8 @@
   "topGear.charges": "Aufladungen",
   "topGear.chargesTooltip": "Wie viele Katalysatorteile gleichzeitig in einem einzelnen Ausrüstungsset getragen werden können.",
   "topGear.voidForge": "Void-Forge-Waffen & -Schmuckstücke",
+  "topGear.largeLocalSimTitle": "Sehr große Simulation",
+  "topGear.largeLocalSimBody": "Etwa {count} Kombinationen werden in rund {batches} aufeinanderfolgenden Durchläufen simuliert, was auf diesem Rechner viele Stunden dauern kann. Wähle einige Gegenstände ab oder erhöhe den Zielfehler.",
   "dropFinder.source": "Quelle",
   "dropFinder.selectRaid": "Schlachtzug auswählen",
   "dropFinder.selectDungeon": "Dungeon auswählen",
