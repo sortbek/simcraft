@@ -51,11 +51,14 @@ function canAddSocket(item: ResolvedItem): boolean {
   );
 }
 
-// Catalyst/void-forge/vault items are excluded: their edited copies would
-// re-resolve as plain bag items and escape the catalyst-charge and vault
-// gear-set constraints — edit the source item instead.
+// Copies of catalyst/void-forge/vault items would re-resolve as plain bag
+// items and escape the catalyst-charge and vault gear-set constraints.
+function canManualCopy(item: ResolvedItem): boolean {
+  return !item.is_catalyst && !item.is_void_forge && item.origin !== 'vault';
+}
+
 function canEditGemsEnchant(item: ResolvedItem): boolean {
-  if (item.is_catalyst || item.is_void_forge || item.origin === 'vault') return false;
+  if (!canManualCopy(item)) return false;
   return item.sockets > 0 || item.gem_ids.length > 0 || ENCHANT_SLOTS.includes(item.slot);
 }
 
@@ -110,7 +113,9 @@ export default function TopGearGroupCard({
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
             onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
-            onRemoveGem={item.gem_ids.length > 0 ? () => onRemoveGem(item) : undefined}
+            onRemoveGem={
+              item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
+            }
             onEditGemsEnchant={canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined}
             t={t}
           />
@@ -172,7 +177,9 @@ export default function TopGearGroupCard({
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
             onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
             onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
-            onRemoveGem={item.gem_ids.length > 0 ? () => onRemoveGem(item) : undefined}
+            onRemoveGem={
+              item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
+            }
             onEditGemsEnchant={canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined}
             t={t}
           />
