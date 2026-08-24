@@ -544,7 +544,7 @@ pub fn build_catalyst_item(
         } else {
             Vec::new()
         },
-        is_manual: false,
+        is_manual: source.is_manual,
         name,
         icon,
         quality,
@@ -1049,6 +1049,27 @@ mod catalyst_tests {
             "catalyst simc string keeps the tier item id, got: {}",
             catalyst.simc_string
         );
+    }
+
+    #[test]
+    fn catalyst_copy_inherits_is_manual_from_its_source() {
+        ensure_game_data_loaded();
+        let profile = "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=251199\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear_with_catalyst(&parsed, Some(1));
+        let source = resolved.slots["head"]
+            .equipped
+            .as_ref()
+            .expect("equipped head");
+
+        let class_id = class_data::class_wow_id("mage").expect("mage class id");
+        let tier = item_db::catalyst_tier_item(class_id, 1).expect("mage head tier item");
+
+        assert!(!build_catalyst_item(source, tier, "head").is_manual);
+        // The copy carries the source's enchant verbatim, so a manual source's
+        // cleared enchant must stay exempt from copy-enchants after conversion.
+        let manual = build_modified_item(source, &[], 0);
+        assert!(build_catalyst_item(&manual, tier, "head").is_manual);
     }
 }
 
