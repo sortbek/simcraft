@@ -136,6 +136,7 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         bonus_ids: item.bonus_ids.clone(),
         enchant_id: item.enchant_id,
         gem_id: item.gem_id,
+        gem_ids: crate::simc_string::extract_gem_ids(&item.simc_string),
         name,
         icon,
         quality,
@@ -505,6 +506,12 @@ pub fn build_catalyst_item(
         bonus_ids: catalyst_bonus_ids,
         enchant_id: source.enchant_id,
         gem_id: source.gem_id,
+        // The built string emits at most the source's single gem.
+        gem_ids: if source.gem_id > 0 {
+            vec![source.gem_id]
+        } else {
+            Vec::new()
+        },
         name,
         icon,
         quality,
@@ -716,6 +723,7 @@ pub fn build_void_forge_item(source: &ResolvedItem, vf_bonus_id: u64) -> Resolve
         ilevel,
         tag,
         upgrade,
+        gem_ids: crate::simc_string::extract_gem_ids(&new_simc),
         simc_string: new_simc,
         is_void_forge: true,
         can_void_forge: false,
@@ -952,5 +960,25 @@ mod catalyst_tests {
             "catalyst simc string keeps the tier item id, got: {}",
             catalyst.simc_string
         );
+    }
+}
+
+#[cfg(test)]
+mod gem_ids_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    #[test]
+    fn enrich_populates_full_gem_id_list() {
+        ensure_game_data_loaded();
+        let profile = "druid=\"T\"\nlevel=80\nspec=feral\n\nneck=,id=999001,gem_id=213470/213473,enchant_id=7334\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear(&parsed);
+        let equipped = resolved.slots["neck"]
+            .equipped
+            .as_ref()
+            .expect("equipped neck");
+        assert_eq!(equipped.gem_ids, vec![213470, 213473]);
+        assert_eq!(equipped.gem_id, 213470);
     }
 }

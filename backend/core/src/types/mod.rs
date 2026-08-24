@@ -156,6 +156,9 @@ pub struct ResolvedItem {
     pub bonus_ids: Vec<u64>,
     pub enchant_id: u64,
     pub gem_id: u64,
+    /// All gem item ids from `gem_id=A/B/...` (empty when unsocketed).
+    #[serde(default)]
+    pub gem_ids: Vec<u64>,
     /// Display info from item DB.
     pub name: String,
     pub icon: String,
