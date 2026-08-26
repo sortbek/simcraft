@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
-import { listProfiles, PROFILE_SCHEMA_VERSION, type SimProfile } from '../../lib/sim-profiles';
+import {
+  defaultProfile,
+  isDefaultProfile,
+  isProfileSupported,
+  listProfiles,
+  type SimProfile,
+} from '../../lib/sim-profiles';
 
 /** Footer-bar dropdown: shows the active profile (dirty dot when edited) and
  *  applies a saved profile on pick. Management lives in the drawer
@@ -13,11 +19,20 @@ export default function ProfilePicker() {
   const { activeProfile, applyProfile, profileDirty } = useSimContext();
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState<SimProfile[]>([]);
+  // Distinct from an empty list: "no saved profiles yet" invites the user to
+  // recreate profiles that a failed load only made invisible.
+  const [loadFailed, setLoadFailed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    listProfiles().then(setProfiles);
+    listProfiles().then(
+      (list) => {
+        setProfiles(list);
+        setLoadFailed(false);
+      },
+      () => setLoadFailed(true)
+    );
     const onDown = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
@@ -53,7 +68,11 @@ export default function ProfilePicker() {
           <path d="M2 4h12M2 8h12M2 12h7" />
         </svg>
         <span className="max-w-[140px] truncate normal-case">
-          {activeProfile ? activeProfile.name : t('profiles.title')}
+          {activeProfile
+            ? isDefaultProfile(activeProfile)
+              ? t('profiles.default')
+              : activeProfile.name
+            : t('profiles.title')}
         </span>
         {activeProfile && profileDirty && (
           <span
@@ -64,14 +83,30 @@ export default function ProfilePicker() {
       </button>
       {open && (
         <div className="absolute bottom-full left-0 z-50 mb-2 w-64 rounded-xl border border-outline-variant/20 bg-surface-container-high p-2 shadow-xl">
-          {profiles.length === 0 && (
-            <div className="px-3 py-2 text-xs text-on-surface-variant">{t('profiles.empty')}</div>
+          <button
+            type="button"
+            onClick={() => pick(defaultProfile())}
+            className={`block w-full truncate rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10 hover:text-primary ${
+              activeProfile && isDefaultProfile(activeProfile)
+                ? 'text-primary'
+                : 'text-on-surface-variant'
+            }`}
+          >
+            {t('profiles.default')}
+          </button>
+          <div className="my-1 h-px bg-outline-variant/20" />
+          {loadFailed ? (
+            <div className="px-3 py-2 text-xs text-red-400">{t('profiles.loadFailed')}</div>
+          ) : (
+            profiles.length === 0 && (
+              <div className="px-3 py-2 text-xs text-on-surface-variant">{t('profiles.empty')}</div>
+            )
           )}
           {profiles.map((p) => {
             // Newer-schema profiles are listed but not applicable (see spec
             // §Versioning). The title lives on the wrapper: browsers suppress
             // hover events (and thus the tooltip) on a disabled button.
-            const unsupported = p.version > PROFILE_SCHEMA_VERSION;
+            const unsupported = !isProfileSupported(p);
             return (
               <span
                 key={p.id}

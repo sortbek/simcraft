@@ -1,40 +1,19 @@
-import { API_URL, apiDelete, fetchJson } from './api';
+import { apiDelete, apiUrl, fetchJson, isDesktop, postJson } from './api';
 import {
   DEFAULT_EXPANSION_OPTIONS,
+  DEFAULT_PROFILE_DATA,
   DEFAULT_RAID_BUFFS,
   normalizeSimcBranch,
+  parseRotationMode,
 } from './sim-config-defaults';
 import { readStoredJson } from './storage';
-import { TRIAGE_BATCH_DEFAULT } from './triageBatch';
 import type { FightScenario } from './types';
-import type { RotationMode } from '../components/sim-config/SimContext';
 
 export const PROFILE_SCHEMA_VERSION = 1;
 
-/** Snapshot of the shared sim config (spec field list). */
-export interface SimProfileData {
-  fightStyle: string;
-  fightLength: number;
-  targetCount: number;
-  scenarios: FightScenario[];
-  iterations: number;
-  targetError: number;
-  threads: number;
-  rotationMode: RotationMode;
-  customApl: string;
-  raidBuffs: Record<string, boolean>;
-  consumables: Record<string, string>;
-  expansionOptions: Record<string, boolean>;
-  simcBranch: string;
-  simcHeader: string;
-  simcBasePlayer: string;
-  simcRaidActors: string;
-  simcPostCombos: string;
-  simcFooter: string;
-  parallelProfilesets: boolean;
-  triageMaxBatchProfilesets: number;
-  statWeights: boolean;
-}
+/** Snapshot of the shared sim config. Derived from the defaults so the field
+ *  list lives in exactly one place. */
+export type SimProfileData = typeof DEFAULT_PROFILE_DATA;
 
 export interface SimProfile {
   id: string;
@@ -61,11 +40,14 @@ export function booleanRecord(
   return out;
 }
 
+/** Consumables only. An empty value means "SimC default", which is exactly what
+ *  an absent key means — keeping it would make `{food:''}` and `{}` compare
+ *  unequal and light the dirty dot on two identical configs. */
 export function stringRecord(raw: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   if (raw && typeof raw === 'object') {
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-      if (typeof v === 'string') out[k] = v;
+      if (typeof v === 'string' && v !== '') out[k] = v;
     }
   }
   return out;
@@ -84,28 +66,59 @@ function sanitizeScenarios(raw: unknown): FightScenario[] {
   );
 }
 
+/** The config's own fight setup. A loaded route forces `fightStyle` and clears
+ *  `scenarios`, so the config's values are held aside for the route's lifetime
+ *  and restored when it's cleared — otherwise the forced values read as profile
+ *  drift and a Save writes them over the profile's real setup. */
+export interface FightSetup {
+  fightStyle: string;
+  scenarios: FightScenario[];
+}
+
+export function parseFightSetup(raw: unknown): FightSetup | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.fightStyle !== 'string') return null;
+  return { fightStyle: r.fightStyle, scenarios: sanitizeScenarios(r.scenarios) };
+}
+
+const str = (v: unknown, fallback: string): string => (typeof v === 'string' ? v : fallback);
+const bool = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback);
+const num = (v: unknown, fallback: number): number =>
+  typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+
+/** Positive integer, matching `readStoredPositiveInt` (0 = "not set"). The
+ *  reload path re-reads these from localStorage and applies the same rule, so a
+ *  blob that disagrees would leave the config permanently unable to read clean. */
+const posInt = (v: unknown, fallback: number): number =>
+  typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : fallback;
+
+/** Non-negative integer — `threads: 0` is a real value ("auto"). */
+const countInt = (v: unknown, fallback: number): number =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : fallback;
+
+/** Strictly positive, matching the restore path's `n > 0` check. */
+const posNum = (v: unknown, fallback: number): number =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback;
+
 /** Fill defaults for missing/invalid fields so applying a profile is
  *  deterministic regardless of blob age. */
 export function normalizeProfileData(raw: unknown): SimProfileData {
   const d = (raw && typeof raw === 'object' ? raw : {}) as Partial<SimProfileData>;
+  const def = DEFAULT_PROFILE_DATA;
   return {
     // Blobs never carry 'DungeonRoute' (captureProfileData maps it away — a
     // stored one is never honorable), so map it here too for imported blobs.
     fightStyle:
-      typeof d.fightStyle === 'string' && d.fightStyle !== 'DungeonRoute'
-        ? d.fightStyle
-        : 'Patchwerk',
-    fightLength: typeof d.fightLength === 'number' ? d.fightLength : 300,
-    targetCount: typeof d.targetCount === 'number' ? d.targetCount : 1,
+      d.fightStyle === 'DungeonRoute' ? def.fightStyle : str(d.fightStyle, def.fightStyle),
+    fightLength: posNum(d.fightLength, def.fightLength),
+    targetCount: posInt(d.targetCount, def.targetCount),
     scenarios: sanitizeScenarios(d.scenarios),
-    iterations: typeof d.iterations === 'number' ? d.iterations : 100000,
-    targetError: typeof d.targetError === 'number' ? d.targetError : 0.1,
-    threads: typeof d.threads === 'number' ? d.threads : 0,
-    rotationMode:
-      d.rotationMode === 'assisted_combat' || d.rotationMode === 'one_button'
-        ? d.rotationMode
-        : 'default',
-    customApl: typeof d.customApl === 'string' ? d.customApl : '',
+    iterations: posInt(d.iterations, def.iterations),
+    targetError: posNum(d.targetError, def.targetError),
+    threads: countInt(d.threads, def.threads),
+    rotationMode: parseRotationMode(d.rotationMode),
+    customApl: str(d.customApl, def.customApl),
     // Per-key merge: buffs/expansion options gain entries over seasons, so an
     // old blob gets new keys defaulted instead of dropped; mistyped values
     // (e.g. an imported "false" string) fall back to the default too.
@@ -114,18 +127,15 @@ export function normalizeProfileData(raw: unknown): SimProfileData {
     expansionOptions: booleanRecord(d.expansionOptions, DEFAULT_EXPANSION_OPTIONS),
     // Same normalization the live setter applies, so an applied profile isn't
     // instantly dirty from a pinned branch tag.
-    simcBranch: normalizeSimcBranch(typeof d.simcBranch === 'string' ? d.simcBranch : ''),
-    simcHeader: typeof d.simcHeader === 'string' ? d.simcHeader : '',
-    simcBasePlayer: typeof d.simcBasePlayer === 'string' ? d.simcBasePlayer : '',
-    simcRaidActors: typeof d.simcRaidActors === 'string' ? d.simcRaidActors : '',
-    simcPostCombos: typeof d.simcPostCombos === 'string' ? d.simcPostCombos : '',
-    simcFooter: typeof d.simcFooter === 'string' ? d.simcFooter : '',
-    parallelProfilesets: typeof d.parallelProfilesets === 'boolean' ? d.parallelProfilesets : true,
-    triageMaxBatchProfilesets:
-      typeof d.triageMaxBatchProfilesets === 'number'
-        ? d.triageMaxBatchProfilesets
-        : TRIAGE_BATCH_DEFAULT,
-    statWeights: typeof d.statWeights === 'boolean' ? d.statWeights : false,
+    simcBranch: normalizeSimcBranch(str(d.simcBranch, def.simcBranch)),
+    simcHeader: str(d.simcHeader, def.simcHeader),
+    simcBasePlayer: str(d.simcBasePlayer, def.simcBasePlayer),
+    simcRaidActors: str(d.simcRaidActors, def.simcRaidActors),
+    simcPostCombos: str(d.simcPostCombos, def.simcPostCombos),
+    simcFooter: str(d.simcFooter, def.simcFooter),
+    parallelProfilesets: bool(d.parallelProfilesets, def.parallelProfilesets),
+    triageMaxBatchProfilesets: posInt(d.triageMaxBatchProfilesets, def.triageMaxBatchProfilesets),
+    statWeights: bool(d.statWeights, def.statWeights),
   };
 }
 
@@ -135,8 +145,51 @@ export function normalizeProfileData(raw: unknown): SimProfileData {
 
 const STORAGE_KEY = 'simhammer_sim_profiles';
 
-function isDesktop(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
+/** A blob written by a newer schema can't be applied faithfully; callers either
+ *  disable it in the picker or refuse to restore it. One definition so the
+ *  gate can't drift between the picker, apply, restore and import. */
+export function isProfileSupported(profile: { version: number }): boolean {
+  return profile.version <= PROFILE_SCHEMA_VERSION;
+}
+
+/** The built-in "Default" profile: always listed first in the picker, never
+ *  stored as a row. The drawer disables save/rename/delete for it — diverge
+ *  and "Save as" to turn the current config into a real profile. The UI shows
+ *  a localized name keyed off this id; `name` is only a fallback. */
+export const DEFAULT_PROFILE_ID = '__default__';
+
+export function isDefaultProfile(p: { id: string }): boolean {
+  return p.id === DEFAULT_PROFILE_ID;
+}
+
+/** Fresh instance per call — `data` is a normalized copy, so applying it can't
+ *  alias the shared DEFAULT_PROFILE_DATA records. */
+export function defaultProfile(): SimProfile {
+  return {
+    id: DEFAULT_PROFILE_ID,
+    name: 'Default',
+    version: PROFILE_SCHEMA_VERSION,
+    updated_at: '',
+    data: normalizeProfileData({}),
+  };
+}
+
+/** Coerce an untrusted stored record into a `SimProfile`, or `null` if it isn't
+ *  one. Both the profile list and the persisted active profile cross this
+ *  boundary, so they must agree on the shape — a listed entry that the restore
+ *  path rejects would silently drop the active profile on reload. */
+export function parseStoredProfile(raw: unknown): SimProfile | null {
+  const p = raw as Record<string, unknown> | null;
+  if (!p || typeof p !== 'object' || typeof p.id !== 'string' || typeof p.name !== 'string') {
+    return null;
+  }
+  return {
+    id: p.id,
+    name: p.name,
+    version: num(p.version, PROFILE_SCHEMA_VERSION),
+    updated_at: str(p.updated_at, ''),
+    data: normalizeProfileData(p.data),
+  };
 }
 
 interface ApiProfileRow {
@@ -164,8 +217,24 @@ function fromApiRow(row: ApiProfileRow): SimProfile {
   };
 }
 
-function toApiBlob(profile: { version: number; data: SimProfileData }): string {
-  return JSON.stringify({ version: profile.version, data: profile.data });
+/** POST the shared create/update endpoint. The response is echoed rather than
+ *  re-normalized — normalization merges defaults in, which would make a fresh
+ *  save compare dirty against the unmerged live state. */
+async function postProfile(
+  body: { id?: string; name: string },
+  data: SimProfileData
+): Promise<SimProfile> {
+  const row = await postJson<ApiProfileRow>('/api/profiles', {
+    ...body,
+    data: JSON.stringify({ version: PROFILE_SCHEMA_VERSION, data }),
+  });
+  return {
+    id: row.id,
+    name: row.name,
+    version: PROFILE_SCHEMA_VERSION,
+    updated_at: row.updated_at,
+    data,
+  };
 }
 
 /** Raw stored array. Mutations operate on this — never on the normalized view —
@@ -189,54 +258,25 @@ function entryId(e: unknown): string | null {
 /** Normalized read view of the store (listing and lookups only). */
 function readWebProfiles(): SimProfile[] {
   return readWebRaw()
-    .filter(
-      (p): p is Record<string, unknown> =>
-        entryId(p) !== null && typeof (p as { name?: unknown }).name === 'string'
-    )
-    .map((p) => ({
-      id: p.id as string,
-      name: p.name as string,
-      version: typeof p.version === 'number' ? p.version : PROFILE_SCHEMA_VERSION,
-      updated_at: typeof p.updated_at === 'string' ? p.updated_at : '',
-      data: normalizeProfileData(p.data),
-    }));
+    .map(parseStoredProfile)
+    .filter((p): p is SimProfile => p !== null);
 }
 
 // ---------- public API ----------
 
+/** Throws on a desktop backend failure. Deliberately not swallowed: an empty
+ *  list renders as "no saved profiles yet", so a transient DB/API error would
+ *  invite the user to recreate profiles that still exist and then collide. */
 export async function listProfiles(): Promise<SimProfile[]> {
-  try {
-    if (isDesktop()) {
-      const rows = await fetchJson<ApiProfileRow[]>(`${API_URL}/api/profiles`);
-      return rows.map(fromApiRow);
-    }
-    return readWebProfiles().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  } catch {
-    return [];
+  if (isDesktop()) {
+    const rows = await fetchJson<ApiProfileRow[]>(apiUrl('/api/profiles'));
+    return rows.map(fromApiRow);
   }
+  return readWebProfiles().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
 export async function createProfile(name: string, data: SimProfileData): Promise<SimProfile> {
-  if (isDesktop()) {
-    const row = await fetchJson<ApiProfileRow>(`${API_URL}/api/profiles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        data: toApiBlob({ version: PROFILE_SCHEMA_VERSION, data }),
-      }),
-    });
-    // Echo the data we sent rather than re-normalizing the server row —
-    // normalization merges defaults in, which would make a fresh save compare
-    // dirty against the unmerged live state.
-    return {
-      id: row.id,
-      name: row.name,
-      version: PROFILE_SCHEMA_VERSION,
-      updated_at: row.updated_at,
-      data,
-    };
-  }
+  if (isDesktop()) return postProfile({ name }, data);
   const profile: SimProfile = {
     id: crypto.randomUUID(),
     name,
@@ -252,23 +292,7 @@ export async function createProfile(name: string, data: SimProfileData): Promise
  *  the current schema version. */
 export async function updateProfile(profile: SimProfile): Promise<SimProfile> {
   if (isDesktop()) {
-    const row = await fetchJson<ApiProfileRow>(`${API_URL}/api/profiles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: profile.id,
-        name: profile.name,
-        data: toApiBlob({ version: PROFILE_SCHEMA_VERSION, data: profile.data }),
-      }),
-    });
-    // Echo, don't re-normalize — see createProfile.
-    return {
-      id: row.id,
-      name: row.name,
-      version: PROFILE_SCHEMA_VERSION,
-      updated_at: row.updated_at,
-      data: profile.data,
-    };
+    return postProfile({ id: profile.id, name: profile.name }, profile.data);
   }
   const entries = readWebRaw();
   if (!entries.some((e) => entryId(e) === profile.id)) {
@@ -291,7 +315,14 @@ export async function deleteProfile(id: string): Promise<void> {
   writeWebRaw(readWebRaw().filter((e) => entryId(e) !== id));
 }
 
-// ---------- export / import ----------
+// ---------- export / import strings ----------
+// Profiles travel as copy/paste strings (the SimC/MDT idiom): a prefix carrying
+// the wire-format version, then base64url of the JSON payload — deflated when
+// CompressionStream exists (everywhere modern; keeps expert-field-heavy
+// profiles under Discord's message limit), raw otherwise. Import accepts both.
+
+const EXPORT_PREFIX_DEFLATE = 'SHP1.';
+const EXPORT_PREFIX_RAW = 'SHP1U.';
 
 interface ProfileExport {
   name: string;
@@ -300,27 +331,118 @@ interface ProfileExport {
   data: SimProfileData;
 }
 
-/** Pretty-printed export payload — the profile minus its id (import mints a new one). */
-export function exportProfileJson(profile: SimProfile): string {
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(s: string): Uint8Array<ArrayBuffer> {
+  // atob's forgiving-base64 accepts unpadded input.
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Profile strings are pasted from chat, so the encoded side is untrusted input.
+ *  A few hundred KB of crafted deflate expands to gigabytes, so the inflated
+ *  size is capped *while streaming* — buffering first and checking after is
+ *  exactly the allocation we need to avoid. A real export is far below this. */
+const MAX_ENCODED_CHARS = 512 * 1024;
+const MAX_DECODED_BYTES = 1024 * 1024;
+
+/** Thrown for input that blows the cap, so the UI can say so rather than
+ *  reporting a generic parse failure. */
+class ProfileTooLargeError extends Error {}
+
+async function pipeBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+  transform: CompressionStream | DecompressionStream,
+  limit?: number
+): Promise<Uint8Array<ArrayBuffer>> {
+  const stream = new Blob([bytes]).stream().pipeThrough(transform);
+  if (limit === undefined) return new Uint8Array(await new Response(stream).arrayBuffer());
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > limit) throw new ProfileTooLargeError('inflated profile exceeds cap');
+      chunks.push(value);
+    }
+  } finally {
+    // Releases the decompressor: on the throw path this stops it inflating the
+    // rest of the payload in the background.
+    reader.cancel().catch(() => {});
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+/** Encode the profile minus its id (import mints a new one) as a paste string. */
+export async function encodeProfileString(profile: SimProfile): Promise<string> {
   const payload: ProfileExport = {
     name: profile.name,
     version: profile.version,
     updated_at: profile.updated_at,
     data: profile.data,
   };
-  return JSON.stringify(payload, null, 2);
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  if (typeof CompressionStream === 'undefined') {
+    return EXPORT_PREFIX_RAW + bytesToBase64Url(bytes);
+  }
+  return (
+    EXPORT_PREFIX_DEFLATE +
+    bytesToBase64Url(await pipeBytes(bytes, new CompressionStream('deflate-raw')))
+  );
 }
 
-/** Parse an exported profile file. `null` when the payload isn't a profile
- *  export or was written by a newer schema. */
-export function parseProfileExport(text: string): { name: string; data: SimProfileData } | null {
+/** Why a paste couldn't be imported. Distinct cases so the UI doesn't tell a
+ *  user with a newer-schema string that their paste was malformed — they'd retry
+ *  the paste instead of updating SimHammer. */
+export type ProfileDecodeError = 'invalid' | 'unsupported' | 'tooLarge';
+
+export type ProfileDecodeResult =
+  | { ok: true; name: string; data: SimProfileData }
+  | { ok: false; error: ProfileDecodeError };
+
+/** Decode a pasted export string. */
+export async function decodeProfileString(text: string): Promise<ProfileDecodeResult> {
   try {
-    const raw = JSON.parse(text) as Partial<ProfileExport>;
-    if (typeof raw.name !== 'string' || !raw.name.trim()) return null;
-    if (typeof raw.version !== 'number' || raw.version > PROFILE_SCHEMA_VERSION) return null;
-    if (!raw.data || typeof raw.data !== 'object') return null;
-    return { name: raw.name.trim(), data: normalizeProfileData(raw.data) };
-  } catch {
-    return null;
+    const trimmed = text.trim();
+    if (trimmed.length > MAX_ENCODED_CHARS) return { ok: false, error: 'tooLarge' };
+    let bytes: Uint8Array;
+    if (trimmed.startsWith(EXPORT_PREFIX_DEFLATE)) {
+      bytes = await pipeBytes(
+        base64UrlToBytes(trimmed.slice(EXPORT_PREFIX_DEFLATE.length)),
+        new DecompressionStream('deflate-raw'),
+        MAX_DECODED_BYTES
+      );
+    } else if (trimmed.startsWith(EXPORT_PREFIX_RAW)) {
+      bytes = base64UrlToBytes(trimmed.slice(EXPORT_PREFIX_RAW.length));
+    } else {
+      return { ok: false, error: 'invalid' };
+    }
+    const raw = JSON.parse(new TextDecoder().decode(bytes)) as Partial<ProfileExport>;
+    if (typeof raw.name !== 'string' || !raw.name.trim()) return { ok: false, error: 'invalid' };
+    if (typeof raw.version !== 'number') return { ok: false, error: 'invalid' };
+    if (!isProfileSupported({ version: raw.version })) return { ok: false, error: 'unsupported' };
+    if (!raw.data || typeof raw.data !== 'object') return { ok: false, error: 'invalid' };
+    return { ok: true, name: raw.name.trim(), data: normalizeProfileData(raw.data) };
+  } catch (e) {
+    return { ok: false, error: e instanceof ProfileTooLargeError ? 'tooLarge' : 'invalid' };
   }
 }

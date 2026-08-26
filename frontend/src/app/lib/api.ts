@@ -1,10 +1,15 @@
+/** Running inside the Electron shell — the desktop build has a local backend
+ *  (and its SQLite-backed endpoints) that the web build does not. */
+export function isDesktop(): boolean {
+  return typeof window !== 'undefined' && !!window.electronAPI;
+}
+
 // In Electron the backend serves the frontend on the same origin, so
 // window.location.origin tracks an ephemeral-port fallback (see
 // desktop/src/main/backend.js).
-export const API_URL =
-  typeof window !== 'undefined' && window.electronAPI
-    ? window.location.origin
-    : (process.env.NEXT_PUBLIC_API_URL ?? '');
+export const API_URL = isDesktop()
+  ? window.location.origin
+  : (process.env.NEXT_PUBLIC_API_URL ?? '');
 
 /** Build provider key headers from localStorage, scoped by Compute selection so
  *  we don't leak unrelated keys: `"local"` sends none; `"auto"`/undefined sends

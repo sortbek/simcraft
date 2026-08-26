@@ -18,22 +18,34 @@ import {
   readStoredJson,
   readStoredPositiveInt,
 } from '../../lib/storage';
-import { TRIAGE_BATCH_DEFAULT } from '../../lib/triageBatch';
 import {
   DEFAULT_EXPANSION_OPTIONS,
+  DEFAULT_PROFILE_DATA,
   DEFAULT_RAID_BUFFS,
   normalizeSimcBranch,
+  parseRotationMode,
+  type RotationMode,
 } from '../../lib/sim-config-defaults';
 import {
   booleanRecord,
+  isDefaultProfile,
+  isProfileSupported,
   normalizeProfileData,
-  PROFILE_SCHEMA_VERSION,
+  parseFightSetup,
+  parseStoredProfile,
   stringRecord,
+  updateProfile,
+  type FightSetup,
   type SimProfile,
   type SimProfileData,
 } from '../../lib/sim-profiles';
 
-export { DEFAULT_EXPANSION_OPTIONS, DEFAULT_RAID_BUFFS };
+export type { RotationMode };
+
+/** How long the config must settle before the working draft is written and the
+ *  dirty dot recomputed. Long enough that typing doesn't serialize per keystroke,
+ *  short enough that the dot feels immediate. */
+const DRAFT_DEBOUNCE_MS = 400;
 
 /** JSON with object keys sorted recursively, so semantically equal configs
  *  compare equal regardless of key insertion order. */
@@ -47,8 +59,6 @@ function stableStringify(value: unknown): string {
   }
   return JSON.stringify(value) ?? 'null';
 }
-
-export type RotationMode = 'default' | 'assisted_combat' | 'one_button';
 
 interface SimContextType {
   simcInput: string;
@@ -82,7 +92,7 @@ interface SimContextType {
    *  (DungeonRoute, except a legacy `footer` snippet). Use instead of poking the
    *  pieces individually. */
   activateRoute: (route: ActiveRoute) => void;
-  /** Unload the active route and restore the default fight style. */
+  /** Unload the active route and restore the fight setup it suspended. */
   clearRoute: () => void;
   rotationMode: RotationMode;
   setRotationMode: (v: RotationMode) => void;
@@ -128,15 +138,16 @@ interface SimContextType {
   /** Profile currently loaded into the shared config (`null` = none). */
   activeProfile: SimProfile | null;
   /** Load a saved profile into the shared config. No-op for newer-schema
-   *  profiles. A loaded non-footer route keeps fightStyle + scenarios; a
-   *  stored 'DungeonRoute' style falls back to Patchwerk. */
+   *  profiles. While a route is loaded the profile's fightStyle + scenarios go
+   *  to the suspension and land when it's cleared; a stored 'DungeonRoute' style
+   *  falls back to Patchwerk. */
   applyProfile: (profile: SimProfile) => void;
-  /** Whether a loaded route owns fightStyle + scenarios (non-footer route).
-   *  Derived; NOT the same as isDungeonRoute — the DungeonRoute style can be
-   *  selected manually without a route, and then the profile owns the style. */
-  routeOwnsFight: boolean;
-  /** Snapshot the shared config as profile data. */
+  /** Snapshot the shared config as profile data. Reports the suspended fight
+   *  setup rather than a route's forced values, so it is what both a new profile
+   *  stores and the dirty check compares. */
   captureProfileData: () => SimProfileData;
+  /** Save the current config over the active profile. No-op without one. */
+  saveActiveProfile: () => Promise<void>;
   /** Record which stored profile the config corresponds to (after save/rename),
    *  or clear it (after delete). */
   setActiveProfile: (p: SimProfile | null) => void;
@@ -153,53 +164,137 @@ export function useSimContext() {
 }
 
 export function SimProvider({ children }: { children: ReactNode }) {
+  // Profile-captured fields start at the shared defaults, so an untouched config
+  // matches a normalized blob exactly (a mismatch reads as a phantom dirty dot).
   const [simcInput, _setSimcInput] = useState('');
-  const [fightStyle, _setFightStyle] = useState('Patchwerk');
-  const [threads, _setThreads] = useState(0);
+  const [fightStyle, _setFightStyle] = useState(DEFAULT_PROFILE_DATA.fightStyle);
+  const [threads, _setThreads] = useState(DEFAULT_PROFILE_DATA.threads);
   const [selectedTalent, setSelectedTalent] = useState('');
-  const [targetCount, setTargetCount] = useState(1);
-  const [fightLength, setFightLength] = useState(300);
-  const [targetError, _setTargetError] = useState(0.1);
-  const [iterations, _setIterations] = useState(100000);
-  const [customApl, setCustomApl] = useState('');
+  const [targetCount, setTargetCount] = useState(DEFAULT_PROFILE_DATA.targetCount);
+  const [fightLength, setFightLength] = useState(DEFAULT_PROFILE_DATA.fightLength);
+  const [targetError, _setTargetError] = useState(DEFAULT_PROFILE_DATA.targetError);
+  const [iterations, _setIterations] = useState(DEFAULT_PROFILE_DATA.iterations);
+  const [customApl, setCustomApl] = useState(DEFAULT_PROFILE_DATA.customApl);
   const [activeRoute, _setActiveRoute] = useState<ActiveRoute | null>(null);
-  const [rotationMode, _setRotationMode] = useState<RotationMode>('default');
-  const [simcHeader, setSimcHeader] = useState('');
-  const [simcBasePlayer, setSimcBasePlayer] = useState('');
-  const [simcRaidActors, setSimcRaidActors] = useState('');
-  const [simcPostCombos, setSimcPostCombos] = useState('');
-  const [simcFooter, setSimcFooter] = useState('');
-  const [raidBuffs, _setRaidBuffs] = useState<Record<string, boolean>>(DEFAULT_RAID_BUFFS);
-  const [consumables, _setConsumables] = useState<Record<string, string>>({});
-  const [expansionOptions, _setExpansionOptions] =
-    useState<Record<string, boolean>>(DEFAULT_EXPANSION_OPTIONS);
-  const [simcBranch, _setSimcBranch] = useState('');
+  const [rotationMode, _setRotationMode] = useState<RotationMode>(
+    DEFAULT_PROFILE_DATA.rotationMode
+  );
+  const [simcHeader, setSimcHeader] = useState(DEFAULT_PROFILE_DATA.simcHeader);
+  const [simcBasePlayer, setSimcBasePlayer] = useState(DEFAULT_PROFILE_DATA.simcBasePlayer);
+  const [simcRaidActors, setSimcRaidActors] = useState(DEFAULT_PROFILE_DATA.simcRaidActors);
+  const [simcPostCombos, setSimcPostCombos] = useState(DEFAULT_PROFILE_DATA.simcPostCombos);
+  const [simcFooter, setSimcFooter] = useState(DEFAULT_PROFILE_DATA.simcFooter);
+  const [raidBuffs, _setRaidBuffs] = useState<Record<string, boolean>>(
+    DEFAULT_PROFILE_DATA.raidBuffs
+  );
+  const [consumables, _setConsumables] = useState<Record<string, string>>(
+    DEFAULT_PROFILE_DATA.consumables
+  );
+  const [expansionOptions, _setExpansionOptions] = useState<Record<string, boolean>>(
+    DEFAULT_PROFILE_DATA.expansionOptions
+  );
+  const [simcBranch, _setSimcBranch] = useState(DEFAULT_PROFILE_DATA.simcBranch);
   const [talentBuilds, setTalentBuilds] = useState<{ name: string; talentString: string }[]>([]);
-  const [scenarios, setScenarios] = useState<FightScenario[]>([]);
-  const [parallelProfilesets, setParallelProfilesets] = useState(true);
-  const [triageMaxBatchProfilesets, _setTriageMaxBatchProfilesets] = useState(TRIAGE_BATCH_DEFAULT);
-  const [statWeights, _setStatWeights] = useState(false);
+  const [scenarios, setScenarios] = useState<FightScenario[]>(DEFAULT_PROFILE_DATA.scenarios);
+  const [parallelProfilesets, setParallelProfilesets] = useState(
+    DEFAULT_PROFILE_DATA.parallelProfilesets
+  );
+  const [triageMaxBatchProfilesets, _setTriageMaxBatchProfilesets] = useState(
+    DEFAULT_PROFILE_DATA.triageMaxBatchProfilesets
+  );
+  const [statWeights, _setStatWeights] = useState(DEFAULT_PROFILE_DATA.statWeights);
   const [activeProfile, _setActiveProfile] = useState<SimProfile | null>(null);
+  // The config's own fightStyle + scenarios while a route forces those fields.
+  // Restored when the route is cleared; see `activateRoute`.
+  const [suspendedFight, _setSuspendedFight] = useState<FightSetup | null>(null);
 
   useEffect(() => {
     try {
       _setSimcInput(readSessionString('simhammer_simc_input', ''));
-      _setThreads(readStoredPositiveInt('simhammer_threads', 0));
+
+      // ---- 1. The working config -------------------------------------------
+      // localStorage is an unchecked boundary — readStoredJson's type argument
+      // is an assertion, not validation — so everything here is shape-checked
+      // and normalized through the storage seam's own parsers.
+      const storedProfile = parseStoredProfile(
+        readStoredJson<unknown>('simhammer_active_profile', null)
+      );
+      // Only adopt a profile this build understands. A newer-schema blob is left
+      // in storage untouched and NOT made active: adopting it would enable Save
+      // and Rename, which rewrite it at the current version and destroy every
+      // field this build can't model.
+      const supported = storedProfile !== null && isProfileSupported(storedProfile);
+      if (supported) _setActiveProfile(storedProfile);
+      // The draft is the live config including unsaved edits. It wins over the
+      // profile's saved data so a reload doesn't silently revert those edits
+      // (which also cleared the dirty dot, hiding the loss).
+      const draft = readStoredJson<unknown>('simhammer_profile_draft', null);
+      const working =
+        draft !== null ? normalizeProfileData(draft) : supported ? storedProfile.data : null;
+
+      // ---- 2. Route and the fight setup it suspends -------------------------
+      // Both are session-scoped: the route is live sim input, and the values it
+      // displaces have to come back with it.
+      const restoredRoute = readSessionJson<ActiveRoute | null>('simhammer_active_route', null);
+      _setActiveRoute(restoredRoute);
+      const restoredSuspension = restoredRoute
+        ? (parseFightSetup(readSessionJson<unknown>('simhammer_suspended_fight', null)) ??
+          (working ? { fightStyle: working.fightStyle, scenarios: working.scenarios } : null))
+        : null;
+      _setSuspendedFight(restoredSuspension);
+
+      // Seed every profile-captured field at once. Raw setters: this is a
+      // restore, not an edit, so it must not re-persist what it just read.
+      if (working) {
+        // Under a route those two fields are the route's; the config's own live
+        // in the suspension and land when it's cleared.
+        if (!restoredSuspension) {
+          _setFightStyle(working.fightStyle);
+          setScenarios(working.scenarios);
+        }
+        setFightLength(working.fightLength);
+        setTargetCount(working.targetCount);
+        _setTargetError(working.targetError);
+        _setIterations(working.iterations);
+        _setThreads(working.threads);
+        _setRotationMode(working.rotationMode);
+        setCustomApl(working.customApl);
+        _setRaidBuffs(working.raidBuffs);
+        _setConsumables(working.consumables);
+        _setExpansionOptions(working.expansionOptions);
+        _setSimcBranch(working.simcBranch);
+        setSimcHeader(working.simcHeader);
+        setSimcBasePlayer(working.simcBasePlayer);
+        setSimcRaidActors(working.simcRaidActors);
+        setSimcPostCombos(working.simcPostCombos);
+        setSimcFooter(working.simcFooter);
+        setParallelProfilesets(working.parallelProfilesets);
+        _setTriageMaxBatchProfilesets(working.triageMaxBatchProfilesets);
+        _setStatWeights(working.statWeights);
+      }
+      // fightStyle isn't persisted on its own, so re-assert route ⇒ DungeonRoute
+      // (footer snippets aren't routes and keep the default style).
+      if (restoredRoute && restoredRoute.kind !== 'footer') _setFightStyle('DungeonRoute');
+
+      // ---- 3. Individually persisted fields win -----------------------------
+      // These have their own keys, written synchronously on every change, while
+      // the draft above is debounced — so a change made just before reload is in
+      // the key but not yet in the draft.
+      _setThreads(readStoredPositiveInt('simhammer_threads', DEFAULT_PROFILE_DATA.threads));
       const storedError = localStorage.getItem('simhammer_target_error');
       if (storedError != null) {
         const n = parseFloat(storedError);
         if (Number.isFinite(n) && n > 0) _setTargetError(n);
       }
-      _setIterations(readStoredPositiveInt('simhammer_iterations', 100000));
+      _setIterations(
+        readStoredPositiveInt('simhammer_iterations', DEFAULT_PROFILE_DATA.iterations)
+      );
       _setStatWeights(localStorage.getItem('simhammer_stat_weights') === 'true');
-      // Active route survives reload (it's live sim input). Never-throw helper so a
-      // corrupt value yields null instead of aborting the other restores. fightStyle
-      // isn't persisted, so re-assert route ⇒ DungeonRoute (footer snippets aren't routes).
-      const restoredRoute = readSessionJson<ActiveRoute | null>('simhammer_active_route', null);
-      _setActiveRoute(restoredRoute);
-      if (restoredRoute && restoredRoute.kind !== 'footer') _setFightStyle('DungeonRoute');
       _setTriageMaxBatchProfilesets(
-        readStoredPositiveInt('simhammer_triage_max_batch_profilesets', TRIAGE_BATCH_DEFAULT)
+        readStoredPositiveInt(
+          'simhammer_triage_max_batch_profilesets',
+          DEFAULT_PROFILE_DATA.triageMaxBatchProfilesets
+        )
       );
       const storedBranch = normalizeSimcBranch(localStorage.getItem('simhammer_simc_branch') ?? '');
       _setSimcBranch(storedBranch);
@@ -214,58 +309,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
       _setExpansionOptions(
         booleanRecord(readStoredJson('simhammer_expansion_options', {}), DEFAULT_EXPANSION_OPTIONS)
       );
-      const storedRotationMode = localStorage.getItem('simhammer_rotation_mode');
-      if (
-        storedRotationMode === 'default' ||
-        storedRotationMode === 'assisted_combat' ||
-        storedRotationMode === 'one_button'
-      ) {
-        _setRotationMode(storedRotationMode);
-      }
-      // Re-seed the fields that aren't individually persisted from the active
-      // profile, so a reload doesn't revert them to defaults (which would also
-      // arm Save to write those defaults back over the profile). Individually
-      // persisted fields (restored above) win — unsaved tweaks to them survive
-      // reload. Route-owned fields follow the route restore: only a real
-      // dungeon route (not a footer snippet) owns fightStyle + scenarios.
-      // localStorage is an unchecked boundary — readStoredJson's type argument
-      // is an assertion, not validation — so shape-check and normalize before
-      // any of it reaches typed state (profileDirty renders from `data`).
-      const rawProfile = readStoredJson<Partial<SimProfile> | null>(
-        'simhammer_active_profile',
-        null
-      );
-      const storedProfile: SimProfile | null =
-        rawProfile &&
-        typeof rawProfile.id === 'string' &&
-        typeof rawProfile.name === 'string' &&
-        typeof rawProfile.version === 'number' &&
-        typeof rawProfile.updated_at === 'string'
-          ? {
-              id: rawProfile.id,
-              name: rawProfile.name,
-              version: rawProfile.version,
-              updated_at: rawProfile.updated_at,
-              data: normalizeProfileData(rawProfile.data),
-            }
-          : null;
-      _setActiveProfile(storedProfile);
-      if (storedProfile && storedProfile.version <= PROFILE_SCHEMA_VERSION) {
-        const d = storedProfile.data;
-        if (!restoredRoute || restoredRoute.kind === 'footer') {
-          _setFightStyle(d.fightStyle);
-          setScenarios(d.scenarios);
-        }
-        setFightLength(d.fightLength);
-        setTargetCount(d.targetCount);
-        setCustomApl(d.customApl);
-        setSimcHeader(d.simcHeader);
-        setSimcBasePlayer(d.simcBasePlayer);
-        setSimcRaidActors(d.simcRaidActors);
-        setSimcPostCombos(d.simcPostCombos);
-        setSimcFooter(d.simcFooter);
-        setParallelProfilesets(d.parallelProfilesets);
-      }
+      _setRotationMode(parseRotationMode(localStorage.getItem('simhammer_rotation_mode')));
     } catch {}
   }, []);
 
@@ -296,11 +340,6 @@ export function SimProvider({ children }: { children: ReactNode }) {
   // Dungeon Route mode: gates the route control and the controls a route overrides.
   const isDungeonRoute = fightStyle === 'DungeonRoute';
 
-  // A loaded non-footer route owns fightStyle + scenarios. Not isDungeonRoute:
-  // that style can be picked manually without a route, and a footer-kind
-  // snippet doesn't own the style either way.
-  const routeOwnsFight = activeRoute !== null && activeRoute.kind !== 'footer';
-
   const setRaidBuffs = useCallback((v: Record<string, boolean>) => {
     _setRaidBuffs(v);
     try {
@@ -309,9 +348,13 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setConsumables = useCallback((v: Record<string, string>) => {
-    _setConsumables(v);
+    // An empty value means "SimC default", which is what an absent key means —
+    // compact here so live state can't differ from a normalized blob by a key
+    // that carries no setting, which would light the dirty dot for nothing.
+    const compact = stringRecord(v);
+    _setConsumables(compact);
     try {
-      localStorage.setItem('simhammer_consumables', JSON.stringify(v));
+      localStorage.setItem('simhammer_consumables', JSON.stringify(compact));
     } catch {}
   }, []);
 
@@ -367,19 +410,41 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  // Internal: set + persist the fight setup a route is displacing. Session-scoped
+  // like the route itself — they have to come back together.
+  const persistSuspendedFight = useCallback((v: FightSetup | null) => {
+    _setSuspendedFight(v);
+    try {
+      if (v) sessionStorage.setItem('simhammer_suspended_fight', JSON.stringify(v));
+      else sessionStorage.removeItem('simhammer_suspended_fight');
+    } catch {}
+  }, []);
+
   // Exposed fight-style setter. A loaded route only applies in Dungeon Route mode,
   // so switching to any other style discards it — keeping "route ⇒ DungeonRoute" one
   // invariant (with activateRoute/clearRoute) instead of each drawer re-coupling it.
   const setFightStyle = useCallback(
     (v: string) => {
       _setFightStyle(v);
-      if (v !== 'DungeonRoute') persistActiveRoute(null);
+      if (v !== 'DungeonRoute') {
+        persistActiveRoute(null);
+        // The style the user just picked wins over the suspended one, but they
+        // never asked to lose their scenarios — hand those back.
+        if (suspendedFight) {
+          setScenarios(suspendedFight.scenarios);
+          persistSuspendedFight(null);
+        }
+      }
     },
-    [persistActiveRoute]
+    [persistActiveRoute, persistSuspendedFight, suspendedFight]
   );
 
   const activateRoute = useCallback(
     (route: ActiveRoute) => {
+      // Suspend the config's own fight setup, on the first route only — a
+      // route-to-route switch would otherwise capture the forced values and
+      // there'd be nothing left to restore.
+      if (!suspendedFight) persistSuspendedFight({ fightStyle, scenarios });
       persistActiveRoute(route);
       // Scenarios sweep fight styles, but the route's fight_style=DungeonRoute would
       // override them at sim time — so they'd all silently run the same route.
@@ -388,13 +453,17 @@ export function SimProvider({ children }: { children: ReactNode }) {
       // kinds force DungeonRoute. Raw setter: don't discard the route we just set.
       _setFightStyle(route.kind === 'footer' ? 'Patchwerk' : 'DungeonRoute');
     },
-    [persistActiveRoute]
+    [persistActiveRoute, persistSuspendedFight, suspendedFight, fightStyle, scenarios]
   );
 
   const clearRoute = useCallback(() => {
     persistActiveRoute(null);
-    _setFightStyle('Patchwerk');
-  }, [persistActiveRoute]);
+    _setFightStyle(suspendedFight ? suspendedFight.fightStyle : 'Patchwerk');
+    if (suspendedFight) {
+      setScenarios(suspendedFight.scenarios);
+      persistSuspendedFight(null);
+    }
+  }, [persistActiveRoute, persistSuspendedFight, suspendedFight]);
 
   const setStatWeights = useCallback((v: boolean) => {
     _setStatWeights(v);
@@ -418,15 +487,17 @@ export function SimProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
-  const captureProfileData = useCallback(
-    (): SimProfileData => ({
-      // Blobs never store 'DungeonRoute': without a route the style is
-      // meaningless, and with one the route owns it (apply skips it, save-over
-      // masks it) — storing it would only leave profiles permanently dirty.
-      fightStyle: fightStyle === 'DungeonRoute' ? 'Patchwerk' : fightStyle,
+  const captureProfileData = useCallback((): SimProfileData => {
+    // While a route is loaded it forces fightStyle + scenarios, so the config's
+    // own values (held in the suspension) are what a profile stores and what the
+    // dirty check compares. Blobs never store 'DungeonRoute': without a route the
+    // style is meaningless, so it would only leave profiles permanently dirty.
+    const fight = suspendedFight ?? { fightStyle, scenarios };
+    return {
+      fightStyle: fight.fightStyle === 'DungeonRoute' ? 'Patchwerk' : fight.fightStyle,
+      scenarios: fight.scenarios,
       fightLength,
       targetCount,
-      scenarios,
       iterations,
       targetError,
       threads,
@@ -444,45 +515,52 @@ export function SimProvider({ children }: { children: ReactNode }) {
       parallelProfilesets,
       triageMaxBatchProfilesets,
       statWeights,
-    }),
-    [
-      fightStyle,
-      fightLength,
-      targetCount,
-      scenarios,
-      iterations,
-      targetError,
-      threads,
-      rotationMode,
-      customApl,
-      raidBuffs,
-      consumables,
-      expansionOptions,
-      simcBranch,
-      simcHeader,
-      simcBasePlayer,
-      simcRaidActors,
-      simcPostCombos,
-      simcFooter,
-      parallelProfilesets,
-      triageMaxBatchProfilesets,
-      statWeights,
-    ]
-  );
+    };
+  }, [
+    suspendedFight,
+    fightStyle,
+    fightLength,
+    targetCount,
+    scenarios,
+    iterations,
+    targetError,
+    threads,
+    rotationMode,
+    customApl,
+    raidBuffs,
+    consumables,
+    expansionOptions,
+    simcBranch,
+    simcHeader,
+    simcBasePlayer,
+    simcRaidActors,
+    simcPostCombos,
+    simcFooter,
+    parallelProfilesets,
+    triageMaxBatchProfilesets,
+    statWeights,
+  ]);
 
   const applyProfile = useCallback(
     (profile: SimProfile) => {
       // Newer-schema profiles can't be applied faithfully; the picker shows
       // them disabled — this is the seam's backstop.
-      if (profile.version > PROFILE_SCHEMA_VERSION) return;
+      if (!isProfileSupported(profile)) return;
       const d = profile.data;
-      // A loaded non-footer route owns fightStyle + scenarios, and a stored
-      // DungeonRoute style can't be honored without one. The public setter is
-      // intentional for the non-owned path: like a manual fight-style change,
-      // applying a profile discards a loaded footer snippet.
-      if (!routeOwnsFight) {
-        setFightStyle(d.fightStyle === 'DungeonRoute' ? 'Patchwerk' : d.fightStyle);
-        setScenarios(d.scenarios);
+      // A stored DungeonRoute style can't be honored without a route. While one
+      // is loaded it forces these two fields, so the profile's own go into the
+      // suspension and land when the route is cleared: writing them to live state
+      // would just be overwritten, and dropping them would let a later Save write
+      // the route's forced values over the profile.
+      const fight: FightSetup = {
+        fightStyle: d.fightStyle === 'DungeonRoute' ? 'Patchwerk' : d.fightStyle,
+        scenarios: d.scenarios,
+      };
+      if (suspendedFight) {
+        persistSuspendedFight(fight);
+      } else {
+        setFightStyle(fight.fightStyle);
+        setScenarios(fight.scenarios);
       }
       setTargetCount(d.targetCount);
       setFightLength(d.fightLength);
@@ -506,7 +584,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
       setActiveProfile(profile);
     },
     [
-      routeOwnsFight,
+      suspendedFight,
+      persistSuspendedFight,
       setFightStyle,
       setActiveProfile,
       setThreads,
@@ -522,18 +601,50 @@ export function SimProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  // Route-owned fields are masked while a route owns them — the config being
-  // forced to DungeonRoute under a route is not profile drift. Key-sorted
-  // stringify so record key order (buffs, consumables) can never false-dirty.
-  const profileDirty = useMemo(() => {
-    if (!activeProfile) return false;
-    const saved = activeProfile.data;
-    const current = captureProfileData();
-    const masked = routeOwnsFight
-      ? { ...current, fightStyle: saved.fightStyle, scenarios: saved.scenarios }
-      : current;
-    return stableStringify(masked) !== stableStringify(saved);
-  }, [activeProfile, routeOwnsFight, captureProfileData]);
+  const saveActiveProfile = useCallback(async () => {
+    // The built-in Default is not a stored row; the drawer disables Save for
+    // it, and this is the seam's backstop.
+    if (!activeProfile || isDefaultProfile(activeProfile)) return;
+    setActiveProfile(await updateProfile({ ...activeProfile, data: captureProfileData() }));
+  }, [activeProfile, captureProfileData, setActiveProfile]);
+
+  // Persist the working config so a reload restores unsaved edits instead of
+  // reverting them (which also cleared the dirty dot, hiding the loss). Debounced:
+  // the expert text fields write to state on every keystroke, and this is the one
+  // place that serializes the whole config — including multi-KB SimC blobs.
+  const [draftKey, setDraftKey] = useState<string | null>(null);
+  useEffect(() => {
+    const writeDraft = () => {
+      const data = captureProfileData();
+      setDraftKey(stableStringify(data));
+      try {
+        localStorage.setItem('simhammer_profile_draft', JSON.stringify(data));
+      } catch {}
+    };
+    const id = setTimeout(writeDraft, DRAFT_DEBOUNCE_MS);
+    // Flush on the way out, or an edit made inside the debounce window is the
+    // one thing the draft was added to stop losing. `pagehide` rather than
+    // `beforeunload`: it also covers the Electron window closing.
+    const flush = () => {
+      clearTimeout(id);
+      writeDraft();
+    };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [captureProfileData]);
+
+  // Key-sorted stringify so record key order (buffs, consumables) can never
+  // false-dirty. Both sides are keyed on their own input, so neither is rebuilt
+  // for a change to the other.
+  const savedProfileKey = useMemo(
+    () => (activeProfile ? stableStringify(activeProfile.data) : null),
+    [activeProfile]
+  );
+  const profileDirty =
+    savedProfileKey !== null && draftKey !== null && draftKey !== savedProfileKey;
 
   return (
     <SimContext.Provider
@@ -596,9 +707,9 @@ export function SimProvider({ children }: { children: ReactNode }) {
         activeProfile,
         applyProfile,
         captureProfileData,
+        saveActiveProfile,
         setActiveProfile,
         profileDirty,
-        routeOwnsFight,
       }}
     >
       {children}
