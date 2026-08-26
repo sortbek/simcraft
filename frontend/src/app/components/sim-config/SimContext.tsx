@@ -11,6 +11,13 @@ import {
   readStoredPositiveInt,
 } from '../../lib/storage';
 import { TRIAGE_BATCH_DEFAULT } from '../../lib/triageBatch';
+import {
+  DEFAULT_EXPANSION_OPTIONS,
+  DEFAULT_RAID_BUFFS,
+  normalizeSimcBranch,
+} from '../../lib/sim-config-defaults';
+
+export { DEFAULT_EXPANSION_OPTIONS, DEFAULT_RAID_BUFFS };
 
 export type RotationMode = 'default' | 'assisted_combat' | 'one_button';
 
@@ -92,36 +99,11 @@ interface SimContextType {
 
 const SimContext = createContext<SimContextType | null>(null);
 
-function normalizeSimcBranch(value: string): string {
-  if (value.startsWith('weekly-')) return 'weekly';
-  if (value.startsWith('nightly-')) return 'nightly';
-  return value;
-}
-
 export function useSimContext() {
   const ctx = useContext(SimContext);
   if (!ctx) throw new Error('useSimContext must be used within SimProvider');
   return ctx;
 }
-
-export const DEFAULT_RAID_BUFFS: Record<string, boolean> = {
-  bloodlust: true,
-  arcane_intellect: true,
-  power_word_fortitude: true,
-  battle_shout: true,
-  mystic_touch: true,
-  chaos_brand: true,
-  skyfury: true,
-  mark_of_the_wild: true,
-  hunters_mark: true,
-  bleeding: true,
-};
-
-export const DEFAULT_EXPANSION_OPTIONS: Record<string, boolean> = {
-  'midnight.crucible_of_erratic_energies_violence': true,
-  'midnight.crucible_of_erratic_energies_sustenance': true,
-  'midnight.crucible_of_erratic_energies_predation': true,
-};
 
 export function SimProvider({ children }: { children: ReactNode }) {
   const [simcInput, _setSimcInput] = useState('');
