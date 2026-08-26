@@ -12,6 +12,7 @@ import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
 import ActiveRouteIndicator from './ActiveRouteIndicator';
+import ProfileControls from './ProfileControls';
 
 const ITERATION_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 
@@ -148,6 +149,8 @@ export default function ConfigDrawer({
               )}
             </button>
           ))}
+          <div className="flex-1" />
+          <ProfileControls />
         </div>
 
         {activeTab === 'simulation' && (
