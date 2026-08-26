@@ -9,6 +9,8 @@ use super::droptimizer_handlers;
 use super::game_data_handlers;
 use super::job_handlers;
 use super::mdt_handlers;
+#[cfg(feature = "desktop")]
+use super::profile_handlers;
 use super::provider_handlers;
 use super::resolve_drops;
 use super::roster_handlers;
@@ -327,6 +329,18 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/providers/{id}/test-stored",
             web::post().to(provider_handlers::test_stored_provider_key),
+        )
+        .route(
+            "/api/profiles",
+            web::get().to(profile_handlers::list_profiles),
+        )
+        .route(
+            "/api/profiles",
+            web::post().to(profile_handlers::upsert_profile),
+        )
+        .route(
+            "/api/profiles/{id}",
+            web::delete().to(profile_handlers::delete_profile),
         );
     }
 
