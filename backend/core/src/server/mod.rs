@@ -12,6 +12,8 @@ mod handler_prep;
 mod job_handlers;
 pub(crate) mod job_spawn;
 mod mdt_handlers;
+#[cfg(feature = "desktop")]
+mod profile_handlers;
 mod provider_handlers;
 mod resolve_drops;
 mod roster_handlers;
@@ -33,6 +35,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::compute::SimcBinaries;
+#[cfg(feature = "desktop")]
+use crate::db::SimProfileRepo;
 use crate::db::{
     CharacterRepo, Database, JobRepo, RosterRepo, RosterRunRepo, RouteRepo, SettingsRepo,
 };
@@ -73,31 +77,40 @@ pub async fn start_server(
     data_dir: Option<PathBuf>,
 ) -> u16 {
     #[cfg(feature = "desktop")]
-    let (job_repo, route_repo, char_repo, roster_repo, roster_run_repo, settings_repo) =
-        match Database::connect(database_url).await {
-            Ok(db) => (
-                web::Data::new(JobRepo::new(db.pool.clone())),
-                web::Data::new(RouteRepo::new(db.pool.clone())),
-                web::Data::new(CharacterRepo::new(db.pool.clone())),
-                web::Data::new(RosterRepo::new(db.pool.clone())),
-                web::Data::new(RosterRunRepo::new(db.pool.clone())),
-                web::Data::new(SettingsRepo::new(db.pool.clone())),
-            ),
-            Err(err) => {
-                eprintln!(
+    let (
+        job_repo,
+        route_repo,
+        char_repo,
+        roster_repo,
+        roster_run_repo,
+        settings_repo,
+        profile_repo,
+    ) = match Database::connect(database_url).await {
+        Ok(db) => (
+            web::Data::new(JobRepo::new(db.pool.clone())),
+            web::Data::new(RouteRepo::new(db.pool.clone())),
+            web::Data::new(CharacterRepo::new(db.pool.clone())),
+            web::Data::new(RosterRepo::new(db.pool.clone())),
+            web::Data::new(RosterRunRepo::new(db.pool.clone())),
+            web::Data::new(SettingsRepo::new(db.pool.clone())),
+            web::Data::new(SimProfileRepo::new(db.pool.clone())),
+        ),
+        Err(err) => {
+            eprintln!(
                 "Failed to connect to database ({}). Continuing with in-memory storage; data will not persist across restarts.",
                 err
             );
-                (
-                    web::Data::new(JobRepo::new_memory()),
-                    web::Data::new(RouteRepo::new_memory()),
-                    web::Data::new(CharacterRepo::new_memory()),
-                    web::Data::new(RosterRepo::new_memory()),
-                    web::Data::new(RosterRunRepo::new_memory()),
-                    web::Data::new(SettingsRepo::new_memory()),
-                )
-            }
-        };
+            (
+                web::Data::new(JobRepo::new_memory()),
+                web::Data::new(RouteRepo::new_memory()),
+                web::Data::new(CharacterRepo::new_memory()),
+                web::Data::new(RosterRepo::new_memory()),
+                web::Data::new(RosterRunRepo::new_memory()),
+                web::Data::new(SettingsRepo::new_memory()),
+                web::Data::new(SimProfileRepo::new_memory()),
+            )
+        }
+    };
     #[cfg(not(feature = "desktop"))]
     let (job_repo, route_repo, char_repo, roster_repo, roster_run_repo, settings_repo) = {
         let db = Database::connect(database_url)
@@ -210,7 +223,9 @@ pub async fn start_server(
         #[cfg(not(feature = "desktop"))]
         let app = app.app_data(admin_secret.clone());
         #[cfg(feature = "desktop")]
-        let app = app.app_data(stats_data.clone());
+        let app = app
+            .app_data(stats_data.clone())
+            .app_data(profile_repo.clone());
         let mut app = app;
 
         // Serve cached assets from data directory

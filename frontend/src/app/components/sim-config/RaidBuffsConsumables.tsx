@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useSimContext, DEFAULT_RAID_BUFFS, DEFAULT_EXPANSION_OPTIONS } from './SimContext';
+import { useSimContext } from './SimContext';
+import { DEFAULT_EXPANSION_OPTIONS, DEFAULT_RAID_BUFFS } from '../../lib/sim-config-defaults';
 import { useLanguage } from '../../lib/i18n';
 import { API_URL, apiUrl, fetchJsonOr } from '../../lib/api';
 

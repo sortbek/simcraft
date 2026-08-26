@@ -3,6 +3,7 @@
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import RunButton from './RunButton';
+import ProfilePicker from './ProfilePicker';
 import type { ComputeChoice } from '../../lib/useComputeChoice';
 import type { ReactNode } from 'react';
 
@@ -47,6 +48,8 @@ export default function ConfigFooterBar({
     <div className="border-t border-outline-variant/10 bg-[#131313]/95 shadow-[0_-4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl">
       <div className="mx-auto flex h-20 max-w-screen-2xl items-center gap-6 px-8">
         <div className="flex items-center gap-4 text-sm text-on-surface-variant">
+          <ProfilePicker />
+          <span className="h-4 w-px bg-outline-variant/30" />
           <span className="font-headline font-bold uppercase">{fightStyle}</span>
           <span className="h-4 w-px bg-outline-variant/30" />
           <span className="font-mono tabular-nums">{fightLengthLabel}</span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { API_URL, apiUrl, fetchJsonOr } from '../../lib/api';
+import { API_URL, apiUrl, fetchJsonOr, isDesktop as detectDesktop } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import LogConsole from './LogConsole';
 
@@ -36,7 +36,7 @@ function useCpuUsage(isRunning: boolean): number | null {
   const isDesktop = useRef(false);
 
   useEffect(() => {
-    isDesktop.current = !!window.electronAPI;
+    isDesktop.current = detectDesktop();
   }, []);
 
   useEffect(() => {

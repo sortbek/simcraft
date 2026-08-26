@@ -12,6 +12,7 @@ import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
 import ActiveRouteIndicator from './ActiveRouteIndicator';
+import ProfileControls from './ProfileControls';
 
 const ITERATION_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 
@@ -122,7 +123,9 @@ export default function ConfigDrawer({
   return (
     <div className="animate-fade-in border-t border-outline-variant/10 bg-[#0e0e0e]/95 backdrop-blur-xl">
       <div className="mx-auto max-w-screen-2xl px-8 py-5">
-        <div className="mb-5 flex items-center gap-1">
+        {/* Wraps rather than compressing: the tab labels and the six profile
+            buttons together overflow a narrow window in the longer locales. */}
+        <div className="mb-5 flex flex-wrap items-center gap-1">
           {[
             { key: 'simulation' as const, label: t('config.simulation'), modified: false },
             {
@@ -148,6 +151,10 @@ export default function ConfigDrawer({
               )}
             </button>
           ))}
+          {/* Grows to push the controls right, but may collapse to 0 so the
+              longer locales wrap the profile buttons instead of squeezing them. */}
+          <div className="min-w-0 flex-1" />
+          <ProfileControls />
         </div>
 
         {activeTab === 'simulation' && (
