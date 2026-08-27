@@ -89,6 +89,8 @@ export interface ReportPlayer {
   spec: string;
   base_dps: number;
   status: string;
+  /** Why this member has no result. Absent on "ok" players and on older reports. */
+  error?: string;
 }
 
 export interface ReportItemResult {
@@ -149,6 +151,8 @@ export interface RunOptions {
   void_forge?: boolean;
   catalyst?: boolean;
   preferred_crafted_stats?: [number, number];
+  /** "auto" | "local" | a registered remote provider id. */
+  compute_provider?: string;
 }
 
 export async function startRun(

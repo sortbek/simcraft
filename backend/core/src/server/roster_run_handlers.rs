@@ -189,6 +189,24 @@ pub(super) async fn list_runs(
     }
 }
 
+/// `None` means the job looks fine from here; `aggregate_report` still rejects
+/// results without a baseline DPS.
+fn failure_reason(job: Option<&crate::models::Job>, result: &Option<Value>) -> Option<String> {
+    let Some(job) = job else {
+        return Some("Sim job record is no longer available.".into());
+    };
+    match job.status {
+        JobStatus::Failed => Some(
+            job.error_message
+                .clone()
+                .unwrap_or_else(|| "Sim failed without an error message.".into()),
+        ),
+        JobStatus::Cancelled => Some("Sim was cancelled.".into()),
+        _ if result.is_none() => Some("Sim finished without a result.".into()),
+        _ => None,
+    }
+}
+
 /// GET /api/rosters/runs/{run_id} — report progress. Once every child job is
 /// terminal, build + cache the aggregated `RosterReport` (idempotent: a cached
 /// report short-circuits subsequent polls) and return it.
@@ -246,11 +264,14 @@ pub(super) async fn get_run(
         .collect();
 
     let total = mappings.len();
-    let is_terminal = |j: &Option<crate::models::Job>| {
-        matches!(
-            j.as_ref().map(|j| &j.status),
-            Some(JobStatus::Done) | Some(JobStatus::Failed) | Some(JobStatus::Cancelled)
-        )
+    // A GC'd job row can never reach a terminal status, so count it as terminal —
+    // otherwise the run sits at partial progress forever and never reports at all.
+    let is_terminal = |j: &Option<crate::models::Job>| match j {
+        None => true,
+        Some(j) => matches!(
+            j.status,
+            JobStatus::Done | JobStatus::Failed | JobStatus::Cancelled
+        ),
     };
     let done = jobs.iter().filter(|(_, j)| is_terminal(j)).count();
     let progress_pct = (100 * done).checked_div(total).unwrap_or(100);
@@ -272,7 +293,7 @@ pub(super) async fn get_run(
         }
     };
 
-    let inputs: Vec<(MemberMeta, Option<Value>)> = jobs
+    let inputs: Vec<(MemberMeta, Option<Value>, Option<String>)> = jobs
         .iter()
         .map(|(member_id, job)| {
             let meta = members
@@ -295,7 +316,8 @@ pub(super) async fn get_run(
                 .as_ref()
                 .and_then(|j| j.result_json.as_deref())
                 .and_then(|s| serde_json::from_str::<Value>(s).ok());
-            (meta, result)
+            let why = failure_reason(job.as_ref(), &result);
+            (meta, result, why)
         })
         .collect();
 
@@ -314,4 +336,69 @@ pub(super) async fn get_run(
     }
     let report_value = serde_json::from_str::<Value>(&json).unwrap_or(Value::Null);
     HttpResponse::Ok().json(json!({ "status": "done", "report": report_value }))
+}
+
+#[cfg(test)]
+mod failure_reason_tests {
+    use super::*;
+    use crate::models::Job;
+
+    fn job(status: JobStatus, error: Option<&str>) -> Job {
+        let mut j = Job::new_with_provider(
+            String::new(),
+            "droptimizer".into(),
+            100_000,
+            "Patchwerk".into(),
+            0.1,
+            "simmit".into(),
+        );
+        j.status = status;
+        j.error_message = error.map(str::to_string);
+        j
+    }
+
+    #[test]
+    fn failed_job_reports_its_own_error() {
+        let msg = "Simmit error [422 Unprocessable Entity runtime_override_exceeds_policy]";
+        let j = job(JobStatus::Failed, Some(msg));
+        assert_eq!(failure_reason(Some(&j), &None).as_deref(), Some(msg));
+    }
+
+    #[test]
+    fn failed_job_without_a_message_still_explains_itself() {
+        let j = job(JobStatus::Failed, None);
+        assert_eq!(
+            failure_reason(Some(&j), &None).as_deref(),
+            Some("Sim failed without an error message.")
+        );
+    }
+
+    #[test]
+    fn cancelled_and_missing_jobs_are_distinguished() {
+        let j = job(JobStatus::Cancelled, None);
+        assert_eq!(
+            failure_reason(Some(&j), &None).as_deref(),
+            Some("Sim was cancelled.")
+        );
+        assert_eq!(
+            failure_reason(None, &None).as_deref(),
+            Some("Sim job record is no longer available.")
+        );
+    }
+
+    #[test]
+    fn done_job_with_a_result_has_no_reason() {
+        let j = job(JobStatus::Done, None);
+        let result = Some(serde_json::json!({"base_dps": 1000.0}));
+        assert!(failure_reason(Some(&j), &result).is_none());
+    }
+
+    #[test]
+    fn done_job_whose_result_did_not_parse_is_flagged() {
+        let j = job(JobStatus::Done, None);
+        assert_eq!(
+            failure_reason(Some(&j), &None).as_deref(),
+            Some("Sim finished without a result.")
+        );
+    }
 }

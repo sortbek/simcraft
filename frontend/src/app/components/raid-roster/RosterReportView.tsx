@@ -52,7 +52,20 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
     () => Array.from(new Set(report.items.map((i) => i.slot))).sort(),
     [report.items]
   );
-  const failedCount = report.players.filter((p) => p.status !== 'ok').length;
+  // Grouped by reason: a whole roster usually fails the same way.
+  const failures = useMemo(() => {
+    const byReason = new Map<string, string[]>();
+    for (const p of report.players) {
+      if (p.status === 'ok') continue;
+      const reason = p.error?.trim() || 'No reason recorded for this sim.';
+      const names = byReason.get(reason);
+      if (names) names.push(p.name);
+      else byReason.set(reason, [p.name]);
+    }
+    return Array.from(byReason, ([reason, names]) => ({ reason, names }));
+  }, [report.players]);
+
+  const failedCount = failures.reduce((n, f) => n + f.names.length, 0);
 
   function togglePlayer(memberId: string) {
     setFilters((f) => {
@@ -157,10 +170,26 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
       {/* Summary line */}
       <div className="text-xs text-on-surface-variant/60">
         {filtered.length} items · {columns.length} players
-        {failedCount > 0 && (
-          <span className="text-on-surface-variant/40"> · {failedCount} failed to sim</span>
-        )}
       </div>
+
+      {failedCount > 0 && (
+        <details
+          open={columns.length === 0}
+          className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2"
+        >
+          <summary className="cursor-pointer text-sm font-medium text-red-400">
+            {failedCount} {failedCount === 1 ? 'player' : 'players'} failed to sim
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {failures.map((f) => (
+              <li key={f.reason}>
+                <div className="text-sm text-on-surface">{f.names.join(', ')}</div>
+                <div className="break-words text-sm text-on-surface-variant/80">{f.reason}</div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {/* View */}
       {mode === 'item' ? (

@@ -4,16 +4,40 @@ use crate::compute::provider::{
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+/// Keeps a roster fan-out to one `/v1/simc/usage` call instead of one per child.
+const RUNTIME_CAP_TTL: Duration = Duration::from_secs(600);
+
+struct CachedCap {
+    cap: Option<u32>,
+    at: Instant,
+}
 
 #[derive(Clone)]
 pub struct SimmitProvider {
     http: reqwest::Client,
+    /// Account runtime cap, keyed by bearer hash so the singleton can serve
+    /// several accounts without holding raw keys.
+    runtime_caps: Arc<tokio::sync::RwLock<HashMap<u64, CachedCap>>>,
 }
 
 impl SimmitProvider {
     pub fn new(http: reqwest::Client) -> Self {
-        Self { http }
+        Self {
+            http,
+            runtime_caps: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        }
     }
+}
+
+fn bearer_fingerprint(bearer: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bearer.hash(&mut h);
+    h.finish()
 }
 
 #[async_trait]
@@ -115,18 +139,7 @@ impl SimcProvider for SimmitProvider {
                 return Err("Simmit requires a configured API key".into())
             }
         };
-        let resp = self
-            .http
-            .get(format!("{}/v1/simc/usage", SIMMIT_BASE_URL))
-            .bearer_auth(&bearer)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        if !resp.status().is_success() {
-            return Err(format!("Simmit usage returned {}", resp.status()));
-        }
-        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
-        Ok(parse_usage(&body))
+        self.fetch_usage(&bearer).await
     }
 
     /// Submit a chunk and return Simmit's remote job id immediately (before it
@@ -291,6 +304,44 @@ impl SimmitProvider {
         }
     }
 
+    async fn fetch_usage(&self, bearer: &str) -> Result<crate::compute::ProviderUsage, String> {
+        let resp = self
+            .http
+            .get(format!("{}/v1/simc/usage", SIMMIT_BASE_URL))
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("Simmit usage returned {}", resp.status()));
+        }
+        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
+        Ok(parse_usage(&body))
+    }
+
+    /// `None` when the lookup fails or the account reports no limit.
+    async fn account_runtime_cap(&self, bearer: &str) -> Option<u32> {
+        let fp = bearer_fingerprint(bearer);
+        if let Some(c) = self.runtime_caps.read().await.get(&fp) {
+            if c.at.elapsed() < RUNTIME_CAP_TTL {
+                return c.cap;
+            }
+        }
+        let cap = self
+            .fetch_usage(bearer)
+            .await
+            .ok()
+            .and_then(|u| u.max_runtime_seconds);
+        self.runtime_caps.write().await.insert(
+            fp,
+            CachedCap {
+                cap,
+                at: Instant::now(),
+            },
+        );
+        cap
+    }
+
     async fn submit(
         &self,
         bearer: &str,
@@ -306,10 +357,9 @@ impl SimmitProvider {
             profile: SubmitProfile { text: input },
             runtime: SubmitRuntime {
                 multi_stage: if enable_multistage { Some(true) } else { None },
-                // Per-account cap isn't threaded here yet: the provider is a shared
-                // Arc singleton (can't cache a per-account value) and RunCtx carries
-                // no usage. `None` keeps the 1800s ceiling; pass the cap once available.
-                max_runtime_seconds: submit_runtime_seconds(None),
+                // Above the account's cap Simmit rejects the submit outright
+                // (`runtime_override_exceeds_policy`).
+                max_runtime_seconds: submit_runtime_seconds(self.account_runtime_cap(bearer).await),
             },
             artifacts: SubmitArtifacts {
                 json: SubmitArtifactsJson { version: "2" },
@@ -341,13 +391,40 @@ impl SimmitProvider {
                 .id
                 .ok_or_else(|| RunError::Other("Simmit submit returned no id".into()))
         } else {
-            let err: ErrorBody = resp.json().await.unwrap_or(ErrorBody {
-                error: None,
-                code: None,
-            });
-            Err(map_simmit_error(status, err))
+            let raw = resp.text().await.unwrap_or_default();
+            Err(map_simmit_error(status, parse_error_body(&raw)))
         }
     }
+}
+
+/// Deserializing straight into `ErrorBody` drops every field that doesn't match,
+/// leaving failures like `runtime_override_exceeds_policy` reported as a bare
+/// "Unprocessable Entity". Fall back to the raw body so the reason survives.
+fn parse_error_body(raw: &str) -> ErrorBody {
+    let parsed = serde_json::from_str::<ErrorBody>(raw).ok();
+    let code = parsed.as_ref().and_then(|b| b.code.clone());
+    match parsed.and_then(|b| b.error) {
+        Some(e) => ErrorBody {
+            error: Some(e),
+            code,
+        },
+        None => ErrorBody {
+            error: body_snippet(raw),
+            code,
+        },
+    }
+}
+
+fn body_snippet(raw: &str) -> Option<String> {
+    let flat = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.is_empty() {
+        return None;
+    }
+    let mut s: String = flat.chars().take(300).collect();
+    if flat.chars().count() > 300 {
+        s.push('…');
+    }
+    Some(s)
 }
 
 fn map_simmit_error(status: reqwest::StatusCode, err: ErrorBody) -> RunError {
@@ -994,6 +1071,51 @@ mod tests {
         assert_eq!(serde_json::from_str::<W>(r#"{"ts": "abc"}"#).unwrap().ts, 0);
         // numeric still works
         assert_eq!(serde_json::from_str::<W>(r#"{"ts": 42}"#).unwrap().ts, 42);
+    }
+
+    #[test]
+    fn unmatched_error_body_reaches_the_job_message() {
+        // Real shape behind the failed roster runs: `code` present, `error` absent.
+        let raw = r#"{"code":"runtime_override_exceeds_policy","message":"maxRuntimeSeconds 1800 exceeds plan limit 900"}"#;
+        let RunError::Other(msg) = map_simmit_error(
+            reqwest::StatusCode::UNPROCESSABLE_ENTITY,
+            parse_error_body(raw),
+        ) else {
+            panic!("expected RunError::Other");
+        };
+        assert!(msg.contains("runtime_override_exceeds_policy"), "{msg}");
+        assert!(msg.contains("exceeds plan limit 900"), "{msg}");
+    }
+
+    #[test]
+    fn well_formed_error_body_is_used_as_is() {
+        let raw = r#"{"code":"rate_limit_exceeded","error":"Rate limit exceeded"}"#;
+        let body = parse_error_body(raw);
+        assert_eq!(body.error.as_deref(), Some("Rate limit exceeded"));
+        assert_eq!(body.code.as_deref(), Some("rate_limit_exceeded"));
+    }
+
+    #[test]
+    fn non_json_error_body_is_still_reported() {
+        let body = parse_error_body("<html>Sorry, you have been blocked</html>");
+        let msg = body.error.as_deref().unwrap_or_default().to_string();
+        assert!(msg.contains("blocked"), "{msg}");
+        assert!(body.code.is_none());
+    }
+
+    #[test]
+    fn body_snippet_flattens_and_truncates() {
+        assert_eq!(body_snippet("  a\n  b  "), Some("a b".to_string()));
+        assert_eq!(body_snippet("   "), None);
+        let long = body_snippet(&"x".repeat(400)).unwrap();
+        assert_eq!(long.chars().count(), 301);
+        assert!(long.ends_with('…'));
+    }
+
+    #[test]
+    fn bearer_fingerprint_separates_keys() {
+        assert_eq!(bearer_fingerprint("sk_a"), bearer_fingerprint("sk_a"));
+        assert_ne!(bearer_fingerprint("sk_a"), bearer_fingerprint("sk_b"));
     }
 
     #[test]

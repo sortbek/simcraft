@@ -19,6 +19,9 @@ pub struct PlayerEntry {
     pub spec: String,
     pub base_dps: f64,
     pub status: String, // "ok" | "sim_failed"
+    /// Absent on "ok" members and on reports cached before reasons existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,20 +77,21 @@ struct ItemAccum {
 }
 
 /// Aggregate per-member droptimizer results into the pivoted report.
-/// Each input is (member, Some(result_json)) or (member, None) when that member's
-/// sim failed / was skipped. For each item, keep each member's BEST combo (max
-/// delta), then rank members within the item by upgrade_pct descending.
+/// Each input is (member, Some(result_json), None) or (member, None, why) when
+/// that member's sim failed / was skipped — `why` is the caller's reason, if it
+/// knows one. For each item, keep each member's BEST combo (max delta), then
+/// rank members within the item by upgrade_pct descending.
 pub fn aggregate_report(
     roster_id: &str,
     instance_id: i64,
     difficulty: &str,
-    inputs: &[(MemberMeta, Option<Value>)],
+    inputs: &[(MemberMeta, Option<Value>, Option<String>)],
 ) -> RosterReport {
     let mut players: Vec<PlayerEntry> = Vec::with_capacity(inputs.len());
     let mut items: HashMap<String, ItemAccum> = HashMap::new();
     let mut next_order: usize = 0;
 
-    for (member, result) in inputs {
+    for (member, result, why) in inputs {
         let base = result
             .as_ref()
             .and_then(|r| r.get("base_dps"))
@@ -99,6 +103,19 @@ pub fn aggregate_report(
         // the member as failed and skip their combos.
         let ok = result.is_some() && base > 0.0;
 
+        // Never leave a failed member without an explanation.
+        let error = if ok {
+            None
+        } else {
+            why.clone().or_else(|| {
+                Some(if result.is_none() {
+                    "Sim produced no result.".into()
+                } else {
+                    "Sim returned no baseline DPS.".into()
+                })
+            })
+        };
+
         players.push(PlayerEntry {
             member_id: member.member_id.clone(),
             name: member.name.clone(),
@@ -106,6 +123,7 @@ pub fn aggregate_report(
             spec: member.spec.clone(),
             base_dps: if ok { base } else { 0.0 },
             status: if ok { "ok".into() } else { "sim_failed".into() },
+            error,
         });
 
         if !ok {
@@ -304,6 +322,7 @@ mod tests {
                     {"name":"Combo 2","items":[{"item_id":111,"slot":"trinket1","ilevel":600,"name":"Whorl","encounter":"Ovinax"}],"dps":1048.0,"delta":48.0}
                 ]
             })),
+            None,
         )];
         let report = aggregate_report("r", 1, "heroic", &inputs);
         assert!(
@@ -330,6 +349,7 @@ mod tests {
                         {"items":[{"item_id":222,"slot":"head","ilevel":600,"name":"Hood","encounter":"Ovinax"}],"dps":990.0,"delta":-10.0}
                     ]
                 })),
+                None,
             ),
             (
                 member("b", "Bob"),
@@ -339,6 +359,7 @@ mod tests {
                         {"items":[{"item_id":111,"slot":"trinket1","ilevel":600,"name":"Whorl","encounter":"Ovinax"}],"dps":2040.0,"delta":40.0}
                     ]
                 })),
+                None,
             ),
         ];
         let report = aggregate_report("roster1", 1234, "heroic", &inputs);
@@ -374,6 +395,7 @@ mod tests {
                     {"items":[{"item_id":111,"slot":"finger2","ilevel":600,"name":"Ring","encounter":"Boss"}],"dps":1030.0,"delta":30.0}
                 ]
             })),
+            None,
         )];
         let report = aggregate_report("r", 1, "heroic", &inputs);
         let ring = report.items.iter().find(|i| i.item_id == 111).unwrap();
@@ -394,6 +416,7 @@ mod tests {
                     {"items":[{"item_id":111,"slot":"trinket1","ilevel":639,"name":"Whorl","encounter":"Ovinax","is_void_forge":true,"source_item_id":111}],"dps":1080.0,"delta":80.0}
                 ]
             })),
+            None,
         )];
         let report = aggregate_report("r", 1, "heroic", &inputs);
         assert_eq!(
@@ -418,11 +441,66 @@ mod tests {
 
     #[test]
     fn failed_member_recorded_without_items() {
-        let inputs = vec![(member("a", "Alice"), None)];
+        let inputs = vec![(member("a", "Alice"), None, None)];
         let report = aggregate_report("r", 1, "mythic", &inputs);
         assert_eq!(report.players.len(), 1);
         assert_eq!(report.players[0].status, "sim_failed");
         assert_eq!(report.players[0].base_dps, 0.0);
         assert!(report.items.is_empty());
+    }
+
+    #[test]
+    fn failed_member_carries_the_callers_reason() {
+        let inputs = vec![(
+            member("a", "Alice"),
+            None,
+            Some("Simmit rate-limited — try again shortly.".to_string()),
+        )];
+        let report = aggregate_report("r", 1, "mythic", &inputs);
+        assert_eq!(
+            report.players[0].error.as_deref(),
+            Some("Simmit rate-limited — try again shortly.")
+        );
+    }
+
+    #[test]
+    fn failed_member_without_a_reason_still_gets_one() {
+        // No caller reason: the report explains itself from what it has.
+        let no_result = vec![(member("a", "Alice"), None, None)];
+        assert_eq!(
+            aggregate_report("r", 1, "mythic", &no_result).players[0]
+                .error
+                .as_deref(),
+            Some("Sim produced no result.")
+        );
+
+        // A result that arrived but carries no usable baseline is a distinct case.
+        let zero_base = vec![(member("b", "Bob"), Some(json!({"base_dps": 0.0})), None)];
+        assert_eq!(
+            aggregate_report("r", 1, "mythic", &zero_base).players[0]
+                .error
+                .as_deref(),
+            Some("Sim returned no baseline DPS.")
+        );
+    }
+
+    #[test]
+    fn ok_member_has_no_error() {
+        let inputs = vec![(
+            member("a", "Alice"),
+            Some(json!({"base_dps": 1000.0})),
+            None,
+        )];
+        let report = aggregate_report("r", 1, "mythic", &inputs);
+        assert_eq!(report.players[0].status, "ok");
+        assert!(report.players[0].error.is_none());
+    }
+
+    #[test]
+    fn cached_reports_without_error_field_still_deserialize() {
+        // report_json rows written before this field existed must keep loading.
+        let old = r#"{"member_id":"a","name":"Alice","class":"mage","spec":"frost","base_dps":0.0,"status":"sim_failed"}"#;
+        let p: PlayerEntry = serde_json::from_str(old).unwrap();
+        assert!(p.error.is_none());
     }
 }

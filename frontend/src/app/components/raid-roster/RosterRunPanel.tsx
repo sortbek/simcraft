@@ -10,6 +10,8 @@ import PreferredStatsSelect, { DEFAULT_PREFERRED_STATS } from '../loot/Preferred
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import RosterReportView from './RosterReportView';
 import FightStyleSelector from '../sim-config/FightStyleSelector';
+import RunButton from '../sim-config/RunButton';
+import { useComputeChoice } from '../../lib/useComputeChoice';
 import CategorySelector from '../loot/CategorySelector';
 import DifficultySelect from '../loot/DifficultySelect';
 import UpgradeSelect from '../loot/UpgradeSelect';
@@ -33,6 +35,9 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
   // Sim options
   const [targetError, setTargetError] = useState<number>(0.1);
   const [fightStyle, setFightStyle] = useState<string>('Patchwerk');
+  // Own key: a fan-out's compute target is a separate choice from the
+  // single-character screens'.
+  const [compute, setCompute] = useComputeChoice('roster');
 
   // Run state
   const [running, setRunning] = useState(false);
@@ -200,6 +205,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
       upgrade_level: upgradeLevel,
       void_forge: voidForge,
       catalyst: catalyst,
+      compute_provider: compute,
       ...(isCrafted ? { preferred_crafted_stats: preferredStats } : {}),
       ...(encounters && encounters.length ? { encounters } : {}),
     });
@@ -243,6 +249,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     isRaid,
     selectedRaidId,
     selectedBosses,
+    compute,
     stopPolling,
   ]);
 
@@ -406,7 +413,6 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
           </div>
         )}
 
-        {/* Sim options + generate */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
@@ -431,35 +437,20 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
               <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
             </div>
           </div>
+        </div>
 
-          <button
-            onClick={handleGenerate}
+        <div className="flex">
+          <RunButton
+            value={compute}
+            onChange={setCompute}
+            onRun={handleGenerate}
+            submitting={running}
+            buttonLabel="Generate"
             disabled={
-              running ||
               instanceId === null ||
               (isRaid && raidEncounters.length > 0 && selectedBosses.size === 0)
             }
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-headline text-xs font-bold uppercase tracking-wider text-on-primary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {running && (
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-            )}
-            {running ? 'Running…' : 'Generate'}
-          </button>
+          />
         </div>
         {isRaid && raidEncounters.length > 0 && selectedBosses.size === 0 && (
           <p className="text-xs text-amber-400/80">Select at least one boss to run a report.</p>
