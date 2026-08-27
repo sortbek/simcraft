@@ -107,4 +107,9 @@ pub struct SeasonConfigResponse {
     /// when the selected raid's encounters are all in this set.
     #[serde(default)]
     pub fixed_difficulty_encounters: Vec<i64>,
+    /// This season's embellishment options for crafted gear, derived from
+    /// crafting data (name-sorted). Includes per-entry applicable item ids so
+    /// clients can scope tooltips without re-deriving the recipe join.
+    #[serde(default)]
+    pub crafted_embellishments: Vec<crate::item_db::EmbellishmentInfo>,
 }

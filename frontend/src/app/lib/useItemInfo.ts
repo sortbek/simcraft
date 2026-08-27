@@ -469,6 +469,8 @@ export interface WowheadItem {
    *  catalyst variant — `source_item_id` means something else on Void Forged rows. */
   is_catalyst?: boolean;
   source_item_id?: number;
+  /** Embellishment applied by the sim; its bonus ids merge into `bonus=`. */
+  embellishment?: { bonus_ids?: number[] };
 }
 
 /** Wowhead tooltip params for an item. The single builder for these — adding a
@@ -476,7 +478,8 @@ export interface WowheadItem {
 export function getWowheadData(item: WowheadItem): string {
   const parts: string[] = [];
   const gemIds = toGemIdList(item);
-  if (item.bonus_ids?.length) parts.push(`bonus=${item.bonus_ids.join(':')}`);
+  const bonusIds = [...(item.bonus_ids ?? []), ...(item.embellishment?.bonus_ids ?? [])];
+  if (bonusIds.length) parts.push(`bonus=${bonusIds.join(':')}`);
   if (item.crafted_stats?.length) parts.push(`crafted-stats=${item.crafted_stats.join(':')}`);
   if (item.is_catalyst && item.source_item_id) {
     parts.push(`original-item=${item.source_item_id}`);

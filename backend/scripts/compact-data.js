@@ -59,6 +59,10 @@ const MANIFEST = {
   // Item limit categories (e.g. max 2 embellished) — keep as-is
   "item-limit-categories.json": null,
 
+  // Crafting reagent slots + reagents (embellishments) — minify only (see
+  // enchantments.json note on why field-stripping is a footgun).
+  "crafting.json": null,
+
   // Item squish era mapping — keep as-is
   "item-squish-era.json": null,
 
@@ -99,7 +103,7 @@ const ITEM_BASE_FIELDS = [
 ];
 
 // Additional fields needed for droppable items (droptimizer, spec filtering)
-const ITEM_DROP_FIELDS = [...ITEM_BASE_FIELDS, "sources", "specs"];
+const ITEM_DROP_FIELDS = [...ITEM_BASE_FIELDS, "sources", "specs", "profession"];
 
 /**
  * Compact equippable-items-full.json:

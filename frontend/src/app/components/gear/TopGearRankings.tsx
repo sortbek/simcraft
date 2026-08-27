@@ -649,6 +649,14 @@ function ItemTag({
           {localizedEnchantName(enchant, locale)}
         </span>
       )}
+      {item.embellishment && (
+        <span
+          className="max-w-[70px] truncate text-[11px] text-purple-400/80"
+          title={item.embellishment.name}
+        >
+          {item.embellishment.name}
+        </span>
+      )}
     </div>
   );
 }

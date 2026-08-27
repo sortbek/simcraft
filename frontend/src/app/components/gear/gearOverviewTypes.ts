@@ -5,6 +5,7 @@ export interface GearItem {
   name: string;
   bonus_ids?: number[];
   crafted_stats?: number[];
+  embellishment?: { id: number; name: string; bonus_ids: number[] };
   is_catalyst?: boolean;
   source_item_id?: number;
   enchant_id?: number;

@@ -392,6 +392,7 @@ pub(super) async fn get_season_config() -> HttpResponse {
         raid_instance_ids: game_data::season_raid_instance_ids(),
         fixed_difficulty_encounters,
         crafted_secondary_stats,
+        crafted_embellishments: crate::item_db::crafted_embellishments().to_vec(),
     })
 }
 

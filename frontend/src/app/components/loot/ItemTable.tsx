@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl, iconProps } from '../../lib/useItemInfo';
+import type { CraftedEmbellishment } from '../../lib/types';
 import type { DropItem, UpgradeTracks } from './types';
 import { dropUid, dropWowheadAttr, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
 import { resolveInherits, type EquippedGear } from '../../lib/inheritedGear';
 import { qualityBorderColor } from '../../lib/qualityColors';
 import Checkbox from '../ui/Checkbox';
 import VariantBadges from './VariantBadges';
+import EmbellishmentSelect from './EmbellishmentSelect';
 
 const SLOT_ORDER = [
   'Main Hand',
@@ -41,6 +43,11 @@ interface ItemTableProps {
   spec: string;
   /** Preferred Stats pair, so crafted tooltips match what the sim runs. */
   craftedStats?: number[];
+  /** Season embellishment options (crafted category only); gates the picker column. */
+  embellishmentOptions?: CraftedEmbellishment[];
+  /** Per-row picks: item_id → canonical reagent id; absent = None. */
+  embellishmentPicks?: Record<number, number>;
+  onEmbellishmentChange?: (itemId: number, id: number | null) => void;
 }
 
 export default function ItemTable({
@@ -58,11 +65,16 @@ export default function ItemTable({
   equippedGear,
   spec,
   craftedStats,
+  embellishmentOptions,
+  embellishmentPicks,
+  onEmbellishmentChange,
 }: ItemTableProps) {
   const { t, locale } = useLanguage();
   useItemNames();
   const [filterText, setFilterText] = useState('');
   const [groupBy, setGroupBy] = useState<'slot' | 'dungeon'>('slot');
+  // Crafted category active iff the caller passed season embellishment data.
+  const hasEmbellishmentColumn = embellishmentOptions !== undefined;
 
   const totalItems = Object.values(drops).reduce((n, items) => n + items.length, 0);
 
@@ -249,12 +261,19 @@ export default function ItemTable({
             {t('loot.itemName')}
           </span>
         </div>
-        <div className="col-span-5 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
+        <div
+          className={`text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 ${hasEmbellishmentColumn ? 'col-span-3' : 'col-span-5'}`}
+        >
           {t('loot.slot')}
         </div>
         <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
           {t('loot.level')}
         </div>
+        {hasEmbellishmentColumn && (
+          <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
+            {t('dropFinder.embellishment')}
+          </div>
+        )}
       </div>
 
       <div className="divide-y divide-outline-variant/5">
@@ -282,11 +301,20 @@ export default function ItemTable({
               const embellishDisabled = isEmbellished && embellishmentsFull && !isSelected;
               const qualityColor = QUALITY_COLORS[resolved.quality] || 'text-gray-400';
               const inherits = resolveInherits(item.inventory_type, spec, equippedGear);
+              const rowOptions = embellishmentOptions?.filter((e) =>
+                e.item_ids.includes(item.item_id)
+              );
+              const pick = embellishmentPicks?.[item.item_id];
+              const pickBonusIds =
+                pick !== undefined
+                  ? embellishmentOptions?.find((e) => e.id === pick)?.bonus_ids
+                  : undefined;
               const wowheadAttr = dropWowheadAttr(
                 item,
                 effectiveBonusId,
                 inherits[0],
-                craftedStats
+                craftedStats,
+                pickBonusIds
               );
 
               return (
@@ -361,7 +389,9 @@ export default function ItemTable({
                     </div>
                   </div>
 
-                  <div className="col-span-5 text-center">
+                  <div
+                    className={`text-center ${hasEmbellishmentColumn ? 'col-span-3' : 'col-span-5'}`}
+                  >
                     <span className="rounded bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase text-on-surface-variant">
                       {itemSlotMap.get(item.item_id) ?? slot}
                     </span>
@@ -372,6 +402,19 @@ export default function ItemTable({
                       {resolved.ilvl}
                     </span>
                   </div>
+
+                  {hasEmbellishmentColumn &&
+                    rowOptions &&
+                    rowOptions.length > 0 &&
+                    onEmbellishmentChange && (
+                      <div className="col-span-2" onClick={(e) => e.stopPropagation()}>
+                        <EmbellishmentSelect
+                          value={pick ?? null}
+                          onChange={(id) => onEmbellishmentChange(item.item_id, id)}
+                          options={rowOptions}
+                        />
+                      </div>
+                    )}
                 </div>
               );
             })}

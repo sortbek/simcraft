@@ -156,6 +156,7 @@ export function diffGearSets(
           // changing the item id — same-looking slots can still differ.
           item.source_item_id ?? 0,
           (item.crafted_stats ?? []).join(':'),
+          item.embellishment?.id ?? 0,
         ].join('|')
       : '';
 

@@ -51,6 +51,8 @@ export interface DropItem {
   is_catalyst?: boolean;
   source_item_id?: number;
   extra_bonus_ids?: number[];
+  /** Per-item embellishment pick (canonical reagent id); absent = None. */
+  embellishment_id?: number;
 }
 
 /** Stable selection/render key. Variants share item_id with their base, so
@@ -68,10 +70,12 @@ export function dropWowheadAttr(
   item: DropItem,
   bonusId?: number,
   inherit?: SlotInherit,
-  craftedStats?: number[]
+  craftedStats?: number[],
+  embellishmentBonusIds?: number[]
 ): string {
   const params = getWowheadData({
     bonus_ids: bonusId ? [bonusId] : undefined,
+    embellishment: embellishmentBonusIds?.length ? { bonus_ids: embellishmentBonusIds } : undefined,
     crafted_stats: craftedStats,
     enchant_id: inherit?.enchant_id,
     gem_id: inherit?.gem_id,

@@ -208,6 +208,9 @@ export default function GearSlotRow({
               )}
             </span>
           )}
+          {item.embellishment && (
+            <span className="text-purple-400/80"> · {item.embellishment.name}</span>
+          )}
         </p>
       </div>
     </div>

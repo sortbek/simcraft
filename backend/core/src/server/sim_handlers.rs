@@ -545,8 +545,12 @@ mod sim_row_tests {
             "item_id": 200001, "ilevel": 600, "name": "Drop", "encounter": "Boss",
             "inventory_type": 1, "bonus_ids": [13575],
         })];
-        let (input, _, _) =
-            crate::profileset_generator::generate_droptimizer_input(profile, &drops, None);
+        let (input, _, _) = crate::profileset_generator::generate_droptimizer_input(
+            profile,
+            &drops,
+            None,
+            &std::collections::HashMap::new(),
+        );
         let lines = extract_profileset_lines(&input, "Combo 2");
         assert!(
             !lines.is_empty() && lines.lines().all(|l| l.contains("\"Combo 2\"")),

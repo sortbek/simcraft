@@ -84,6 +84,12 @@ static TALENT_TREES: OnceCell<HashMap<u64, Value>> = OnceCell::new();
 static ITEM_NAMES: OnceCell<HashMap<u64, HashMap<String, String>>> = OnceCell::new();
 /// Void Forge map: max-upgrade base bonus_id → voidforged bonus_id
 static VOID_FORGE_MAP: OnceCell<HashMap<u64, u64>> = OnceCell::new();
+/// "Add Embellishment" reagent slot id -> accepted reagent item ids.
+static CRAFTING_EMB_SLOTS: OnceCell<HashMap<u64, Vec<u64>>> = OnceCell::new();
+/// Crafting reagent id -> raw reagent record (name, icon, craftingBonusIds, …).
+static CRAFTING_REAGENTS: OnceCell<HashMap<u64, Value>> = OnceCell::new();
+/// Lazily derived embellishment options for the current crafted pool.
+static EMBELLISHMENTS: OnceCell<Vec<EmbellishmentInfo>> = OnceCell::new();
 
 /// Catalyst item info for a specific class + slot combination.
 #[derive(Debug, Clone)]
@@ -518,6 +524,50 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
         let _ = ITEM_LIMIT_CATS.set(lookup);
     }
 
+    // crafting.json — embellishment reagent slots + reagents
+    // Missing file is intentionally non-fatal; compacted-fixture tests pin its presence in CI.
+    let crafting_path = data_dir.join("crafting.json");
+    if crafting_path.exists() {
+        let raw: Value = {
+            let file = fs::File::open(&crafting_path)
+                .map_err(|e| format!("open {}: {}", crafting_path.display(), e))?;
+            serde_json::from_reader(std::io::BufReader::new(file))
+                .map_err(|e| format!("parse {}: {}", crafting_path.display(), e))?
+        };
+        let mut emb_slots: HashMap<u64, Vec<u64>> = HashMap::new();
+        if let Some(slots) = raw.get("slots").and_then(|v| v.as_object()) {
+            for slot in slots.values() {
+                if slot.get("name").and_then(|n| n.as_str()) != Some("Add Embellishment") {
+                    continue;
+                }
+                let (Some(id), Some(rids)) = (
+                    slot.get("reagentSlotId").and_then(|i| i.as_u64()),
+                    slot.get("reagentIds").and_then(|r| r.as_array()),
+                ) else {
+                    continue;
+                };
+                emb_slots.insert(id, rids.iter().filter_map(|r| r.as_u64()).collect());
+            }
+        }
+        // Unlike `slots` (object keyed by slot id), `reagents` is a plain array.
+        let reagents: HashMap<u64, Value> = raw
+            .get("reagents")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|r| Some((r.get("id")?.as_u64()?, r.clone())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!(
+            "Loaded {} embellishment slots, {} crafting reagents",
+            emb_slots.len(),
+            reagents.len()
+        );
+        let _ = CRAFTING_EMB_SLOTS.set(emb_slots);
+        let _ = CRAFTING_REAGENTS.set(reagents);
+    }
+
     // talents.json
     let talents_path = data_dir.join("talents.json");
     if talents_path.exists() {
@@ -771,6 +821,12 @@ pub fn bonuses() -> &'static HashMap<u64, Value> {
     BONUSES.get().expect("Game data not loaded")
 }
 
+/// Single-bonus lookup; test-only, no production caller.
+#[allow(dead_code)]
+pub(crate) fn get_bonus(id: u64) -> Option<&'static Value> {
+    BONUSES.get().and_then(|m| m.get(&id))
+}
+
 pub fn void_forge_map() -> &'static HashMap<u64, u64> {
     VOID_FORGE_MAP.get_or_init(HashMap::new)
 }
@@ -841,6 +897,119 @@ pub fn is_crafted_item(item_id: u64) -> bool {
             set
         })
         .contains(&item_id)
+}
+
+/// One embellishment option for the current crafted pool, derived from
+/// crafting.json ("Add Embellishment" reagent slots) joined with each crafted
+/// item's `profession.optionalCraftingSlots`. Quality tiers are collapsed to
+/// the highest tier (tiers share craftingBonusIds; a test pins that).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EmbellishmentInfo {
+    /// Canonical reagent item id (highest crafting quality tier).
+    pub id: u64,
+    pub name: String,
+    pub icon: String,
+    /// The reagent's craftingBonusIds, appended verbatim to the simc string.
+    pub bonus_ids: Vec<u64>,
+    /// Crafted-pool item ids this embellishment can be crafted onto.
+    pub item_ids: Vec<u64>,
+}
+
+/// Embellishments applicable to at least one current crafted-pool item,
+/// name-sorted. Empty when crafting data is absent (loud sibling accessors
+/// cover the missing-game-data case).
+pub fn crafted_embellishments() -> &'static [EmbellishmentInfo] {
+    EMBELLISHMENTS
+        .get_or_init(|| {
+            let (Some(emb_slots), Some(reagents), Some(items)) = (
+                CRAFTING_EMB_SLOTS.get(),
+                CRAFTING_REAGENTS.get(),
+                ITEMS.get(),
+            ) else {
+                return Vec::new();
+            };
+            // reagent id -> crafted item ids whose recipe offers it
+            let mut items_by_reagent: HashMap<u64, Vec<u64>> = HashMap::new();
+            for (item_id, item) in items {
+                if !is_crafted_item(*item_id) {
+                    continue;
+                }
+                let Some(slot_ids) = item
+                    .get("profession")
+                    .and_then(|p| p.get("optionalCraftingSlots"))
+                    .and_then(|s| s.as_array())
+                else {
+                    continue;
+                };
+                for sid in slot_ids.iter().filter_map(|s| s.get("id").and_then(|i| i.as_u64())) {
+                    if let Some(rids) = emb_slots.get(&sid) {
+                        for rid in rids {
+                            items_by_reagent.entry(*rid).or_default().push(*item_id);
+                        }
+                    }
+                }
+            }
+            // Collapse quality tiers by reagent name; canonical = highest tier.
+            let mut by_name: HashMap<String, Vec<(&u64, &Value)>> = HashMap::new();
+            for rid in items_by_reagent.keys() {
+                if let Some(r) = reagents.get(rid) {
+                    if let Some(n) = r.get("name").and_then(|n| n.as_str()) {
+                        by_name.entry(n.to_string()).or_default().push((rid, r));
+                    }
+                }
+            }
+            let mut out: Vec<EmbellishmentInfo> = Vec::new();
+            for (name, mut tiers) in by_name {
+                // craftingQuality may be null (single-tier reagents) — treat as 0.
+                // Tie-break by reagent id so the canonical tier is deterministic across
+                // process restarts (HashMap iteration order is otherwise unstable).
+                tiers.sort_by_key(|(rid, r)| {
+                    (
+                        std::cmp::Reverse(r.get("craftingQuality").and_then(|q| q.as_u64()).unwrap_or(0)),
+                        **rid,
+                    )
+                });
+                let (canon_id, canon) = tiers[0];
+                let bonus_ids: Vec<u64> = canon
+                    .get("craftingBonusIds")
+                    .and_then(|b| b.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_u64()).collect())
+                    .unwrap_or_default();
+                if bonus_ids.is_empty() {
+                    eprintln!("embellishment '{}' has no craftingBonusIds; skipped", name);
+                    continue;
+                }
+                let mut item_ids: Vec<u64> = tiers
+                    .iter()
+                    .flat_map(|(rid, _)| items_by_reagent.get(rid).cloned().unwrap_or_default())
+                    .collect();
+                item_ids.sort_unstable();
+                item_ids.dedup();
+                out.push(EmbellishmentInfo {
+                    id: *canon_id,
+                    name,
+                    icon: canon
+                        .get("icon")
+                        .and_then(|i| i.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    bonus_ids,
+                    item_ids,
+                });
+            }
+            out.sort_by(|a, b| a.name.cmp(&b.name));
+            out
+        })
+        .as_slice()
+}
+
+/// Whether `embellishment_id` (canonical reagent id) can be crafted onto
+/// `item_id` — the recipe-slot join, precomputed in `crafted_embellishments`.
+pub fn embellishment_applicable(item_id: u64, embellishment_id: u64) -> bool {
+    crafted_embellishments()
+        .iter()
+        .find(|e| e.id == embellishment_id)
+        .is_some_and(|e| e.item_ids.binary_search(&item_id).is_ok())
 }
 
 /// Whether every item in the list is from the crafted pool (by `item_id`).
@@ -2132,6 +2301,102 @@ mod tests {
             merged.contains_key(&512),
             "base itemLimit cat 512 must be honored for 251513, got {merged:?}"
         );
+    }
+
+    #[test]
+    fn crafted_embellishments_list_is_populated_and_well_formed() {
+        ensure_game_data_loaded();
+        let embs = crafted_embellishments();
+        assert!(!embs.is_empty(), "current season must offer embellishments");
+        for e in embs {
+            assert!(!e.name.is_empty(), "embellishment {} has no name", e.id);
+            assert!(!e.bonus_ids.is_empty(), "{} has no bonus ids", e.name);
+            assert!(!e.item_ids.is_empty(), "{} applies to no crafted item", e.name);
+        }
+        // Deterministic order for the API response.
+        let names: Vec<&str> = embs.iter().map(|e| e.name.as_str()).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted, "list must be name-sorted");
+    }
+
+    #[test]
+    fn embellishment_bonuses_carry_no_socket_or_ilevel_payload() {
+        // The generator keeps embellishment bonuses out of socket/ilevel lookups;
+        // this pins that no current embellishment bonus would need them.
+        ensure_game_data_loaded();
+        for e in crafted_embellishments() {
+            for bid in &e.bonus_ids {
+                if let Some(b) = get_bonus(*bid) {
+                    assert!(b.get("socket").is_none(), "bonus {bid} of {} adds sockets", e.name);
+                    assert!(b.get("itemLevel").is_none(), "bonus {bid} of {} changes ilevel", e.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn embellishment_applicability_matches_crafting_slots() {
+        ensure_game_data_loaded();
+        let arcanoweave = crafted_embellishments()
+            .iter()
+            .find(|e| e.name == "Arcanoweave Lining")
+            .expect("Arcanoweave Lining in season list");
+        // Spellbreaker's March (237828): crafted plate boots whose recipe carries
+        // "Add Embellishment" slot 391, which offers Arcanoweave Lining.
+        assert!(embellishment_applicable(237828, arcanoweave.id));
+        // Loa Worshiper's Band (251513) is inherently embellished — its recipe has
+        // no "Add Embellishment" slot, so nothing is applicable to it.
+        for e in crafted_embellishments() {
+            assert!(
+                !embellishment_applicable(251513, e.id),
+                "inherently embellished 251513 must accept no embellishment ({})",
+                e.name
+            );
+        }
+        // Unknown embellishment id is never applicable.
+        assert!(!embellishment_applicable(237828, 999_999_999));
+    }
+
+    #[test]
+    fn embellishment_quality_tiers_share_bonus_ids() {
+        // The picker collapses quality tiers to one entry; if a future season's
+        // tiers ever diverge in craftingBonusIds this must fail loud, not sim q1.
+        ensure_game_data_loaded();
+        let (slots, reagents) = crafting_raw_for_tests();
+        let mut by_name: HashMap<&str, Vec<&Value>> = HashMap::new();
+        for slot in slots.values() {
+            for rid in slot {
+                if let Some(r) = reagents.get(rid) {
+                    if let Some(n) = r.get("name").and_then(|n| n.as_str()) {
+                        by_name.entry(n).or_default().push(r);
+                    }
+                }
+            }
+        }
+        for (name, tiers) in by_name {
+            let first: Vec<u64> = bonus_ids_of(tiers[0]);
+            for t in &tiers[1..] {
+                assert_eq!(bonus_ids_of(t), first, "tiers of {name} diverge in craftingBonusIds");
+            }
+        }
+    }
+
+    fn crafting_raw_for_tests() -> (
+        &'static HashMap<u64, Vec<u64>>,
+        &'static HashMap<u64, Value>,
+    ) {
+        (
+            CRAFTING_EMB_SLOTS.get().expect("crafting slots loaded"),
+            CRAFTING_REAGENTS.get().expect("crafting reagents loaded"),
+        )
+    }
+
+    fn bonus_ids_of(r: &Value) -> Vec<u64> {
+        r.get("craftingBonusIds")
+            .and_then(|b| b.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_u64()).collect())
+            .unwrap_or_default()
     }
 
     #[test]

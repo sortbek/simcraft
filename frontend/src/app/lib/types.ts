@@ -31,6 +31,7 @@ export interface ResolvedItem {
   is_void_forge?: boolean;
   can_void_forge?: boolean;
   is_manual?: boolean;
+  embellishment?: { id: number; name: string; bonus_ids: number[] };
 }
 
 export interface SlotResolution {
@@ -94,6 +95,14 @@ export interface DungeonCategory {
   difficultyGroups?: DifficultyGroup[];
 }
 
+export interface CraftedEmbellishment {
+  id: number;
+  name: string;
+  icon: string;
+  bonus_ids: number[];
+  item_ids: number[];
+}
+
 export interface SeasonConfigResponse {
   season: string;
   raid_difficulties: DifficultyDef[];
@@ -104,6 +113,7 @@ export interface SeasonConfigResponse {
    *  track (e.g. Sporefall) — hide the upgrade-track control for these raids. */
   fixed_difficulty_encounters?: number[];
   crafted_secondary_stats?: number[];
+  crafted_embellishments?: CraftedEmbellishment[];
 }
 
 // Gear slots constant (matches backend)

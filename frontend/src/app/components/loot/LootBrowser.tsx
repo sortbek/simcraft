@@ -219,6 +219,8 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
   const [dungeonDiff, setDungeonDiff] = useState('mythic+10');
   const [upgradeLevel, setUpgradeLevel] = useState(0);
   const [preferredStats, setPreferredStats] = useState<[number, number]>(DEFAULT_PREFERRED_STATS);
+  /** Per-item embellishment picks: item_id → canonical reagent id; absent = None. */
+  const [embellishmentPicks, setEmbellishmentPicks] = useState<Record<number, number>>({});
   // Instance pool: set of instance IDs that are "checked" (multi-select)
   const [dungeonPool, setDungeonPool] = useState<Set<string>>(new Set());
   const [raidPool, setRaidPool] = useState<Set<string>>(new Set());
@@ -523,11 +525,18 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
     const items: DropItem[] = [];
     for (const slotItems of Object.values(visibleDrops)) {
       for (const item of slotItems) {
-        if (selected.has(dropUid(item))) items.push(item);
+        if (selected.has(dropUid(item))) {
+          items.push({
+            ...item,
+            ...(isCrafted && embellishmentPicks[item.item_id] !== undefined
+              ? { embellishment_id: embellishmentPicks[item.item_id] }
+              : {}),
+          });
+        }
       }
     }
     return items;
-  }, [visibleDrops, selected]);
+  }, [visibleDrops, selected, isCrafted, embellishmentPicks]);
 
   const footerState: LootBrowserRenderState = {
     selectedDrops,
@@ -624,6 +633,14 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
               />
             </div>
           )}
+
+          {/* Crafted gear: cap note once any row has an embellishment pick and
+              the player already has 2+ embellished pieces equipped. */}
+          {isCrafted &&
+            Object.keys(embellishmentPicks).length > 0 &&
+            equippedEmbellishments >= 2 && (
+              <p className="text-xs text-amber-400/80">{t('dropFinder.embellishmentCapWarning')}</p>
+            )}
 
           {/* Variant toggles: voidforge + catalyst */}
           <div className="flex flex-wrap items-center gap-4">
@@ -812,6 +829,16 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
           equippedGear={equippedGear}
           spec={specName ?? ''}
           craftedStats={isCrafted ? preferredStats : undefined}
+          embellishmentOptions={isCrafted ? seasonConfig?.crafted_embellishments : undefined}
+          embellishmentPicks={embellishmentPicks}
+          onEmbellishmentChange={(itemId, id) =>
+            setEmbellishmentPicks((prev) => {
+              const next = { ...prev };
+              if (id === null) delete next[itemId];
+              else next[itemId] = id;
+              return next;
+            })
+          }
         />
       )}
 

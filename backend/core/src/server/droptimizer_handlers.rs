@@ -1,5 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::handler_prep::{preprocess_simc_input, serialize_combo_metadata_value};
@@ -38,11 +39,44 @@ pub(super) async fn create_droptimizer_sim(
             Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
         };
 
+    // Per-item embellishment picks ride `drop_items` (like the other variant
+    // markers), not a run-level field. Resolve each distinct id once into a
+    // cache keyed by embellishment id — NOT by item, since two items may
+    // share a pick.
+    let mut embellishments: HashMap<u64, profileset_generator::CraftedEmbellishment> =
+        HashMap::new();
+    for item in &req.drop_items {
+        let Some(pick) = item.get("embellishment_id") else {
+            continue;
+        };
+        // A present-but-non-numeric value (or 0) is malformed, not a valid
+        // pick: resolve() rejects both the same way an unlisted id would.
+        let id = pick.as_u64().unwrap_or(0);
+        let embellishment = match profileset_generator::CraftedEmbellishment::resolve(Some(id)) {
+            Ok(Some(e)) => e,
+            // resolve(Some(_)) only returns None for a None input, so this
+            // never fires — but a request handler must never be able to
+            // panic the worker if that contract ever drifts.
+            Ok(None) => continue,
+            Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+        };
+        let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+        if !crate::item_db::embellishment_applicable(item_id, id) {
+            return HttpResponse::BadRequest().json(json!({
+                "detail": "Embellishment cannot be crafted onto this item."
+            }));
+        }
+        embellishments.insert(id, embellishment);
+    }
+
     // Enforce crafted-only at the trust boundary, not just via the frontend
-    // gate, so a stray request can't graft missives onto non-craftable gear.
-    if crafted_stats.is_some() && !crate::item_db::all_crafted_items(&req.drop_items) {
+    // gate, so a stray request can't graft missives or embellishments onto
+    // non-craftable gear.
+    if (crafted_stats.is_some() || !embellishments.is_empty())
+        && !crate::item_db::all_crafted_items(&req.drop_items)
+    {
         return HttpResponse::BadRequest().json(json!({
-            "detail": "Preferred crafted stats can only be applied to crafted items."
+            "detail": "Crafted-gear options can only be applied to crafted items."
         }));
     }
 
@@ -51,6 +85,7 @@ pub(super) async fn create_droptimizer_sim(
             &base_profile,
             &req.drop_items,
             crafted_stats,
+            &embellishments,
         );
 
     if combo_count == 0 {

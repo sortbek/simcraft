@@ -381,11 +381,13 @@ pub(crate) async fn spawn_droptimizer_child(
     let parse_result = crate::addon_parser::parse_simc_input(&simc_input);
     let base_profile = parse_result.base_profile.clone();
 
+    let no_embellishments = std::collections::HashMap::new();
     let (generated_input, combo_count, combo_metadata) =
         crate::profileset_generator::generate_droptimizer_input(
             &base_profile,
             drop_items,
             crafted_stats,
+            &no_embellishments,
         );
 
     let generated_input = inject_expert_fields(&generated_input, options);

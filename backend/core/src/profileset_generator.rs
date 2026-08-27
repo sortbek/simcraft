@@ -219,12 +219,42 @@ impl CraftedStats {
     }
 }
 
+/// Crafted embellishment pick: reagent identity for display, bonus IDs for the
+/// sim. Mirrors `CraftedStats`, but owns strings — flows as `Option<&Self>`.
+#[derive(Clone, Debug)]
+pub struct CraftedEmbellishment {
+    pub id: u64,
+    pub name: String,
+    pub bonus_ids: Vec<u64>,
+}
+
+impl CraftedEmbellishment {
+    /// Resolve a picked reagent id against this season's embellishment list.
+    /// `Ok(None)` when no pick; `Err(detail)` on an unknown id — fail loud
+    /// rather than silently simming without the pick.
+    pub fn resolve(pick: Option<u64>) -> Result<Option<Self>, String> {
+        let Some(id) = pick else { return Ok(None) };
+        crate::item_db::crafted_embellishments()
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| {
+                Some(Self {
+                    id: e.id,
+                    name: e.name.clone(),
+                    bonus_ids: e.bonus_ids.clone(),
+                })
+            })
+            .ok_or_else(|| "Unsupported embellishment for the current season.".to_string())
+    }
+}
+
 pub fn generate_droptimizer_input(
     base_profile: &str,
     drop_items: &[Value],
     crafted_stats: Option<CraftedStats>,
+    embellishments: &HashMap<u64, CraftedEmbellishment>,
 ) -> (String, usize, HashMap<String, Value>) {
-    droptimizer::generate_droptimizer_input(base_profile, drop_items, crafted_stats)
+    droptimizer::generate_droptimizer_input(base_profile, drop_items, crafted_stats, embellishments)
 }
 
 pub fn generate_upgrade_compare_input(
@@ -280,7 +310,8 @@ mod classifier_tests {
 mod tests {
     use super::{
         count_top_gear_combos_with_talents, generate_droptimizer_input,
-        generate_top_gear_input_with_talents, generate_upgrade_compare_input, GemEnchantOptions,
+        generate_top_gear_input_with_talents, generate_upgrade_compare_input, CraftedEmbellishment,
+        GemEnchantOptions,
     };
     use crate::test_support::{ensure_game_data_loaded, TestItem};
     use serde_json::json;
@@ -305,7 +336,7 @@ main_hand=,id=200\n";
         })];
 
         let (input, combo_count, metadata) =
-            generate_droptimizer_input(base_profile, &drop_items, None);
+            generate_droptimizer_input(base_profile, &drop_items, None, &HashMap::new());
 
         assert_eq!(combo_count, 1);
         assert!(input.contains("profileset.\"Combo 2\"+=head=,id=999,ilevel=671,bonus_id=123/456"));
@@ -335,7 +366,7 @@ main_hand=,id=200\n";
         })];
 
         let (input, combo_count, metadata) =
-            generate_droptimizer_input(base_profile, &drop_items, None);
+            generate_droptimizer_input(base_profile, &drop_items, None, &HashMap::new());
 
         assert_eq!(combo_count, 2);
         assert!(
@@ -379,7 +410,7 @@ main_hand=,id=200,enchant_id=7459\n";
         })];
 
         let (input, combo_count, _metadata) =
-            generate_droptimizer_input(base_profile, &drop_items, None);
+            generate_droptimizer_input(base_profile, &drop_items, None, &HashMap::new());
 
         assert_eq!(combo_count, 1);
         assert!(
@@ -406,7 +437,7 @@ main_hand=,id=200\n";
         })];
 
         let (input, combo_count, _metadata) =
-            generate_droptimizer_input(base_profile, &drop_items, None);
+            generate_droptimizer_input(base_profile, &drop_items, None, &HashMap::new());
 
         assert_eq!(combo_count, 1);
         assert!(
@@ -1291,7 +1322,8 @@ finger2=,id=101\n";
     #[test]
     fn droptimizer_returns_zero_combos_for_empty_drops() {
         let base_profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let (_, count, metadata) = generate_droptimizer_input(base_profile, &[], None);
+        let (_, count, metadata) =
+            generate_droptimizer_input(base_profile, &[], None, &HashMap::new());
         assert_eq!(count, 0);
         assert!(metadata.is_empty());
     }
@@ -1318,7 +1350,8 @@ finger2=,id=101\n";
                 "bonus_ids": [99]
             }),
         ];
-        let (input, count, _) = generate_droptimizer_input(base_profile, &drops, None);
+        let (input, count, _) =
+            generate_droptimizer_input(base_profile, &drops, None, &HashMap::new());
         assert_eq!(count, 2);
         assert!(input.contains(",id=1001,ilevel=600"));
         assert!(input.contains(",id=1002,ilevel=610,bonus_id=99"));
@@ -1335,7 +1368,7 @@ finger2=,id=101\n";
             "inventory_type": 1,
             "bonus_ids": []
         })];
-        let (input, _, _) = generate_droptimizer_input(base_profile, &drops, None);
+        let (input, _, _) = generate_droptimizer_input(base_profile, &drops, None, &HashMap::new());
         // Should NOT have ",bonus_id=" for this drop
         let combo_line = input
             .lines()
@@ -2575,5 +2608,28 @@ finger1=,id=400\nfinger2=,id=401\nmain_hand=,id=200\n"
             );
             assert!(full > 0, "gem-only config must emit combos");
         }
+    }
+
+    #[test]
+    fn crafted_embellishment_resolve_none_is_none() {
+        assert!(matches!(CraftedEmbellishment::resolve(None), Ok(None)));
+    }
+
+    #[test]
+    fn crafted_embellishment_resolve_maps_season_entry() {
+        crate::test_support::ensure_game_data_loaded();
+        let entry = &crate::item_db::crafted_embellishments()[0];
+        let resolved = CraftedEmbellishment::resolve(Some(entry.id))
+            .expect("listed id resolves")
+            .expect("Some");
+        assert_eq!(resolved.id, entry.id);
+        assert_eq!(resolved.name, entry.name);
+        assert_eq!(resolved.bonus_ids, entry.bonus_ids);
+    }
+
+    #[test]
+    fn crafted_embellishment_resolve_rejects_unknown_id() {
+        crate::test_support::ensure_game_data_loaded();
+        assert!(CraftedEmbellishment::resolve(Some(999_999_999)).is_err());
     }
 }
