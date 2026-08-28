@@ -539,7 +539,7 @@ static CLASSES: &[ClassDef] = &[
         name: "demon_hunter",
         aliases: &["demonhunter"],
         max_armor: 2,
-        weapons: &[0, 7, 9, 13],
+        weapons: &[0, 7, 9, 13, 15],
         specs: &[
             SpecDef {
                 name: "havoc",
@@ -558,6 +558,15 @@ static CLASSES: &[ClassDef] = &[
                 can_use_shield: false,
                 can_use_offhand: false,
                 primary_stat: PrimaryStat::Agility,
+            },
+            SpecDef {
+                name: "devourer",
+                id: 1480,
+                weapon_subclasses: &[0, 7, 9, 13, 15],
+                can_dual_wield: true,
+                can_use_shield: false,
+                can_use_offhand: false,
+                primary_stat: PrimaryStat::Intellect,
             },
         ],
     },
@@ -1057,6 +1066,48 @@ mod tests {
             !sv.weapon_subclasses.contains(&5),
             "SV should NOT allow 2H mace (5) — hunters cannot equip it"
         );
+    }
+
+    #[test]
+    fn devourer_resolves_by_name_and_id() {
+        let profile = spec_weapon_profile("demon_hunter", "devourer").unwrap();
+        assert_eq!(profile.id, 1480);
+        assert_eq!(spec_id_to_name(1480), Some("devourer"));
+        assert_eq!(spec_id_to_class(1480), Some("demon_hunter"));
+        assert_eq!(class_spec_ids("demon_hunter", Some("devourer")), vec![1480]);
+    }
+
+    #[test]
+    fn devourer_uses_intellect_supports_dual_wield_and_daggers() {
+        let profile = spec_weapon_profile("demon_hunter", "devourer").unwrap();
+        assert_eq!(profile.primary_stat, PrimaryStat::Intellect);
+        assert!(profile.can_dual_wield);
+        assert!(profile.weapon_subclasses.contains(&15));
+    }
+
+    #[test]
+    fn demon_hunter_legacy_specs_keep_weapon_profiles() {
+        for spec in &["havoc", "vengeance"] {
+            let profile = spec_weapon_profile("demon_hunter", spec).unwrap();
+            assert_eq!(profile.weapon_subclasses, &[0, 7, 9, 13]);
+            assert_eq!(profile.primary_stat, PrimaryStat::Agility);
+            assert!(profile.can_dual_wield);
+            assert!(!profile.weapon_subclasses.contains(&15));
+        }
+    }
+
+    #[test]
+    fn demon_hunter_class_weapons_include_devourer_daggers() {
+        let weapons = class_allowed_weapons("demon_hunter").unwrap();
+        assert!(weapons.contains(&15));
+        assert!(!spec_weapon_profile("demon_hunter", "havoc")
+            .unwrap()
+            .weapon_subclasses
+            .contains(&15));
+        assert!(!spec_weapon_profile("demon_hunter", "vengeance")
+            .unwrap()
+            .weapon_subclasses
+            .contains(&15));
     }
 
     #[test]
