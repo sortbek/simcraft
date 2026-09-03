@@ -13,6 +13,10 @@ on:
         required: false
         type: string
         default: ''
+      ref:
+        required: false
+        type: string
+        default: ''
     secrets:
       CSC_LINK:
         required: false
@@ -31,6 +35,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
