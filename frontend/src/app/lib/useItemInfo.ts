@@ -443,6 +443,7 @@ const WOWHEAD_DOMAINS: Record<string, string> = {
   it_IT: 'it.wowhead.com',
   pt_BR: 'pt.wowhead.com',
   ru_RU: 'ru.wowhead.com',
+  ko_KR: 'ko.wowhead.com',
 };
 
 export function getWowheadUrl(itemId: number, locale?: string): string {
