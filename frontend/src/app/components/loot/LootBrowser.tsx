@@ -234,6 +234,9 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
   const isDungeon = !!activeDungeonCat;
   const isCrafted = activeDungeonCat?.cat.key === 'crafted';
   const isPoolOnly = isDungeon && (activeDungeonCat?.instances.length ?? 0) === 0;
+  // Raid BOEs carry placeholder secondaries like crafted gear does, so both need
+  // a preferred pair. Other categories have fixed stats — no pair to choose.
+  const usesPreferredStats = isCrafted || isRaid;
   const selectedInstance =
     selectedId && !selectedId.startsWith('type:')
       ? instances.find((i) => String(i.id) === selectedId)
@@ -545,7 +548,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
     upgradeLevel,
     upgradeTracks,
     hasSelection: selectedDrops.length > 0,
-    craftedPreferredStats: isCrafted ? preferredStats : null,
+    craftedPreferredStats: usesPreferredStats ? preferredStats : null,
   };
 
   return (
@@ -622,8 +625,8 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
             </div>
           )}
 
-          {/* Crafted gear: choose the two secondary stats (via missives) */}
-          {isCrafted && (
+          {/* Crafted gear and raid BOEs: choose the two secondary stats */}
+          {usesPreferredStats && (
             <div>
               <label className="label-text">{t('dropFinder.preferredStats')}</label>
               <PreferredStatsSelect

@@ -53,6 +53,9 @@ static DROPS_BY_ENCOUNTER: OnceCell<HashMap<i64, Vec<Value>>> = OnceCell::new();
 static BASE_SOCKETS_BY_ITEM: OnceCell<HashMap<u64, u64>> = OnceCell::new();
 /// Item's own `bonusLists` per item_id (from encounter-items).
 static INHERENT_BONUSES_BY_ITEM: OnceCell<HashMap<u64, Vec<u64>>> = OnceCell::new();
+/// Items whose secondaries are unallocated placeholders (stat ids 24/25) and so
+/// need an explicit `crafted_stats=` pair, else simc resolves them to "unknown".
+static FLEXIBLE_STAT_ITEMS: OnceCell<HashSet<u64>> = OnceCell::new();
 /// Curated socket-count overrides (item_id → true total sockets) for items
 /// whose guaranteed sockets the extracted data under-reports — e.g. Amulet of
 /// the Abyssal Hymn (250247) has 1 base socket recorded but 2 in-game.
@@ -394,6 +397,7 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
     let mut drops: HashMap<i64, Vec<Value>> = HashMap::new();
     let mut base_sockets: HashMap<u64, u64> = HashMap::new();
     let mut inherent_bonuses: HashMap<u64, Vec<u64>> = HashMap::new();
+    let mut flexible_stat_items: HashSet<u64> = HashSet::new();
     if encounter_items_path.exists() {
         let data: Vec<Value> = read_json_vec(&encounter_items_path)?;
         println!("Loaded {} encounter items", data.len());
@@ -404,6 +408,17 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
                     if !ids.is_empty() {
                         inherent_bonuses.insert(id, ids);
                     }
+                }
+                if item
+                    .get("stats")
+                    .and_then(|v| v.as_array())
+                    .is_some_and(|a| {
+                        a.iter().any(|st| {
+                            matches!(st.get("id").and_then(|v| v.as_u64()), Some(24) | Some(25))
+                        })
+                    })
+                {
+                    flexible_stat_items.insert(id);
                 }
             }
             if let (Some(id), Some(n)) = (
@@ -436,6 +451,7 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
     let _ = DROPS_BY_ENCOUNTER.set(drops);
     let _ = BASE_SOCKETS_BY_ITEM.set(base_sockets);
     let _ = INHERENT_BONUSES_BY_ITEM.set(inherent_bonuses);
+    let _ = FLEXIBLE_STAT_ITEMS.set(flexible_stat_items);
 
     // item-socket-overrides.json — our own committed file (crate-root fallback,
     // like season-config.json below): curated item_id → true socket count for
@@ -1025,6 +1041,16 @@ pub fn embellishment_applicable(item_id: u64, embellishment_id: u64) -> bool {
 }
 
 /// Whether every item in the list is from the crafted pool (by `item_id`).
+/// True when the item's secondaries are unallocated placeholders, so it needs an
+/// explicit stat pair. Crafted gear takes its pair from missives; raid BOEs carry
+/// the same placeholders with no missive, and simc resolves them to "unknown"
+/// unless given `crafted_stats=`.
+pub fn has_flexible_stats(item_id: u64) -> bool {
+    FLEXIBLE_STAT_ITEMS
+        .get()
+        .is_some_and(|s| s.contains(&item_id))
+}
+
 pub fn all_crafted_items(items: &[Value]) -> bool {
     items.iter().all(|it| {
         it.get("item_id")

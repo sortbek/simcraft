@@ -69,14 +69,13 @@ pub(super) async fn create_droptimizer_sim(
         embellishments.insert(id, embellishment);
     }
 
-    // Enforce crafted-only at the trust boundary, not just via the frontend
-    // gate, so a stray request can't graft missives or embellishments onto
-    // non-craftable gear.
-    if (crafted_stats.is_some() || !embellishments.is_empty())
-        && !crate::item_db::all_crafted_items(&req.drop_items)
-    {
+    // Embellishments are crafting reagents — enforce crafted-only at the trust
+    // boundary, not just via the frontend gate. A preferred stat pair needs no
+    // such check: the generator applies it per item, and only to gear that can
+    // take one.
+    if !embellishments.is_empty() && !crate::item_db::all_crafted_items(&req.drop_items) {
         return HttpResponse::BadRequest().json(json!({
-            "detail": "Crafted-gear options can only be applied to crafted items."
+            "detail": "Embellishments can only be applied to crafted items."
         }));
     }
 
