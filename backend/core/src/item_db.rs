@@ -51,6 +51,8 @@ static INSTANCES: OnceCell<Vec<Value>> = OnceCell::new();
 static DROPS_BY_ENCOUNTER: OnceCell<HashMap<i64, Vec<Value>>> = OnceCell::new();
 /// Base gem-socket count per item_id (from encounter-items `socketInfo`).
 static BASE_SOCKETS_BY_ITEM: OnceCell<HashMap<u64, u64>> = OnceCell::new();
+/// Item's own `bonusLists` per item_id (from encounter-items).
+static INHERENT_BONUSES_BY_ITEM: OnceCell<HashMap<u64, Vec<u64>>> = OnceCell::new();
 /// Curated socket-count overrides (item_id → true total sockets) for items
 /// whose guaranteed sockets the extracted data under-reports — e.g. Amulet of
 /// the Abyssal Hymn (250247) has 1 base socket recorded but 2 in-game.
@@ -391,10 +393,19 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
     let encounter_items_path = data_dir.join("encounter-items.json");
     let mut drops: HashMap<i64, Vec<Value>> = HashMap::new();
     let mut base_sockets: HashMap<u64, u64> = HashMap::new();
+    let mut inherent_bonuses: HashMap<u64, Vec<u64>> = HashMap::new();
     if encounter_items_path.exists() {
         let data: Vec<Value> = read_json_vec(&encounter_items_path)?;
         println!("Loaded {} encounter items", data.len());
         for item in &data {
+            if let Some(id) = item.get("id").and_then(|v| v.as_u64()) {
+                if let Some(bl) = item.get("bonusLists").and_then(|v| v.as_array()) {
+                    let ids: Vec<u64> = bl.iter().filter_map(|b| b.as_u64()).collect();
+                    if !ids.is_empty() {
+                        inherent_bonuses.insert(id, ids);
+                    }
+                }
+            }
             if let (Some(id), Some(n)) = (
                 item.get("id").and_then(|v| v.as_u64()),
                 item.get("socketInfo")
@@ -424,6 +435,7 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
     println!("Indexed drops for {} encounters", drops.len());
     let _ = DROPS_BY_ENCOUNTER.set(drops);
     let _ = BASE_SOCKETS_BY_ITEM.set(base_sockets);
+    let _ = INHERENT_BONUSES_BY_ITEM.set(inherent_bonuses);
 
     // item-socket-overrides.json — our own committed file (crate-root fallback,
     // like season-config.json below): curated item_id → true socket count for
@@ -1267,6 +1279,26 @@ pub(crate) fn get_raw_item(item_id: u64) -> Option<&'static Value> {
     // exercise validators / generators without panicking on incidental
     // inventory-type queries. Production paths always load data at startup.
     ITEMS.get()?.get(&item_id)
+}
+
+/// The item's own EFFECT-granting bonuses (e.g. the Venomcursed procs). The drop
+/// payload never carries these, so a candidate built without them sims as a plain
+/// stat stick. Deliberately excludes the item's other inherent bonuses: ilevel and
+/// quality already come from the chosen upgrade track (some carry a priority-100
+/// `itemLevel` that would override it), and sockets from `item_socket_count`.
+/// Sourced from encounter-items — compact-data.js strips `bonusLists` from
+/// equippable-items-full.
+pub fn item_effect_bonus_ids(item_id: u64) -> Vec<u64> {
+    INHERENT_BONUSES_BY_ITEM
+        .get()
+        .and_then(|m| m.get(&item_id))
+        .map(|ids| {
+            ids.iter()
+                .copied()
+                .filter(|id| get_bonus(*id).is_some_and(|b| b.get("effect").is_some()))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// For a set of bonus IDs, return the item limit categories they belong to.

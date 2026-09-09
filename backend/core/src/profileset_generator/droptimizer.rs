@@ -168,11 +168,18 @@ pub(super) fn generate_droptimizer_input(
         // Crafted stat + embellishment bonus IDs go into the simc string, not
         // `bonus_ids`. The fragment is built per slot: the embellishment can
         // drop out of individual combos (cap fallback below).
-        let item_bonus_ids: Vec<u64> = bonus_ids
-            .iter()
-            .copied()
+        // The item's own effect grants (e.g. Venomcursed) live in the game data,
+        // never in the drop payload. Deduped: resolve_bonuses SUMS socket grants.
+        let mut item_bonus_ids: Vec<u64> = Vec::new();
+        for b in crate::item_db::item_effect_bonus_ids(item_id)
+            .into_iter()
+            .chain(bonus_ids.iter().copied())
             .chain(crafted_stats.map(|cs| cs.bonus_ids).into_iter().flatten())
-            .collect();
+        {
+            if !item_bonus_ids.contains(&b) {
+                item_bonus_ids.push(b);
+            }
+        }
         // Applicability was validated at the trust boundary (droptimizer_handlers);
         // any future caller wiring picks in (e.g. roster runs) must validate too.
         let item_embellishment = item
@@ -470,6 +477,63 @@ mod tests {
         assert!(
             input.contains("bonus_id=12345/11137/11138"),
             "expected crafted stat bonus IDs appended after the upgrade bonus, got:\n{input}"
+        );
+    }
+
+    #[test]
+    fn candidate_carries_the_items_own_effect_bonus() {
+        // Aqirbane Reliquary's proc rides on bonus 13987, which lives in the game
+        // data's bonusLists and never in the drop payload. Without it the neck
+        // sims as a plain stat stick and ranks mid-pack instead of first.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test
+spec=frost
+neck=,id=100
+";
+        let drops = vec![drop(268265, 2, vec![12846])];
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None, &HashMap::new());
+        let line = input
+            .lines()
+            .find(|l| l.contains("id=268265"))
+            .unwrap_or_default();
+        assert!(
+            line.contains("13987"),
+            "effect bonus missing from:
+{line}"
+        );
+        assert!(
+            line.contains("12846"),
+            "upgrade bonus missing from:
+{line}"
+        );
+    }
+
+    #[test]
+    fn inherent_bonus_is_not_repeated_when_already_requested() {
+        // resolve_bonuses SUMS socket grants, so a duplicated id would invent a
+        // socket. 13668 is Aqirbane's own socket bonus.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test
+spec=frost
+neck=,id=100
+";
+        let drops = vec![drop(268265, 2, vec![13668])];
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None, &HashMap::new());
+        let line = input
+            .lines()
+            .find(|l| l.contains("id=268265"))
+            .unwrap_or_default();
+        let bonus = line.split(",bonus_id=").nth(1).unwrap_or_default();
+        let ids: Vec<&str> = bonus
+            .split(',')
+            .next()
+            .unwrap_or_default()
+            .split('/')
+            .collect();
+        assert_eq!(
+            ids.iter().filter(|b| **b == "13668").count(),
+            1,
+            "13668 duplicated in: {line}"
         );
     }
 

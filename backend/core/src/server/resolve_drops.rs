@@ -40,7 +40,19 @@ pub(super) fn drop_to_raw_item(drop: &Value) -> Option<RawParsedItem> {
         .map(|a| a.iter().filter_map(|b| b.as_u64()).collect())
         .unwrap_or_default();
 
-    let bonus_str = bonus_ids
+    // Same as the droptimizer path: fold in the item's own effect bonuses, which
+    // the request never carries.
+    let mut applied: Vec<u64> = Vec::new();
+    for b in crate::item_db::item_effect_bonus_ids(item_id)
+        .into_iter()
+        .chain(bonus_ids.iter().copied())
+    {
+        if !applied.contains(&b) {
+            applied.push(b);
+        }
+    }
+
+    let bonus_str = applied
         .iter()
         .map(u64::to_string)
         .collect::<Vec<_>>()
