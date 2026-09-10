@@ -48,6 +48,9 @@ fn make_uid(item: &RawParsedItem) -> String {
         item.origin.as_str(),
         item.raw_slot
     );
+    if item.source_item_id > 0 {
+        uid.push_str(&format!(":{}", item.source_item_id));
+    }
     if item.manual {
         uid.push_str(&manual_suffix(&item.simc_string));
     }
@@ -64,6 +67,9 @@ fn dedup_key(item: &RawParsedItem) -> String {
         .collect::<Vec<_>>()
         .join(":");
     let mut key = format!("{}:{}", item.item_id, bonus_key);
+    if item.source_item_id > 0 {
+        key.push_str(&format!(":{}", item.source_item_id));
+    }
     if item.manual {
         key.push_str(&manual_suffix(&item.simc_string));
     }
@@ -181,8 +187,8 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         gem_name,
         gem_icon,
         season_id,
-        is_catalyst: false,
-        source_item_id: 0,
+        is_catalyst: item.source_item_id > 0,
+        source_item_id: item.source_item_id,
         can_catalyst: false,
         is_void_forge: false,
         can_void_forge: false,
@@ -1096,6 +1102,19 @@ mod catalyst_tests {
             "catalyst simc string keeps the tier item id, got: {}",
             catalyst.simc_string
         );
+    }
+
+    #[test]
+    fn already_catalysed_item_preserves_source_item_id_and_is_catalyst() {
+        ensure_game_data_loaded();
+        let profile = "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=250042,redirected_base_stats=249629\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        assert_eq!(parsed.items[0].source_item_id, 249629);
+        let resolved = resolve_gear(&parsed);
+        let head = resolved.slots["head"].equipped.as_ref().expect("equipped head");
+        assert!(head.is_catalyst);
+        assert_eq!(head.source_item_id, 249629);
+        assert!(head.uid.ends_with(":249629"));
     }
 
     #[test]

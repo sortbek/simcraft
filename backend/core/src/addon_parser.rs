@@ -13,6 +13,8 @@ static RE_ENCHANT_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"enchant_id=(\d+)")
 static RE_GEM_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"gem_id=(\d+)").unwrap());
 static RE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"name=([^,]+)").unwrap());
 static RE_SLOT_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([a-z_]+),").unwrap());
+static RE_REDIRECTED_BASE_STATS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"redirected_base_stats=(\d+)").unwrap());
 
 // parse_simc_input regexes — compiled once per process.
 static RE_SLOT: Lazy<Regex> = Lazy::new(|| {
@@ -40,6 +42,7 @@ struct ItemProps {
     bonus_ids: Vec<u64>,
     enchant_id: u64,
     gem_id: u64,
+    source_item_id: u64,
 }
 
 fn parse_item_props(item_str: &str) -> ItemProps {
@@ -50,6 +53,7 @@ fn parse_item_props(item_str: &str) -> ItemProps {
         bonus_ids: Vec::new(),
         enchant_id: 0,
         gem_id: 0,
+        source_item_id: 0,
     };
 
     if let Some(caps) = RE_ITEM_ID.captures(item_str) {
@@ -69,6 +73,9 @@ fn parse_item_props(item_str: &str) -> ItemProps {
     }
     if let Some(caps) = RE_GEM_ID.captures(item_str) {
         props.gem_id = caps[1].parse().unwrap_or(0);
+    }
+    if let Some(caps) = RE_REDIRECTED_BASE_STATS.captures(item_str) {
+        props.source_item_id = caps[1].parse().unwrap_or(0);
     }
     if let Some(caps) = RE_NAME.captures(item_str) {
         props.name = class_data::title_case(&caps[1].replace('_', " "));
@@ -172,6 +179,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     gem_id: props.gem_id,
                     origin: ItemOrigin::Bags,
                     manual: true,
+                    source_item_id: props.source_item_id,
                 });
                 continue;
             }
@@ -210,6 +218,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     gem_id: props.gem_id,
                     origin,
                     manual: false,
+                    source_item_id: props.source_item_id,
                 });
             } else if let Some(caps) = header_re.captures(stripped) {
                 pending_name = caps[1].to_string();
@@ -278,6 +287,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     gem_id: props.gem_id,
                     origin: ItemOrigin::Equipped,
                     manual: false,
+                    source_item_id: props.source_item_id,
                 });
             }
             pending_label.clear();

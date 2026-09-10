@@ -408,6 +408,8 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
             .map(|info| info.sockets)
             .unwrap_or(0);
 
+        let source_item_id = crate::simc_string::extract_redirected_base_stats(encoded);
+
         baseline.insert(
             slot.clone(),
             json!({
@@ -421,6 +423,8 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
                 "gem_ids": gem_ids,
                 "sockets": sockets,
                 "is_kept": true,
+                "is_catalyst": source_item_id > 0,
+                "source_item_id": source_item_id,
             }),
         );
     }

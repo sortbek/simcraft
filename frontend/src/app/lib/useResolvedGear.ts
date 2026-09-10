@@ -82,6 +82,9 @@ export function equippedGearItems(
         bonus_ids: eq.bonus_ids,
         enchant_id: eq.enchant_id || undefined,
         gem_id: eq.gem_id || undefined,
+        gem_ids: eq.gem_ids?.length ? eq.gem_ids : undefined,
+        is_catalyst: eq.is_catalyst,
+        source_item_id: eq.source_item_id || undefined,
       };
     }
   }

@@ -53,6 +53,9 @@ pub struct RawParsedItem {
     /// these bypass the item_id+bonus dedup and carry a content-suffixed uid.
     #[serde(default)]
     pub manual: bool,
+    /// Item this was catalysed from (parsed from `redirected_base_stats=<id>`).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub source_item_id: u64,
 }
 
 // ---- Character Info ----

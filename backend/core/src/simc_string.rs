@@ -20,6 +20,8 @@ static AFTER_ITEM_ID_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(,id=\d+)").unw
 static BONUS_ID_CAPTURE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"bonus_id=([0-9/:]+)").unwrap());
 static STRIP_GEM_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r",?gem_id=[\d/]+").unwrap());
 static STRIP_ENCHANT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r",?enchant_id=\d+").unwrap());
+static REDIRECTED_BASE_STATS_CAPTURE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"redirected_base_stats=(\d+)").unwrap());
 
 /// Replace the existing `enchant_id=N` if present, otherwise insert one right after `,id=N`.
 pub fn set_enchant_id(simc: &str, enchant_id: u64) -> String {
@@ -117,6 +119,15 @@ pub fn extract_bonus_ids(simc: &str) -> Vec<u64> {
         .unwrap_or_default()
 }
 
+/// Extract source item id from `redirected_base_stats=<id>`.
+/// Returns 0 if none.
+pub fn extract_redirected_base_stats(simc: &str) -> u64 {
+    REDIRECTED_BASE_STATS_CAPTURE_RE
+        .captures(simc)
+        .and_then(|c| c[1].parse().ok())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod gem_tests {
     use super::*;
@@ -190,5 +201,17 @@ mod gem_tests {
     fn strip_enchant_id_noop_when_absent() {
         let s = ",id=100,bonus_id=12";
         assert_eq!(strip_enchant_id(s), ",id=100,bonus_id=12");
+    }
+
+    #[test]
+    fn extract_redirected_base_stats_parses_source_id() {
+        assert_eq!(
+            extract_redirected_base_stats(",id=250045,bonus_id=123,redirected_base_stats=249629"),
+            249629
+        );
+        assert_eq!(
+            extract_redirected_base_stats(",id=250045,bonus_id=123"),
+            0
+        );
     }
 }

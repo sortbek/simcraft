@@ -62,6 +62,7 @@ pub(super) fn drop_to_raw_item(drop: &Value) -> Option<RawParsedItem> {
         gem_id: 0,
         origin: ItemOrigin::Bags,
         manual: false,
+        source_item_id: drop.get("source_item_id").and_then(|v| v.as_u64()).unwrap_or(0),
     })
 }
 
@@ -86,8 +87,8 @@ pub(super) fn resolve_drops_to_items(simc_input: &str, drops: &[Value]) -> Vec<R
     };
     let resolved = gear_resolver::resolve_gear(&drop_parse);
 
-    // (item_id, sorted bonus_ids) -> (is_void_forge, is_catalyst)
-    let mut flags: HashMap<(u64, Vec<u64>), (bool, bool)> = HashMap::new();
+    // (item_id, sorted bonus_ids) -> (is_void_forge, is_catalyst, source_item_id)
+    let mut flags: HashMap<(u64, Vec<u64>), (bool, bool, u64)> = HashMap::new();
     for drop in drops {
         let Some(item_id) = drop.get("item_id").and_then(|v| v.as_u64()) else {
             continue;
@@ -106,7 +107,11 @@ pub(super) fn resolve_drops_to_items(simc_input: &str, drops: &[Value]) -> Vec<R
             .get("is_catalyst")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        flags.insert((item_id, b), (vf, cat));
+        let src = drop
+            .get("source_item_id")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        flags.insert((item_id, b), (vf, cat, src));
     }
 
     let mut out: Vec<ResolvedItem> = Vec::new();
@@ -114,9 +119,12 @@ pub(super) fn resolve_drops_to_items(simc_input: &str, drops: &[Value]) -> Vec<R
         for mut alt in slot_res.alternatives {
             let mut key_b = alt.bonus_ids.clone();
             key_b.sort();
-            if let Some(&(vf, cat)) = flags.get(&(alt.item_id, key_b)) {
+            if let Some(&(vf, cat, src)) = flags.get(&(alt.item_id, key_b)) {
                 alt.is_void_forge = vf;
                 alt.is_catalyst = cat;
+                if cat && src > 0 {
+                    alt.source_item_id = src;
+                }
             }
             out.push(alt);
         }
