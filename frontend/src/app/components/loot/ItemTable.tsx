@@ -41,7 +41,7 @@ interface ItemTableProps {
   equippedEmbellishments?: number;
   equippedGear: EquippedGear;
   spec: string;
-  /** Preferred Stats pair, so crafted tooltips match what the sim runs. */
+  /** Preferred Stats pair for crafted gear and raid drops with flexible secondaries. */
   craftedStats?: number[];
   /** Season embellishment options (crafted category only); gates the picker column. */
   embellishmentOptions?: CraftedEmbellishment[];

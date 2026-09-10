@@ -831,7 +831,7 @@ export default function LootBrowser({ footer }: LootBrowserProps) {
           equippedEmbellishments={equippedEmbellishments}
           equippedGear={equippedGear}
           spec={specName ?? ''}
-          craftedStats={isCrafted ? preferredStats : undefined}
+          craftedStats={usesPreferredStats ? preferredStats : undefined}
           embellishmentOptions={isCrafted ? seasonConfig?.crafted_embellishments : undefined}
           embellishmentPicks={embellishmentPicks}
           onEmbellishmentChange={(itemId, id) =>
