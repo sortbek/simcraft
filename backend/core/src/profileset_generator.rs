@@ -523,6 +523,101 @@ finger1=,id=102,gem_id=213453\n";
     }
 
     #[test]
+    fn top_gear_never_emits_two_diamonds_when_an_alternative_arrives_gemmed() {
+        ensure_game_data_loaded();
+        // The reported bug. The player selected an extra head that already has a
+        // diamond socketed, plus a neck with an empty socket, and picked one
+        // diamond. The gem combos are built without knowing which head a given
+        // gear set uses, so the sets that take the gemmed head used to get a
+        // second diamond in the neck.
+        let base_profile = "\
+hunter=test\n\
+spec=marksmanship\n\
+head=,id=271492\n\
+neck=,id=273781,bonus_id=8781\n\
+main_hand=,id=265337\n";
+
+        let diamond_a = 213738_u64; // Insightful Blasphemite
+        let plain_gem = 213453_u64; // Quick Ruby
+
+        let equipped_head = json!({
+            "slot": "head",
+            "simc_string": ",id=271492",
+            "is_equipped": true,
+            "origin": "equipped",
+            "item_id": 271492,
+            "ilevel": 0,
+            "name": "Equipped Head",
+            "bonus_ids": [],
+            "enchant_id": 0,
+            "gem_id": 0,
+            "sockets": 0,
+        });
+        // The added head: socketed, and it arrives with the diamond already in it.
+        let alt_head_gemmed = json!({
+            "slot": "head",
+            "simc_string": format!(",id=249988,bonus_id=8781,gem_id={diamond_a}"),
+            "is_equipped": false,
+            "origin": "bags",
+            "item_id": 249988,
+            "ilevel": 0,
+            "name": "Added Head With Diamond",
+            "bonus_ids": [8781],
+            "enchant_id": 0,
+            "gem_id": diamond_a,
+            "sockets": 1,
+        });
+
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped_head, alt_head_gemmed]);
+
+        let mut selected = HashMap::new();
+        selected.insert(
+            "head".to_string(),
+            vec!["249988:8781:bags:head".to_string()],
+        );
+
+        let gems = [diamond_a, plain_gem];
+        // Only the neck is offered as a gem slot: the added head already carries a
+        // gem, so with replace_gems off the generator leaves it alone.
+        let sockets = HashSet::from([273781_u64, 249988_u64]);
+        let (input, _combo_count, metadata) = generate_top_gear_input_with_talents(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(500),
+            &[],
+            None,
+            &GemEnchantOptions {
+                gem_options: &gems,
+                socketed_item_ids: Some(&sockets),
+                replace_gems: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        for block in input.split("### ").skip(1) {
+            let diamonds = block.matches(&format!("gem_id={diamond_a}")).count();
+            assert!(
+                diamonds <= 1,
+                "a profileset carried {diamonds} diamonds:\n{block}"
+            );
+        }
+
+        for (combo_name, items) in metadata {
+            let diamonds = items
+                .iter()
+                .filter(|item| item.get("gem_id").and_then(|v| v.as_u64()) == Some(diamond_a))
+                .count();
+            assert!(
+                diamonds <= 1,
+                "{combo_name} metadata carried {diamonds} diamonds"
+            );
+        }
+    }
+
+    #[test]
     fn top_gear_keeps_one_diamond_when_one_is_preserved_on_a_non_varied_slot() {
         ensure_game_data_loaded();
 

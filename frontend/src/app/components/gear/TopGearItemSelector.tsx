@@ -7,17 +7,17 @@ import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import { localizedItemName, localizedUpgrade, useItemNames } from '../../lib/useItemInfo';
 import GemEnchantEditDialog from './GemEnchantEditDialog';
+import { GEAR_DENSITY_LAYOUT, gearGridColumns, type GearRowDensity } from './gearDensity';
 import TopGearGroupCard from './TopGearGroupCard';
-import TopGearQuickSelectBar from './TopGearQuickSelectBar';
+import TopGearUnchangedStrip from './TopGearUnchangedStrip';
 import { buildAlternativeKey, buildResolvedCopy } from './topGearIdentity';
 import {
   buildVisibleGroups,
-  collectQuickSelectEntries,
   isItemSelected as getIsItemSelected,
   mergeAlternative,
+  partitionByAlternatives,
   selectAlternative,
   toggleItemSelection,
-  toggleQuickSelectGroup,
   type DisplayGroup,
 } from './topGearSelection';
 
@@ -39,6 +39,11 @@ interface TopGearItemSelectorProps {
   onManualItemAdded: (item: ResolvedItem) => void;
   addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
+  density: GearRowDensity;
+  /** Group labels the user opened out of the unchanged strip. */
+  promotedGroups: Set<string>;
+  onPromoteGroup: (label: string) => void;
+  onDemoteGroup: (label: string) => void;
 }
 
 const SOCKET_BONUS_ID = 13668;
@@ -52,6 +57,10 @@ export default function TopGearItemSelector({
   onManualItemAdded,
   addedKeys,
   onRemoveAdded,
+  density,
+  promotedGroups,
+  onPromoteGroup,
+  onDemoteGroup,
 }: TopGearItemSelectorProps) {
   const { t, locale } = useLanguage();
   useItemNames();
@@ -228,9 +237,9 @@ export default function TopGearItemSelector({
   );
 
   const visibleGroups = useMemo(() => buildVisibleGroups(resolved), [resolved]);
-  const { vaultUids, lootUids, catalystUids } = useMemo(
-    () => collectQuickSelectEntries(resolved),
-    [resolved]
+  const { cards, unchanged } = useMemo(
+    () => partitionByAlternatives(visibleGroups, promotedGroups),
+    [visibleGroups, promotedGroups]
   );
 
   const itemDetails = useCallback(
@@ -287,13 +296,6 @@ export default function TopGearItemSelector({
     [onSelectionChange, resolved, selectedUids]
   );
 
-  const onToggleGroup = useCallback(
-    (entries: { uid: string; slot: string }[]) => {
-      onSelectionChange(toggleQuickSelectGroup(entries, selectedUids));
-    },
-    [onSelectionChange, selectedUids]
-  );
-
   if (visibleGroups.length === 0) {
     return (
       <div className="card p-8 text-center">
@@ -303,24 +305,12 @@ export default function TopGearItemSelector({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="sticky top-14 z-30 -mx-8 flex items-center justify-between border-b border-outline-variant/20 bg-background/90 px-8 py-2 backdrop-blur-sm">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted">
-          {t('gear.selectItems')}
-        </p>
-        <TopGearQuickSelectBar
-          vaultUids={vaultUids}
-          lootUids={lootUids}
-          catalystUids={catalystUids}
-          selectedUids={selectedUids}
-          onToggleGroup={onToggleGroup}
-          onDeselectAll={() => onSelectionChange({})}
-          t={t}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {visibleGroups.map(({ group, equipped, alternatives }) => (
+    <div className="space-y-2.5">
+      <div
+        className={`grid ${GEAR_DENSITY_LAYOUT[density].gap}`}
+        style={{ gridTemplateColumns: gearGridColumns(density) }}
+      >
+        {cards.map(({ group, equipped, alternatives }) => (
           <TopGearGroupCard
             key={group.label}
             group={group}
@@ -346,10 +336,20 @@ export default function TopGearItemSelector({
             }}
             addedKeys={addedKeys}
             onRemoveAdded={onRemoveAdded}
+            density={density}
+            // Only a group that is in the grid *because* it was promoted can go
+            // back; one with real alternatives has nothing to go back to.
+            onDemote={
+              alternatives.length === 0 && promotedGroups.has(group.label)
+                ? () => onDemoteGroup(group.label)
+                : undefined
+            }
             t={t}
           />
         ))}
       </div>
+
+      <TopGearUnchangedStrip groups={unchanged} locale={locale} onPromote={onPromoteGroup} t={t} />
 
       {editItem && (
         <GemEnchantEditDialog

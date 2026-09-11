@@ -1,3 +1,5 @@
+import { CLASS_SPECS } from './classSpecs';
+export { CLASS_SPECS, SPEC_ID_TO_NAME, SPEC_NAME_TO_ID } from './classSpecs';
 // Shared types matching backend API response shapes.
 // These are display-only — no behavior, no business logic.
 
@@ -215,73 +217,6 @@ export const SLOT_LABELS: Record<string, string> = {
 };
 
 // ---- Class / Spec Data ----
-
-/** All specs for each class (SimC names). Matches backend CLASSES array. */
-export const CLASS_SPECS: Record<string, string[]> = {
-  warrior: ['arms', 'fury', 'protection'],
-  paladin: ['holy', 'protection', 'retribution'],
-  hunter: ['beast_mastery', 'marksmanship', 'survival'],
-  rogue: ['assassination', 'outlaw', 'subtlety'],
-  priest: ['discipline', 'holy', 'shadow'],
-  death_knight: ['blood', 'frost', 'unholy'],
-  deathknight: ['blood', 'frost', 'unholy'],
-  shaman: ['elemental', 'enhancement', 'restoration'],
-  mage: ['arcane', 'fire', 'frost'],
-  warlock: ['affliction', 'demonology', 'destruction'],
-  monk: ['brewmaster', 'mistweaver', 'windwalker'],
-  druid: ['balance', 'feral', 'guardian', 'restoration'],
-  demon_hunter: ['havoc', 'vengeance'],
-  demonhunter: ['havoc', 'vengeance'],
-  evoker: ['devastation', 'preservation', 'augmentation'],
-};
-
-/** Spec ID → SimC spec name mapping. */
-export const SPEC_ID_TO_NAME: Record<number, string> = {
-  71: 'arms',
-  72: 'fury',
-  73: 'protection',
-  65: 'holy',
-  66: 'protection',
-  70: 'retribution',
-  253: 'beast_mastery',
-  254: 'marksmanship',
-  255: 'survival',
-  259: 'assassination',
-  260: 'outlaw',
-  261: 'subtlety',
-  256: 'discipline',
-  257: 'holy',
-  258: 'shadow',
-  250: 'blood',
-  251: 'frost',
-  252: 'unholy',
-  262: 'elemental',
-  263: 'enhancement',
-  264: 'restoration',
-  62: 'arcane',
-  63: 'fire',
-  64: 'frost',
-  265: 'affliction',
-  266: 'demonology',
-  267: 'destruction',
-  268: 'brewmaster',
-  270: 'mistweaver',
-  269: 'windwalker',
-  102: 'balance',
-  103: 'feral',
-  104: 'guardian',
-  105: 'restoration',
-  577: 'havoc',
-  581: 'vengeance',
-  1467: 'devastation',
-  1468: 'preservation',
-  1473: 'augmentation',
-};
-
-/** Reverse mapping: spec name → spec ID */
-export const SPEC_NAME_TO_ID: Record<string, number> = Object.fromEntries(
-  Object.entries(SPEC_ID_TO_NAME).map(([id, name]) => [name, Number(id)])
-);
 
 /** Pretty-print a spec name: beast_mastery → Beast Mastery */
 export function specDisplayName(spec: string): string {

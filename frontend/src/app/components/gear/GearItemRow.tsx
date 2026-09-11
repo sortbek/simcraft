@@ -5,6 +5,7 @@ import { cn } from '../../lib/cn';
 import { GEAR_STATUS_STYLES, gearStatusFrom } from '../../lib/statusStyles';
 import { iconProps } from '../../lib/useItemInfo';
 import Checkbox from '../ui/Checkbox';
+import { GEAR_ROW_METRICS, type GearRowDensity } from './gearDensity';
 
 interface DetailPart {
   text: string;
@@ -44,6 +45,8 @@ interface GearItemRowProps {
   wowheadData?: string;
   /** Optional content rendered after the details (e.g. upgrade button) */
   children?: React.ReactNode;
+  /** Row metrics; defaults to the original size so other pages are unaffected. */
+  density?: GearRowDensity;
 }
 
 export default function GearItemRow({
@@ -63,17 +66,29 @@ export default function GearItemRow({
   href,
   wowheadData,
   children,
+  density = 'comfortable',
 }: GearItemRowProps) {
   const status = gearStatusFrom({ vault, loot, catalyst, voidForge });
   const statusStyle = status ? GEAR_STATUS_STYLES[status] : null;
+  const metrics = GEAR_ROW_METRICS[density];
 
   const content = (
     <>
       {selectable ? (
-        <Checkbox checked={!!checked} onChange={onToggle} aria-label={name} />
+        <Checkbox
+          checked={!!checked}
+          onChange={onToggle}
+          size={density === 'comfortable' ? 'md' : 'sm'}
+          aria-label={name}
+        />
       ) : equipped ? (
-        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-white/10">
-          <svg className="h-3 w-3 text-white/40" viewBox="0 0 16 16" fill="none">
+        <div
+          className={cn(
+            'flex shrink-0 items-center justify-center rounded-[3px] bg-white/10',
+            metrics.box
+          )}
+        >
+          <svg className={cn('text-white/40', metrics.check)} viewBox="0 0 16 16" fill="none">
             <path
               d="M12 5L6.5 10.5L4 8"
               stroke="currentColor"
@@ -89,7 +104,8 @@ export default function GearItemRow({
         href={href}
         data-wowhead={wowheadData}
         className={cn(
-          'block h-8 w-8 shrink-0 overflow-hidden rounded',
+          'block shrink-0 overflow-hidden rounded',
+          metrics.icon,
           statusStyle ? statusStyle.iconRing : 'ring-1 ring-white/5'
         )}
         target="_blank"
@@ -106,11 +122,20 @@ export default function GearItemRow({
         />
       </a>
 
-      <div className="min-w-0 flex-1">
+      <div
+        className={cn(
+          'min-w-0 flex-1',
+          density === 'ultra' && 'flex items-baseline gap-1.5 overflow-hidden'
+        )}
+      >
         <a
           href={href}
           data-wowhead={wowheadData}
-          className="block truncate text-[15px] leading-tight no-underline"
+          className={cn(
+            'truncate leading-tight no-underline',
+            metrics.name,
+            density === 'ultra' ? 'block shrink' : 'block'
+          )}
           style={{ color: nameColor }}
           target="_blank"
           rel="noopener noreferrer"
@@ -119,7 +144,13 @@ export default function GearItemRow({
           {name}
         </a>
         {details && details.length > 0 && (
-          <span className="mt-0.5 block truncate text-[13px] text-muted">
+          <span
+            className={cn(
+              'block truncate text-muted',
+              metrics.details,
+              density === 'ultra' ? 'min-w-0 flex-1' : 'mt-0.5'
+            )}
+          >
             {details.map((p, i) => (
               <span key={i}>
                 {i > 0 && <span className="opacity-40"> · </span>}
@@ -132,12 +163,14 @@ export default function GearItemRow({
 
       {children}
       {ilevel != null && ilevel > 0 && (
-        <span className="shrink-0 font-mono text-xs tabular-nums text-muted">{ilevel}</span>
+        <span className={cn('shrink-0 font-mono tabular-nums text-muted', metrics.ilevel)}>
+          {ilevel}
+        </span>
       )}
     </>
   );
 
-  const baseClass = 'flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors';
+  const baseClass = cn('flex items-center rounded-md transition-colors', metrics.row);
 
   if (selectable) {
     return (

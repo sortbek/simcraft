@@ -2,7 +2,7 @@
 //   - parse_base_profile  in backend/core/src/profileset_generator/base_profile.rs
 //   - inv_type_to_slots   in backend/core/src/types/class_data.rs
 //   - can_dual_wield      in backend/core/src/types/class_data.rs (drives DUAL_WIELD_SPECS)
-// Used by the drop finder for the per-slot `slot_inherits` payload and inherit badges.
+// Used for Drop Finder tooltip previews; the backend resolves simulation inheritance.
 
 export const GEAR_SLOTS = [
   'head',
@@ -26,6 +26,7 @@ export const GEAR_SLOTS = [
 export type Slot = (typeof GEAR_SLOTS)[number];
 
 export interface EquippedSlot {
+  embellished?: boolean;
   enchant_id?: number;
   gem_id?: number;
 }
@@ -50,7 +51,8 @@ const DUAL_WIELD_SPECS: ReadonlySet<string> = new Set([
   'brewmaster',
   'windwalker', // monk
   'havoc',
-  'vengeance', // demon hunter
+  'vengeance',
+  'devourer', // demon hunter
 ]);
 
 function canDualWield(spec: string): boolean {
@@ -82,6 +84,11 @@ export function parseEquippedGear(simcInput: string): EquippedGear {
     }
 
     const entry: EquippedSlot = {};
+    const bonuses = rest
+      .match(/(?:^|,)bonus_id=([0-9/:]+)/)?.[1]
+      .split(/[/:]/)
+      .map(Number);
+    if (bonuses?.includes(8960)) entry.embellished = true;
     const eMatch = rest.match(/enchant_id=(\d+)/);
     if (eMatch) {
       const eid = Number.parseInt(eMatch[1], 10);

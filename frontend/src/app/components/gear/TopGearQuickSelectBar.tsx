@@ -6,7 +6,6 @@ interface TopGearQuickSelectBarProps {
   catalystUids: QuickSelectEntry[];
   selectedUids: Record<string, Set<string>>;
   onToggleGroup: (entries: QuickSelectEntry[]) => void;
-  onDeselectAll: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }
 
@@ -16,10 +15,8 @@ export default function TopGearQuickSelectBar({
   catalystUids,
   selectedUids,
   onToggleGroup,
-  onDeselectAll,
   t,
 }: TopGearQuickSelectBarProps) {
-  const hasSelection = Object.values(selectedUids).some((values) => values.size > 0);
   const allVaultSelected =
     vaultUids.length > 0 && vaultUids.every((entry) => selectedUids[entry.slot]?.has(entry.uid));
   const allLootSelected =
@@ -67,15 +64,6 @@ export default function TopGearQuickSelectBar({
           }`}
         >
           {t('gear.catalyst')}
-        </button>
-      )}
-      {hasSelection && (
-        <button
-          type="button"
-          onClick={onDeselectAll}
-          className="rounded-md px-2 py-1 text-[11px] font-medium text-on-surface-variant/50 transition-colors hover:bg-white/[0.04] hover:text-on-surface"
-        >
-          {t('common.clear')}
         </button>
       )}
     </div>

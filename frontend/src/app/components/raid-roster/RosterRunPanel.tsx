@@ -1,11 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { API_URL, fetchJson } from '../../lib/api';
 import { startRun, getRun, type Roster, type RosterReport } from '../../lib/rosters';
-import type { SeasonConfigResponse, DifficultyDef, DifficultyGroup } from '../../lib/types';
+import type { DifficultyDef, DifficultyGroup } from '../../lib/types';
 import type { Instance, UpgradeTracks } from '../loot/types';
-import { groupInstances } from '../../lib/instanceCategories';
+import { categoryDetails, categoryMayUsePreferredStats } from '../loot/lootConfiguration';
 import PreferredStatsSelect, { DEFAULT_PREFERRED_STATS } from '../loot/PreferredStatsSelect';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import RosterReportView from './RosterReportView';
@@ -15,12 +14,21 @@ import { useComputeChoice } from '../../lib/useComputeChoice';
 import CategorySelector from '../loot/CategorySelector';
 import DifficultySelect from '../loot/DifficultySelect';
 import UpgradeSelect from '../loot/UpgradeSelect';
+import { useLootCatalog } from '../loot/useLootCatalog';
+
+const NO_INSTANCES: Instance[] = [];
+const NO_TRACKS: UpgradeTracks = {};
+const NO_DIFFICULTIES: DifficultyDef[] = [];
+type CategoryDetails = ReturnType<typeof categoryDetails>;
+const NO_RAIDS: CategoryDetails['raids'] = [];
+const NO_DUNGEON_CATS: CategoryDetails['dungeonCats'] = [];
 
 export default function RosterRunPanel({ roster }: { roster: Roster }) {
-  // Source data
-  const [instances, setInstances] = useState<Instance[]>([]);
-  const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
-  const [upgradeTracks, setUpgradeTracks] = useState<UpgradeTracks>({});
+  // Source data — shared with the Drop Finder so the two cannot drift.
+  const catalog = useLootCatalog();
+  const instances = catalog.status === 'success' ? catalog.data.instances : NO_INSTANCES;
+  const seasonConfig = catalog.status === 'success' ? catalog.data.seasonConfig : null;
+  const upgradeTracks = catalog.status === 'success' ? catalog.data.upgradeTracks : NO_TRACKS;
 
   // Config selection
   const [category, setCategory] = useState<string>('raids');
@@ -56,19 +64,6 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     }
   }, []);
 
-  // Fetch source data on mount
-  useEffect(() => {
-    fetchJson<Instance[]>(`${API_URL}/api/instances`)
-      .then(setInstances)
-      .catch(() => {});
-    fetchJson<SeasonConfigResponse>(`${API_URL}/api/season-config`)
-      .then(setSeasonConfig)
-      .catch(() => {});
-    fetchJson<UpgradeTracks>(`${API_URL}/api/upgrade-tracks`)
-      .then(setUpgradeTracks)
-      .catch(() => {});
-  }, []);
-
   // Stop polling when roster changes / unmount
   useEffect(() => {
     return () => {
@@ -76,15 +71,21 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     };
   }, [roster.id, stopPolling]);
 
-  // Derive raids + dungeon categories (shared with DropFinderContent)
-  const { raids, dungeonCats } = useMemo(
-    () => groupInstances(instances, seasonConfig),
-    [instances, seasonConfig]
+  // Same derivation the Drop Finder uses, so the two cannot drift.
+  const details = useMemo(
+    () =>
+      seasonConfig ? categoryDetails({ instances, seasonConfig, upgradeTracks }, category) : null,
+    [instances, seasonConfig, upgradeTracks, category]
   );
-
+  const raids = details?.raids ?? NO_RAIDS;
+  const dungeonCats = details?.dungeonCats ?? NO_DUNGEON_CATS;
   const isRaid = category === 'raids';
+  // Kept local: the roster needs the pool's numeric id, not the string `source`.
   const activeDungeonCat = dungeonCats.find((dc) => dc.cat.key === category);
-  const isCrafted = activeDungeonCat?.cat.key === 'crafted';
+  const isCrafted = details?.isCrafted ?? false;
+  // Rare/PVP profession pools carry flexible-stat gear too — a raid+crafted
+  // whitelist silently dropped the pair for them.
+  const usesPreferredStats = categoryMayUsePreferredStats(category);
 
   // Default the selected raid to the first available raid
   useEffect(() => {
@@ -98,32 +99,14 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
     ? selectedRaidId
     : (activeDungeonCat?.cat.poolInstanceId ?? null);
 
-  // Active difficulties for the current category (mirror DropFinderContent)
-  const activeDifficulties: DifficultyDef[] = useMemo(() => {
-    if (!seasonConfig) return [];
-    if (isRaid) return seasonConfig.raid_difficulties;
-    if (activeDungeonCat) {
-      if (activeDungeonCat.cat.difficultyGroups) {
-        return activeDungeonCat.cat.difficultyGroups.flatMap((g) => g.difficulties);
-      }
-      return activeDungeonCat.cat.difficulties;
-    }
-    return [];
-  }, [seasonConfig, isRaid, activeDungeonCat]);
-
-  const activeDifficultyGroups: DifficultyGroup[] | null = useMemo(() => {
-    if (activeDungeonCat?.cat.difficultyGroups) return activeDungeonCat.cat.difficultyGroups;
-    return null;
-  }, [activeDungeonCat]);
+  const activeDifficulties: DifficultyDef[] = details?.difficulties ?? NO_DIFFICULTIES;
+  const activeDifficultyGroups: DifficultyGroup[] | null = details?.difficultyGroups ?? null;
 
   // Reset difficulty + upgrade level to the category's default when category changes
   useEffect(() => {
     if (activeDifficulties.length === 0) return;
-    const defaultKey = isRaid
-      ? (activeDifficulties.find((d) => d.key === 'heroic')?.key ?? activeDifficulties[0].key)
-      : (activeDungeonCat?.cat.defaultDifficulty ?? activeDifficulties[0].key);
     if (!activeDifficulties.some((d) => d.key === difficulty)) {
-      setDifficulty(defaultKey);
+      setDifficulty(details?.defaultDifficulty ?? activeDifficulties[0].key);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, activeDifficulties]);
@@ -206,7 +189,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
       void_forge: voidForge,
       catalyst: catalyst,
       compute_provider: compute,
-      ...(isCrafted ? { preferred_crafted_stats: preferredStats } : {}),
+      ...(usesPreferredStats ? { preferred_crafted_stats: preferredStats } : {}),
       ...(encounters && encounters.length ? { encounters } : {}),
     });
     if (!started) {
@@ -238,13 +221,13 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
   }, [
     roster.id,
     instanceId,
+    usesPreferredStats,
     difficulty,
     targetError,
     fightStyle,
     upgradeLevel,
     voidForge,
     catalyst,
-    isCrafted,
     preferredStats,
     isRaid,
     selectedRaidId,
@@ -319,7 +302,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
             </div>
           )}
 
-          {isCrafted && (
+          {usesPreferredStats && (
             <div className="space-y-1">
               <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
                 Preferred stats
@@ -475,6 +458,15 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
             {progressPct.toFixed(0)}%
           </div>
         </div>
+      )}
+
+      {catalog.status === 'error' && (
+        <p
+          role="alert"
+          className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+        >
+          Could not load loot data: {catalog.error}
+        </p>
       )}
 
       {error && (

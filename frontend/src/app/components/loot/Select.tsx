@@ -1,12 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
+import { usePopupDismissal } from './usePopupDismissal';
 import { createPortal } from 'react-dom';
 
 export interface SelectOption<T> {
   value: T;
-  label: string;
-  sublabel?: string;
+  label: ReactNode;
+  group?: string;
+  sublabel?: ReactNode;
 }
 
 interface SelectProps<T> {
@@ -44,18 +54,42 @@ export default function Select<T>({
     bottom?: number;
   } | null>(null);
 
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listId = useId();
+  const focusOnOpen = useRef(false);
+  const close = useCallback(() => setOpen(false), []);
+  usePopupDismissal(open, close, ref, panelRef, triggerRef);
   useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      const target = e.target as Node;
-      if (ref.current?.contains(target)) return;
-      if (portal && panelRef.current?.contains(target)) return;
-      setOpen(false);
+    if (open && focusOnOpen.current) {
+      const panel = panelRef.current;
+      (
+        panel?.querySelector<HTMLElement>('[aria-selected="true"]') ??
+        panel?.querySelector<HTMLElement>('[role="option"]')
+      )?.focus();
+      focusOnOpen.current = false;
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open, portal]);
-
+  }, [open]);
+  function panelKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Tab') {
+      close();
+      return;
+    }
+    const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const buttons = Array.from(
+      panelRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
+    );
+    if (!buttons.length) return;
+    const current = buttons.findIndex((button) => button === document.activeElement);
+    const index =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? buttons.length - 1
+          : (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[index].focus();
+  }
   // Portal panels are positioned once at open time; rather than tracking the
   // trigger's rect on every scroll, just close on scroll/resize (capture:
   // true to also catch scrolling containers, since scroll doesn't bubble).
@@ -111,29 +145,39 @@ export default function Select<T>({
     setOpen(!open);
   }
 
-  const optionButtons = options.map((opt) => {
+  const optionButtons = options.map((opt, index) => {
     const isActive = isEqual(opt.value, value);
     return (
-      <button
-        key={String(opt.value)}
-        type="button"
-        onClick={() => {
-          onChange(opt.value);
-          setOpen(false);
-        }}
-        className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium transition-colors ${
-          isActive ? 'bg-gold/[0.06] text-gold' : 'text-on-surface hover:bg-surface-container-high'
-        }`}
-      >
-        <span className="truncate">{opt.label}</span>
-        {opt.sublabel && (
-          <span
-            className={`text-right text-xs tabular-nums ${isActive ? 'text-gold/70' : 'text-on-surface-variant/50'}`}
-          >
-            {opt.sublabel}
-          </span>
+      <div key={String(opt.value)}>
+        {opt.group && opt.group !== options[index - 1]?.group && (
+          <div className="px-3 py-1.5 text-xs text-on-surface-variant">{opt.group}</div>
         )}
-      </button>
+        <button
+          role="option"
+          aria-selected={isActive}
+          tabIndex={isActive ? 0 : -1}
+          type="button"
+          onClick={() => {
+            onChange(opt.value);
+            setOpen(false);
+            triggerRef.current?.focus();
+          }}
+          className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium transition-colors ${
+            isActive
+              ? 'bg-gold/[0.06] text-gold'
+              : 'text-on-surface hover:bg-surface-container-high'
+          }`}
+        >
+          <span className="truncate">{opt.label}</span>
+          {opt.sublabel && (
+            <span
+              className={`text-right text-xs tabular-nums ${isActive ? 'text-gold/70' : 'text-on-surface-variant/50'}`}
+            >
+              {opt.sublabel}
+            </span>
+          )}
+        </button>
+      </div>
     );
   });
 
@@ -141,6 +185,19 @@ export default function Select<T>({
     <div ref={ref} className="relative">
       <button
         type="button"
+        ref={triggerRef}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!open) {
+              focusOnOpen.current = true;
+              toggleOpen();
+            } else panelRef.current?.querySelector<HTMLElement>('[role="option"]')?.focus();
+          }
+        }}
         onClick={toggleOpen}
         className="input-field flex w-full items-center justify-between gap-2 text-left"
       >
@@ -168,6 +225,9 @@ export default function Select<T>({
         ? createPortal(
             <div
               ref={panelRef}
+              id={listId}
+              role="listbox"
+              onKeyDown={panelKeyDown}
               style={{
                 left: portalRect.left,
                 width: portalRect.width,
@@ -185,7 +245,13 @@ export default function Select<T>({
         : null}
 
       {open && !portal && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container shadow-xl">
+        <div
+          ref={panelRef}
+          id={listId}
+          role="listbox"
+          onKeyDown={panelKeyDown}
+          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container shadow-xl"
+        >
           {optionButtons}
         </div>
       )}

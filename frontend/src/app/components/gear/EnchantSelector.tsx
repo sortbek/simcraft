@@ -3,11 +3,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../../lib/api';
 import GearItemRow from './GearItemRow';
+import {
+  GEAR_DENSITY_LAYOUT,
+  gearCardClass,
+  gearGridProps,
+  type GearRowDensity,
+} from './gearDensity';
 import type { ResolvedItem } from '../../lib/types';
 import { getWowheadUrl } from '../../lib/useItemInfo';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
-import CollapsibleSection from '../ui/CollapsibleSection';
 import { statLabel, ENCHANT_SLOTS, type ItemOption } from './itemOptions';
 
 const SLOT_DISPLAY: Record<string, string> = {
@@ -29,6 +34,10 @@ interface EnchantSelectorProps {
   onEnchantToggle: (slot: string, enchantId: number) => void;
   onSelectAllEnchants: (slot: string, ids: number[]) => void;
   onDeselectAllEnchants: (slot: string) => void;
+  density: GearRowDensity;
+  /** Reports that there is nothing to show, so the page can drop the whole
+   *  section instead of leaving a heading over an empty body. */
+  onEmptyChange?: (empty: boolean) => void;
 }
 
 function enchantDetails(e: ItemOption): { text: string; color?: string }[] {
@@ -48,9 +57,12 @@ export default function EnchantSelector({
   onEnchantToggle,
   onSelectAllEnchants,
   onDeselectAllEnchants,
+  density,
+  onEmptyChange,
 }: EnchantSelectorProps) {
   const { t, locale } = useLanguage();
   const [enchantOptions, setItemOptions] = useState<Record<string, ItemOption[]>>({});
+  const [loaded, setLoaded] = useState(false);
   useWowheadTooltips([enchantOptions]);
 
   const enchantableSlots = useMemo(
@@ -78,6 +90,7 @@ export default function EnchantSelector({
         if (data.length > 0) map[slot] = data;
       }
       setItemOptions(map);
+      setLoaded(true);
     });
   }, [enchantableSlots]);
 
@@ -99,93 +112,98 @@ export default function EnchantSelector({
     [sortedEnchants]
   );
 
+  useEffect(() => {
+    if (loaded) onEmptyChange?.(enchantSlots.length === 0);
+  }, [loaded, enchantSlots.length, onEmptyChange]);
+
+  // Still fetching: a placeholder rather than `null`, so the section heading is
+  // never left sitting over nothing.
+  if (!loaded) {
+    return <p className="py-1 text-sm text-muted">{t('common.loading')}</p>;
+  }
+
   if (enchantSlots.length === 0) {
     return null;
   }
 
-  const selectedCount = Object.values(enchantSelections).reduce((sum, ids) => sum + ids.size, 0);
-
   return (
-    <CollapsibleSection
-      title={t('enchantGem.selectEnchants')}
-      subtitle={t('enchantGem.selectEnchantsTooltip')}
-      count={selectedCount}
-      storageKey="simhammer_topgear_enchants_open"
-    >
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {enchantSlots.map((slot) => {
-          const equippedId = equippedSlots[slot]?.enchant_id ?? 0;
-          const equippedOption =
-            equippedId > 0 ? sortedEnchants[slot].find((e) => e.id === equippedId) : undefined;
-          const equippedName = equippedOption
-            ? equippedOption.itemName || equippedOption.displayName
-            : equippedSlots[slot]?.enchant_name || '';
+    <div {...gearGridProps(density)}>
+      {enchantSlots.map((slot) => {
+        const equippedId = equippedSlots[slot]?.enchant_id ?? 0;
+        const equippedOption =
+          equippedId > 0 ? sortedEnchants[slot].find((e) => e.id === equippedId) : undefined;
+        const equippedName = equippedOption
+          ? equippedOption.itemName || equippedOption.displayName
+          : equippedSlots[slot]?.enchant_name || '';
 
-          const candidates = sortedEnchants[slot].filter((e) => e.id !== equippedId);
-          const candidateIds = candidates.map((e) => e.id);
-          const allSelected =
-            candidateIds.length > 0 && candidateIds.every((id) => enchantSelections[slot]?.has(id));
+        const candidates = sortedEnchants[slot].filter((e) => e.id !== equippedId);
+        const candidateIds = candidates.map((e) => e.id);
+        const allSelected =
+          candidateIds.length > 0 && candidateIds.every((id) => enchantSelections[slot]?.has(id));
 
-          return (
-            <div key={slot} className="card space-y-1 p-3.5">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="font-headline text-[13px] font-semibold uppercase tracking-widest text-muted">
-                  {t(SLOT_DISPLAY[slot])}
-                </p>
-                {candidateIds.length > 0 && (
-                  <button
-                    onClick={() =>
-                      allSelected
-                        ? onDeselectAllEnchants(slot)
-                        : onSelectAllEnchants(slot, candidateIds)
-                    }
-                    className="text-[11px] text-gold/60 transition-colors hover:text-gold"
-                  >
-                    {allSelected ? t('enchantGem.deselectAll') : t('enchantGem.selectAll')}
-                  </button>
-                )}
-              </div>
-
-              {/* Equipped enchant: always simmed as the baseline */}
-              {equippedId > 0 && equippedName && (
-                <GearItemRow
-                  icon={equippedOption?.itemIcon || ''}
-                  name={equippedName}
-                  nameColor="text-on-surface"
-                  href={
-                    equippedOption?.itemId
-                      ? getWowheadUrl(equippedOption.itemId, locale)
-                      : undefined
+        return (
+          <div key={slot} className={gearCardClass(density)}>
+            <div
+              className={`flex items-center justify-between ${GEAR_DENSITY_LAYOUT[density].title}`}
+            >
+              <p className="font-headline font-semibold uppercase tracking-widest text-muted">
+                {t(SLOT_DISPLAY[slot])}
+              </p>
+              {candidateIds.length > 0 && (
+                <button
+                  onClick={() =>
+                    allSelected
+                      ? onDeselectAllEnchants(slot)
+                      : onSelectAllEnchants(slot, candidateIds)
                   }
-                  details={equippedOption ? enchantDetails(equippedOption) : undefined}
-                  equipped
-                />
+                  className="text-[11px] text-gold/60 transition-colors hover:text-gold"
+                >
+                  {allSelected ? t('enchantGem.deselectAll') : t('enchantGem.selectAll')}
+                </button>
               )}
-
-              {equippedId > 0 && equippedName && candidates.length > 0 && (
-                <div className="!my-1.5 border-t border-outline-variant/20" />
-              )}
-
-              {candidates.map((e) => {
-                const isSelected = enchantSelections[slot]?.has(e.id) ?? false;
-                return (
-                  <GearItemRow
-                    key={e.id}
-                    icon={e.itemIcon || ''}
-                    name={e.itemName || e.displayName}
-                    nameColor="text-on-surface"
-                    href={e.itemId ? getWowheadUrl(e.itemId, locale) : undefined}
-                    details={enchantDetails(e)}
-                    selectable
-                    checked={isSelected}
-                    onToggle={() => onEnchantToggle(slot, e.id)}
-                  />
-                );
-              })}
             </div>
-          );
-        })}
-      </div>
-    </CollapsibleSection>
+
+            {/* Equipped enchant: always simmed as the baseline */}
+            {equippedId > 0 && equippedName && (
+              <GearItemRow
+                icon={equippedOption?.itemIcon || ''}
+                name={equippedName}
+                nameColor="text-on-surface"
+                href={
+                  equippedOption?.itemId ? getWowheadUrl(equippedOption.itemId, locale) : undefined
+                }
+                details={equippedOption ? enchantDetails(equippedOption) : undefined}
+                equipped
+                density={density}
+              />
+            )}
+
+            {equippedId > 0 && equippedName && candidates.length > 0 && (
+              <div
+                className={`border-t border-outline-variant/20 ${GEAR_DENSITY_LAYOUT[density].rule}`}
+              />
+            )}
+
+            {candidates.map((e) => {
+              const isSelected = enchantSelections[slot]?.has(e.id) ?? false;
+              return (
+                <GearItemRow
+                  key={e.id}
+                  icon={e.itemIcon || ''}
+                  name={e.itemName || e.displayName}
+                  nameColor="text-on-surface"
+                  href={e.itemId ? getWowheadUrl(e.itemId, locale) : undefined}
+                  details={enchantDetails(e)}
+                  selectable
+                  checked={isSelected}
+                  onToggle={() => onEnchantToggle(slot, e.id)}
+                  density={density}
+                />
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
   );
 }

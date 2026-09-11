@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 
 interface DungeonDrawerProps {
   instances: { id: number; name: string }[];
-  allKey: string;
   allLabel: string;
   selectedIds: Set<string>;
   onChange: (ids: Set<string>) => void;
@@ -13,7 +12,6 @@ interface DungeonDrawerProps {
 
 export default function DungeonDrawer({
   instances,
-  allKey,
   allLabel,
   selectedIds,
   onChange,

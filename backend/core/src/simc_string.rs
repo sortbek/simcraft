@@ -42,6 +42,11 @@ pub fn set_gem_id(simc: &str, gem_id: u64) -> String {
     set_gem_ids(simc, &[gem_id])
 }
 
+/// Join ids the way simc lists them: `a/b/c`. Shared by every `,x_id=` field.
+pub fn join_ids(ids: &[u64]) -> String {
+    ids.iter().map(u64::to_string).collect::<Vec<_>>().join("/")
+}
+
 /// Replace the existing `gem_id=…` with a slash-separated list, or insert one
 /// right after `,id=N`. An empty slice strips any existing `gem_id` (use
 /// `strip_gem_id` directly if that's all you want).
@@ -49,11 +54,7 @@ pub fn set_gem_ids(simc: &str, gem_ids: &[u64]) -> String {
     if gem_ids.is_empty() {
         return strip_gem_id(simc);
     }
-    let joined = gem_ids
-        .iter()
-        .map(|id| id.to_string())
-        .collect::<Vec<_>>()
-        .join("/");
+    let joined = join_ids(gem_ids);
     if GEM_ID_RE.is_match(simc) {
         GEM_ID_RE
             .replace(simc, &format!("gem_id={}", joined))

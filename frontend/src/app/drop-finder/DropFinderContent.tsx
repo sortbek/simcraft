@@ -6,13 +6,15 @@ import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import { useComputeChoice, type ComputeChoice } from '../lib/useComputeChoice';
-import LootBrowser, { type LootBrowserRenderState } from '../components/loot/LootBrowser';
+import LootBrowser from '../components/loot/LootBrowser';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import { useLanguage } from '../lib/i18n';
-import { resolveUpgrade, type DropItemPayload } from '../components/loot/types';
+import type { LootSubmission } from '../components/loot/useLootBrowserModel';
 
 interface DropFinderFooterProps {
-  buildPayload: () => Record<string, unknown> | null;
+  buildPayload: () =>
+    | (LootSubmission & { simc_input: string; compute_provider: ComputeChoice })
+    | null;
   hasSelection: boolean;
   hasCharacter: boolean;
   count: number;
@@ -80,50 +82,16 @@ export default function DropFinderContent() {
       </div>
 
       <LootBrowser
-        footer={({
-          selectedDrops,
-          difficulty,
-          dungeonDiff,
-          upgradeLevel,
-          upgradeTracks,
-          hasSelection,
-          craftedPreferredStats,
-        }: LootBrowserRenderState) => {
-          const buildPayload = () => {
-            if (!hasSelection) return null;
-            const dropItems: DropItemPayload[] = selectedDrops.map((item) => {
-              const resolved = resolveUpgrade(
-                item,
-                difficulty,
-                dungeonDiff,
-                upgradeLevel,
-                upgradeTracks
-              );
-              // No `slot_inherits` here: backend derives enchant/gem inheritance
-              // from the equipped profile, keeping sim semantics off the frontend.
-              return {
-                ...item,
-                ilevel: resolved.ilvl,
-                quality: resolved.quality,
-                bonus_ids: [
-                  ...(resolved.bonus_id ? [resolved.bonus_id] : []),
-                  ...(item.extra_bonus_ids ?? []),
-                ],
-              };
-            });
-            return {
-              simc_input: simcInput,
-              drop_items: dropItems,
-              compute_provider: compute,
-              ...(craftedPreferredStats ? { preferred_crafted_stats: craftedPreferredStats } : {}),
-            };
-          };
+        footer={(submission) => {
+          const hasSelection = submission !== null;
+          const buildPayload = () =>
+            submission ? { ...submission, simc_input: simcInput, compute_provider: compute } : null;
           return (
             <DropFinderFooter
               buildPayload={buildPayload}
               hasSelection={hasSelection}
               hasCharacter={hasInput}
-              count={selectedDrops.length}
+              count={submission?.drop_items.length ?? 0}
               compute={compute}
               onComputeChange={setCompute}
             />

@@ -40,7 +40,11 @@ pub(super) fn drop_to_raw_item(drop: &Value) -> Option<RawParsedItem> {
         .map(|a| a.iter().filter_map(|b| b.as_u64()).collect())
         .unwrap_or_default();
 
-    let bonus_str = bonus_ids
+    // Same as the droptimizer path: fold in the item's own effect bonuses, which
+    // the request never carries.
+    let applied = crate::item_db::with_item_effect_bonuses(item_id, &bonus_ids);
+
+    let bonus_str = applied
         .iter()
         .map(u64::to_string)
         .collect::<Vec<_>>()

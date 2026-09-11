@@ -1,168 +1,36 @@
+import LootItemRow from './LootItemRow';
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
-import { localizedItemName, useItemNames, getWowheadUrl, iconProps } from '../../lib/useItemInfo';
-import type { CraftedEmbellishment } from '../../lib/types';
-import type { DropItem, UpgradeTracks } from './types';
-import { dropUid, dropWowheadAttr, getTrackInfo, resolveUpgrade, QUALITY_COLORS } from './types';
-import { resolveInherits, type EquippedGear } from '../../lib/inheritedGear';
-import { qualityBorderColor } from '../../lib/qualityColors';
+import { groupLootRows, type LootTableModel } from './lootTableModel';
 import Checkbox from '../ui/Checkbox';
-import VariantBadges from './VariantBadges';
-import EmbellishmentSelect from './EmbellishmentSelect';
-
-const SLOT_ORDER = [
-  'Main Hand',
-  'Off Hand',
-  'Head',
-  'Neck',
-  'Shoulder',
-  'Back',
-  'Chest',
-  'Wrist',
-  'Hands',
-  'Waist',
-  'Legs',
-  'Feet',
-  'Finger',
-  'Trinket',
-];
-
 interface ItemTableProps {
-  drops: Record<string, DropItem[]>;
-  selected: Set<string>;
+  model: LootTableModel;
   onToggle: (uid: string) => void;
   onSelectItems: (uids: string[]) => void;
   onClearItems: (uids: string[]) => void;
-  difficulty: string;
-  dungeonDiff: string;
-  upgradeLevel: number;
-  upgradeTracks: UpgradeTracks;
-  headerLabel: string;
-  equippedEmbellishments?: number;
-  equippedGear: EquippedGear;
-  spec: string;
-  /** Preferred Stats pair, so crafted tooltips match what the sim runs. */
-  craftedStats?: number[];
-  /** Season embellishment options (crafted category only); gates the picker column. */
-  embellishmentOptions?: CraftedEmbellishment[];
-  /** Per-row picks: item_id → canonical reagent id; absent = None. */
-  embellishmentPicks?: Record<number, number>;
   onEmbellishmentChange?: (itemId: number, id: number | null) => void;
 }
-
 export default function ItemTable({
-  drops,
-  selected,
+  model,
   onToggle,
   onSelectItems,
   onClearItems,
-  difficulty,
-  dungeonDiff,
-  upgradeLevel,
-  upgradeTracks,
-  headerLabel,
-  equippedEmbellishments = 0,
-  equippedGear,
-  spec,
-  craftedStats,
-  embellishmentOptions,
-  embellishmentPicks,
   onEmbellishmentChange,
 }: ItemTableProps) {
-  const { t, locale } = useLanguage();
-  useItemNames();
+  const { t } = useLanguage();
   const [filterText, setFilterText] = useState('');
   const [groupBy, setGroupBy] = useState<'slot' | 'dungeon'>('slot');
-  // Crafted category active iff the caller passed season embellishment data.
-  const hasEmbellishmentColumn = embellishmentOptions !== undefined;
-
-  const totalItems = Object.values(drops).reduce((n, items) => n + items.length, 0);
-
-  // Dungeon grouping is only meaningful with multiple instance names
-  const hasMultipleDungeons = useMemo(() => {
-    const names = new Set<string>();
-    for (const items of Object.values(drops)) {
-      for (const item of items) {
-        if (item.instance_name) names.add(item.instance_name);
-        if (names.size > 1) return true;
-      }
-    }
-    return false;
-  }, [drops]);
-
-  const selectedEmbellished = useMemo(() => {
-    let count = 0;
-    for (const items of Object.values(drops)) {
-      for (const item of items) {
-        if (item.embellished && selected.has(dropUid(item))) count++;
-      }
-    }
-    return count;
-  }, [drops, selected]);
-
-  const embellishmentsFull = equippedEmbellishments + selectedEmbellished >= 2;
-
-  // item_id → slot name, keyed off the drops map
-  const itemSlotMap = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const [slot, items] of Object.entries(drops)) {
-      for (const item of items) map.set(item.item_id, slot);
-    }
-    return map;
-  }, [drops]);
-
-  const groupedItems = useMemo(() => {
-    const filter = filterText.toLowerCase();
-
-    if (groupBy === 'slot') {
-      return [...Object.entries(drops)]
-        .sort(([a], [b]) => {
-          const ai = SLOT_ORDER.indexOf(a);
-          const bi = SLOT_ORDER.indexOf(b);
-          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-        })
-        .map(([slot, items]) => {
-          const filtered = filter
-            ? items.filter(
-                (item) =>
-                  localizedItemName(item.item_id, item.name, locale)
-                    .toLowerCase()
-                    .includes(filter) || String(item.item_id).includes(filter)
-              )
-            : items;
-          return [slot, filtered] as [string, DropItem[]];
-        })
-        .filter(([, items]) => items.length > 0);
-    }
-
-    const byDungeon = new Map<string, DropItem[]>();
-    for (const items of Object.values(drops)) {
-      for (const item of items) {
-        if (
-          filter &&
-          !localizedItemName(item.item_id, item.name, locale).toLowerCase().includes(filter) &&
-          !String(item.item_id).includes(filter)
-        )
-          continue;
-        const key = item.instance_name || 'Unknown';
-        const list = byDungeon.get(key);
-        if (list) list.push(item);
-        else byDungeon.set(key, [item]);
-      }
-    }
-    return [...byDungeon.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .filter(([, items]) => items.length > 0);
-  }, [drops, filterText, locale, groupBy]);
-
-  const visibleItemIds = useMemo(
-    () => groupedItems.flatMap(([, items]) => items.map((item) => dropUid(item))),
-    [groupedItems]
+  const { rows, headerLabel, hasEmbellishmentColumn, embellishmentLimitReached } = model;
+  const rowGroups = useMemo(
+    () => groupLootRows(rows, filterText, groupBy),
+    [rows, filterText, groupBy]
   );
-  const filteredTotal = groupedItems.reduce((n, [, items]) => n + items.length, 0);
-  const allSelected =
-    filteredTotal > 0 &&
-    groupedItems.every(([, items]) => items.every((item) => selected.has(dropUid(item))));
+  const hasMultipleDungeons = new Set(rows.map((row) => row.sourceId ?? row.sourceName)).size > 1;
+  const visibleRows = rowGroups.flatMap((group) => group.rows);
+  const visibleItemIds = visibleRows.map((row) => row.uid);
+  const filteredTotal = visibleRows.length;
+  const selectedCount = rows.filter((row) => row.selected).length;
+  const allSelected = filteredTotal > 0 && visibleRows.every((row) => row.selected);
   return (
     <div className="overflow-hidden rounded-xl border border-outline-variant/5 bg-surface-container shadow-2xl">
       <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
@@ -172,9 +40,9 @@ export default function ItemTable({
           </h3>
           <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">
             {headerLabel} &mdash; {t('gear.itemsCount', { count: filteredTotal })}
-            {selected.size > 0 && (
+            {selectedCount > 0 && (
               <span className="ml-1.5 normal-case tracking-normal text-gold">
-                ({selected.size} {t('dropFinder.selected')})
+                ({selectedCount} {t('dropFinder.selected')})
               </span>
             )}
           </p>
@@ -239,7 +107,7 @@ export default function ItemTable({
                     : 'text-on-surface-variant/60 hover:text-on-surface-variant'
                 }`}
               >
-                {t('loot.byDungeon')}
+                {t('loot.byInstance')}
               </button>
             </div>
           )}
@@ -277,154 +145,31 @@ export default function ItemTable({
       </div>
 
       <div className="divide-y divide-outline-variant/5">
-        {groupedItems.map(([slot, items]) => (
-          <div key={slot}>
+        {rowGroups.map(({ key, group, rows }) => (
+          <div key={key}>
             <div className="bg-surface-container-low/50 px-4 py-1.5">
               <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40">
-                {slot} ({items.length})
+                {group} ({rows.length})
               </span>
             </div>
 
-            {items.map((item) => {
-              const resolved = resolveUpgrade(
-                item,
-                difficulty,
-                dungeonDiff,
-                upgradeLevel,
-                upgradeTracks
-              );
-              const effectiveBonusId = getTrackInfo(item, difficulty, dungeonDiff)?.bonus_id;
-              const uid = dropUid(item);
-              const isSelected = selected.has(uid);
-              const isEmbellished = item.embellished === true;
-              const isOffSpec = item.off_spec === true;
-              const embellishDisabled = isEmbellished && embellishmentsFull && !isSelected;
-              const qualityColor = QUALITY_COLORS[resolved.quality] || 'text-gray-400';
-              const inherits = resolveInherits(item.inventory_type, spec, equippedGear);
-              const rowOptions = embellishmentOptions?.filter((e) =>
-                e.item_ids.includes(item.item_id)
-              );
-              const pick = embellishmentPicks?.[item.item_id];
-              const pickBonusIds =
-                pick !== undefined
-                  ? embellishmentOptions?.find((e) => e.id === pick)?.bonus_ids
-                  : undefined;
-              const wowheadAttr = dropWowheadAttr(
-                item,
-                effectiveBonusId,
-                inherits[0],
-                craftedStats,
-                pickBonusIds
-              );
-
-              return (
-                <div
-                  key={uid}
-                  onClick={() => !embellishDisabled && onToggle(uid)}
-                  className={`group grid grid-cols-12 items-center px-4 py-2 transition-colors ${
-                    embellishDisabled
-                      ? 'cursor-not-allowed opacity-40'
-                      : 'cursor-pointer hover:bg-surface-container-high/40'
-                  }`}
-                >
-                  <div className="col-span-5 flex items-center gap-3">
-                    <Checkbox
-                      variant="primary"
-                      size="sm"
-                      checked={isSelected}
-                      disabled={embellishDisabled}
-                      onChange={() => onToggle(uid)}
-                      aria-label={item.name}
-                    />
-                    <div className="relative shrink-0">
-                      <a
-                        href={getWowheadUrl(item.item_id, locale)}
-                        data-wowhead={wowheadAttr}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="block"
-                      >
-                        <div
-                          className={`h-9 w-9 overflow-hidden rounded-md border-b-2 bg-surface-container-highest`}
-                          style={{ borderBottomColor: qualityBorderColor(resolved.quality) }}
-                        >
-                          <img
-                            {...iconProps(item.icon)}
-                            alt=""
-                            className={`h-full w-full object-cover ${isOffSpec || embellishDisabled ? 'opacity-60' : ''}`}
-                          />
-                        </div>
-                      </a>
-                      {isEmbellished && (
-                        <div
-                          className={`absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-bold ${
-                            embellishDisabled ? 'bg-red-500 text-white' : 'bg-purple-500 text-white'
-                          }`}
-                        >
-                          E
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <a
-                          href={getWowheadUrl(item.item_id, locale)}
-                          data-wowhead={wowheadAttr}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className={`text-[13px] font-bold group-hover:underline ${qualityColor}`}
-                        >
-                          {localizedItemName(item.item_id, item.name, locale)}
-                        </a>
-                        <VariantBadges item={item} />
-                      </div>
-                      {item.encounter && (
-                        <p className="text-[10px] text-on-surface-variant/60">
-                          {item.instance_name && `${item.instance_name} • `}
-                          {item.encounter}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div
-                    className={`text-center ${hasEmbellishmentColumn ? 'col-span-3' : 'col-span-5'}`}
-                  >
-                    <span className="rounded bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase text-on-surface-variant">
-                      {itemSlotMap.get(item.item_id) ?? slot}
-                    </span>
-                  </div>
-
-                  <div className="col-span-2 text-center">
-                    <span className="font-headline text-xs font-black tabular-nums text-on-surface">
-                      {resolved.ilvl}
-                    </span>
-                  </div>
-
-                  {hasEmbellishmentColumn &&
-                    rowOptions &&
-                    rowOptions.length > 0 &&
-                    onEmbellishmentChange && (
-                      <div className="col-span-2" onClick={(e) => e.stopPropagation()}>
-                        <EmbellishmentSelect
-                          value={pick ?? null}
-                          onChange={(id) => onEmbellishmentChange(item.item_id, id)}
-                          options={rowOptions}
-                        />
-                      </div>
-                    )}
-                </div>
-              );
-            })}
+            {rows.map((row) => (
+              <LootItemRow
+                key={row.uid}
+                row={row}
+                hasEmbellishmentColumn={hasEmbellishmentColumn}
+                embellishmentLimitReached={embellishmentLimitReached}
+                onToggle={onToggle}
+                onEmbellishmentChange={onEmbellishmentChange}
+              />
+            ))}
           </div>
         ))}
       </div>
 
       {filteredTotal === 0 && (
         <div className="p-8 text-center text-sm text-on-surface-variant/40">
-          {filterText ? t('loot.noItemsMatch') : t('loot.noDropsFound')}
+          {filterText ? t('loot.noItemsMatch') : t('dropFinder.noDrops')}
         </div>
       )}
     </div>

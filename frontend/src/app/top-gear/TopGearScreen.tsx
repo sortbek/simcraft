@@ -6,9 +6,15 @@ import TopGearItemSelector from '../components/gear/TopGearItemSelector';
 import AddItemSearch from '../components/gear/AddItemSearch';
 import EnchantSelector from '../components/gear/EnchantSelector';
 import GemSelector from '../components/gear/GemSelector';
+import TopGearToolbar, { type TopGearSection } from '../components/gear/TopGearToolbar';
+import { GEAR_ROW_DENSITIES, type GearRowDensity } from '../components/gear/gearDensity';
+import TopGearQuickSelectBar from '../components/gear/TopGearQuickSelectBar';
+import TopGearSectionPanel from '../components/gear/TopGearSectionPanel';
+import { ENCHANT_SLOTS } from '../components/gear/itemOptions';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import TalentPicker from '../components/talents/TalentPicker';
 import ErrorAlert from '../components/ui/ErrorAlert';
+import InfoIcon from '../components/ui/InfoIcon';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { postJson } from '../lib/api';
@@ -20,6 +26,7 @@ import type { ResolveGearResponse, ResolvedItem } from '../lib/types';
 import { useLanguage } from '../lib/i18n';
 import { VOID_FORGE_ENABLED } from '../lib/featureFlags';
 import { clearTopGearState, getTopGearState, storeTopGearState } from '../lib/topgear-state';
+import { readStoredJson } from '../lib/storage';
 import {
   appendLocalItems,
   buildSelectedUidsJson,
@@ -29,38 +36,37 @@ import {
 import type { TopGearLocalItem } from './topGearTypes';
 import { useComputeChoice } from '../lib/useComputeChoice';
 import { buildAlternativeKey } from '../components/gear/topGearIdentity';
-import { mergeAlternative, selectAlternative } from '../components/gear/topGearSelection';
+import {
+  collectQuickSelectEntries,
+  mergeAlternative,
+  selectAlternative,
+  toggleQuickSelectGroup,
+} from '../components/gear/topGearSelection';
 
 // A local run works through every combo on this machine, so a six-figure
 // count is hours of work. Warn past this line, never block.
 const LARGE_LOCAL_SIM_THRESHOLD = 20_000;
 
-function InfoIcon({ tooltip }: { tooltip: string }) {
-  return (
-    <span
-      onClick={(event) => event.stopPropagation()}
-      className="group/tip relative inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full bg-on-surface-variant/10 text-on-surface-variant/50 transition-colors hover:bg-on-surface-variant/20 hover:text-on-surface-variant"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 16 16"
-        fill="currentColor"
-        className="h-2.5 w-2.5"
-      >
-        <path
-          fillRule="evenodd"
-          d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0Zm-6 3.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM7.293 5.293a1 1 0 1 1 .99 1.667c-.15.09-.293.21-.293.443V8a.75.75 0 1 0 1.5 0v-.297a2.5 2.5 0 1 0-3.447-2.66.75.75 0 0 0 1.5 0 1 1 0 0 1-.25-.75Z"
-          clipRule="evenodd"
-        />
-      </svg>
-      <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-56 -translate-x-1/2 whitespace-normal rounded-lg border border-outline-variant/20 bg-surface-container-highest px-3 py-2 text-center text-xs font-normal normal-case tracking-normal text-on-surface opacity-0 shadow-xl transition-opacity group-hover/tip:opacity-100">
-        {tooltip}
-      </span>
-    </span>
-  );
-}
+type SectionKey = 'items' | 'enchants' | 'gems';
 
-function Toggle({
+// One key for all three, deliberately new: the old per-section keys
+// (simhammer_topgear_{enchants,gems}_open) already hold `false` for anyone who
+// used the page before, which would shadow the open-by-default below.
+const SECTIONS_STORAGE_KEY = 'simhammer_topgear_sections_open';
+
+const DEFAULT_SECTIONS_OPEN: Record<SectionKey, boolean> = {
+  items: true,
+  enchants: true,
+  gems: true,
+};
+
+const DENSITY_STORAGE_KEY = 'simhammer_topgear_density';
+
+/** Compact option chip. The switch itself is an inner button so that anything
+ *  else in the chip — the catalyst charges input, the info badge — is a sibling
+ *  rather than a descendant: no keystroke can reach the toggle by bubbling, and
+ *  no interactive element ends up nested inside a `role="switch"`. */
+function Chip({
   checked,
   onChange,
   label,
@@ -75,36 +81,29 @@ function Toggle({
 }) {
   return (
     <div
-      onClick={() => onChange(!checked)}
-      className={`group flex w-full min-w-0 cursor-pointer select-none items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${
+      className={`group flex shrink-0 select-none items-center gap-2 rounded-full border px-3 py-1 text-[12px] transition-colors ${
         checked
-          ? 'border-gold/30 bg-gold/[0.07]'
-          : 'border-outline-variant/15 bg-surface-container hover:border-outline-variant/25 hover:bg-surface-container-high'
+          ? 'border-gold/40 bg-gold/10 font-semibold text-on-surface'
+          : 'border-outline-variant/25 bg-surface-container font-medium text-on-surface-variant hover:border-outline-variant/40 hover:bg-surface-container-high'
       }`}
     >
-      <div
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-          checked ? 'bg-gold' : 'bg-surface-container-highest'
-        }`}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className="flex min-w-0 items-center gap-2 text-left"
       >
-        <div
-          className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-all ${
-            checked ? 'right-0.5 bg-background' : 'left-0.5 bg-on-surface-variant'
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
+            checked ? 'bg-gold' : 'bg-on-surface-variant/40'
           }`}
         />
-      </div>
-      <span
-        className={`min-w-0 truncate text-sm transition-colors ${
-          checked ? 'font-semibold text-on-surface' : 'font-medium text-on-surface-variant'
-        }`}
-      >
-        {label}
-      </span>
+        <span className="truncate">{label}</span>
+      </button>
       {children}
-      <div className="flex-1" />
       {tooltip && (
         <span
-          onClick={(e) => e.stopPropagation()}
           className={`shrink-0 transition-opacity ${
             checked ? 'opacity-90' : 'opacity-40 group-hover:opacity-90'
           }`}
@@ -136,6 +135,15 @@ export default function TopGearScreen() {
   const [replaceGems, setReplaceGems] = useState(false);
   const [diamondAlwaysUse, setDiamondAlwaysUse] = useState(false);
   const [maxColors, setMaxColors] = useState(false);
+  const [density, setDensity] = useState<GearRowDensity>('compact');
+  const [sectionsOpen, setSectionsOpen] =
+    useState<Record<SectionKey, boolean>>(DEFAULT_SECTIONS_OPEN);
+  const [promotedGroups, setPromotedGroups] = useState<Set<string>>(new Set());
+  // Reported by the selectors once their fetches land: the structural gates
+  // below only know the character has enchantable slots / sockets, not whether
+  // the game data actually offers anything for them.
+  const [enchantsEmpty, setEnchantsEmpty] = useState(false);
+  const [gemsEmpty, setGemsEmpty] = useState(false);
   const prevInputRef = useRef('');
   const prevUpgradeRef = useRef(false);
   const prevCatalystRef = useRef(false);
@@ -143,6 +151,15 @@ export default function TopGearScreen() {
   const restoringRef = useRef(false);
   const localItemsRef = useRef(localItems);
   localItemsRef.current = localItems;
+  // The untouched resolve response. Reset restores it, which is what undoes the
+  // mergeAlternative calls behind added items, upgraded copies and conversions.
+  const baseResolvedRef = useRef<ResolveGearResponse | null>(null);
+  const sectionRefs = useRef<Record<SectionKey, HTMLElement | null>>({
+    items: null,
+    enchants: null,
+    gems: null,
+  });
+  const pendingScrollRef = useRef<SectionKey | null>(null);
 
   useEffect(() => {
     const saved = getTopGearState();
@@ -172,7 +189,31 @@ export default function TopGearScreen() {
     setEnchantSelections(restoredEnchants);
     setGemSelections(new Set(saved.gemSelections));
     setAddedLootItems(saved.addedLootItems ?? []);
+    setPromotedGroups(new Set(saved.promotedGroups ?? []));
   }, []);
+
+  // Restore view preferences after mount (avoids an SSR hydration mismatch).
+  useEffect(() => {
+    // Validated rather than trusted: an unknown stored value would otherwise
+    // index the metric maps with undefined and blank every row class.
+    const storedDensity = readStoredJson<GearRowDensity>(DENSITY_STORAGE_KEY, 'compact');
+    setDensity(GEAR_ROW_DENSITIES.includes(storedDensity) ? storedDensity : 'compact');
+    // Spread over the defaults so a partial or stale blob can't leave a section
+    // stuck closed with no way to tell why.
+    setSectionsOpen({
+      ...DEFAULT_SECTIONS_OPEN,
+      ...readStoredJson<Partial<Record<SectionKey, boolean>>>(SECTIONS_STORAGE_KEY, {}),
+    });
+  }, []);
+
+  // Runs once the section has actually opened or closed, so the scroll lands on
+  // the final layout instead of racing it.
+  useEffect(() => {
+    const key = pendingScrollRef.current;
+    if (!key) return;
+    pendingScrollRef.current = null;
+    sectionRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [sectionsOpen]);
 
   useEffect(() => {
     // Skipped while Void Forge is hidden — otherwise a user who enabled it
@@ -220,6 +261,7 @@ export default function TopGearScreen() {
             void_forge: voidForge,
           });
           setResolved(data);
+          baseResolvedRef.current = data;
 
           if (inputChanged && data.catalyst_charges != null && !restoringRef.current) {
             setCatalystCharges(data.catalyst_charges);
@@ -234,6 +276,7 @@ export default function TopGearScreen() {
             setReplaceGems(false);
             setDiamondAlwaysUse(false);
             setMaxColors(false);
+            setPromotedGroups(new Set());
           }
         } catch {
           setResolved(null);
@@ -306,12 +349,166 @@ export default function TopGearScreen() {
     });
   }, []);
 
+  const changeDensity = useCallback((next: GearRowDensity) => {
+    setDensity(next);
+    try {
+      localStorage.setItem(DENSITY_STORAGE_KEY, JSON.stringify(next));
+    } catch {}
+  }, []);
+
+  // Toolbar navigation: scroll only. Expanding and collapsing belongs to the
+  // section's own header, so this never touches open state.
+  const scrollToSection = useCallback((key: SectionKey) => {
+    sectionRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const toggleSection = useCallback(
+    (key: SectionKey) => {
+      // Computed and persisted outside the updater: React requires updaters to
+      // be pure and invokes them twice under StrictMode.
+      const next = { ...sectionsOpen, [key]: !sectionsOpen[key] };
+      setSectionsOpen(next);
+      try {
+        localStorage.setItem(SECTIONS_STORAGE_KEY, JSON.stringify(next));
+      } catch {}
+      // Collapsing shortens the page, and the browser would otherwise clamp the
+      // scroll position to wherever it lands. Land on the section either way.
+      pendingScrollRef.current = key;
+    },
+    [sectionsOpen]
+  );
+
+  const promoteGroup = useCallback((label: string) => {
+    setPromotedGroups((previous) => new Set(previous).add(label));
+  }, []);
+
+  // Without this a stray click in the unchanged strip would strand a slot as a
+  // full card forever, with Reset all as the only way back.
+  const demoteGroup = useCallback((label: string) => {
+    setPromotedGroups((previous) => {
+      const next = new Set(previous);
+      next.delete(label);
+      return next;
+    });
+  }, []);
+
+  const clearItems = useCallback(() => setSelectedUids({}), []);
+  const clearEnchants = useCallback(() => setEnchantSelections({}), []);
+  const clearGems = useCallback(() => {
+    setGemSelections(new Set());
+    // These only apply to selected gems, so leaving them on would silently
+    // affect the next batch picked.
+    setReplaceGems(false);
+    setDiamondAlwaysUse(false);
+    setMaxColors(false);
+  }, []);
+
+  const resetAll = useCallback(() => {
+    clearItems();
+    clearEnchants();
+    clearGems();
+    setLocalItems([]);
+    setAddedLootItems([]);
+    setPromotedGroups(new Set());
+    if (baseResolvedRef.current) setResolved(baseResolvedRef.current);
+  }, [clearItems, clearEnchants, clearGems]);
+
   const setVoidForge = useCallback((v: boolean) => {
     _setVoidForge(v);
     try {
       localStorage.setItem('simhammer_void_forge', String(v));
     } catch {}
   }, []);
+
+  const itemCount = useMemo(
+    () => Object.values(selectedUids).reduce((sum, uids) => sum + uids.size, 0),
+    [selectedUids]
+  );
+  const enchantCount = useMemo(
+    () => Object.values(enchantSelections).reduce((sum, ids) => sum + ids.size, 0),
+    [enchantSelections]
+  );
+
+  // Which sections exist at all. The structural half is decided here from the
+  // character's gear; the data half (did /api/enchants and /api/gems actually
+  // return anything?) is reported up by the selectors, because only they know
+  // once their fetches resolve.
+  const hasEnchantSlots = useMemo(
+    () => ENCHANT_SLOTS.some((slot) => equippedSlots[slot]),
+    [equippedSlots]
+  );
+  const hasSocketedSlots = useMemo(
+    () => Object.values(equippedSlots).some((item) => item.sockets > 0),
+    [equippedSlots]
+  );
+  const showEnchantSection = hasEnchantSlots && !enchantsEmpty;
+  const showGemSection = hasSocketedSlots && !gemsEmpty;
+
+  const quickSelectEntries = useMemo(
+    () =>
+      resolved
+        ? collectQuickSelectEntries(resolved)
+        : { vaultUids: [], lootUids: [], catalystUids: [] },
+    [resolved]
+  );
+
+  const onToggleQuickGroup = useCallback((entries: { uid: string; slot: string }[]) => {
+    setSelectedUids((previous) => toggleQuickSelectGroup(entries, previous));
+  }, []);
+
+  const sections = useMemo<TopGearSection[]>(() => {
+    const list: TopGearSection[] = [
+      {
+        key: 'items',
+        label: t('topGear.sectionItems'),
+        count: itemCount,
+        open: sectionsOpen.items,
+        onNavigate: () => scrollToSection('items'),
+        onClear: clearItems,
+      },
+    ];
+    if (showEnchantSection) {
+      list.push({
+        key: 'enchants',
+        label: t('topGear.sectionEnchants'),
+        count: enchantCount,
+        open: sectionsOpen.enchants,
+        onNavigate: () => scrollToSection('enchants'),
+        onClear: clearEnchants,
+      });
+    }
+    if (showGemSection) {
+      list.push({
+        key: 'gems',
+        label: t('topGear.sectionGems'),
+        count: gemSelections.size,
+        open: sectionsOpen.gems,
+        onNavigate: () => scrollToSection('gems'),
+        onClear: clearGems,
+      });
+    }
+    return list;
+  }, [
+    t,
+    itemCount,
+    enchantCount,
+    gemSelections.size,
+    sectionsOpen,
+    showEnchantSection,
+    showGemSection,
+    scrollToSection,
+    clearItems,
+    clearEnchants,
+    clearGems,
+  ]);
+
+  const nothingToReset =
+    itemCount === 0 &&
+    enchantCount === 0 &&
+    gemSelections.size === 0 &&
+    localItems.length === 0 &&
+    addedLootItems.length === 0 &&
+    promotedGroups.size === 0;
 
   const submitInput = useMemo(
     () => appendLocalItems(simcInput, localItems),
@@ -564,6 +761,7 @@ export default function TopGearScreen() {
       diamondAlwaysUse,
       maxColors,
       addedLootItems,
+      promotedGroups: [...promotedGroups],
     });
   }, [
     selectedUids,
@@ -578,6 +776,7 @@ export default function TopGearScreen() {
     diamondAlwaysUse,
     maxColors,
     addedLootItems,
+    promotedGroups,
   ]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
@@ -617,30 +816,30 @@ export default function TopGearScreen() {
 
   return (
     <div className={`space-y-6 ${largeLocalSim ? 'pb-36' : 'pb-20'}`}>
-      <div>
-        <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="font-headline text-xl font-black uppercase tracking-tight text-on-surface">
           {t('nav.topGear')}
         </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">{t('page.topGearSubtitle')}</p>
+        <p className="text-xs text-on-surface-variant/70">{t('page.topGearSubtitle')}</p>
       </div>
 
       <TalentPicker />
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <Toggle
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip
           checked={copyEnchants}
           onChange={setCopyEnchants}
           label={t('topGear.copyEnchants')}
           tooltip={t('topGear.copyEnchantsTooltip')}
         />
-        <Toggle
+        <Chip
           checked={maxUpgrade}
           onChange={setMaxUpgrade}
           label={t('topGear.simHighestUpgrade')}
           tooltip={t('topGear.simHighestUpgradeTooltip')}
         />
         {catalystCharges != null && catalystCharges > 0 && (
-          <Toggle
+          <Chip
             checked={catalyst}
             onChange={setCatalyst}
             label={t('topGear.revivalCatalyst')}
@@ -656,14 +855,14 @@ export default function TopGearScreen() {
                   const value = parseInt(event.target.value, 10);
                   if (!Number.isNaN(value) && value >= 0) setCatalystCharges(value);
                 }}
-                className="w-9 rounded-md border border-outline-variant/30 bg-surface-container px-1 py-1 text-center text-[13px] font-bold tabular-nums text-on-surface outline-none focus:border-gold/40"
+                className="w-8 rounded border border-outline-variant/30 bg-surface-container px-0.5 py-px text-center text-[12px] font-bold tabular-nums text-on-surface outline-none focus:border-gold/40"
               />
               <span className="text-[11px] text-on-surface-variant/60">{t('topGear.charges')}</span>
             </span>
-          </Toggle>
+          </Chip>
         )}
         {VOID_FORGE_ENABLED && (
-          <Toggle checked={voidForge} onChange={setVoidForge} label={t('topGear.voidForge')} />
+          <Chip checked={voidForge} onChange={setVoidForge} label={t('topGear.voidForge')} />
         )}
       </div>
 
@@ -674,45 +873,122 @@ export default function TopGearScreen() {
       ) : (
         <>
           <AddItemSearch simcInput={submitInput} onItemsResolved={handleAddedItems} />
-          <TopGearItemSelector
-            resolved={resolved}
-            selectedUids={selectedUids}
-            onSelectionChange={setSelectedUids}
-            onResolvedChange={setResolved}
-            onItemAdded={(slot, simcString, origin) =>
-              setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])
+
+          <TopGearToolbar
+            sections={sections}
+            density={density}
+            onDensityChange={changeDensity}
+            quickSelect={
+              <TopGearQuickSelectBar
+                vaultUids={quickSelectEntries.vaultUids}
+                lootUids={quickSelectEntries.lootUids}
+                catalystUids={quickSelectEntries.catalystUids}
+                selectedUids={selectedUids}
+                onToggleGroup={onToggleQuickGroup}
+                t={t}
+              />
             }
-            onManualItemAdded={(item) => {
-              setLocalItems((previous) => [
-                ...previous,
-                toLocalItem(item.slot, item.simc_string, 'bags', true),
-              ]);
-              setAddedLootItems((previous) => [...previous, item]);
-            }}
-            addedKeys={addedKeys}
-            onRemoveAdded={handleRemoveAdded}
+            onResetAll={resetAll}
+            resetDisabled={nothingToReset}
+            t={t}
           />
-          <EnchantSelector
-            equippedSlots={equippedSlots}
-            enchantSelections={enchantSelections}
-            onEnchantToggle={onEnchantToggle}
-            onSelectAllEnchants={onSelectAllEnchants}
-            onDeselectAllEnchants={onDeselectAllEnchants}
-          />
-          <GemSelector
-            equippedSlots={equippedSlots}
-            gemSelections={gemSelections}
-            onGemToggle={onGemToggle}
-            onSelectAllGems={onSelectAllGems}
-            onDeselectAllGems={onDeselectAllGems}
-            replaceGems={replaceGems}
-            onReplaceGemsChange={setReplaceGems}
-            diamondAlwaysUse={diamondAlwaysUse}
-            onDiamondAlwaysUseChange={setDiamondAlwaysUse}
-            maxColors={maxColors}
-            onMaxColorsChange={setMaxColors}
-            storageKey="simhammer_topgear_gems_open"
-          />
+
+          <div className="space-y-6">
+            <TopGearSectionPanel
+              label={t('topGear.sectionItems')}
+              count={itemCount}
+              open={sectionsOpen.items}
+              onToggle={() => toggleSection('items')}
+              onClear={clearItems}
+              clearTitle={t('topGear.clearSection', { section: t('topGear.sectionItems') })}
+              clearLabel={t('common.clear')}
+              sectionRef={(el) => {
+                sectionRefs.current.items = el;
+              }}
+            >
+              <TopGearItemSelector
+                resolved={resolved}
+                selectedUids={selectedUids}
+                onSelectionChange={setSelectedUids}
+                onResolvedChange={setResolved}
+                onItemAdded={(slot, simcString, origin) =>
+                  setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])
+                }
+                onManualItemAdded={(item) => {
+                  setLocalItems((previous) => [
+                    ...previous,
+                    toLocalItem(item.slot, item.simc_string, 'bags', true),
+                  ]);
+                  setAddedLootItems((previous) => [...previous, item]);
+                }}
+                addedKeys={addedKeys}
+                onRemoveAdded={handleRemoveAdded}
+                density={density}
+                promotedGroups={promotedGroups}
+                onPromoteGroup={promoteGroup}
+                onDemoteGroup={demoteGroup}
+              />
+            </TopGearSectionPanel>
+
+            {showEnchantSection && (
+              <TopGearSectionPanel
+                label={t('topGear.sectionEnchants')}
+                count={enchantCount}
+                tooltip={t('enchantGem.selectEnchantsTooltip')}
+                open={sectionsOpen.enchants}
+                onToggle={() => toggleSection('enchants')}
+                onClear={clearEnchants}
+                clearTitle={t('topGear.clearSection', { section: t('topGear.sectionEnchants') })}
+                clearLabel={t('common.clear')}
+                sectionRef={(el) => {
+                  sectionRefs.current.enchants = el;
+                }}
+              >
+                <EnchantSelector
+                  equippedSlots={equippedSlots}
+                  enchantSelections={enchantSelections}
+                  onEnchantToggle={onEnchantToggle}
+                  onSelectAllEnchants={onSelectAllEnchants}
+                  onDeselectAllEnchants={onDeselectAllEnchants}
+                  density={density}
+                  onEmptyChange={setEnchantsEmpty}
+                />
+              </TopGearSectionPanel>
+            )}
+
+            {showGemSection && (
+              <TopGearSectionPanel
+                label={t('topGear.sectionGems')}
+                count={gemSelections.size}
+                tooltip={t('enchantGem.selectGemsTooltip')}
+                open={sectionsOpen.gems}
+                onToggle={() => toggleSection('gems')}
+                onClear={clearGems}
+                clearTitle={t('topGear.clearSection', { section: t('topGear.sectionGems') })}
+                clearLabel={t('common.clear')}
+                sectionRef={(el) => {
+                  sectionRefs.current.gems = el;
+                }}
+              >
+                <GemSelector
+                  equippedSlots={equippedSlots}
+                  gemSelections={gemSelections}
+                  onGemToggle={onGemToggle}
+                  onSelectAllGems={onSelectAllGems}
+                  onDeselectAllGems={onDeselectAllGems}
+                  onClearAllGems={clearGems}
+                  replaceGems={replaceGems}
+                  onReplaceGemsChange={setReplaceGems}
+                  diamondAlwaysUse={diamondAlwaysUse}
+                  onDiamondAlwaysUseChange={setDiamondAlwaysUse}
+                  maxColors={maxColors}
+                  onMaxColorsChange={setMaxColors}
+                  density={density}
+                  onEmptyChange={setGemsEmpty}
+                />
+              </TopGearSectionPanel>
+            )}
+          </div>
         </>
       )}
 

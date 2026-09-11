@@ -148,6 +148,31 @@ export function buildVisibleGroups(resolved: ResolveGearResponse): VisibleGroup[
   return result;
 }
 
+/** Split visible groups into the ones worth a card and the ones with nothing to
+ *  choose. `promoted` holds labels the user opened from the unchanged strip, so
+ *  they keep a card (and its per-item menu, the only way to create alternatives). */
+export function partitionByAlternatives(
+  groups: VisibleGroup[],
+  promoted: Set<string>
+): { cards: VisibleGroup[]; unchanged: VisibleGroup[] } {
+  const cards: VisibleGroup[] = [];
+  const unchanged: VisibleGroup[] = [];
+
+  for (const entry of groups) {
+    if (entry.alternatives.length > 0 || promoted.has(entry.group.label)) cards.push(entry);
+    else unchanged.push(entry);
+  }
+
+  return { cards, unchanged };
+}
+
+/** Number of equipped pieces the unchanged strip renders. Not `groups.length`:
+ *  the rings and trinkets groups cover two slots each, so counting groups
+ *  under-reports what the user can see. */
+export function unchangedSlotCount(groups: VisibleGroup[]): number {
+  return groups.reduce((total, entry) => total + entry.equipped.length, 0);
+}
+
 export function collectQuickSelectEntries(resolved: ResolveGearResponse): {
   vaultUids: QuickSelectEntry[];
   lootUids: QuickSelectEntry[];

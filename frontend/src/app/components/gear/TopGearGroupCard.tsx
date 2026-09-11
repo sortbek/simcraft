@@ -2,6 +2,12 @@ import type { ResolvedItem } from '../../lib/types';
 import { getWowheadData, getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import GearItemRow from './GearItemRow';
+import {
+  GEAR_DENSITY_LAYOUT,
+  GEAR_ROW_METRICS,
+  gearCardClass,
+  type GearRowDensity,
+} from './gearDensity';
 import { ENCHANT_SLOTS } from './itemOptions';
 import { buildAlternativeKey } from './topGearIdentity';
 import type { DisplayGroup } from './topGearSelection';
@@ -41,6 +47,10 @@ interface TopGearGroupCardProps {
   onEditGemsEnchant: (item: ResolvedItem) => void;
   addedKeys: Set<string>;
   onRemoveAdded: (item: ResolvedItem) => void;
+  density: GearRowDensity;
+  /** Present only for a group shown because it was promoted out of the
+   *  unchanged strip; sends it back. */
+  onDemote?: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }
 
@@ -83,12 +93,43 @@ export default function TopGearGroupCard({
   onEditGemsEnchant,
   addedKeys,
   onRemoveAdded,
+  density,
+  onDemote,
   t,
 }: TopGearGroupCardProps) {
+  const layout = GEAR_DENSITY_LAYOUT[density];
+
   return (
-    <div className="card space-y-1 p-3.5">
-      <p className="mb-2 font-headline text-[13px] font-semibold uppercase tracking-widest text-muted">
+    <div className={gearCardClass(density)}>
+      <p
+        className={`flex items-center gap-1.5 font-headline font-semibold uppercase tracking-widest text-muted ${layout.title}`}
+      >
         {title}
+        {alternatives.length > 0 && (
+          <span className="rounded bg-surface-container-highest px-1 text-[10px] font-bold tabular-nums tracking-normal text-muted/90">
+            {alternatives.length}
+          </span>
+        )}
+        {onDemote && (
+          <button
+            type="button"
+            onClick={onDemote}
+            title={t('topGear.collapseSlot')}
+            aria-label={t('topGear.collapseSlot')}
+            className="ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded text-on-surface-variant/40 transition-colors hover:bg-white/[0.06] hover:text-on-surface-variant"
+          >
+            <svg
+              className="h-2.5 w-2.5"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            >
+              <path d="M3 3l10 10M13 3L3 13" />
+            </svg>
+          </button>
+        )}
       </p>
 
       {equipped.map((item, index) => (
@@ -100,6 +141,7 @@ export default function TopGearGroupCard({
           details={itemDetails(item)}
           ilevel={item.ilevel}
           equipped
+          density={density}
           href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
           wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
         >
@@ -117,13 +159,14 @@ export default function TopGearGroupCard({
               item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
             }
             onEditGemsEnchant={canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined}
+            density={density}
             t={t}
           />
         </GearItemRow>
       ))}
 
       {equipped.length > 0 && alternatives.length > 0 && (
-        <div className="!my-1.5 border-t border-outline-variant/20" />
+        <div className={`border-t border-outline-variant/20 ${layout.rule}`} />
       )}
 
       {alternatives.map((item, index) => (
@@ -141,6 +184,7 @@ export default function TopGearGroupCard({
           loot={item.origin === 'loot'}
           catalyst={item.is_catalyst}
           voidForge={item.is_void_forge}
+          density={density}
           href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
           wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
         >
@@ -152,7 +196,7 @@ export default function TopGearGroupCard({
                 event.preventDefault();
                 onRemoveAdded(item);
               }}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-on-surface-variant/50 transition-colors hover:bg-red-500/10 hover:text-red-400"
+              className={`flex shrink-0 items-center justify-center rounded text-on-surface-variant/50 transition-colors hover:bg-red-500/10 hover:text-red-400 ${GEAR_ROW_METRICS[density].button}`}
               title="Remove item"
             >
               <svg
@@ -181,6 +225,7 @@ export default function TopGearGroupCard({
               item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
             }
             onEditGemsEnchant={canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined}
+            density={density}
             t={t}
           />
         </GearItemRow>
@@ -201,6 +246,7 @@ function UpgradeButton({
   onAddSocket,
   onRemoveGem,
   onEditGemsEnchant,
+  density,
   t,
 }: {
   item: ResolvedItem;
@@ -214,6 +260,7 @@ function UpgradeButton({
   onAddSocket?: () => void;
   onRemoveGem?: () => void;
   onEditGemsEnchant?: () => void;
+  density: GearRowDensity;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   // Gated once so the surrounding menu guards agree with the button itself and
@@ -239,7 +286,7 @@ function UpgradeButton({
           event.preventDefault();
           onUpgradeClick();
         }}
-        className={`flex h-7 w-7 items-center justify-center rounded transition-colors ${
+        className={`flex items-center justify-center rounded transition-colors ${GEAR_ROW_METRICS[density].button} ${
           isMenuOpen
             ? 'bg-gold/20 text-gold'
             : 'text-on-surface-variant/50 hover:bg-white/[0.05] hover:text-on-surface-variant'

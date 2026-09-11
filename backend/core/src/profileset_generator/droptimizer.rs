@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use super::base_profile::parse_base_profile;
 use super::constraints::{is_legal_gear_set, GearSetContext};
-use crate::simc_string::{extract_bonus_ids, extract_item_id};
+use crate::simc_string::{extract_bonus_ids, extract_item_id, join_ids};
 use crate::types::class_data::{self, GEAR_SLOTS};
 
 /// True if dropping `drop_item_id` into `target_slot` (other slots unchanged)
@@ -72,6 +72,36 @@ fn most_used_gem(equipped: &HashMap<String, String>, gem_re: &Regex) -> Option<u
         .into_iter()
         .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
         .map(|(id, _)| id)
+}
+
+/// The applied replacement configuration drives both SimC and result metadata.
+struct AppliedDropCandidate {
+    base: String,
+    bonus_ids: Vec<u64>,
+    display_bonus_ids: Vec<u64>,
+    /// Present only when the pair must be emitted as `crafted_stats=`; crafted
+    /// gear carries it as missive bonus ids instead.
+    stat_parameter: Option<Vec<u64>>,
+    enchant_id: u64,
+    gem_ids: Vec<u64>,
+}
+impl AppliedDropCandidate {
+    fn simc_string(&self) -> String {
+        let mut result = self.base.clone();
+        if let Some(stat_ids) = self.stat_parameter.as_deref().filter(|ids| !ids.is_empty()) {
+            result.push_str(&format!(",crafted_stats={}", join_ids(stat_ids)));
+        }
+        if !self.bonus_ids.is_empty() {
+            result.push_str(&format!(",bonus_id={}", join_ids(&self.bonus_ids)));
+        }
+        if self.enchant_id > 0 {
+            result.push_str(&format!(",enchant_id={}", self.enchant_id));
+        }
+        if !self.gem_ids.is_empty() {
+            result.push_str(&format!(",gem_id={}", join_ids(&self.gem_ids)));
+        }
+        result
+    }
 }
 
 pub(super) fn generate_droptimizer_input(
@@ -165,14 +195,30 @@ pub(super) fn generate_droptimizer_input(
             is_catalyst,
             source_item_id.unwrap_or(0),
         ));
-        // Crafted stat + embellishment bonus IDs go into the simc string, not
-        // `bonus_ids`. The fragment is built per slot: the embellishment can
-        // drop out of individual combos (cap fallback below).
-        let item_bonus_ids: Vec<u64> = bonus_ids
-            .iter()
-            .copied()
-            .chain(crafted_stats.map(|cs| cs.bonus_ids).into_iter().flatten())
-            .collect();
+        // Crafted gear carries the stat pair as missive bonus IDs; a raid BOE has
+        // no missive, so it needs `crafted_stats=` or simc resolves its
+        // placeholder secondaries to "unknown". Dispatched per item — a raid
+        // selection mixes both with ordinary fixed-stat drops.
+        // A catalysed piece keeps the SOURCE item's secondaries (redirected_base_stats=),
+        // so its stat eligibility follows the source, not the tier item.
+        let stat_item_id = match (is_catalyst, source_item_id) {
+            (true, Some(source)) if source > 0 => source,
+            _ => item_id,
+        };
+        let use_missives = crate::item_db::is_crafted_item(stat_item_id);
+        let crafted_stats =
+            crafted_stats.filter(|_| crate::item_db::accepts_preferred_stats(stat_item_id));
+        let needs_stat_param = !use_missives && crate::item_db::has_flexible_stats(stat_item_id);
+        // The item's own effect grants (e.g. Venomcursed) live in the game data,
+        // never in the drop payload. Deduped: resolve_bonuses SUMS socket grants.
+        let mut requested_bonuses = bonus_ids.clone();
+        if let Some(cs) = crafted_stats.filter(|_| use_missives) {
+            requested_bonuses.extend_from_slice(&cs.bonus_ids);
+        }
+        let item_bonus_ids = crate::item_db::with_item_effect_bonuses(item_id, &requested_bonuses);
+        // Display keeps the requested bonuses plus effects, without missives or
+        // embellishments — the results UI shows what dropped, not what was simmed.
+        let display_bonus_ids = crate::item_db::with_item_effect_bonuses(item_id, &bonus_ids);
         // Applicability was validated at the trust boundary (droptimizer_handlers);
         // any future caller wiring picks in (e.g. roster runs) must validate too.
         let item_embellishment = item
@@ -185,7 +231,7 @@ pub(super) fn generate_droptimizer_input(
             // category in this combo (e.g. a third Embellished piece), fall
             // back to simming the combo plain rather than dropping the row.
             let combo_embellishment = item_embellishment.filter(|e| {
-                let mut extended = bonus_ids.clone();
+                let mut extended = item_bonus_ids.clone();
                 extended.extend_from_slice(&e.bonus_ids);
                 drop_combo_is_valid(&equipped_gear, slot, item_id, &extended, inv_type, &spec)
             });
@@ -194,7 +240,14 @@ pub(super) fn generate_droptimizer_input(
             // slot or exceed a bonus-id limit category. The conflicting slot still
             // emits its own "would replacing this slot be better" combo.
             if combo_embellishment.is_none()
-                && !drop_combo_is_valid(&equipped_gear, slot, item_id, &bonus_ids, inv_type, &spec)
+                && !drop_combo_is_valid(
+                    &equipped_gear,
+                    slot,
+                    item_id,
+                    &item_bonus_ids,
+                    inv_type,
+                    &spec,
+                )
             {
                 continue;
             }
@@ -202,23 +255,24 @@ pub(super) fn generate_droptimizer_input(
             // set passed validity above; otherwise we've just confirmed the plain
             // bonus set is valid. Either way the combo built below is the one that
             // was actually validated — nothing ships unvalidated.
-            let mut simc_str = base_simc_str.clone();
             let mut combo_bonus_ids = item_bonus_ids.clone();
             if let Some(e) = combo_embellishment {
-                combo_bonus_ids.extend_from_slice(&e.bonus_ids);
+                for id in &e.bonus_ids {
+                    if !combo_bonus_ids.contains(id) {
+                        combo_bonus_ids.push(*id);
+                    }
+                }
             }
-            if !combo_bonus_ids.is_empty() {
-                simc_str.push_str(&format!(
-                    ",bonus_id={}",
-                    combo_bonus_ids
-                        .iter()
-                        .map(u64::to_string)
-                        .collect::<Vec<_>>()
-                        .join("/")
-                ));
-            }
-            let mut applied_enchant: u64 = 0;
-            let mut applied_gem: u64 = 0;
+            let mut applied = AppliedDropCandidate {
+                base: base_simc_str.clone(),
+                bonus_ids: combo_bonus_ids,
+                display_bonus_ids: display_bonus_ids.clone(),
+                stat_parameter: crafted_stats
+                    .filter(|_| needs_stat_param)
+                    .map(|cs| cs.stat_ids.to_vec()),
+                enchant_id: 0,
+                gem_ids: Vec::new(),
+            };
             let equipped = equipped_gear.get(*slot);
 
             // Enchant: inherit from the equipped item in this slot.
@@ -226,8 +280,7 @@ pub(super) fn generate_droptimizer_input(
                 if let Some(caps) = legacy_enchant_re.captures(equipped) {
                     if let Ok(eid) = caps[1].parse::<u64>() {
                         if eid > 0 {
-                            simc_str.push_str(&format!(",enchant_id={}", eid));
-                            applied_enchant = eid;
+                            applied.enchant_id = eid;
                         }
                     }
                 }
@@ -258,22 +311,16 @@ pub(super) fn generate_droptimizer_input(
                 let gems: Vec<u64> = (0..drop_sockets as usize)
                     .filter_map(|i| slot_gems.get(i).copied().or(best_gem))
                     .collect();
-                if let Some(&first) = gems.first() {
-                    applied_gem = first;
-                    let gem_str = gems
-                        .iter()
-                        .map(u64::to_string)
-                        .collect::<Vec<_>>()
-                        .join("/");
-                    simc_str.push_str(&format!(",gem_id={}", gem_str));
-                }
+                applied.gem_ids = gems;
             }
 
             let combo_name = format!("Combo {}", combo_idx);
             lines.push(format!("### {}", combo_name));
             lines.push(format!(
                 "profileset.\"{}\"+={}={}",
-                combo_name, slot, simc_str
+                combo_name,
+                slot,
+                applied.simc_string()
             ));
             if inv_type == 17 && *slot == "main_hand" && spec != "fury" {
                 lines.push(format!("profileset.\"{}\"+=off_hand=,", combo_name));
@@ -286,29 +333,30 @@ pub(super) fn generate_droptimizer_input(
             }
             lines.push(String::new());
 
-            combo_metadata.insert(
-                combo_name.clone(),
-                json!([{
-                    "slot": slot,
-                    "item_id": item_id,
-                    "ilevel": ilevel,
-                    "name": name,
-                    "bonus_ids": bonus_ids,
-                    "crafted_stats": crafted_stats.map(|cs| cs.stat_ids.to_vec()).unwrap_or_default(),
-                    "embellishment": combo_embellishment.map(|e| json!({
-                        "id": e.id,
-                        "name": e.name,
-                        "bonus_ids": e.bonus_ids,
-                    })),
-                    "enchant_id": applied_enchant,
-                    "gem_id": applied_gem,
-                    "is_kept": false,
-                    "encounter": encounter,
-                    "is_void_forge": is_void_forge,
-                    "is_catalyst": is_catalyst,
-                    "source_item_id": source_item_id,
-                }]),
-            );
+            let metadata = json!({
+                "slot": slot,
+                "item_id": item_id,
+                "ilevel": ilevel,
+                "name": name,
+                "embellishment": combo_embellishment.map(|e| json!({
+                    "id": e.id,
+                    "name": e.name,
+                    "bonus_ids": e.bonus_ids,
+                })),
+                "is_kept": false,
+                "encounter": encounter,
+                "is_void_forge": is_void_forge,
+                "is_catalyst": is_catalyst,
+                "source_item_id": source_item_id,
+                "bonus_ids": applied.display_bonus_ids,
+                "crafted_stats": crafted_stats
+                    .map(|cs| cs.stat_ids.to_vec())
+                    .unwrap_or_default(),
+                "enchant_id": applied.enchant_id,
+                "gem_id": applied.gem_ids.first().copied().unwrap_or(0),
+                "gem_ids": applied.gem_ids,
+            });
+            combo_metadata.insert(combo_name.clone(), json!([metadata]));
             combo_idx += 1;
         }
     }
@@ -322,6 +370,7 @@ mod tests {
     use super::*;
 
     fn drop(item_id: u64, inv_type: u64, bonus_ids: Vec<u64>) -> Value {
+        crate::test_support::ensure_game_data_loaded();
         json!({
             "item_id": item_id,
             "ilevel": 600,
@@ -417,8 +466,10 @@ mod tests {
 
     #[test]
     fn crafted_stat_bonus_ids_go_into_the_simc_string() {
+        // Must be a real crafted-pool item: missives are dispatched per item now.
+        crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let drops = vec![drop(207157, 11, vec![])]; // finger, no inherent bonus IDs
+        let drops = vec![drop(237830, 11, vec![])];
         let (input, _, _) = generate_droptimizer_input(
             profile,
             &drops,
@@ -438,7 +489,7 @@ mod tests {
     fn crafted_stats_surface_in_metadata_not_display_bonus_ids() {
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let drops = vec![drop(207157, 11, vec![12345])];
+        let drops = vec![drop(237830, 11, vec![12345])];
         let (_, _, metadata) = generate_droptimizer_input(
             profile,
             &drops,
@@ -457,7 +508,7 @@ mod tests {
     fn crafted_stats_appended_after_existing_bonus_ids() {
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let drops = vec![drop(207157, 11, vec![12345])];
+        let drops = vec![drop(237830, 11, vec![12345])];
         let (input, _, _) = generate_droptimizer_input(
             profile,
             &drops,
@@ -474,6 +525,170 @@ mod tests {
     }
 
     #[test]
+    fn candidate_carries_the_items_own_effect_bonus() {
+        // Aqirbane Reliquary's proc rides on bonus 13987, which lives in the game
+        // data's bonusLists and never in the drop payload. Without it the neck
+        // sims as a plain stat stick and ranks mid-pack instead of first.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test
+spec=frost
+neck=,id=100
+";
+        let drops = vec![drop(268265, 2, vec![12846])];
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None, &HashMap::new());
+        let line = input
+            .lines()
+            .find(|l| l.contains("id=268265"))
+            .unwrap_or_default();
+        assert!(
+            line.contains("13987"),
+            "effect bonus missing from:
+{line}"
+        );
+        assert!(
+            line.contains("12846"),
+            "upgrade bonus missing from:
+{line}"
+        );
+    }
+
+    #[test]
+    fn inherent_bonus_is_not_repeated_when_already_requested() {
+        // resolve_bonuses SUMS socket grants, so a duplicated id would invent a
+        // socket. 13668 is Aqirbane's own socket bonus.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test
+spec=frost
+neck=,id=100
+";
+        let drops = vec![drop(268265, 2, vec![13668])];
+        let (input, _, _) = generate_droptimizer_input(profile, &drops, None, &HashMap::new());
+        let line = input
+            .lines()
+            .find(|l| l.contains("id=268265"))
+            .unwrap_or_default();
+        let bonus = line.split(",bonus_id=").nth(1).unwrap_or_default();
+        let ids: Vec<&str> = bonus
+            .split(',')
+            .next()
+            .unwrap_or_default()
+            .split('/')
+            .collect();
+        assert_eq!(
+            ids.iter().filter(|b| **b == "13668").count(),
+            1,
+            "13668 duplicated in: {line}"
+        );
+    }
+
+    #[test]
+    fn mixed_raid_drops_only_apply_preferred_stats_to_flexible_items() {
+        crate::test_support::ensure_game_data_loaded();
+        let drops = vec![drop(271638, 2, vec![12846]), drop(268265, 2, vec![12846])];
+        assert!(crate::item_db::accepts_preferred_stats(271638));
+        assert!(!crate::item_db::accepts_preferred_stats(268265));
+        let (input, count, metadata) = generate_droptimizer_input(
+            "mage=test\nspec=frost\nneck=,id=100\n",
+            &drops,
+            Some(crate::profileset_generator::CraftedStats {
+                stat_ids: [36, 49],
+                bonus_ids: [11138, 11137],
+            }),
+            &HashMap::new(),
+        );
+        assert_eq!(count, 2);
+        for (item_id, expected) in [(271638, json!([36, 49])), (268265, json!([]))] {
+            let entry = metadata
+                .values()
+                .find(|items| items[0]["item_id"] == item_id)
+                .unwrap();
+            assert_eq!(entry[0]["crafted_stats"], expected);
+            let line = input
+                .lines()
+                .find(|line| line.contains(&format!("id={item_id}")))
+                .unwrap();
+            assert_eq!(line.contains("crafted_stats=36/49"), item_id == 271638);
+            assert!(!line.contains("11138"));
+            assert!(!line.contains("11137"));
+        }
+    }
+
+    #[test]
+    fn catalysed_flexible_drop_takes_the_pair_from_its_source_item() {
+        // A catalysed piece inherits the source drop's secondaries via
+        // redirected_base_stats=, so eligibility must follow the source. Keying on
+        // the tier item id instead leaves the placeholders unresolved and the combo
+        // sims with no secondaries at all.
+        crate::test_support::ensure_game_data_loaded();
+        const FLEXIBLE_SOURCE: u64 = 271434; // Venom Rite Mantle, stat ids 24/25
+        assert!(crate::item_db::has_flexible_stats(FLEXIBLE_SOURCE));
+        let profile = "mage=test
+spec=frost
+shoulder=,id=100
+";
+        let mut item = drop(999_001, 3, vec![12846]);
+        item["is_catalyst"] = json!(true);
+        item["source_item_id"] = json!(FLEXIBLE_SOURCE);
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &[item],
+            Some(crate::profileset_generator::CraftedStats {
+                stat_ids: [36, 49],
+                bonus_ids: [11138, 11137],
+            }),
+            &HashMap::new(),
+        );
+        let line = input
+            .lines()
+            .find(|l| l.contains("id=999001"))
+            .unwrap_or_default();
+        assert!(
+            line.contains("crafted_stats=36/49"),
+            "got:
+{line}"
+        );
+    }
+
+    #[test]
+    fn flexible_stat_drop_gets_the_pair_as_a_simc_parameter() {
+        // Bound Serpent's Jade Eye is a raid BOE, not crafted: its secondaries are
+        // placeholders (stat ids 24/25) with no missive to carry them. Without
+        // `crafted_stats=` simc resolves them to "unknown" and the neck sims as a
+        // stamina stick — a real upgrade reported as a large downgrade.
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test
+spec=frost
+neck=,id=100
+";
+        let drops = vec![drop(271638, 2, vec![12846])];
+        let (input, _, _) = generate_droptimizer_input(
+            profile,
+            &drops,
+            Some(crate::profileset_generator::CraftedStats {
+                stat_ids: [36, 49],
+                bonus_ids: [11138, 11137],
+            }),
+            &HashMap::new(),
+        );
+        let line = input
+            .lines()
+            .find(|l| l.contains("id=271638"))
+            .unwrap_or_default();
+        assert!(
+            line.contains("crafted_stats=36/49"),
+            "got:
+{line}"
+        );
+        // Missive bonus IDs belong to crafted gear only — they must not be grafted
+        // onto a raid drop.
+        assert!(
+            !line.contains("11138"),
+            "missive leaked onto a raid BOE:
+{line}"
+        );
+    }
+
+    #[test]
     fn crafted_socketless_drop_does_not_inherit_equipped_gem() {
         // Regression: a socketless crafted drop (empty inherent bonus_ids) must
         // not inherit the equipped gem just because missives were appended.
@@ -481,7 +696,7 @@ mod tests {
         // season, so they always gem regardless of bonus IDs.
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100,gem_id=999\n";
-        let drops = vec![drop(207157, 1, vec![])];
+        let drops = vec![drop(237830, 1, vec![])];
         let (input, _, _) = generate_droptimizer_input(
             profile,
             &drops,
@@ -510,7 +725,7 @@ mod tests {
     fn no_preferred_stats_leaves_bonus_ids_unchanged() {
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let drops = vec![drop(207157, 11, vec![12345])];
+        let drops = vec![drop(237830, 11, vec![12345])];
         let (input, _, _) = generate_droptimizer_input(profile, &drops, None, &HashMap::new());
         assert!(input.contains("bonus_id=12345"), "got:\n{input}");
         assert!(
@@ -721,7 +936,7 @@ mod tests {
     fn no_embellishment_leaves_generation_unchanged() {
         crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
-        let drops = vec![drop(207157, 11, vec![12345])];
+        let drops = vec![drop(237830, 11, vec![12345])];
         let with_none = generate_droptimizer_input(profile, &drops, None, &HashMap::new());
         assert!(with_none.0.contains("bonus_id=12345"));
         let entry = &with_none.2.values().next().unwrap()[0];
@@ -938,6 +1153,7 @@ off_hand=,id=201\n";
 
     #[test]
     fn drop_ignores_slot_inherits_field_in_request() {
+        crate::test_support::ensure_game_data_loaded();
         // A request still carrying the legacy `slot_inherits` array must be
         // tolerated and ignored (backend derives inheritance from equipped).
         let profile = "mage=test\nspec=frost\nhead=,id=100,enchant_id=7777\n";
@@ -1131,6 +1347,7 @@ finger2=,id=102,gem_id=2222\n"; // 2222 is most-used (x2)
         );
         let combo = metadata.get("Combo 2").expect("missing combo");
         assert_eq!(combo[0]["gem_id"], 1111);
+        assert_eq!(combo[0]["gem_ids"], json!([1111, 2222]));
     }
 
     #[test]
@@ -1151,6 +1368,7 @@ finger2=,id=102,gem_id=2222\n"; // 2222 is most-used (x2)
 
     #[test]
     fn drop_metadata_carries_encounter_field() {
+        crate::test_support::ensure_game_data_loaded();
         let profile = "mage=test\nspec=frost\nhead=,id=100\n";
         let drops = vec![json!({
             "item_id": 999,

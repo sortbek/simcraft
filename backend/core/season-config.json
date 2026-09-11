@@ -459,6 +459,7 @@
     "mythic": "Myth"
   },
   "encounterUpgradeLevel": {
+    "-97": 1,
     "2888": 1,
     "2874": 2,
     "2894": 2,

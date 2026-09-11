@@ -303,6 +303,14 @@ impl ProfilesetIterator {
             .unwrap_or_default();
         let eff_gems = effective_gems(&gear_set, &nominal_gems, &self.cfg.socketed_item_ids);
 
+        // Diamonds are unique-equipped, and only here is the pair known: the gem
+        // combo was built without knowing which alternatives this set picked, so
+        // a set whose item arrives with a diamond already socketed can push the
+        // total to two. Skip rather than emit an illegal profile.
+        if !super::constraints::validate_diamond_uniqueness(&gear_set, &eff_gems) {
+            return None;
+        }
+
         // ── 7. Resolve talent ────────────────────────────────────────────────
         let talent_idx = cursor[cursor.len() - 1];
         let (talent_name, talent_string) = self

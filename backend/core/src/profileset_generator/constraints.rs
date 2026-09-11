@@ -46,6 +46,72 @@ pub(super) fn is_legal_gear_set<V: Borrow<Value>>(
     true
 }
 
+/// Diamonds (quality-4 gems) are unique-equipped: a gear set may carry at most
+/// one, counting both the diamonds the generator places and any already
+/// socketed in the items themselves.
+///
+/// The generator's own cap (`gem_combos::dedupe_gem_assignments`) only sees the
+/// gems it places, and `top_gear`'s `preserved_diamond` shortcut only scans
+/// *equipped* gear, so neither notices a diamond riding along in a selected
+/// alternative — e.g. an extra head pulled from the bags with a diamond already
+/// in it. That combination has to be rejected per gear set, because whether the
+/// diamond is present depends on which alternative the set picked.
+pub(super) fn validate_diamond_uniqueness<V: Borrow<Value>>(
+    gear_set: &HashMap<String, V>,
+    placed_gems: &HashMap<String, Vec<u64>>,
+) -> bool {
+    let mut diamonds = 0usize;
+
+    for (slot, item) in gear_set {
+        // A placed assignment supersedes whatever the item arrived with, so each
+        // slot contributes from exactly one source.
+        let gem_ids: Vec<u64> = match placed_gems.get(slot) {
+            Some(placed) => placed.clone(),
+            None => item_gem_ids(item.borrow()),
+        };
+        diamonds += gem_ids
+            .iter()
+            .filter(|&&g| super::simc::is_diamond(g))
+            .count();
+        if diamonds > 1 {
+            return false;
+        }
+    }
+
+    // A placed gem in a slot the gear set doesn't name can still be emitted, so
+    // it counts too.
+    for (slot, placed) in placed_gems {
+        if gear_set.contains_key(slot) {
+            continue;
+        }
+        diamonds += placed
+            .iter()
+            .filter(|&&g| super::simc::is_diamond(g))
+            .count();
+        if diamonds > 1 {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Gems an item already carries. `simc_string` is authoritative (it holds every
+/// socket, `gem_id=a/b/c`); `gem_id` is the single-gem fallback for items built
+/// without one.
+fn item_gem_ids(item: &Value) -> Vec<u64> {
+    if let Some(simc) = item.get("simc_string").and_then(|v| v.as_str()) {
+        let ids = crate::simc_string::extract_gem_ids(simc);
+        if !ids.is_empty() {
+            return ids;
+        }
+    }
+    match item.get("gem_id").and_then(|v| v.as_u64()) {
+        Some(id) if id > 0 => vec![id],
+        _ => Vec::new(),
+    }
+}
+
 pub(super) fn validate_vault_constraint<V: Borrow<Value>>(gear_set: &HashMap<String, V>) -> bool {
     let mut vault_item_ids: HashSet<u64> = HashSet::new();
     for item in gear_set.values() {
@@ -373,5 +439,117 @@ mod tests {
         let mut gs = HashMap::new();
         gs.insert("main_hand".to_string(), item(0));
         assert!(!main_hand_is_two_hand(&gs, "arms"));
+    }
+
+    // ── diamond uniqueness ────────────────────────────────────────────────────
+    // Insightful Blasphemite and its sibling are quality-4 diamonds; Quick Ruby
+    // is quality 3. (213743 is *also* a Blasphemite — do not use it as a plain
+    // gem here.)
+    const DIAMOND: u64 = 213738;
+    const DIAMOND_B: u64 = 213739;
+    const PLAIN_GEM: u64 = 213453;
+
+    fn gem_map(entries: &[(&str, Vec<u64>)]) -> HashMap<String, Vec<u64>> {
+        entries
+            .iter()
+            .map(|(slot, gems)| (slot.to_string(), gems.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn diamond_uniqueness_allows_a_single_placed_diamond() {
+        ensure_game_data_loaded();
+        let mut gear = HashMap::new();
+        gear.insert("neck".to_string(), TestItem::new(100).sockets(1).build());
+        let gems = gem_map(&[("neck", vec![DIAMOND])]);
+        assert!(validate_diamond_uniqueness(&gear, &gems));
+    }
+
+    #[test]
+    fn diamond_uniqueness_allows_a_diamond_already_in_an_item() {
+        ensure_game_data_loaded();
+        let mut gear = HashMap::new();
+        gear.insert(
+            "head".to_string(),
+            TestItem::new(100)
+                .sockets(1)
+                .gem_id(DIAMOND)
+                .simc_string(&format!("head=,id=100,gem_id={DIAMOND}"))
+                .build(),
+        );
+        gear.insert("neck".to_string(), TestItem::new(101).sockets(1).build());
+        let gems = gem_map(&[("neck", vec![PLAIN_GEM])]);
+        assert!(validate_diamond_uniqueness(&gear, &gems));
+    }
+
+    #[test]
+    fn diamond_uniqueness_rejects_a_placed_diamond_beside_one_already_socketed() {
+        ensure_game_data_loaded();
+        // The reported bug: an alternative head arrives with a diamond already in
+        // it, and the generator sockets another diamond into the neck.
+        let mut gear = HashMap::new();
+        gear.insert(
+            "head".to_string(),
+            TestItem::new(249988)
+                .sockets(1)
+                .gem_id(DIAMOND)
+                .simc_string(&format!("head=,id=249988,gem_id={DIAMOND}"))
+                .build(),
+        );
+        gear.insert("neck".to_string(), TestItem::new(273781).sockets(1).build());
+        let gems = gem_map(&[("neck", vec![DIAMOND])]);
+        assert!(!validate_diamond_uniqueness(&gear, &gems));
+    }
+
+    #[test]
+    fn diamond_uniqueness_rejects_two_placed_diamonds() {
+        ensure_game_data_loaded();
+        let mut gear = HashMap::new();
+        gear.insert("head".to_string(), TestItem::new(100).sockets(1).build());
+        gear.insert("neck".to_string(), TestItem::new(101).sockets(1).build());
+        let gems = gem_map(&[("head", vec![DIAMOND]), ("neck", vec![DIAMOND_B])]);
+        assert!(!validate_diamond_uniqueness(&gear, &gems));
+    }
+
+    #[test]
+    fn diamond_uniqueness_rejects_two_items_that_already_carry_diamonds() {
+        ensure_game_data_loaded();
+        let mut gear = HashMap::new();
+        gear.insert(
+            "head".to_string(),
+            TestItem::new(100)
+                .sockets(1)
+                .gem_id(DIAMOND)
+                .simc_string(&format!("head=,id=100,gem_id={DIAMOND}"))
+                .build(),
+        );
+        gear.insert(
+            "waist".to_string(),
+            TestItem::new(102)
+                .sockets(1)
+                .gem_id(DIAMOND_B)
+                .simc_string(&format!("waist=,id=102,gem_id={DIAMOND_B}"))
+                .build(),
+        );
+        assert!(!validate_diamond_uniqueness(&gear, &HashMap::new()));
+    }
+
+    #[test]
+    fn diamond_uniqueness_counts_a_replaced_gem_once() {
+        ensure_game_data_loaded();
+        // replace_gems: the placed gem supersedes the socketed one, so a diamond
+        // replacing a diamond is still a single diamond.
+        let mut gear = HashMap::new();
+        gear.insert(
+            "head".to_string(),
+            TestItem::new(100)
+                .sockets(1)
+                .gem_id(DIAMOND)
+                .simc_string(&format!("head=,id=100,gem_id={DIAMOND}"))
+                .build(),
+        );
+        gear.insert("neck".to_string(), TestItem::new(101).sockets(1).build());
+        let gems = gem_map(&[("head", vec![DIAMOND_B]), ("neck", vec![PLAIN_GEM])]);
+        assert!(validate_diamond_uniqueness(&gear, &gems));
     }
 }

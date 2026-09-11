@@ -16,6 +16,8 @@ export interface TopGearSavedState {
   diamondAlwaysUse: boolean;
   maxColors: boolean;
   addedLootItems?: ResolvedItem[];
+  /** Slot-group labels opened out of the unchanged strip. */
+  promotedGroups?: string[];
 }
 
 export function storeTopGearState(state: TopGearSavedState): void {

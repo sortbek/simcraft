@@ -23,7 +23,7 @@ pub struct StartRunRequest {
     pub void_forge: bool,
     #[serde(default)]
     pub catalyst: bool,
-    /// Missive stat pair for crafted-pool runs, like the droptimizer request.
+    /// Preferred secondary stats, applied only to eligible items by the generator.
     #[serde(default)]
     pub preferred_crafted_stats: Option<[u64; 2]>,
     #[serde(flatten)]
@@ -96,17 +96,6 @@ pub(super) async fn start_run(
             }
         })
         .collect();
-
-    // Same trust-boundary rule as the droptimizer handler.
-    if crafted_stats.is_some()
-        && !eligible
-            .iter()
-            .all(|(_, drops)| crate::item_db::all_crafted_items(drops))
-    {
-        return HttpResponse::BadRequest().json(json!({
-            "detail": "Preferred crafted stats can only be applied to crafted items."
-        }));
-    }
 
     let max_combos = eligible.iter().map(|(_, d)| d.len()).max().unwrap_or(0);
 

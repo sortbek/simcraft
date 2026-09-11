@@ -411,6 +411,7 @@ pub fn get_instance_drops(
                     "encounter": encounter_ids.get(eid).cloned().unwrap_or_default(),
                     "encounter_id": *eid,
                     "instance_name": item_instance,
+                    "instance_id": if is_meta && encounter_to_instance.contains_key(eid) { *eid } else { instance_id },
                 });
                 if !item_specs.is_empty() {
                     item_json["specs"] = serde_json::json!(item_specs);
@@ -457,6 +458,15 @@ pub fn get_instance_drops(
                     if !main_can_use {
                         item_json["off_spec"] = serde_json::json!(true);
                     }
+                }
+                item_json["accepts_preferred_stats"] =
+                    serde_json::json!(item_db::accepts_preferred_stats(item_id));
+                // Effect grants (e.g. Venomcursed procs) live in the item's own
+                // bonusLists, never in the chosen upgrade bonus. Publish them so the
+                // tooltip renders the item the sim actually runs.
+                let effect_bonus_ids = item_db::item_effect_bonus_ids(item_id);
+                if !effect_bonus_ids.is_empty() {
+                    item_json["effect_bonus_ids"] = serde_json::json!(effect_bonus_ids);
                 }
                 if !diff_info.is_empty() {
                     item_json["difficulty_info"] = Value::Object(diff_info);
@@ -598,6 +608,20 @@ fn build_catalyst_variant(item: &Value, class_id: u64, inv_type: u64) -> Option<
     // The tier piece is not embellished even if the source drop was; drop the
     // stale flag so it doesn't show the badge or count against the 2/2 limit.
     obj.remove("embellished");
+    // Secondaries are inherited from the source drop, so eligibility follows it.
+    obj.insert(
+        "accepts_preferred_stats".to_string(),
+        Value::Bool(item_db::accepts_preferred_stats(source_item_id)),
+    );
+    let tier_effects = item_db::item_effect_bonus_ids(tier.item_id);
+    if tier_effects.is_empty() {
+        obj.remove("effect_bonus_ids");
+    } else {
+        obj.insert(
+            "effect_bonus_ids".to_string(),
+            serde_json::json!(tier_effects),
+        );
+    }
     if tier.has_set {
         obj.insert(
             "extra_bonus_ids".to_string(),
@@ -750,6 +774,31 @@ mod season_filter_tests {
     use super::*;
     use crate::test_support::ensure_game_data_loaded;
 
+    /// The drop payload feeds the Wowhead tooltip, the sim candidate feeds SimC.
+    /// If effect grants reach only the latter, an item tooltips without the proc
+    /// it is simmed with — the divergence #157 reported.
+    #[test]
+    fn drop_payload_publishes_effect_bonuses() {
+        ensure_game_data_loaded();
+        // Aqirbane Reliquary carries the Venomcursed proc in its own bonusLists.
+        const AQIRBANE: u64 = 268265;
+        let expected = crate::item_db::item_effect_bonus_ids(AQIRBANE);
+        assert!(!expected.is_empty(), "fixture item has no effect bonus");
+        let drops = get_drops_by_type("raid", None, None).expect("raid drops");
+        let item = drops
+            .values()
+            .filter_map(Value::as_array)
+            .flatten()
+            .find(|i| i.get("item_id").and_then(Value::as_u64) == Some(AQIRBANE))
+            .expect("Aqirbane in raid drops");
+        let published: Vec<u64> = item
+            .get("effect_bonus_ids")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_u64).collect())
+            .unwrap_or_default();
+        assert_eq!(published, expected, "tooltip would miss the item's effect");
+    }
+
     /// The raid pool lists boss encounter IDs, so the resolver has to map them
     /// back to the raids that own them.
     #[test]
@@ -768,6 +817,10 @@ mod season_filter_tests {
     fn raid_drops_exclude_previous_season_raids() {
         ensure_game_data_loaded();
         let drops = get_drops_by_type("raid", None, None).expect("raid drops");
+        let source_ids = season_raid_instance_ids();
+        for item in drops.values().filter_map(Value::as_array).flatten() {
+            assert!(source_ids.contains(&item["instance_id"].as_i64().expect("source instance id")));
+        }
         let names: std::collections::HashSet<String> = drops
             .values()
             .filter_map(|v| v.as_array())
