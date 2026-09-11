@@ -210,9 +210,6 @@ mod gem_tests {
             extract_redirected_base_stats(",id=250045,bonus_id=123,redirected_base_stats=249629"),
             249629
         );
-        assert_eq!(
-            extract_redirected_base_stats(",id=250045,bonus_id=123"),
-            0
-        );
+        assert_eq!(extract_redirected_base_stats(",id=250045,bonus_id=123"), 0);
     }
 }

@@ -216,3 +216,27 @@ test('preferred-stats categories cover every pool holding flexible-stat gear', (
   for (const category of ['mplus', 'normal-dungeons', 'delves', 'prey', 'catalyst', 'pvp-honor'])
     assert.equal(categoryMayUsePreferredStats(category), false, category);
 });
+
+test("variant tooltips: catalyst rows carry original-item, Void Forge rows do not", () => {
+  const catalyst = item(250042, {
+    ...flexible,
+    item_id: 250042,
+    is_catalyst: true,
+    source_item_id: 271638,
+  });
+  const catalystTip = new URLSearchParams(
+    dropWowheadAttr(catalyst, resolve(catalyst, options)),
+  );
+  assert.equal(catalystTip.get("original-item"), "271638");
+
+  // Void Forge catalog rows reuse source_item_id for their own id.
+  const voidForged = item(271638, {
+    ...flexible,
+    is_void_forge: true,
+    source_item_id: 271638,
+  });
+  const vfTip = new URLSearchParams(
+    dropWowheadAttr(voidForged, resolve(voidForged, options)),
+  );
+  assert.equal(vfTip.get("original-item"), null);
+});

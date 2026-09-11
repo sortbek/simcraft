@@ -63,10 +63,11 @@ pub(super) fn item_meta(item: &Value, slot: &str) -> Value {
         .unwrap_or(false)
     {
         meta["is_catalyst"] = json!(true);
-        meta["source_item_id"] = item
-            .get("source_item_id")
-            .cloned()
-            .unwrap_or_else(|| json!(0));
+    }
+    if let Some(src) = item.get("source_item_id").and_then(|v| v.as_u64()) {
+        if src > 0 {
+            meta["source_item_id"] = json!(src);
+        }
     }
     meta
 }
@@ -217,6 +218,17 @@ head=,id=100\n\
         });
         let meta = item_meta(&item, "head");
         assert_eq!(meta["is_catalyst"], true);
+    }
+
+    #[test]
+    fn item_meta_keeps_source_item_id_without_catalyst_flag() {
+        let item = json!({
+            "item_id": 250042,
+            "source_item_id": 249629,
+        });
+        let meta = item_meta(&item, "head");
+        assert_eq!(meta["source_item_id"], 249629);
+        assert!(meta.get("is_catalyst").is_none());
     }
 
     #[test]

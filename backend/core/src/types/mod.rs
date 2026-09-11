@@ -54,7 +54,7 @@ pub struct RawParsedItem {
     #[serde(default)]
     pub manual: bool,
     /// Item this was catalysed from (parsed from `redirected_base_stats=<id>`).
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(default)]
     pub source_item_id: u64,
 }
 

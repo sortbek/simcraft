@@ -13,8 +13,6 @@ static RE_ENCHANT_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"enchant_id=(\d+)")
 static RE_GEM_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"gem_id=(\d+)").unwrap());
 static RE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"name=([^,]+)").unwrap());
 static RE_SLOT_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([a-z_]+),").unwrap());
-static RE_REDIRECTED_BASE_STATS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"redirected_base_stats=(\d+)").unwrap());
 
 // parse_simc_input regexes — compiled once per process.
 static RE_SLOT: Lazy<Regex> = Lazy::new(|| {
@@ -74,9 +72,7 @@ fn parse_item_props(item_str: &str) -> ItemProps {
     if let Some(caps) = RE_GEM_ID.captures(item_str) {
         props.gem_id = caps[1].parse().unwrap_or(0);
     }
-    if let Some(caps) = RE_REDIRECTED_BASE_STATS.captures(item_str) {
-        props.source_item_id = caps[1].parse().unwrap_or(0);
-    }
+    props.source_item_id = crate::simc_string::extract_redirected_base_stats(item_str);
     if let Some(caps) = RE_NAME.captures(item_str) {
         props.name = class_data::title_case(&caps[1].replace('_', " "));
     }

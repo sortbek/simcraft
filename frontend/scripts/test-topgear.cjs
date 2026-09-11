@@ -114,3 +114,35 @@ test('every density has complete row metrics and layout entries', () => {
     assert.match(gearCardClass(density), /^card /);
   }
 });
+
+const { buildResolvedCopy } = require('../src/app/components/gear/topGearIdentity.ts');
+
+test('buildResolvedCopy keeps the source segment on owned catalysed gear', () => {
+  const owned = {
+    uid: '250042::equipped:head:249629',
+    item_id: 250042,
+    bonus_ids: [],
+    origin: 'equipped',
+    slot: 'head',
+    is_catalyst: false,
+    source_item_id: 249629,
+  };
+  const copy = buildResolvedCopy(owned, { origin: 'bags' });
+  assert.equal(copy.uid, '250042::bags:head:249629');
+});
+
+const { getWowheadData } = require("../src/app/lib/useItemInfo.ts");
+
+test("getWowheadData emits original-item for owned catalysed gear without the conversion flag", () => {
+  const params = new URLSearchParams(
+    getWowheadData({ ilevel: 600, source_item_id: 249629 }),
+  );
+  assert.equal(params.get("original-item"), "249629");
+});
+
+test("getWowheadData skips original-item on Void Forge rows, which reuse source_item_id", () => {
+  const params = new URLSearchParams(
+    getWowheadData({ ilevel: 600, source_item_id: 111, is_void_forge: true }),
+  );
+  assert.equal(params.get("original-item"), null);
+});

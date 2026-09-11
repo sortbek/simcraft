@@ -466,10 +466,12 @@ export interface WowheadItem {
   gem_ids?: number[];
   crafted_stats?: number[];
   /** Catalysed pieces keep the source item's secondaries; `original-item` is
-   *  Wowhead's equivalent of simc's `redirected_base_stats`. Only set on a
-   *  catalyst variant — `source_item_id` means something else on Void Forged rows. */
+   *  Wowhead's equivalent of simc's `redirected_base_stats`. Set on catalyst
+   *  variants and on already-catalysed gear from the addon string. Void Forged
+   *  loot rows reuse `source_item_id` for their own id, so they are skipped. */
   is_catalyst?: boolean;
   source_item_id?: number;
+  is_void_forge?: boolean;
   /** Embellishment applied by the sim; its bonus ids merge into `bonus=`. */
   embellishment?: { bonus_ids?: number[] };
 }
@@ -482,7 +484,7 @@ export function getWowheadData(item: WowheadItem): string {
   const bonusIds = [...(item.bonus_ids ?? []), ...(item.embellishment?.bonus_ids ?? [])];
   if (bonusIds.length) parts.push(`bonus=${bonusIds.join(':')}`);
   if (item.crafted_stats?.length) parts.push(`crafted-stats=${item.crafted_stats.join(':')}`);
-  if (item.is_catalyst && item.source_item_id) {
+  if (item.source_item_id && !item.is_void_forge) {
     parts.push(`original-item=${item.source_item_id}`);
   }
   if (item.ilevel && item.ilevel > 0) parts.push(`ilvl=${item.ilevel}`);

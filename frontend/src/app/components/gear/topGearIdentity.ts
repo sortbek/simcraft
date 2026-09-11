@@ -31,13 +31,7 @@ export function buildResolvedCopy(
     origin,
     bonus_ids: bonusIds,
     slot,
-    uid: buildTopGearUid(
-      item.item_id,
-      bonusIds,
-      origin,
-      slot,
-      item.is_catalyst ? item.source_item_id : undefined
-    ),
+    uid: buildTopGearUid(item.item_id, bonusIds, origin, slot, item.source_item_id || undefined),
   };
 }
 

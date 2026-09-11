@@ -8,6 +8,8 @@ export interface GearItem {
   embellishment?: { id: number; name: string; bonus_ids: number[] };
   is_catalyst?: boolean;
   source_item_id?: number;
+  /** Void Forge rows reuse `source_item_id` for their own id; tooltips skip it when set. */
+  is_void_forge?: boolean;
   enchant_id?: number;
   gem_id?: number;
   /** All gem IDs (one per socket); necks/crafted items hold 2+ but `gem_id` only carries the first, so prefer `gem_ids` when present. */

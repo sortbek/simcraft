@@ -410,23 +410,22 @@ fn extract_all_gear(player: &Value) -> HashMap<String, Value> {
 
         let source_item_id = crate::simc_string::extract_redirected_base_stats(encoded);
 
-        baseline.insert(
-            slot.clone(),
-            json!({
-                "slot": &slot,
-                "item_id": item_id,
-                "ilevel": ilevel,
-                "name": name,
-                "bonus_ids": bonus_ids,
-                "enchant_id": enchant_id,
-                "gem_id": gem_id,
-                "gem_ids": gem_ids,
-                "sockets": sockets,
-                "is_kept": true,
-                "is_catalyst": source_item_id > 0,
-                "source_item_id": source_item_id,
-            }),
-        );
+        let mut entry = json!({
+            "slot": &slot,
+            "item_id": item_id,
+            "ilevel": ilevel,
+            "name": name,
+            "bonus_ids": bonus_ids,
+            "enchant_id": enchant_id,
+            "gem_id": gem_id,
+            "gem_ids": gem_ids,
+            "sockets": sockets,
+            "is_kept": true,
+        });
+        if source_item_id > 0 {
+            entry["source_item_id"] = json!(source_item_id);
+        }
+        baseline.insert(slot.clone(), entry);
     }
 
     baseline
@@ -755,5 +754,29 @@ mod tests {
         let parsed = parse_gear_comparison_result(&raw, None, "top_gear");
         assert_eq!(parsed["fight_length"].as_f64(), Some(300.0));
         assert_eq!(parsed["target_error"].as_f64(), Some(0.1));
+    }
+}
+
+#[cfg(test)]
+mod baseline_gear_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    #[test]
+    fn baseline_gear_carries_source_item_id_without_catalyst_flag() {
+        ensure_game_data_loaded();
+        let player = json!({
+            "gear": {
+                "head": {
+                    "encoded_item": "helm,id=250042,bonus_id=12849,redirected_base_stats=249629",
+                    "ilevel": 600
+                },
+                "neck": { "encoded_item": "neck,id=100", "ilevel": 600 }
+            }
+        });
+        let gear = extract_all_gear(&player);
+        assert_eq!(gear["head"]["source_item_id"], 249629);
+        assert!(gear["head"].get("is_catalyst").is_none());
+        assert!(gear["neck"].get("source_item_id").is_none());
     }
 }

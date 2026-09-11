@@ -64,6 +64,7 @@ export function dropWowheadAttr(
     gem_id: inherit?.gem_id,
     is_catalyst: item.is_catalyst,
     source_item_id: item.source_item_id,
+    is_void_forge: item.is_void_forge,
   });
   return 'item=' + item.item_id + (params ? '&' + params : '');
 }

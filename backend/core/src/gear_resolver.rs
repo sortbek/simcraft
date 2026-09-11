@@ -32,7 +32,9 @@ pub(crate) fn manual_suffix(simc: &str) -> String {
     )
 }
 
-/// Build a stable UID for deduplication: "item_id:sorted_bonus_ids:origin:raw_slot"
+/// Build a stable UID for deduplication: "item_id:sorted_bonus_ids:origin:raw_slot",
+/// plus the catalyst source id for catalysed gear (the same trailing segment
+/// `build_catalyst_item` and the frontend's `buildTopGearUid` produce).
 fn make_uid(item: &RawParsedItem) -> String {
     let mut sorted = item.bonus_ids.clone();
     sorted.sort();
@@ -48,13 +50,20 @@ fn make_uid(item: &RawParsedItem) -> String {
         item.origin.as_str(),
         item.raw_slot
     );
-    if item.source_item_id > 0 {
-        uid.push_str(&format!(":{}", item.source_item_id));
-    }
+    uid.push_str(&source_suffix(item.source_item_id));
     if item.manual {
         uid.push_str(&manual_suffix(&item.simc_string));
     }
     uid
+}
+
+/// `:<source_item_id>` for catalysed gear, empty otherwise.
+fn source_suffix(source_item_id: u64) -> String {
+    if source_item_id > 0 {
+        format!(":{}", source_item_id)
+    } else {
+        String::new()
+    }
 }
 
 /// Dedup key: item_id + sorted bonus_ids (ignores origin/slot).
@@ -67,8 +76,9 @@ fn dedup_key(item: &RawParsedItem) -> String {
         .collect::<Vec<_>>()
         .join(":");
     let mut key = format!("{}:{}", item.item_id, bonus_key);
+    // Marked so a source id cannot read as one more bonus id.
     if item.source_item_id > 0 {
-        key.push_str(&format!(":{}", item.source_item_id));
+        key.push_str(&format!(":s:{}", item.source_item_id));
     }
     if item.manual {
         key.push_str(&manual_suffix(&item.simc_string));
@@ -187,7 +197,7 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         gem_name,
         gem_icon,
         season_id,
-        is_catalyst: item.source_item_id > 0,
+        is_catalyst: false,
         source_item_id: item.source_item_id,
         can_catalyst: false,
         is_void_forge: false,
@@ -598,11 +608,12 @@ pub fn build_modified_item(
         .collect::<Vec<_>>()
         .join(":");
     let uid = format!(
-        "{}:{}:{}:{}{}",
+        "{}:{}:{}:{}{}{}",
         source.item_id,
         bonus_key,
         ItemOrigin::Bags.as_str(),
         source.slot,
+        source_suffix(source.source_item_id),
         manual_suffix(&new_simc)
     );
 
@@ -619,7 +630,7 @@ pub fn build_modified_item(
         gem_name,
         gem_icon,
         is_catalyst: false,
-        source_item_id: 0,
+        source_item_id: source.source_item_id,
         can_catalyst: false,
         is_void_forge: false,
         can_void_forge: false,
@@ -1105,16 +1116,65 @@ mod catalyst_tests {
     }
 
     #[test]
-    fn already_catalysed_item_preserves_source_item_id_and_is_catalyst() {
+    fn already_catalysed_item_keeps_its_source_without_becoming_a_conversion() {
         ensure_game_data_loaded();
-        let profile = "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=250042,redirected_base_stats=249629\n";
+        let profile =
+            "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=250042,redirected_base_stats=249629\n";
         let parsed = crate::addon_parser::parse_simc_input(profile);
         assert_eq!(parsed.items[0].source_item_id, 249629);
         let resolved = resolve_gear(&parsed);
-        let head = resolved.slots["head"].equipped.as_ref().expect("equipped head");
-        assert!(head.is_catalyst);
+        let head = resolved.slots["head"]
+            .equipped
+            .as_ref()
+            .expect("equipped head");
+        // Owned catalysed gear is not a proposed conversion: it spends no charge.
+        assert!(!head.is_catalyst);
         assert_eq!(head.source_item_id, 249629);
-        assert!(head.uid.ends_with(":249629"));
+        assert_eq!(head.uid, "250042::equipped:head:249629");
+    }
+
+    #[test]
+    fn dedup_does_not_confuse_a_source_id_with_a_bonus_id() {
+        ensure_game_data_loaded();
+        let profile = "mage=\"Test\"\nlevel=80\nspec=frost\n\n\
+            # head=,id=250042,bonus_id=11111/22222\n\
+            # head=,id=250042,bonus_id=11111,redirected_base_stats=22222\n";
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(profile));
+        let alts = &resolved.slots["head"].alternatives;
+        assert_eq!(
+            alts.len(),
+            2,
+            "uids: {:?}",
+            alts.iter().map(|a| &a.uid).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn modified_copy_of_catalysed_gear_round_trips_its_uid() {
+        ensure_game_data_loaded();
+        let profile =
+            "mage=\"Test\"\nlevel=80\nspec=frost\n\nhead=,id=250042,redirected_base_stats=249629\n";
+        let resolved = resolve_gear(&crate::addon_parser::parse_simc_input(profile));
+        let head = resolved.slots["head"]
+            .equipped
+            .clone()
+            .expect("equipped head");
+        let modified = build_modified_item(&head, &[213473], 0);
+        assert_eq!(modified.source_item_id, 249629);
+
+        let with_manual = format!("{profile}# manual.head={}\n", modified.simc_string);
+        let re_resolved = resolve_gear(&crate::addon_parser::parse_simc_input(&with_manual));
+        let uids: Vec<&String> = re_resolved.slots["head"]
+            .alternatives
+            .iter()
+            .map(|a| &a.uid)
+            .collect();
+        assert!(
+            uids.contains(&&modified.uid),
+            "got {:?}, want {}",
+            uids,
+            modified.uid
+        );
     }
 
     #[test]

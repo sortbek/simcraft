@@ -227,6 +227,8 @@ fn resolved_item_to_value(item: &crate::types::ResolvedItem, is_equipped: bool) 
     });
     if item.is_catalyst {
         v["is_catalyst"] = json!(true);
+    }
+    if item.source_item_id > 0 {
         v["source_item_id"] = json!(item.source_item_id);
     }
     if item.is_manual {
@@ -260,5 +262,43 @@ pub(super) fn apply_spec_override(simc_input: &str, spec: &str) -> String {
             .to_string()
     } else {
         format!("{}\nspec={}", simc_input, spec)
+    }
+}
+
+#[cfg(test)]
+mod catalyst_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    #[test]
+    fn owned_catalysed_gear_does_not_spend_catalyst_charges() {
+        ensure_game_data_loaded();
+        let input = "mage=\"Test\"\nlevel=80\nspec=frost\n\
+            head=,id=250042,redirected_base_stats=249629\n\
+            neck=,id=100\n# neck=,id=101\n";
+        let parsed = crate::addon_parser::parse_simc_input(input);
+        let resolved = crate::gear_resolver::resolve_gear_with_catalyst(&parsed, Some(0));
+        let items_by_slot = resolve_to_items_by_slot(&resolved);
+
+        let head = &items_by_slot["head"][0];
+        assert_eq!(head["source_item_id"], 249629);
+        assert!(head.get("is_catalyst").is_none());
+
+        let mut selected = HashMap::new();
+        selected.insert(
+            "neck".to_string(),
+            vec![resolved.slots["neck"].alternatives[0].uid.clone()],
+        );
+        let (_, count, _) = crate::profileset_generator::generate_top_gear_input_with_talents(
+            &resolved.base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            Some(0),
+            &crate::profileset_generator::GemEnchantOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(count, 1, "the neck swap must survive a zero-charge budget");
     }
 }
