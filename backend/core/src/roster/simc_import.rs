@@ -11,10 +11,10 @@ pub struct SimcProfile {
 /// An empty result means the text holds no profiles at all (the caller falls back
 /// to the armory path).
 ///
-/// A block runs from its class line to just before the next one. Comments are kept
-/// verbatim, so a block absorbs the *following* character's header comment — inert
-/// for both SimC and `addon_parser`, and preferable to backing the split point up
-/// over preceding comments, which would move a vault section into the wrong block.
+/// A block runs from the character's own header comment, which the addon writes
+/// directly above the class line, to just before the next character's. Exactly one
+/// line is claimed: backing the split point up over every preceding comment would
+/// move a vault section into the wrong block.
 pub fn split_simc_profiles(input: &str) -> Vec<SimcProfile> {
     let lines: Vec<&str> = input.lines().collect();
     let starts: Vec<(usize, String)> = lines
@@ -23,12 +23,20 @@ pub fn split_simc_profiles(input: &str) -> Vec<SimcProfile> {
         .filter_map(|(i, line)| class_line_character(line).map(|name| (i, name)))
         .collect();
 
+    let block_starts: Vec<usize> = starts
+        .iter()
+        .map(|(i, name)| match i.checked_sub(1) {
+            Some(prev) if is_header_for(lines[prev], name) => prev,
+            _ => *i,
+        })
+        .collect();
+
     starts
         .iter()
         .enumerate()
-        .map(|(n, (start, name))| {
-            let end = starts.get(n + 1).map_or(lines.len(), |(next, _)| *next);
-            let mut block = &lines[*start..end];
+        .map(|(n, (_, name))| {
+            let end = block_starts.get(n + 1).copied().unwrap_or(lines.len());
+            let mut block = &lines[block_starts[n]..end];
             while block.last().is_some_and(|l| l.trim().is_empty()) {
                 block = &block[..block.len() - 1];
             }
@@ -40,6 +48,17 @@ pub fn split_simc_profiles(input: &str) -> Vec<SimcProfile> {
             }
         })
         .collect()
+}
+
+/// The addon's per-character header: `# Duskryth - Devastation - EU/Silvermoon`.
+/// The name must be followed by a separator, so `# Annabelle - ...` is not Ann's
+/// header and `# head=,id=...` is not a bag line surrendered to a character named
+/// `head`. `###` section markers never match: stripping one `#` leaves `##`.
+fn is_header_for(line: &str, name: &str) -> bool {
+    line.trim()
+        .strip_prefix('#')
+        .and_then(|rest| rest.trim_start().strip_prefix(name))
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
 }
 
 /// `server=tarren_mill` -> `Tarren Mill`. Empty when the profile has no server line.
@@ -112,5 +131,42 @@ mod tests {
         let got = split_simc_profiles("mage=\"Jaina\"\nlevel=90\n");
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].realm, "");
+    }
+
+    #[test]
+    fn a_block_keeps_its_own_header_and_not_the_next_characters() {
+        let got = split_simc_profiles(&sample());
+        assert!(got[0].simc.starts_with("# Duskryth - Devastation - EU/Silvermoon"));
+        assert!(!got[0].simc.contains("Sørtbek"));
+        assert!(got[1].simc.starts_with("# Sørtbek - unknown - EU/Draenor"));
+    }
+
+    #[test]
+    fn a_vault_section_stays_with_the_character_it_belongs_to() {
+        let paste = concat!(
+            "# Jaina - Frost - EU/Draenor\n",
+            "mage=\"Jaina\"\nserver=draenor\nhead=,id=111111\n\n",
+            "### Weekly Reward Choices\n",
+            "# head=,id=222222\n",
+            "### End of Weekly Reward Choices\n\n",
+            "# Thrall - Enhancement - EU/Draenor\n",
+            "shaman=\"Thrall\"\nserver=draenor\nhead=,id=333333\n",
+        );
+        let got = split_simc_profiles(paste);
+        assert_eq!(got.len(), 2);
+        assert!(got[0].simc.contains("id=222222"), "vault item belongs to Jaina");
+        assert!(!got[1].simc.contains("id=222222"));
+        assert!(got[1].simc.starts_with("# Thrall - Enhancement - EU/Draenor"));
+    }
+
+    #[test]
+    fn a_comment_that_merely_starts_with_the_name_is_not_its_header() {
+        // `Ann` is a prefix of `Annabelle`, and a bag line can start with a slot
+        // name. Neither is the character's header, so neither joins the block.
+        let prefix = "# Annabelle - Frost - EU/Draenor\nmage=\"Ann\"\nserver=draenor\n";
+        assert!(split_simc_profiles(prefix)[0].simc.starts_with("mage=\"Ann\""));
+
+        let bag = "# head=,id=222222\nhunter=\"head\"\nserver=draenor\n";
+        assert!(split_simc_profiles(bag)[0].simc.starts_with("hunter=\"head\""));
     }
 }
