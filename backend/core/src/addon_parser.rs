@@ -269,8 +269,6 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                 if props.ilevel == 0 && pending_ilevel > 0 {
                     props.ilevel = pending_ilevel;
                 }
-                pending_name.clear();
-                pending_ilevel = 0;
 
                 items.push(RawParsedItem {
                     raw_slot: slot,
@@ -287,6 +285,10 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                 });
             }
             pending_label.clear();
+            // A name header only ever labels the commented gear line directly below
+            // it; anything else in between means it was not an item header at all.
+            pending_name.clear();
+            pending_ilevel = 0;
         }
     }
 
@@ -343,4 +345,45 @@ pub fn parse_catalyst_charges(simc_input: &str, currency_id: u64) -> Option<u32>
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_character_header_does_not_name_the_first_equipped_item() {
+        // `Area 52` ends in digits, so the header parses as an item name + ilvl.
+        let input = concat!(
+            "# Jaina - Frost - US/Area 52\n",
+            "mage=\"Jaina\"\nlevel=80\n\n",
+            "head=,id=212067\n",
+        );
+        let parsed = parse_simc_input(input);
+        let head = parsed
+            .items
+            .iter()
+            .find(|i| i.raw_slot == "head")
+            .expect("head item parsed");
+        assert!(head.name.is_empty(), "got {:?}", head.name);
+        assert_eq!(head.ilevel, 0);
+    }
+
+    #[test]
+    fn a_name_header_still_labels_the_bag_item_directly_below_it() {
+        let input = concat!(
+            "mage=\"Jaina\"\n",
+            "### Gear from bags\n",
+            "# Frozen Cowl (678)\n",
+            "# head=,id=212067\n",
+        );
+        let parsed = parse_simc_input(input);
+        let bag = parsed
+            .items
+            .iter()
+            .find(|i| i.raw_slot == "head")
+            .expect("bag item parsed");
+        assert_eq!(bag.name, "Frozen Cowl");
+        assert_eq!(bag.ilevel, 678);
+    }
 }
