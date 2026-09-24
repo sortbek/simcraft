@@ -165,6 +165,9 @@ pub struct TopGearRequest {
     pub simc_input: String,
     pub selected_items: HashMap<String, Vec<String>>,
     pub items_by_slot: Option<HashMap<String, Vec<Value>>>,
+    /// Slots whose equipped item the user unticked: combos never keep it.
+    #[serde(default)]
+    pub excluded_equipped: Vec<String>,
     #[serde(default)]
     pub max_upgrade: bool,
     #[serde(default)]

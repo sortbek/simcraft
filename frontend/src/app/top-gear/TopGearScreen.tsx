@@ -45,8 +45,11 @@ import {
 } from '../components/omnium/omniumSelection';
 import { useOmniumTree } from '../lib/useOmniumTree';
 import {
+  buildVisibleGroups,
   collectQuickSelectEntries,
+  isItemSelected,
   mergeAlternative,
+  pruneExcludedEquipped,
   selectAlternative,
   toggleQuickSelectGroup,
 } from '../components/gear/topGearSelection';
@@ -147,6 +150,7 @@ export default function TopGearScreen() {
   const [compute, setCompute] = useComputeChoice('top_gear');
   const [resolved, setResolved] = useState<ResolveGearResponse | null>(null);
   const [selectedUids, setSelectedUids] = useState<Record<string, Set<string>>>({});
+  const [excludedEquipped, setExcludedEquipped] = useState<Set<string>>(new Set());
   const [localItems, setLocalItems] = useState<TopGearLocalItem[]>([]);
   const [addedLootItems, setAddedLootItems] = useState<ResolvedItem[]>([]);
   const [maxUpgrade, setMaxUpgrade] = useState(false);
@@ -207,6 +211,7 @@ export default function TopGearScreen() {
       restoredUids[slot] = new Set(values);
     }
     setSelectedUids(restoredUids);
+    setExcludedEquipped(new Set(saved.excludedEquipped ?? []));
 
     const restoredEnchants: Record<string, Set<number>> = {};
     for (const [slot, values] of Object.entries(saved.enchantSelections)) {
@@ -317,6 +322,22 @@ export default function TopGearScreen() {
 
     return () => clearTimeout(timer);
   }, [simcInput, maxUpgrade, catalyst, voidForge]);
+
+  // Every slot keeps an item, so an unticked equipped piece is ticked again once
+  // nothing else covers its slot (e.g. its alternative was deselected).
+  const effectiveExcluded = useMemo(
+    () =>
+      resolved
+        ? pruneExcludedEquipped(buildVisibleGroups(resolved), excludedEquipped, (item, group) =>
+            isItemSelected(item, group, resolved, selectedUids)
+          )
+        : excludedEquipped,
+    [resolved, excludedEquipped, selectedUids]
+  );
+  useEffect(() => {
+    if (effectiveExcluded !== excludedEquipped) setExcludedEquipped(effectiveExcluded);
+  }, [effectiveExcluded, excludedEquipped]);
+  const excludedEquippedJson = useMemo(() => [...effectiveExcluded], [effectiveExcluded]);
 
   const equippedSlots = useMemo<Record<string, ResolvedItem>>(() => {
     if (!resolved) return {};
@@ -608,6 +629,7 @@ export default function TopGearScreen() {
     return {
       simc_input: submitInput,
       selected_items: selectedItemsJson,
+      excluded_equipped: excludedEquippedJson,
       items_by_slot: null,
       max_upgrade: maxUpgrade,
       copy_enchants: copyEnchants,
@@ -641,6 +663,7 @@ export default function TopGearScreen() {
     selectedUids,
     submitInput,
     selectedItemsJson,
+    excludedEquippedJson,
     maxUpgrade,
     copyEnchants,
     talentBuilds,
@@ -691,6 +714,7 @@ export default function TopGearScreen() {
     () => ({
       simc_input: submitInput,
       selected_items: selectedItemsJson,
+      excluded_equipped: excludedEquippedJson,
       items_by_slot: null,
       max_upgrade: maxUpgrade,
       copy_enchants: copyEnchants,
@@ -716,6 +740,7 @@ export default function TopGearScreen() {
     [
       submitInput,
       selectedItemsJson,
+      excludedEquippedJson,
       maxUpgrade,
       copyEnchants,
 
@@ -832,6 +857,7 @@ export default function TopGearScreen() {
   const saveState = useCallback(() => {
     storeTopGearState({
       selectedUids: buildSelectedUidsJson(selectedUids),
+      excludedEquipped: excludedEquippedJson,
       localItems,
       enchantSelections: serializeSelectionMap<number>(enchantSelections),
       gemSelections: [...gemSelections],
@@ -847,6 +873,7 @@ export default function TopGearScreen() {
     });
   }, [
     selectedUids,
+    excludedEquippedJson,
     localItems,
     enchantSelections,
     gemSelections,
@@ -992,6 +1019,8 @@ export default function TopGearScreen() {
                 resolved={resolved}
                 selectedUids={selectedUids}
                 onSelectionChange={setSelectedUids}
+                excludedEquipped={effectiveExcluded}
+                onExcludedEquippedChange={setExcludedEquipped}
                 onResolvedChange={setResolved}
                 onItemAdded={(slot, simcString, origin) =>
                   setLocalItems((previous) => [...previous, toLocalItem(slot, simcString, origin)])

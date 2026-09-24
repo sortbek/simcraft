@@ -13,6 +13,7 @@ import TopGearUnchangedStrip from './TopGearUnchangedStrip';
 import { buildAlternativeKey, buildResolvedCopy } from './topGearIdentity';
 import {
   buildVisibleGroups,
+  canExcludeEquipped,
   isItemSelected as getIsItemSelected,
   mergeAlternative,
   partitionByAlternatives,
@@ -34,6 +35,9 @@ interface TopGearItemSelectorProps {
   resolved: ResolveGearResponse;
   selectedUids: Record<string, Set<string>>;
   onSelectionChange: (selected: Record<string, Set<string>>) => void;
+  /** Slots whose equipped item is left out of every combo. */
+  excludedEquipped: Set<string>;
+  onExcludedEquippedChange: (excluded: Set<string>) => void;
   onResolvedChange: (resolved: ResolveGearResponse) => void;
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
   onManualItemAdded: (item: ResolvedItem) => void;
@@ -52,6 +56,8 @@ export default function TopGearItemSelector({
   resolved,
   selectedUids,
   onSelectionChange,
+  excludedEquipped,
+  onExcludedEquippedChange,
   onResolvedChange,
   onItemAdded,
   onManualItemAdded,
@@ -296,6 +302,16 @@ export default function TopGearItemSelector({
     [onSelectionChange, resolved, selectedUids]
   );
 
+  const onToggleEquipped = useCallback(
+    (item: ResolvedItem) => {
+      const next = new Set(excludedEquipped);
+      if (next.has(item.slot)) next.delete(item.slot);
+      else next.add(item.slot);
+      onExcludedEquippedChange(next);
+    },
+    [excludedEquipped, onExcludedEquippedChange]
+  );
+
   if (visibleGroups.length === 0) {
     return (
       <div className="card p-8 text-center">
@@ -310,43 +326,49 @@ export default function TopGearItemSelector({
         className={`grid ${GEAR_DENSITY_LAYOUT[density].gap}`}
         style={{ gridTemplateColumns: gearGridColumns(density) }}
       >
-        {cards.map(({ group, equipped, alternatives }) => (
-          <TopGearGroupCard
-            key={group.label}
-            group={group}
-            equipped={equipped}
-            alternatives={alternatives}
-            locale={locale}
-            title={t(group.label)}
-            itemDetails={itemDetails}
-            isItemSelected={isSelected}
-            onToggleItem={onToggleItem}
-            upgradeMenuFor={upgradeMenuFor}
-            upgradeOptions={upgradeOptions}
-            loadingUpgrades={loadingUpgrades}
-            onUpgradeClick={openUpgradeMenu}
-            onUpgradeSelect={addUpgradedCopy}
-            onCatalystConvert={convertToCatalyst}
-            onVoidForgeConvert={convertToVoidForge}
-            onAddSocket={addSocketCopy}
-            onRemoveGem={removeGemCopy}
-            onEditGemsEnchant={(item) => {
-              setUpgradeMenuFor(null);
-              setEditItem(item);
-            }}
-            addedKeys={addedKeys}
-            onRemoveAdded={onRemoveAdded}
-            density={density}
-            // Only a group that is in the grid *because* it was promoted can go
-            // back; one with real alternatives has nothing to go back to.
-            onDemote={
-              alternatives.length === 0 && promotedGroups.has(group.label)
-                ? () => onDemoteGroup(group.label)
-                : undefined
-            }
-            t={t}
-          />
-        ))}
+        {cards.map((entry) => {
+          const { group, equipped, alternatives } = entry;
+          return (
+            <TopGearGroupCard
+              key={group.label}
+              group={group}
+              equipped={equipped}
+              alternatives={alternatives}
+              locale={locale}
+              title={t(group.label)}
+              itemDetails={itemDetails}
+              isItemSelected={isSelected}
+              onToggleItem={onToggleItem}
+              excludedEquipped={excludedEquipped}
+              canExcludeEquipped={canExcludeEquipped(entry, excludedEquipped, isSelected)}
+              onToggleEquipped={onToggleEquipped}
+              upgradeMenuFor={upgradeMenuFor}
+              upgradeOptions={upgradeOptions}
+              loadingUpgrades={loadingUpgrades}
+              onUpgradeClick={openUpgradeMenu}
+              onUpgradeSelect={addUpgradedCopy}
+              onCatalystConvert={convertToCatalyst}
+              onVoidForgeConvert={convertToVoidForge}
+              onAddSocket={addSocketCopy}
+              onRemoveGem={removeGemCopy}
+              onEditGemsEnchant={(item) => {
+                setUpgradeMenuFor(null);
+                setEditItem(item);
+              }}
+              addedKeys={addedKeys}
+              onRemoveAdded={onRemoveAdded}
+              density={density}
+              // Only a group that is in the grid *because* it was promoted can go
+              // back; one with real alternatives has nothing to go back to.
+              onDemote={
+                alternatives.length === 0 && promotedGroups.has(group.label)
+                  ? () => onDemoteGroup(group.label)
+                  : undefined
+              }
+              t={t}
+            />
+          );
+        })}
       </div>
 
       <TopGearUnchangedStrip groups={unchanged} locale={locale} onPromote={onPromoteGroup} t={t} />

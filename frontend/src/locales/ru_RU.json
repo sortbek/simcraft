@@ -628,6 +628,7 @@
   "topGear.unchangedSlots": "Без изменений",
   "topGear.unchangedSlotsHint": "Слотов без выбора: {count} — нажмите, чтобы открыть",
   "topGear.collapseSlot": "Назад к неизменным",
+  "topGear.equippedLocked": "В каждом слоте должен быть предмет: сначала отметьте альтернативу.",
   "topGear.densityLarge": "Крупно",
   "topGear.densityCompact": "Компактно",
   "topGear.densityUltra": "Плотно",

@@ -29,6 +29,10 @@ interface GearItemRowProps {
   checked?: boolean;
   /** Checkbox change handler */
   onToggle?: () => void;
+  /** Locks the checkbox in its current state */
+  disabled?: boolean;
+  /** Row tooltip, e.g. why the checkbox is locked */
+  title?: string;
   /** Whether this is the currently equipped item (shows static checkmark) */
   equipped?: boolean;
   /** Vault item styling */
@@ -58,6 +62,8 @@ export default function GearItemRow({
   selectable,
   checked,
   onToggle,
+  disabled,
+  title,
   equipped,
   vault,
   loot,
@@ -78,6 +84,7 @@ export default function GearItemRow({
         <Checkbox
           checked={!!checked}
           onChange={onToggle}
+          disabled={disabled}
           size={density === 'comfortable' ? 'md' : 'sm'}
           aria-label={name}
         />
@@ -175,13 +182,17 @@ export default function GearItemRow({
   if (selectable) {
     return (
       <label
+        title={title}
         className={cn(
-          'group cursor-pointer',
+          'group',
+          disabled ? 'cursor-default' : 'cursor-pointer',
           baseClass,
           checked
             ? statusStyle
               ? statusStyle.rowChecked
-              : 'bg-gold/[0.07]'
+              : equipped
+                ? 'bg-white/[0.03]'
+                : 'bg-gold/[0.07]'
             : statusStyle
               ? statusStyle.rowUnchecked
               : 'hover:bg-white/[0.02]'

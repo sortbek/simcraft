@@ -2,7 +2,9 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 require('./register-typescript.cjs');
 const {
+  canExcludeEquipped,
   partitionByAlternatives,
+  pruneExcludedEquipped,
   unchangedSlotCount,
 } = require('../src/app/components/gear/topGearSelection.ts');
 const { gearGridColumns } = require('../src/app/components/gear/gearDensity.ts');
@@ -78,6 +80,58 @@ test('unchangedSlotCount counts equipped pieces, not groups', () => {
 
 test('unchangedSlotCount is 0 for no groups', () => {
   assert.equal(unchangedSlotCount([]), 0);
+});
+
+const headGroup = {
+  group: { label: 'slot.head', slots: ['head'] },
+  equipped: [{ uid: 'h-eq', slot: 'head' }],
+  alternatives: [{ uid: 'h-alt', slot: 'head' }],
+};
+const ringGroup = {
+  group: { label: 'slot.rings', slots: ['finger1', 'finger2'] },
+  equipped: [
+    { uid: 'r1-eq', slot: 'finger1' },
+    { uid: 'r2-eq', slot: 'finger2' },
+  ],
+  alternatives: [
+    { uid: 'r-a', slot: 'finger1' },
+    { uid: 'r-b', slot: 'finger1' },
+  ],
+};
+const selecting =
+  (...uids) =>
+  (item) =>
+    uids.includes(item.uid);
+
+test('an equipped item can only be unticked once another item covers its slot', () => {
+  assert.equal(canExcludeEquipped(headGroup, new Set(), selecting()), false);
+  assert.equal(canExcludeEquipped(headGroup, new Set(), selecting('h-alt')), true);
+});
+
+test('rings and trinkets must keep two items', () => {
+  assert.equal(canExcludeEquipped(ringGroup, new Set(), selecting('r-a')), true);
+  assert.equal(canExcludeEquipped(ringGroup, new Set(['finger1']), selecting('r-a')), false);
+  assert.equal(canExcludeEquipped(ringGroup, new Set(['finger1']), selecting('r-a', 'r-b')), true);
+});
+
+test('pruning keeps exclusions that still leave every slot covered', () => {
+  const excluded = new Set(['head', 'finger1']);
+  const pruned = pruneExcludedEquipped([headGroup, ringGroup], excluded, selecting('h-alt', 'r-a'));
+  assert.equal(pruned, excluded);
+});
+
+test('deselecting the covering item re-ticks the equipped one', () => {
+  const pruned = pruneExcludedEquipped(
+    [headGroup, ringGroup],
+    new Set(['head', 'finger1', 'finger2']),
+    selecting('r-a')
+  );
+  assert.deepEqual([...pruned], []);
+});
+
+test('pruning drops exclusions for slots that are no longer shown', () => {
+  const pruned = pruneExcludedEquipped([headGroup], new Set(['head', 'chest']), selecting('h-alt'));
+  assert.deepEqual([...pruned], ['head']);
 });
 
 test('gearGridColumns clamps the track so it cannot outgrow its container', () => {

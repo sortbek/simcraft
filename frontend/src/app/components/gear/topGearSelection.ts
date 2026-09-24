@@ -173,6 +173,45 @@ export function unchangedSlotCount(groups: VisibleGroup[]): number {
   return groups.reduce((total, entry) => total + entry.equipped.length, 0);
 }
 
+/** Items the group would sim: kept equipped pieces plus selected alternatives. */
+function keptItemCount(
+  entry: VisibleGroup,
+  excluded: Set<string>,
+  isSelected: (item: ResolvedItem, group: DisplayGroup) => boolean
+): number {
+  const keptEquipped = entry.equipped.filter((item) => !excluded.has(item.slot)).length;
+  return keptEquipped + entry.alternatives.filter((item) => isSelected(item, entry.group)).length;
+}
+
+/** Every slot needs an item, so a group keeps at least one per slot: two for
+ *  rings and trinkets. */
+export function canExcludeEquipped(
+  entry: VisibleGroup,
+  excluded: Set<string>,
+  isSelected: (item: ResolvedItem, group: DisplayGroup) => boolean
+): boolean {
+  return keptItemCount(entry, excluded, isSelected) - 1 >= entry.group.slots.length;
+}
+
+/** Drop exclusions whose group no longer keeps enough items (the covering
+ *  alternative was deselected) or is no longer shown. Returns `excluded`
+ *  itself when nothing changes. */
+export function pruneExcludedEquipped(
+  groups: VisibleGroup[],
+  excluded: Set<string>,
+  isSelected: (item: ResolvedItem, group: DisplayGroup) => boolean
+): Set<string> {
+  if (excluded.size === 0) return excluded;
+  const kept = new Set<string>();
+  for (const entry of groups) {
+    if (keptItemCount(entry, excluded, isSelected) < entry.group.slots.length) continue;
+    for (const item of entry.equipped) {
+      if (excluded.has(item.slot)) kept.add(item.slot);
+    }
+  }
+  return kept.size === excluded.size ? excluded : kept;
+}
+
 export function collectQuickSelectEntries(resolved: ResolveGearResponse): {
   vaultUids: QuickSelectEntry[];
   lootUids: QuickSelectEntry[];

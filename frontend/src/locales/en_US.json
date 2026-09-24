@@ -359,6 +359,7 @@
   "topGear.unchangedSlots": "Unchanged",
   "topGear.unchangedSlotsHint": "{count} slots with nothing to choose · click to open",
   "topGear.collapseSlot": "Back to unchanged",
+  "topGear.equippedLocked": "Every slot needs an item: tick an alternative first.",
   "topGear.densityLarge": "Large",
   "topGear.densityCompact": "Compact",
   "topGear.densityUltra": "Dense",

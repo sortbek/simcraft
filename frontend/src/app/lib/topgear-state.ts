@@ -5,6 +5,8 @@ const STORAGE_KEY = 'simhammer_topgear_state';
 
 export interface TopGearSavedState {
   selectedUids: Record<string, string[]>;
+  /** Slots whose equipped item is unticked. */
+  excludedEquipped?: string[];
   localItems: TopGearLocalItem[];
   enchantSelections: Record<string, number[]>;
   gemSelections: number[];

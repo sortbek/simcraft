@@ -35,6 +35,11 @@ interface TopGearGroupCardProps {
   itemDetails: (item: ResolvedItem) => DetailPart[];
   isItemSelected: (item: ResolvedItem, group: DisplayGroup) => boolean;
   onToggleItem: (item: ResolvedItem, group: DisplayGroup) => void;
+  /** Slots whose equipped item is unticked. */
+  excludedEquipped: Set<string>;
+  /** Whether a ticked equipped item may be unticked without leaving a slot empty. */
+  canExcludeEquipped: boolean;
+  onToggleEquipped: (item: ResolvedItem) => void;
   upgradeMenuFor: string | null;
   upgradeOptions: UpgradeOption[];
   loadingUpgrades: boolean;
@@ -81,6 +86,9 @@ export default function TopGearGroupCard({
   itemDetails,
   isItemSelected,
   onToggleItem,
+  excludedEquipped,
+  canExcludeEquipped,
+  onToggleEquipped,
   upgradeMenuFor,
   upgradeOptions,
   loadingUpgrades,
@@ -132,38 +140,49 @@ export default function TopGearGroupCard({
         )}
       </p>
 
-      {equipped.map((item, index) => (
-        <GearItemRow
-          key={`eq-${item.uid}-${index}`}
-          icon={item.icon}
-          name={localizedItemName(item.item_id, item.name, locale)}
-          nameColor={item.quality_color}
-          details={itemDetails(item)}
-          ilevel={item.ilevel}
-          equipped
-          density={density}
-          href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
-          wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
-        >
-          <UpgradeButton
-            item={item}
-            upgradeMenuFor={upgradeMenuFor}
-            upgradeOptions={upgradeOptions}
-            loadingUpgrades={loadingUpgrades}
-            onUpgradeClick={() => onUpgradeClick(item, item.uid)}
-            onUpgradeSelect={(option) => onUpgradeSelect(item, option)}
-            onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
-            onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
-            onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
-            onRemoveGem={
-              item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
-            }
-            onEditGemsEnchant={canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined}
+      {equipped.map((item, index) => {
+        const checked = !excludedEquipped.has(item.slot);
+        const locked = checked && !canExcludeEquipped;
+        return (
+          <GearItemRow
+            key={`eq-${item.uid}-${index}`}
+            icon={item.icon}
+            name={localizedItemName(item.item_id, item.name, locale)}
+            nameColor={item.quality_color}
+            details={itemDetails(item)}
+            ilevel={item.ilevel}
+            equipped
+            selectable
+            checked={checked}
+            onToggle={() => onToggleEquipped(item)}
+            disabled={locked}
+            title={locked ? t('topGear.equippedLocked') : undefined}
             density={density}
-            t={t}
-          />
-        </GearItemRow>
-      ))}
+            href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
+            wowheadData={item.item_id > 0 ? getWowheadData(item) : undefined}
+          >
+            <UpgradeButton
+              item={item}
+              upgradeMenuFor={upgradeMenuFor}
+              upgradeOptions={upgradeOptions}
+              loadingUpgrades={loadingUpgrades}
+              onUpgradeClick={() => onUpgradeClick(item, item.uid)}
+              onUpgradeSelect={(option) => onUpgradeSelect(item, option)}
+              onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
+              onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
+              onAddSocket={canAddSocket(item) ? () => onAddSocket(item) : undefined}
+              onRemoveGem={
+                item.gem_ids.length > 0 && canManualCopy(item) ? () => onRemoveGem(item) : undefined
+              }
+              onEditGemsEnchant={
+                canEditGemsEnchant(item) ? () => onEditGemsEnchant(item) : undefined
+              }
+              density={density}
+              t={t}
+            />
+          </GearItemRow>
+        );
+      })}
 
       {equipped.length > 0 && alternatives.length > 0 && (
         <div className={`border-t border-outline-variant/20 ${layout.rule}`} />

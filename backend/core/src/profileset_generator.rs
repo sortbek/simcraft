@@ -26,6 +26,7 @@ pub use iterator::{
     ProfilesetIteratorConfig,
 };
 pub use iterator_from_request::build_iterator_from_request_json;
+pub use selection::mark_excluded_equipped;
 pub(crate) use top_gear::build_iterator_config;
 
 use once_cell::sync::Lazy;
@@ -414,8 +415,9 @@ mod classifier_tests {
 mod tests {
     use super::{
         count_top_gear_combos_with_variants, generate_droptimizer_input,
-        generate_top_gear_input_with_variants, generate_upgrade_compare_input, variants_from,
-        CraftedEmbellishment, GemEnchantOptions, ProfileVariant,
+        generate_top_gear_input_with_variants, generate_upgrade_compare_input,
+        mark_excluded_equipped, variants_from, CraftedEmbellishment, GemEnchantOptions,
+        ProfileVariant,
     };
     use crate::test_support::{ensure_game_data_loaded, TestItem};
     use serde_json::json;
@@ -1316,6 +1318,52 @@ finger2=,id=101\n";
                 "combo violated unique-equipped:\n{block}"
             );
         }
+    }
+
+    #[test]
+    fn top_gear_excluded_equipped_ring_is_never_worn_but_stays_baseline() {
+        ensure_game_data_loaded();
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+finger1=,id=100\n\
+finger2=,id=101\n";
+
+        let f1_eq = make_item("finger1", 100, true, ",id=100", vec![], 0, 0);
+        let f1_alt = make_item("finger1", 300, false, ",id=300", vec![], 0, 0);
+        let f2_eq = make_item("finger2", 101, true, ",id=101", vec![], 0, 0);
+        let f2_alt = make_item("finger2", 300, false, ",id=300", vec![], 0, 0);
+
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("finger1".to_string(), vec![f1_eq, f1_alt]);
+        items_by_slot.insert("finger2".to_string(), vec![f2_eq, f2_alt]);
+        mark_excluded_equipped(&mut items_by_slot, &["finger1".to_string()]);
+
+        let mut selected = HashMap::new();
+        selected.insert(
+            "finger1".to_string(),
+            vec![uid(300, &[], "bags", "finger1")],
+        );
+
+        let (input, count, metadata) = generate_top_gear_input_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap();
+
+        // Only 300 + 101: 300/300 breaks unique-equipped, 100 is excluded.
+        assert_eq!(count, 1);
+        let combos: Vec<&str> = input.split("### ").skip(2).collect();
+        assert!(combos.iter().all(|c| !c.contains("finger1=,id=100")));
+
+        let baseline = &metadata["Currently Equipped"];
+        let f1 = baseline.iter().find(|m| m["slot"] == "finger1").unwrap();
+        assert_eq!(f1["item_id"], 100, "baseline must show the equipped ring");
     }
 
     #[test]

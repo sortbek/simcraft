@@ -628,6 +628,7 @@
   "topGear.unchangedSlots": "Invariati",
   "topGear.unchangedSlotsHint": "{count} slot senza nulla da scegliere: clicca per aprire",
   "topGear.collapseSlot": "Torna a invariati",
+  "topGear.equippedLocked": "Ogni slot richiede un oggetto: seleziona prima un’alternativa.",
   "topGear.densityLarge": "Grande",
   "topGear.densityCompact": "Compatto",
   "topGear.densityUltra": "Denso",

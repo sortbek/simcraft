@@ -628,6 +628,7 @@
   "topGear.unchangedSlots": "Sin cambios",
   "topGear.unchangedSlotsHint": "{count} espacios sin nada que elegir: haz clic para abrir",
   "topGear.collapseSlot": "Volver a sin cambios",
+  "topGear.equippedLocked": "Cada ranura necesita un objeto: marca antes una alternativa.",
   "topGear.densityLarge": "Grande",
   "topGear.densityCompact": "Compacto",
   "topGear.densityUltra": "Denso",

@@ -125,6 +125,7 @@ pub(super) async fn cloud_estimate_top_gear(
     if req.copy_enchants {
         items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
     }
+    profileset_generator::mark_excluded_equipped(&mut items_by_slot, &req.excluded_equipped);
 
     // Same axis the run itself will use, so the credit estimate can't drift.
     let variants = super::top_gear_handlers::request_variants(&req);

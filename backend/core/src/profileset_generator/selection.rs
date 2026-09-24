@@ -87,6 +87,28 @@ fn uid_identity(uid: &str) -> String {
         .join(":")
 }
 
+fn is_excluded(item: &Value) -> bool {
+    item.get("excluded")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// Flag the equipped item in each of `slots` so candidate building stops
+/// forcing it in. The item stays in `items_by_slot` so the stored request and
+/// the "Currently Equipped" baseline still see it.
+pub fn mark_excluded_equipped(items_by_slot: &mut HashMap<String, Vec<Value>>, slots: &[String]) {
+    for slot in slots {
+        let Some(items) = items_by_slot.get_mut(slot) else {
+            continue;
+        };
+        for item in items.iter_mut() {
+            if item.get("is_equipped").and_then(|v| v.as_bool()) == Some(true) {
+                item["excluded"] = Value::Bool(true);
+            }
+        }
+    }
+}
+
 pub(super) fn build_slot_candidates(
     base_profile: &str,
     items_by_slot: &HashMap<String, Vec<Value>>,
@@ -118,6 +140,9 @@ pub(super) fn build_slot_candidates(
 
         let mut candidates: Vec<Value> = Vec::new();
         for item in slot_items {
+            if is_excluded(item) {
+                continue;
+            }
             let uid = make_item_uid(item);
             let identity = make_item_identity(item);
             if selected_uids.contains(&uid) || selected_identities.contains(&identity) {
@@ -129,6 +154,7 @@ pub(super) fn build_slot_candidates(
             it.get("is_equipped")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false)
+                && !is_excluded(it)
         });
 
         if let Some(eq) = equipped {
@@ -363,6 +389,81 @@ mod tests {
         let result = build_slot_candidates(profile, &items_by_slot, &selected);
         let head = result.get("head").expect("head missing");
         assert_eq!(head.len(), 1, "equipped should not appear twice");
+    }
+
+    #[test]
+    fn excluded_equipped_leaves_only_selected_alternatives() {
+        ensure_game_data_loaded();
+        let profile = "mage=test\n";
+        let equipped = make(100, "head", true, vec![]);
+        let alt = make(200, "head", false, vec![]);
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped, alt]);
+        mark_excluded_equipped(&mut items_by_slot, &["head".to_string()]);
+
+        let mut selected = HashMap::new();
+        selected.insert("head".to_string(), vec![uid_str(200, &[], "bags", "head")]);
+
+        let result = build_slot_candidates(profile, &items_by_slot, &selected);
+        let head = result.get("head").expect("head missing");
+        assert_eq!(head.len(), 1);
+        assert_eq!(head[0]["item_id"], 200);
+    }
+
+    #[test]
+    fn excluded_equipped_ignores_explicit_selection_of_itself() {
+        ensure_game_data_loaded();
+        let profile = "mage=test\n";
+        let equipped = make(100, "head", true, vec![]);
+        let alt = make(200, "head", false, vec![]);
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped, alt]);
+        mark_excluded_equipped(&mut items_by_slot, &["head".to_string()]);
+
+        let mut selected = HashMap::new();
+        selected.insert(
+            "head".to_string(),
+            vec![
+                uid_str(100, &[], "equipped", "head"),
+                uid_str(200, &[], "bags", "head"),
+            ],
+        );
+
+        let result = build_slot_candidates(profile, &items_by_slot, &selected);
+        let head = result.get("head").expect("head missing");
+        assert!(head.iter().all(|i| i["item_id"] != 100));
+    }
+
+    #[test]
+    fn excluding_one_ring_keeps_the_other_equipped() {
+        ensure_game_data_loaded();
+        let profile = "mage=test\n";
+        let f1_eq = make(100, "finger1", true, vec![]);
+        let f1_alt = make(300, "finger1", false, vec![]);
+        let f2_eq = make(101, "finger2", true, vec![]);
+        let f2_alt = make(300, "finger2", false, vec![]);
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("finger1".to_string(), vec![f1_eq, f1_alt]);
+        items_by_slot.insert("finger2".to_string(), vec![f2_eq, f2_alt]);
+        mark_excluded_equipped(&mut items_by_slot, &["finger1".to_string()]);
+
+        let mut selected = HashMap::new();
+        selected.insert(
+            "finger1".to_string(),
+            vec![uid_str(300, &[], "bags", "finger1")],
+        );
+
+        let result = build_slot_candidates(profile, &items_by_slot, &selected);
+        let f1: Vec<_> = result["finger1"]
+            .iter()
+            .map(|i| i["item_id"].clone())
+            .collect();
+        let f2: Vec<_> = result["finger2"]
+            .iter()
+            .map(|i| i["item_id"].clone())
+            .collect();
+        assert_eq!(f1, vec![Value::from(300)]);
+        assert_eq!(f2, vec![Value::from(101), Value::from(300)]);
     }
 
     #[test]

@@ -71,6 +71,7 @@ fn build_items_by_slot(
         items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
     }
 
+    profileset_generator::mark_excluded_equipped(&mut items_by_slot, &req.excluded_equipped);
     items_by_slot
 }
 

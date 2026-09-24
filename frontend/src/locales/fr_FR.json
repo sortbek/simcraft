@@ -628,6 +628,7 @@
   "topGear.unchangedSlots": "Inchangés",
   "topGear.unchangedSlotsHint": "{count} emplacements sans choix possible — cliquez pour ouvrir",
   "topGear.collapseSlot": "Retour aux inchangés",
+  "topGear.equippedLocked": "Chaque emplacement doit avoir un objet : cochez d’abord une alternative.",
   "topGear.densityLarge": "Grand",
   "topGear.densityCompact": "Compact",
   "topGear.densityUltra": "Dense",

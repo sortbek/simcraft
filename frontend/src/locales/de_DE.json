@@ -628,6 +628,7 @@
   "topGear.unchangedSlots": "Unverändert",
   "topGear.unchangedSlotsHint": "{count} Plätze ohne Auswahlmöglichkeit – zum Öffnen klicken",
   "topGear.collapseSlot": "Zurück zu unverändert",
+  "topGear.equippedLocked": "Jeder Platz braucht ein Item: wähle zuerst eine Alternative.",
   "topGear.densityLarge": "Groß",
   "topGear.densityCompact": "Kompakt",
   "topGear.densityUltra": "Dicht",
