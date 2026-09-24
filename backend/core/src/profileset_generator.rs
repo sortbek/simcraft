@@ -1366,6 +1366,147 @@ finger2=,id=101\n";
         assert_eq!(f1["item_id"], 100, "baseline must show the equipped ring");
     }
 
+    type RingFixture = (
+        &'static str,
+        HashMap<String, Vec<serde_json::Value>>,
+        HashMap<String, Vec<String>>,
+    );
+
+    /// Rings 300 and 301 selected for both fingers, equipped 100/101.
+    fn two_shared_rings() -> RingFixture {
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+finger1=,id=100\n\
+finger2=,id=101\n";
+        let mut items_by_slot = HashMap::new();
+        let mut selected = HashMap::new();
+        for (slot, equipped) in [("finger1", 100), ("finger2", 101)] {
+            items_by_slot.insert(
+                slot.to_string(),
+                vec![
+                    make_item(
+                        slot,
+                        equipped,
+                        true,
+                        &format!(",id={equipped}"),
+                        vec![],
+                        0,
+                        0,
+                    ),
+                    make_item(slot, 300, false, ",id=300", vec![], 0, 0),
+                    make_item(slot, 301, false, ",id=301", vec![], 0, 0),
+                ],
+            );
+            selected.insert(
+                slot.to_string(),
+                vec![uid(300, &[], "bags", slot), uid(301, &[], "bags", slot)],
+            );
+        }
+        (base_profile, items_by_slot, selected)
+    }
+
+    /// (finger1, finger2) item ids per emitted combo.
+    fn ring_pairs(input: &str) -> Vec<(String, String)> {
+        let ring = |block: &str, slot: &str| {
+            let re = regex::Regex::new(&format!(r"\+={slot}=,id=(\d+)")).unwrap();
+            re.captures(block)
+                .map_or("kept".to_string(), |c| c[1].to_string())
+        };
+        input
+            .split("### ")
+            .filter(|b| b.starts_with("Combo ") && b.contains("profileset."))
+            .map(|b| (ring(b, "finger1"), ring(b, "finger2")))
+            .collect()
+    }
+
+    #[test]
+    fn top_gear_swapping_two_rings_between_fingers_is_one_combo() {
+        ensure_game_data_loaded();
+        let (base_profile, items_by_slot, selected) = two_shared_rings();
+        let (input, count, _) = generate_top_gear_input_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap();
+
+        // 100+300, 100+301, 300+101, 301+101, and 300+301 once (not also 301+300).
+        assert_eq!(count, 5, "combos: {:?}", ring_pairs(&input));
+        let both_new = ring_pairs(&input)
+            .into_iter()
+            .filter(|(a, b)| a != "100" && b != "101")
+            .count();
+        assert_eq!(both_new, 1, "combos: {:?}", ring_pairs(&input));
+    }
+
+    #[test]
+    fn top_gear_count_matches_emitted_after_ring_swap_dedup() {
+        ensure_game_data_loaded();
+        let (base_profile, items_by_slot, selected) = two_shared_rings();
+        let count = count_top_gear_combos_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(count, 5);
+    }
+
+    #[test]
+    fn top_gear_both_rings_unticked_leaves_one_combo() {
+        ensure_game_data_loaded();
+        let (base_profile, mut items_by_slot, selected) = two_shared_rings();
+        mark_excluded_equipped(
+            &mut items_by_slot,
+            &["finger1".to_string(), "finger2".to_string()],
+        );
+        let (input, count, _) = generate_top_gear_input_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(count, 1, "combos: {:?}", ring_pairs(&input));
+    }
+
+    #[test]
+    fn top_gear_ring_swap_kept_when_fingers_carry_different_enchants() {
+        ensure_game_data_loaded();
+        let (base_profile, mut items_by_slot, selected) = two_shared_rings();
+        // As copy_enchants leaves them: each finger's alternatives take that
+        // finger's enchant, so 300/301 and 301/300 are different profiles.
+        for (slot, enchant) in [("finger1", 1111), ("finger2", 2222)] {
+            for item in items_by_slot.get_mut(slot).unwrap().iter_mut().skip(1) {
+                let id = item["item_id"].as_u64().unwrap();
+                item["simc_string"] = json!(format!(",id={id},enchant_id={enchant}"));
+            }
+        }
+        let (input, count, _) = generate_top_gear_input_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(count, 6, "combos: {:?}", ring_pairs(&input));
+    }
+
     #[test]
     fn top_gear_vault_constraint_blocks_two_vault_items() {
         ensure_game_data_loaded();

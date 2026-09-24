@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use super::gem_combos::GemCombo;
 use super::identity_key::{compute_identity_key, effective_gems, IdentityInput};
-use crate::types::class_data::GEAR_SLOTS;
+use crate::types::class_data::{GEAR_SLOTS, UNIQUE_SLOT_PAIRS};
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -99,6 +99,37 @@ struct Eval {
     folio_name: String,
     /// `omnium_talents=` value to override, empty when it matches the base actor.
     omnium_override: String,
+}
+
+/// Each gear slot's simc value with its enchant and gem overrides applied.
+fn slot_lines(
+    gear_set: &HashMap<String, Arc<Value>>,
+    effective_enchants: &HashMap<String, u64>,
+    eff_gems: &GemCombo,
+) -> HashMap<String, String> {
+    GEAR_SLOTS
+        .iter()
+        .filter_map(|slot| {
+            let item = gear_set.get(*slot)?;
+            let base_simc = item
+                .get("simc_string")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            let with_enchant = if let Some(&eid) = effective_enchants.get(*slot) {
+                crate::simc_string::set_enchant_id(base_simc, eid)
+            } else {
+                base_simc.to_string()
+            };
+            let item_sockets = item.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
+            // item_sockets (game data) is authoritative: sockets:0 is never gemmed.
+            // replace_gems=true is safe — eff_gems is already filtered upstream in
+            // build_iterator_config (socketless + replace_gems=false already-gemmed
+            // items excluded during gem_slots construction).
+            let with_gem =
+                super::emit::apply_item_gems(&with_enchant, item_sockets, slot, eff_gems, true);
+            Some((slot.to_string(), with_gem))
+        })
+        .collect()
 }
 
 // ── Shared cursor helpers ─────────────────────────────────────────────────────
@@ -248,6 +279,77 @@ impl ProfilesetIterator {
     /// `None` skips. Shared by `build_candidate` and `count_emitted` so they can
     /// never diverge.
     fn evaluate(&self, cursor: &[usize]) -> Option<Eval> {
+        let eval = self.evaluate_unpaired(cursor)?;
+        if self.has_earlier_ring_or_trinket_swap(cursor, &eval) {
+            return None;
+        }
+        Some(eval)
+    }
+
+    /// Whether swapping this combo's two rings (or two trinkets) between their
+    /// slots gives an earlier cursor with the exact same profile. Both would
+    /// sim the same gear, so only the earlier one emits. Decided from the cursor
+    /// alone so `count_emitted`, `seek` and resume keep agreeing.
+    fn has_earlier_ring_or_trinket_swap(&self, cursor: &[usize], eval: &Eval) -> bool {
+        let axis_of = |slot: &str| self.cfg.varying_slots.iter().position(|s| s == slot);
+        let item_id = |item: &Value| item.get("item_id").and_then(|v| v.as_u64());
+        let mut lines: Option<HashMap<String, String>> = None;
+
+        for (slot_a, slot_b) in UNIQUE_SLOT_PAIRS {
+            let (Some(axis_a), Some(axis_b)) = (axis_of(slot_a), axis_of(slot_b)) else {
+                continue;
+            };
+            let (Some(item_a), Some(item_b)) =
+                (eval.gear_set.get(*slot_a), eval.gear_set.get(*slot_b))
+            else {
+                continue;
+            };
+            let list_a = &self.cfg.slot_item_lists[*slot_a];
+            let list_b = &self.cfg.slot_item_lists[*slot_b];
+
+            for (i, candidate_a) in list_a.iter().enumerate() {
+                if item_id(candidate_a) != item_id(item_b) {
+                    continue;
+                }
+                for (j, candidate_b) in list_b.iter().enumerate() {
+                    if item_id(candidate_b) != item_id(item_a) {
+                        continue;
+                    }
+                    let mut swapped = cursor.to_vec();
+                    swapped[axis_a] = i;
+                    swapped[axis_b] = j;
+                    if swapped.as_slice() >= cursor {
+                        continue;
+                    }
+                    let Some(other) = self.evaluate_unpaired(&swapped) else {
+                        continue;
+                    };
+                    let ours = lines.get_or_insert_with(|| {
+                        slot_lines(&eval.gear_set, &eval.effective_enchants_map, &eval.eff_gems)
+                    });
+                    let mut theirs = slot_lines(
+                        &other.gear_set,
+                        &other.effective_enchants_map,
+                        &other.eff_gems,
+                    );
+                    let (a, b) = (theirs.remove(*slot_a), theirs.remove(*slot_b));
+                    if let Some(a) = a {
+                        theirs.insert(slot_b.to_string(), a);
+                    }
+                    if let Some(b) = b {
+                        theirs.insert(slot_a.to_string(), b);
+                    }
+                    if &theirs == ours {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Every emission rule except the ring/trinket swap dedup.
+    fn evaluate_unpaired(&self, cursor: &[usize]) -> Option<Eval> {
         // ── 1. Build gear set ────────────────────────────────────────────────
         let mut gear_set: HashMap<String, Arc<Value>> = HashMap::new();
         for (slot, items) in &self.cfg.slot_item_lists {
@@ -419,36 +521,7 @@ impl ProfilesetIterator {
         // ── 9. Format simc lines + build metadata ───────────────────────────
         let profileset_name = format!("Combo {}", self.next_name_idx);
 
-        // Build slot_simc: apply enchant and gem overrides to each gear slot.
-        let slot_simc: HashMap<String, String> = GEAR_SLOTS
-            .iter()
-            .filter_map(|slot| {
-                let item = gear_set.get(*slot)?;
-                let base_simc = item
-                    .get("simc_string")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("");
-                let with_enchant = if let Some(&eid) = effective_enchants_map.get(*slot) {
-                    crate::simc_string::set_enchant_id(base_simc, eid)
-                } else {
-                    base_simc.to_string()
-                };
-                let item_sockets =
-                    item.get("sockets").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
-                // item_sockets (game data) is authoritative: sockets:0 is never gemmed.
-                // replace_gems=true is safe — eff_gems is already filtered upstream in
-                // build_iterator_config (socketless + replace_gems=false already-gemmed
-                // items excluded during gem_slots construction).
-                let with_gem = super::emit::apply_item_gems(
-                    &with_enchant,
-                    item_sockets,
-                    slot,
-                    &eff_gems,
-                    true,
-                );
-                Some((slot.to_string(), with_gem))
-            })
-            .collect();
+        let slot_simc = slot_lines(&gear_set, &effective_enchants_map, &eff_gems);
 
         // Talent spec for the spec= override line (streaming doesn't vary specs,
         // but kept consistent with the eager path).
