@@ -77,6 +77,8 @@ export default function TopGearItemSelector({
 
   useWowheadTooltips([resolved]);
 
+  const closeUpgradeMenu = useCallback(() => setUpgradeMenuFor(null), []);
+
   const openUpgradeMenu = useCallback(
     async (item: ResolvedItem, key: string) => {
       if (upgradeMenuFor === key) {
@@ -346,6 +348,7 @@ export default function TopGearItemSelector({
               upgradeOptions={upgradeOptions}
               loadingUpgrades={loadingUpgrades}
               onUpgradeClick={openUpgradeMenu}
+              onUpgradeMenuClose={closeUpgradeMenu}
               onUpgradeSelect={addUpgradedCopy}
               onCatalystConvert={convertToCatalyst}
               onVoidForgeConvert={convertToVoidForge}

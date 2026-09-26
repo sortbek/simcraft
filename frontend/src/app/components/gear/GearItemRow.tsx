@@ -180,8 +180,11 @@ export default function GearItemRow({
   const baseClass = cn('flex items-center rounded-md transition-colors', metrics.row);
 
   if (selectable) {
+    // A div, not a label: a label ignores clicks on its links (the icon and
+    // name), so those spots never toggled. Nested buttons stop propagation.
     return (
-      <label
+      <div
+        onClick={disabled ? undefined : onToggle}
         title={title}
         className={cn(
           'group',
@@ -199,7 +202,7 @@ export default function GearItemRow({
         )}
       >
         {content}
-      </label>
+      </div>
     );
   }
 

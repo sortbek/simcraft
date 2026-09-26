@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import type { ResolvedItem } from '../../lib/types';
+import { usePopupDismissal } from '../loot/usePopupDismissal';
 import { getWowheadData, getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
 import GearItemRow from './GearItemRow';
@@ -44,6 +46,7 @@ interface TopGearGroupCardProps {
   upgradeOptions: UpgradeOption[];
   loadingUpgrades: boolean;
   onUpgradeClick: (item: ResolvedItem, key: string) => void;
+  onUpgradeMenuClose: () => void;
   onUpgradeSelect: (item: ResolvedItem, option: UpgradeOption) => void;
   onCatalystConvert: (item: ResolvedItem) => void;
   onVoidForgeConvert: (item: ResolvedItem) => void;
@@ -93,6 +96,7 @@ export default function TopGearGroupCard({
   upgradeOptions,
   loadingUpgrades,
   onUpgradeClick,
+  onUpgradeMenuClose,
   onUpgradeSelect,
   onCatalystConvert,
   onVoidForgeConvert,
@@ -167,6 +171,7 @@ export default function TopGearGroupCard({
               upgradeOptions={upgradeOptions}
               loadingUpgrades={loadingUpgrades}
               onUpgradeClick={() => onUpgradeClick(item, item.uid)}
+              onClose={onUpgradeMenuClose}
               onUpgradeSelect={(option) => onUpgradeSelect(item, option)}
               onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
               onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
@@ -236,6 +241,7 @@ export default function TopGearGroupCard({
             upgradeOptions={upgradeOptions}
             loadingUpgrades={loadingUpgrades}
             onUpgradeClick={() => onUpgradeClick(item, item.uid)}
+            onClose={onUpgradeMenuClose}
             onUpgradeSelect={(option) => onUpgradeSelect(item, option)}
             onCatalystConvert={item.can_catalyst ? () => onCatalystConvert(item) : undefined}
             onVoidForgeConvert={item.can_void_forge ? () => onVoidForgeConvert(item) : undefined}
@@ -259,6 +265,7 @@ function UpgradeButton({
   upgradeOptions,
   loadingUpgrades,
   onUpgradeClick,
+  onClose,
   onUpgradeSelect,
   onCatalystConvert,
   onVoidForgeConvert: onVoidForgeConvertProp,
@@ -273,6 +280,7 @@ function UpgradeButton({
   upgradeOptions: UpgradeOption[];
   loadingUpgrades: boolean;
   onUpgradeClick: () => void;
+  onClose: () => void;
   onUpgradeSelect: (opt: UpgradeOption) => void;
   onCatalystConvert?: () => void;
   onVoidForgeConvert?: () => void;
@@ -285,6 +293,9 @@ function UpgradeButton({
   // Gated once so the surrounding menu guards agree with the button itself and
   // the menu never renders empty with Void Forge as its only action.
   const onVoidForgeConvert = VOID_FORGE_ENABLED ? onVoidForgeConvertProp : undefined;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const isMenuOpen = upgradeMenuFor === item.uid;
+  usePopupDismissal(isMenuOpen, onClose, rootRef);
   if (
     !item.upgrade &&
     !onCatalystConvert &&
@@ -294,10 +305,9 @@ function UpgradeButton({
     !onEditGemsEnchant
   )
     return null;
-  const isMenuOpen = upgradeMenuFor === item.uid;
 
   return (
-    <div className="relative shrink-0">
+    <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
         onClick={(event) => {
@@ -324,7 +334,10 @@ function UpgradeButton({
         </svg>
       </button>
       {isMenuOpen && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-outline-variant/20 bg-surface-container py-1 shadow-xl">
+        <div
+          onClick={(event) => event.stopPropagation()}
+          className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-outline-variant/20 bg-surface-container py-1 shadow-xl"
+        >
           {onCatalystConvert && (
             <button
               type="button"
