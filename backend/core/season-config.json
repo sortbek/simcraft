@@ -86,7 +86,7 @@
           "key": "heroic",
           "label": "Heroic",
           "track": "Adventurer",
-          "level": 2,
+          "level": 4,
           "sortOrder": 1
         },
         {
@@ -127,8 +127,8 @@
         {
           "key": "mythic+6",
           "label": "+6",
-          "track": "Champion",
-          "level": 5,
+          "track": "Hero",
+          "level": 1,
           "sortOrder": 7
         },
         {
@@ -223,7 +223,7 @@
           "key": "heroic",
           "label": "Heroic",
           "track": "Adventurer",
-          "level": 2,
+          "level": 4,
           "sortOrder": 2
         },
         {
@@ -564,7 +564,7 @@
   "dungeonDifficultyTracks": {
     "heroic": {
       "track": "Adventurer",
-      "level": 2
+      "level": 4
     },
     "mythic": {
       "track": "Champion",
@@ -587,8 +587,8 @@
       "level": 4
     },
     "mythic+6": {
-      "track": "Champion",
-      "level": 5
+      "track": "Hero",
+      "level": 1
     },
     "mythic+7": {
       "track": "Hero",

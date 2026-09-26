@@ -1030,6 +1030,46 @@ mod season_filter_tests {
         assert!(checked > 0, "no loot found for the last two bosses");
     }
 
+    /// Dungeon loot per keystone level, as the game lists it. +6 and +7 share
+    /// 305 but +6 is already Hero 1/6, not Champion 5/6: same item level, but
+    /// only Hero upgrades past 308.
+    #[test]
+    fn mythic_plus_drops_land_on_the_game_item_levels() {
+        ensure_game_data_loaded();
+        let drops = get_instance_drops(-1, None, None, false).expect("M+ pool drops");
+        let info = drops
+            .values()
+            .filter_map(|v| v.as_array())
+            .flatten()
+            .find_map(|item| item.get("dungeon_info"))
+            .expect("an M+ drop with dungeon info");
+
+        for (key, ilvl, track, level) in [
+            ("heroic", 276, "Adventurer", 4),
+            ("mythic", 292, "Champion", 1),
+            ("mythic+2", 295, "Champion", 2),
+            ("mythic+3", 295, "Champion", 2),
+            ("mythic+4", 298, "Champion", 3),
+            ("mythic+5", 302, "Champion", 4),
+            ("mythic+6", 305, "Hero", 1),
+            ("mythic+7", 305, "Hero", 1),
+            ("mythic+8", 308, "Hero", 2),
+            ("mythic+9", 308, "Hero", 2),
+            ("mythic+10", 311, "Hero", 3),
+            ("vault+0", 302, "Champion", 4),
+            ("vault+2-3", 305, "Champion", 5),
+            ("vault+4-5", 308, "Champion", 6),
+            ("vault+6", 311, "Hero", 3),
+            ("vault+7-9", 315, "Hero", 4),
+            ("vault+10-13", 318, "Myth", 1),
+        ] {
+            let got = &info[key];
+            assert_eq!(got["ilvl"], serde_json::json!(ilvl), "{key} item level");
+            assert_eq!(got["track"], serde_json::json!(track), "{key} track");
+            assert_eq!(got["level"], serde_json::json!(level), "{key} track level");
+        }
+    }
+
     /// Off-track bonuses must be indexed as fixed-difficulty, or every feature
     /// gating on "current season AND a minimum track" silently drops this gear.
     #[test]
