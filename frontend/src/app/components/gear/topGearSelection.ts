@@ -173,43 +173,37 @@ export function unchangedSlotCount(groups: VisibleGroup[]): number {
   return groups.reduce((total, entry) => total + entry.equipped.length, 0);
 }
 
-/** Items the group would sim: kept equipped pieces plus selected alternatives. */
-function keptItemCount(
-  entry: VisibleGroup,
-  excluded: Set<string>,
-  isSelected: (item: ResolvedItem, group: DisplayGroup) => boolean
-): number {
-  const keptEquipped = entry.equipped.filter((item) => !excluded.has(item.slot)).length;
-  return keptEquipped + entry.alternatives.filter((item) => isSelected(item, entry.group)).length;
-}
-
-/** Every slot needs an item, so a group keeps at least one per slot: two for
- *  rings and trinkets. */
-export function canExcludeEquipped(
-  entry: VisibleGroup,
-  excluded: Set<string>,
-  isSelected: (item: ResolvedItem, group: DisplayGroup) => boolean
-): boolean {
-  return keptItemCount(entry, excluded, isSelected) - 1 >= entry.group.slots.length;
-}
-
-/** Drop exclusions whose group no longer keeps enough items (the covering
- *  alternative was deselected) or is no longer shown. Returns `excluded`
- *  itself when nothing changes. */
-export function pruneExcludedEquipped(
+/** The alternative that stands in for each unticked equipped item as the
+ *  baseline: the first one ticked for that slot (a Set keeps click order) that
+ *  the paired ring or trinket slot isn't already wearing. An unticked slot with
+ *  no such item gets none and keeps its equipped piece, so every slot always
+ *  has an item. */
+export function pickEquippedReplacements(
   groups: VisibleGroup[],
   excluded: Set<string>,
-  isSelected: (item: ResolvedItem, group: DisplayGroup) => boolean
-): Set<string> {
-  if (excluded.size === 0) return excluded;
-  const kept = new Set<string>();
+  resolved: ResolveGearResponse,
+  selectedUids: Record<string, Set<string>>
+): Record<string, ResolvedItem> {
+  const replacements: Record<string, ResolvedItem> = {};
   for (const entry of groups) {
-    if (keptItemCount(entry, excluded, isSelected) < entry.group.slots.length) continue;
+    const worn: Record<string, number> = {};
     for (const item of entry.equipped) {
-      if (excluded.has(item.slot)) kept.add(item.slot);
+      if (!excluded.has(item.slot)) worn[item.slot] = item.item_id;
+    }
+    for (const slot of entry.group.slots) {
+      if (!excluded.has(slot) || !entry.equipped.some((item) => item.slot === slot)) continue;
+      const taken = entry.group.slots.filter((other) => other !== slot).map((other) => worn[other]);
+      const alternatives = resolved.slots[slot]?.alternatives ?? [];
+      for (const uid of selectedUids[slot] ?? []) {
+        const alternative = alternatives.find((candidate) => candidate.uid === uid);
+        if (!alternative || taken.includes(alternative.item_id)) continue;
+        replacements[slot] = alternative;
+        worn[slot] = alternative.item_id;
+        break;
+      }
     }
   }
-  return kept.size === excluded.size ? excluded : kept;
+  return replacements;
 }
 
 export function collectQuickSelectEntries(resolved: ResolveGearResponse): {

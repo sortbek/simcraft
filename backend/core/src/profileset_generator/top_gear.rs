@@ -380,19 +380,10 @@ pub fn generate_top_gear_input_with_variants(
         let mut baseline_items: Vec<Value> = Vec::new();
         for slot in &paired_display_slots {
             let slot = slot.to_string();
-            // Read the equipped item from items_by_slot: an excluded one is no
-            // longer a candidate, but it is still what the baseline wears.
-            let equipped = items_by_slot.get(&slot).and_then(|items| {
-                items.iter().find(|it| {
-                    it.get("is_equipped")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false)
-                })
-            });
-            if let Some(item) =
-                equipped.or_else(|| slot_item_lists_raw.get(&slot).and_then(|i| i.first()))
-            {
-                baseline_items.push(item_meta(item, &slot));
+            if let Some(items) = slot_item_lists_raw.get(&slot) {
+                if !items.is_empty() {
+                    baseline_items.push(item_meta(&items[0], &slot));
+                }
             }
         }
         if has_folio_variants {

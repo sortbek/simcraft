@@ -39,8 +39,8 @@ interface TopGearGroupCardProps {
   onToggleItem: (item: ResolvedItem, group: DisplayGroup) => void;
   /** Slots whose equipped item is unticked. */
   excludedEquipped: Set<string>;
-  /** Whether a ticked equipped item may be unticked without leaving a slot empty. */
-  canExcludeEquipped: boolean;
+  /** Whether a ticked equipped item has a ticked alternative to stand in for it. */
+  canExcludeEquipped: (item: ResolvedItem) => boolean;
   onToggleEquipped: (item: ResolvedItem) => void;
   upgradeMenuFor: string | null;
   upgradeOptions: UpgradeOption[];
@@ -146,7 +146,7 @@ export default function TopGearGroupCard({
 
       {equipped.map((item, index) => {
         const checked = !excludedEquipped.has(item.slot);
-        const locked = checked && !canExcludeEquipped;
+        const locked = checked && !canExcludeEquipped(item);
         return (
           <GearItemRow
             key={`eq-${item.uid}-${index}`}

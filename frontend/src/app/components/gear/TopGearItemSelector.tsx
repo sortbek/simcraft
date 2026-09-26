@@ -13,10 +13,10 @@ import TopGearUnchangedStrip from './TopGearUnchangedStrip';
 import { buildAlternativeKey, buildResolvedCopy } from './topGearIdentity';
 import {
   buildVisibleGroups,
-  canExcludeEquipped,
   isItemSelected as getIsItemSelected,
   mergeAlternative,
   partitionByAlternatives,
+  pickEquippedReplacements,
   selectAlternative,
   toggleItemSelection,
   type DisplayGroup,
@@ -37,6 +37,8 @@ interface TopGearItemSelectorProps {
   onSelectionChange: (selected: Record<string, Set<string>>) => void;
   /** Slots whose equipped item is left out of every combo. */
   excludedEquipped: Set<string>;
+  /** Slot → the alternative standing in for its unticked equipped piece. */
+  equippedReplacements: Record<string, ResolvedItem>;
   onExcludedEquippedChange: (excluded: Set<string>) => void;
   onResolvedChange: (resolved: ResolveGearResponse) => void;
   onItemAdded: (slot: string, simcString: string, origin: ItemOrigin) => void;
@@ -57,6 +59,7 @@ export default function TopGearItemSelector({
   selectedUids,
   onSelectionChange,
   excludedEquipped,
+  equippedReplacements,
   onExcludedEquippedChange,
   onResolvedChange,
   onItemAdded,
@@ -250,9 +253,17 @@ export default function TopGearItemSelector({
     [visibleGroups, promotedGroups]
   );
 
+  const baselineKeys = useMemo(
+    () => new Set(Object.values(equippedReplacements).map(buildAlternativeKey)),
+    [equippedReplacements]
+  );
+
   const itemDetails = useCallback(
     (item: ResolvedItem): { text: string; color?: string }[] => {
       const parts: { text: string; color?: string }[] = [];
+      if (baselineKeys.has(buildAlternativeKey(item))) {
+        parts.push({ text: t('topGear.baseline'), color: 'text-gold' });
+      }
       if (addedKeys.has(buildAlternativeKey(item))) {
         parts.push({ text: 'Added', color: 'text-gold/90' });
       }
@@ -288,7 +299,7 @@ export default function TopGearItemSelector({
       }
       return parts;
     },
-    [locale, t, addedKeys]
+    [locale, t, addedKeys, baselineKeys]
   );
 
   const isSelected = useCallback(
@@ -342,7 +353,15 @@ export default function TopGearItemSelector({
               isItemSelected={isSelected}
               onToggleItem={onToggleItem}
               excludedEquipped={excludedEquipped}
-              canExcludeEquipped={canExcludeEquipped(entry, excludedEquipped, isSelected)}
+              canExcludeEquipped={(item) =>
+                item.slot in
+                pickEquippedReplacements(
+                  [entry],
+                  new Set(excludedEquipped).add(item.slot),
+                  resolved,
+                  selectedUids
+                )
+              }
               onToggleEquipped={onToggleEquipped}
               upgradeMenuFor={upgradeMenuFor}
               upgradeOptions={upgradeOptions}

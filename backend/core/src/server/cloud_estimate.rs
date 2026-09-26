@@ -112,7 +112,6 @@ pub(super) async fn cloud_estimate_top_gear(
     if req.void_forge {
         gear_resolver::generate_void_forge_alternatives(&mut resolved.slots);
     }
-    let base_profile = resolved.base_profile.clone();
 
     let mut items_by_slot = if let Some(ref ibs) = req.items_by_slot {
         ibs.clone()
@@ -125,7 +124,11 @@ pub(super) async fn cloud_estimate_top_gear(
     if req.copy_enchants {
         items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
     }
-    profileset_generator::mark_excluded_equipped(&mut items_by_slot, &req.excluded_equipped);
+    let base_profile = profileset_generator::apply_equipped_replacements(
+        &resolved.base_profile,
+        &mut items_by_slot,
+        &req.equipped_replacements,
+    );
 
     // Same axis the run itself will use, so the credit estimate can't drift.
     let variants = super::top_gear_handlers::request_variants(&req);

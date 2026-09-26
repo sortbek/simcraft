@@ -628,6 +628,7 @@
   "topGear.unchangedSlots": "Inalterados",
   "topGear.unchangedSlotsHint": "{count} espaços sem nada para escolher: clique para abrir",
   "topGear.collapseSlot": "Voltar para inalterados",
+  "topGear.baseline": "Referência",
   "topGear.equippedLocked": "Todo espaço precisa de um item: marque uma alternativa primeiro.",
   "topGear.densityLarge": "Grande",
   "topGear.densityCompact": "Compacto",

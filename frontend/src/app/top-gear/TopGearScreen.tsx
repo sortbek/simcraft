@@ -47,9 +47,8 @@ import { useOmniumTree } from '../lib/useOmniumTree';
 import {
   buildVisibleGroups,
   collectQuickSelectEntries,
-  isItemSelected,
   mergeAlternative,
-  pruneExcludedEquipped,
+  pickEquippedReplacements,
   selectAlternative,
   toggleQuickSelectGroup,
 } from '../components/gear/topGearSelection';
@@ -323,21 +322,37 @@ export default function TopGearScreen() {
     return () => clearTimeout(timer);
   }, [simcInput, maxUpgrade, catalyst, voidForge]);
 
-  // Every slot keeps an item, so an unticked equipped piece is ticked again once
-  // nothing else covers its slot (e.g. its alternative was deselected).
-  const effectiveExcluded = useMemo(
+  // Each unticked equipped piece is replaced by the first alternative ticked for
+  // its slot, which becomes the baseline.
+  const equippedReplacements = useMemo(
     () =>
       resolved
-        ? pruneExcludedEquipped(buildVisibleGroups(resolved), excludedEquipped, (item, group) =>
-            isItemSelected(item, group, resolved, selectedUids)
+        ? pickEquippedReplacements(
+            buildVisibleGroups(resolved),
+            excludedEquipped,
+            resolved,
+            selectedUids
           )
-        : excludedEquipped,
+        : {},
     [resolved, excludedEquipped, selectedUids]
   );
+  // Every slot keeps an item: a slot left with nothing to replace its equipped
+  // piece (its alternatives were deselected) is ticked again.
+  const effectiveExcluded = useMemo(
+    () => (resolved ? new Set(Object.keys(equippedReplacements)) : excludedEquipped),
+    [resolved, equippedReplacements, excludedEquipped]
+  );
   useEffect(() => {
-    if (effectiveExcluded !== excludedEquipped) setExcludedEquipped(effectiveExcluded);
+    if (effectiveExcluded.size !== excludedEquipped.size) setExcludedEquipped(effectiveExcluded);
   }, [effectiveExcluded, excludedEquipped]);
   const excludedEquippedJson = useMemo(() => [...effectiveExcluded], [effectiveExcluded]);
+  const equippedReplacementsJson = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(equippedReplacements).map(([slot, item]) => [slot, item.uid])
+      ),
+    [equippedReplacements]
+  );
 
   const equippedSlots = useMemo<Record<string, ResolvedItem>>(() => {
     if (!resolved) return {};
@@ -629,7 +644,7 @@ export default function TopGearScreen() {
     return {
       simc_input: submitInput,
       selected_items: selectedItemsJson,
-      excluded_equipped: excludedEquippedJson,
+      equipped_replacements: equippedReplacementsJson,
       items_by_slot: null,
       max_upgrade: maxUpgrade,
       copy_enchants: copyEnchants,
@@ -663,7 +678,7 @@ export default function TopGearScreen() {
     selectedUids,
     submitInput,
     selectedItemsJson,
-    excludedEquippedJson,
+    equippedReplacementsJson,
     maxUpgrade,
     copyEnchants,
     talentBuilds,
@@ -714,7 +729,7 @@ export default function TopGearScreen() {
     () => ({
       simc_input: submitInput,
       selected_items: selectedItemsJson,
-      excluded_equipped: excludedEquippedJson,
+      equipped_replacements: equippedReplacementsJson,
       items_by_slot: null,
       max_upgrade: maxUpgrade,
       copy_enchants: copyEnchants,
@@ -740,7 +755,7 @@ export default function TopGearScreen() {
     [
       submitInput,
       selectedItemsJson,
-      excludedEquippedJson,
+      equippedReplacementsJson,
       maxUpgrade,
       copyEnchants,
 
@@ -1020,6 +1035,7 @@ export default function TopGearScreen() {
                 selectedUids={selectedUids}
                 onSelectionChange={setSelectedUids}
                 excludedEquipped={effectiveExcluded}
+                equippedReplacements={equippedReplacements}
                 onExcludedEquippedChange={setExcludedEquipped}
                 onResolvedChange={setResolved}
                 onItemAdded={(slot, simcString, origin) =>

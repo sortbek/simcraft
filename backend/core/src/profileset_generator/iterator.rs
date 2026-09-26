@@ -279,17 +279,17 @@ impl ProfilesetIterator {
     /// `None` skips. Shared by `build_candidate` and `count_emitted` so they can
     /// never diverge.
     fn evaluate(&self, cursor: &[usize]) -> Option<Eval> {
-        let eval = self.evaluate_unpaired(cursor)?;
-        if self.has_earlier_ring_or_trinket_swap(cursor, &eval) {
+        let (eval, reproduces_base) = self.evaluate_unpaired(cursor)?;
+        if reproduces_base || self.has_earlier_ring_or_trinket_swap(cursor, &eval) {
             return None;
         }
         Some(eval)
     }
 
     /// Whether swapping this combo's two rings (or two trinkets) between their
-    /// slots gives an earlier cursor with the exact same profile. Both would
-    /// sim the same gear, so only the earlier one emits. Decided from the cursor
-    /// alone so `count_emitted`, `seek` and resume keep agreeing.
+    /// slots gives the exact same profile as an earlier cursor, or as the base
+    /// actor. Both would sim the same gear, so only one emits. Decided from the
+    /// cursor alone so `count_emitted`, `seek` and resume keep agreeing.
     fn has_earlier_ring_or_trinket_swap(&self, cursor: &[usize], eval: &Eval) -> bool {
         let axis_of = |slot: &str| self.cfg.varying_slots.iter().position(|s| s == slot);
         let item_id = |item: &Value| item.get("item_id").and_then(|v| v.as_u64());
@@ -318,12 +318,12 @@ impl ProfilesetIterator {
                     let mut swapped = cursor.to_vec();
                     swapped[axis_a] = i;
                     swapped[axis_b] = j;
-                    if swapped.as_slice() >= cursor {
-                        continue;
-                    }
-                    let Some(other) = self.evaluate_unpaired(&swapped) else {
+                    let Some((other, other_is_base)) = self.evaluate_unpaired(&swapped) else {
                         continue;
                     };
+                    if !other_is_base && swapped.as_slice() >= cursor {
+                        continue;
+                    }
                     let ours = lines.get_or_insert_with(|| {
                         slot_lines(&eval.gear_set, &eval.effective_enchants_map, &eval.eff_gems)
                     });
@@ -348,8 +348,10 @@ impl ProfilesetIterator {
         false
     }
 
-    /// Every emission rule except the ring/trinket swap dedup.
-    fn evaluate_unpaired(&self, cursor: &[usize]) -> Option<Eval> {
+    /// Every emission rule except the ring/trinket swap dedup. The flag marks a
+    /// cursor that reproduces the base actor: never emitted, but the swap dedup
+    /// needs to recognise it.
+    fn evaluate_unpaired(&self, cursor: &[usize]) -> Option<(Eval, bool)> {
         // ── 1. Build gear set ────────────────────────────────────────────────
         let mut gear_set: HashMap<String, Arc<Value>> = HashMap::new();
         for (slot, items) in &self.cfg.slot_item_lists {
@@ -471,16 +473,13 @@ impl ProfilesetIterator {
             b.sort_unstable();
             a == b
         });
-        if is_baseline
+        let reproduces_base = is_baseline
             && effective_enchants_map.is_empty()
             && gems_match_equipped
             && (talent_string.is_empty() || variant_idx == 0)
-            && omnium_override.is_empty()
-        {
-            return None;
-        }
+            && omnium_override.is_empty();
 
-        Some(Eval {
+        let eval = Eval {
             gear_set,
             is_baseline,
             effective_enchants_map,
@@ -491,7 +490,8 @@ impl ProfilesetIterator {
             talent_string,
             folio_name,
             omnium_override,
-        })
+        };
+        Some((eval, reproduces_base))
     }
 
     fn build_candidate(&self) -> Option<ProfilesetCandidate> {

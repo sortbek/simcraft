@@ -87,26 +87,59 @@ fn uid_identity(uid: &str) -> String {
         .join(":")
 }
 
-fn is_excluded(item: &Value) -> bool {
-    item.get("excluded")
+fn is_equipped(item: &Value) -> bool {
+    item.get("is_equipped")
         .and_then(|v| v.as_bool())
         .unwrap_or(false)
 }
 
-/// Flag the equipped item in each of `slots` so candidate building stops
-/// forcing it in. The item stays in `items_by_slot` so the stored request and
-/// the "Currently Equipped" baseline still see it.
-pub fn mark_excluded_equipped(items_by_slot: &mut HashMap<String, Vec<Value>>, slots: &[String]) {
+/// Make each chosen alternative (slot → uid) the slot's equipped item: the old
+/// one leaves `items_by_slot` and the base actor wears the replacement, so it
+/// is the baseline every combo is measured against. Returns the rewritten base
+/// profile. An unknown uid leaves its slot untouched.
+pub fn apply_equipped_replacements(
+    base_profile: &str,
+    items_by_slot: &mut HashMap<String, Vec<Value>>,
+    replacements: &HashMap<String, String>,
+) -> String {
+    let mut lines: Vec<String> = base_profile.lines().map(str::to_string).collect();
+    let mut slots: Vec<&String> = replacements.keys().collect();
+    slots.sort();
+
     for slot in slots {
         let Some(items) = items_by_slot.get_mut(slot) else {
             continue;
         };
-        for item in items.iter_mut() {
-            if item.get("is_equipped").and_then(|v| v.as_bool()) == Some(true) {
-                item["excluded"] = Value::Bool(true);
-            }
+        let uid = &replacements[slot];
+        let Some(pos) = items
+            .iter()
+            .position(|it| !is_equipped(it) && make_item_uid(it) == *uid)
+        else {
+            continue;
+        };
+        let mut replacement = items.remove(pos);
+        items.retain(|it| !is_equipped(it));
+        replacement["is_equipped"] = Value::Bool(true);
+        let simc = replacement
+            .get("simc_string")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        items.insert(0, replacement);
+
+        let prefix = format!("{slot}=");
+        let line = format!("{slot}={simc}");
+        match lines.iter_mut().find(|l| l.trim().starts_with(&prefix)) {
+            Some(existing) => *existing = line,
+            None => lines.push(line),
         }
     }
+
+    let mut out = lines.join("\n");
+    if base_profile.ends_with('\n') {
+        out.push('\n');
+    }
+    out
 }
 
 pub(super) fn build_slot_candidates(
@@ -140,9 +173,6 @@ pub(super) fn build_slot_candidates(
 
         let mut candidates: Vec<Value> = Vec::new();
         for item in slot_items {
-            if is_excluded(item) {
-                continue;
-            }
             let uid = make_item_uid(item);
             let identity = make_item_identity(item);
             if selected_uids.contains(&uid) || selected_identities.contains(&identity) {
@@ -154,7 +184,6 @@ pub(super) fn build_slot_candidates(
             it.get("is_equipped")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false)
-                && !is_excluded(it)
         });
 
         if let Some(eq) = equipped {
@@ -391,79 +420,92 @@ mod tests {
         assert_eq!(head.len(), 1, "equipped should not appear twice");
     }
 
-    #[test]
-    fn excluded_equipped_leaves_only_selected_alternatives() {
-        ensure_game_data_loaded();
-        let profile = "mage=test\n";
-        let equipped = make(100, "head", true, vec![]);
-        let alt = make(200, "head", false, vec![]);
-        let mut items_by_slot = HashMap::new();
-        items_by_slot.insert("head".to_string(), vec![equipped, alt]);
-        mark_excluded_equipped(&mut items_by_slot, &["head".to_string()]);
+    /// A real item always carries its simc string; replacement copies it into
+    /// the base profile.
+    fn make_item(item_id: u64, slot: &str, is_equipped: bool) -> Value {
+        let mut item = make(item_id, slot, is_equipped, vec![]);
+        item["simc_string"] = Value::String(format!(",id={item_id}"));
+        item
+    }
 
-        let mut selected = HashMap::new();
-        selected.insert("head".to_string(), vec![uid_str(200, &[], "bags", "head")]);
-
-        let result = build_slot_candidates(profile, &items_by_slot, &selected);
-        let head = result.get("head").expect("head missing");
-        assert_eq!(head.len(), 1);
-        assert_eq!(head[0]["item_id"], 200);
+    fn replace(slot: &str, uid: String) -> HashMap<String, String> {
+        HashMap::from([(slot.to_string(), uid)])
     }
 
     #[test]
-    fn excluded_equipped_ignores_explicit_selection_of_itself() {
+    fn replacement_becomes_the_equipped_item_and_base_line() {
         ensure_game_data_loaded();
-        let profile = "mage=test\n";
-        let equipped = make(100, "head", true, vec![]);
-        let alt = make(200, "head", false, vec![]);
+        let profile = "mage=test\nhead=,id=100\nchest=,id=150\n";
+        let equipped = make_item(100, "head", true);
+        let alt = make_item(200, "head", false);
         let mut items_by_slot = HashMap::new();
         items_by_slot.insert("head".to_string(), vec![equipped, alt]);
-        mark_excluded_equipped(&mut items_by_slot, &["head".to_string()]);
 
-        let mut selected = HashMap::new();
-        selected.insert(
+        let uid = uid_str(200, &[], "bags", "head");
+        let base = apply_equipped_replacements(profile, &mut items_by_slot, &replace("head", uid));
+
+        assert_eq!(base, "mage=test\nhead=,id=200\nchest=,id=150\n");
+        let head = &items_by_slot["head"];
+        assert_eq!(head.len(), 1, "the old equipped head is not simmed at all");
+        assert_eq!(head[0]["item_id"], 200);
+        assert_eq!(head[0]["is_equipped"], true);
+    }
+
+    #[test]
+    fn replacement_with_an_unknown_uid_changes_nothing() {
+        ensure_game_data_loaded();
+        let profile = "mage=test\nhead=,id=100\n";
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert(
             "head".to_string(),
+            vec![make_item(100, "head", true), make_item(200, "head", false)],
+        );
+        let before = items_by_slot.clone();
+
+        let base = apply_equipped_replacements(
+            profile,
+            &mut items_by_slot,
+            &replace("head", uid_str(999, &[], "bags", "head")),
+        );
+        assert_eq!(base, profile);
+        assert_eq!(items_by_slot, before);
+    }
+
+    #[test]
+    fn replaced_ring_slot_keeps_the_other_equipped_ring() {
+        ensure_game_data_loaded();
+        let profile = "mage=test\nfinger1=,id=100\nfinger2=,id=101\n";
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert(
+            "finger1".to_string(),
             vec![
-                uid_str(100, &[], "equipped", "head"),
-                uid_str(200, &[], "bags", "head"),
+                make_item(100, "finger1", true),
+                make_item(300, "finger1", false),
+            ],
+        );
+        items_by_slot.insert(
+            "finger2".to_string(),
+            vec![
+                make_item(101, "finger2", true),
+                make_item(300, "finger2", false),
             ],
         );
 
-        let result = build_slot_candidates(profile, &items_by_slot, &selected);
-        let head = result.get("head").expect("head missing");
-        assert!(head.iter().all(|i| i["item_id"] != 100));
-    }
-
-    #[test]
-    fn excluding_one_ring_keeps_the_other_equipped() {
-        ensure_game_data_loaded();
-        let profile = "mage=test\n";
-        let f1_eq = make(100, "finger1", true, vec![]);
-        let f1_alt = make(300, "finger1", false, vec![]);
-        let f2_eq = make(101, "finger2", true, vec![]);
-        let f2_alt = make(300, "finger2", false, vec![]);
-        let mut items_by_slot = HashMap::new();
-        items_by_slot.insert("finger1".to_string(), vec![f1_eq, f1_alt]);
-        items_by_slot.insert("finger2".to_string(), vec![f2_eq, f2_alt]);
-        mark_excluded_equipped(&mut items_by_slot, &["finger1".to_string()]);
-
-        let mut selected = HashMap::new();
-        selected.insert(
-            "finger1".to_string(),
-            vec![uid_str(300, &[], "bags", "finger1")],
+        let uid = uid_str(300, &[], "bags", "finger1");
+        let base = apply_equipped_replacements(
+            profile,
+            &mut items_by_slot,
+            &replace("finger1", uid.clone()),
         );
+        assert_eq!(base, "mage=test\nfinger1=,id=300\nfinger2=,id=101\n");
 
-        let result = build_slot_candidates(profile, &items_by_slot, &selected);
-        let f1: Vec<_> = result["finger1"]
-            .iter()
-            .map(|i| i["item_id"].clone())
-            .collect();
-        let f2: Vec<_> = result["finger2"]
-            .iter()
-            .map(|i| i["item_id"].clone())
-            .collect();
-        assert_eq!(f1, vec![Value::from(300)]);
-        assert_eq!(f2, vec![Value::from(101), Value::from(300)]);
+        let selected = HashMap::from([("finger1".to_string(), vec![uid])]);
+        let result = build_slot_candidates(&base, &items_by_slot, &selected);
+        let ids = |slot: &str| -> Vec<Value> {
+            result[slot].iter().map(|i| i["item_id"].clone()).collect()
+        };
+        assert_eq!(ids("finger1"), vec![Value::from(300)]);
+        assert_eq!(ids("finger2"), vec![Value::from(101), Value::from(300)]);
     }
 
     #[test]

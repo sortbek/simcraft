@@ -634,6 +634,7 @@
   "topGear.unchangedSlots": "변경 없음",
   "topGear.unchangedSlotsHint": "선택할 것이 없는 부위 {count}개 — 클릭하면 열립니다",
   "topGear.collapseSlot": "변경 없는 부위로 돌아가기",
+  "topGear.baseline": "기준",
   "topGear.equippedLocked": "모든 부위에는 아이템이 필요합니다. 먼저 다른 아이템을 선택하세요.",
   "topGear.densityLarge": "크게",
   "topGear.densityCompact": "보통",

@@ -2,9 +2,9 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 require('./register-typescript.cjs');
 const {
-  canExcludeEquipped,
+  buildVisibleGroups,
   partitionByAlternatives,
-  pruneExcludedEquipped,
+  pickEquippedReplacements,
   unchangedSlotCount,
 } = require('../src/app/components/gear/topGearSelection.ts');
 const { gearGridColumns } = require('../src/app/components/gear/gearDensity.ts');
@@ -82,56 +82,72 @@ test('unchangedSlotCount is 0 for no groups', () => {
   assert.equal(unchangedSlotCount([]), 0);
 });
 
-const headGroup = {
-  group: { label: 'slot.head', slots: ['head'] },
-  equipped: [{ uid: 'h-eq', slot: 'head' }],
-  alternatives: [{ uid: 'h-alt', slot: 'head' }],
+const gear = (uid, slot, itemId) => ({
+  uid,
+  slot,
+  item_id: itemId,
+  ilevel: 300,
+  bonus_ids: [],
+  origin: 'bags',
+  enchant_id: 0,
+  gem_id: 0,
+  simc_string: `,id=${itemId}`,
+});
+const resolvedGear = {
+  slots: {
+    head: {
+      equipped: gear('h-eq', 'head', 1),
+      alternatives: [gear('h-a', 'head', 2), gear('h-b', 'head', 3)],
+    },
+    finger1: {
+      equipped: gear('r1-eq', 'finger1', 10),
+      alternatives: [gear('ra1', 'finger1', 30), gear('rb1', 'finger1', 31)],
+    },
+    finger2: {
+      equipped: gear('r2-eq', 'finger2', 11),
+      alternatives: [gear('ra2', 'finger2', 30), gear('rb2', 'finger2', 31)],
+    },
+  },
 };
-const ringGroup = {
-  group: { label: 'slot.rings', slots: ['finger1', 'finger2'] },
-  equipped: [
-    { uid: 'r1-eq', slot: 'finger1' },
-    { uid: 'r2-eq', slot: 'finger2' },
-  ],
-  alternatives: [
-    { uid: 'r-a', slot: 'finger1' },
-    { uid: 'r-b', slot: 'finger1' },
-  ],
-};
-const selecting =
-  (...uids) =>
-  (item) =>
-    uids.includes(item.uid);
-
-test('an equipped item can only be unticked once another item covers its slot', () => {
-  assert.equal(canExcludeEquipped(headGroup, new Set(), selecting()), false);
-  assert.equal(canExcludeEquipped(headGroup, new Set(), selecting('h-alt')), true);
-});
-
-test('rings and trinkets must keep two items', () => {
-  assert.equal(canExcludeEquipped(ringGroup, new Set(), selecting('r-a')), true);
-  assert.equal(canExcludeEquipped(ringGroup, new Set(['finger1']), selecting('r-a')), false);
-  assert.equal(canExcludeEquipped(ringGroup, new Set(['finger1']), selecting('r-a', 'r-b')), true);
-});
-
-test('pruning keeps exclusions that still leave every slot covered', () => {
-  const excluded = new Set(['head', 'finger1']);
-  const pruned = pruneExcludedEquipped([headGroup, ringGroup], excluded, selecting('h-alt', 'r-a'));
-  assert.equal(pruned, excluded);
-});
-
-test('deselecting the covering item re-ticks the equipped one', () => {
-  const pruned = pruneExcludedEquipped(
-    [headGroup, ringGroup],
-    new Set(['head', 'finger1', 'finger2']),
-    selecting('r-a')
+const replacements = (excluded, selected) =>
+  Object.fromEntries(
+    Object.entries(
+      pickEquippedReplacements(
+        buildVisibleGroups(resolvedGear),
+        new Set(excluded),
+        resolvedGear,
+        Object.fromEntries(Object.entries(selected).map(([slot, uids]) => [slot, new Set(uids)]))
+      )
+    ).map(([slot, item]) => [slot, item.uid])
   );
-  assert.deepEqual([...pruned], []);
+
+test('the first alternative ticked replaces an unticked equipped item', () => {
+  assert.deepEqual(replacements(['head'], { head: ['h-b', 'h-a'] }), { head: 'h-b' });
 });
 
-test('pruning drops exclusions for slots that are no longer shown', () => {
-  const pruned = pruneExcludedEquipped([headGroup], new Set(['head', 'chest']), selecting('h-alt'));
-  assert.deepEqual([...pruned], ['head']);
+test('deselecting the replacement hands the role to the next one ticked', () => {
+  assert.deepEqual(replacements(['head'], { head: ['h-a'] }), { head: 'h-a' });
+});
+
+test('an unticked slot with nothing ticked gets no replacement', () => {
+  assert.deepEqual(replacements(['head'], {}), {});
+});
+
+test('a replaced ring never duplicates the ring kept on the other finger', () => {
+  assert.deepEqual(replacements(['finger1'], { finger1: ['ra1', 'rb1'] }), { finger1: 'ra1' });
+});
+
+test('replacing both rings takes the first two different rings ticked', () => {
+  const picked = replacements(['finger1', 'finger2'], {
+    finger1: ['rb1', 'ra1'],
+    finger2: ['rb2', 'ra2'],
+  });
+  assert.deepEqual(picked, { finger1: 'rb1', finger2: 'ra2' });
+});
+
+test('with one ring ticked only one finger can be replaced', () => {
+  const picked = replacements(['finger1', 'finger2'], { finger1: ['ra1'], finger2: ['ra2'] });
+  assert.deepEqual(picked, { finger1: 'ra1' });
 });
 
 test('gearGridColumns clamps the track so it cannot outgrow its container', () => {

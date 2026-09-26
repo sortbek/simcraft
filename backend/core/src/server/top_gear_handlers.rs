@@ -53,10 +53,12 @@ pub(super) fn request_variants(req: &TopGearRequest) -> Vec<profileset_generator
     )
 }
 
+/// The run's base profile and items, with any chosen replacement already
+/// swapped in as the equipped baseline.
 fn build_items_by_slot(
     req: &TopGearRequest,
     resolved: &crate::types::ResolveGearResponse,
-) -> HashMap<String, Vec<Value>> {
+) -> (String, HashMap<String, Vec<Value>>) {
     let mut items_by_slot = if let Some(ref ibs) = req.items_by_slot {
         ibs.clone()
     } else {
@@ -71,8 +73,12 @@ fn build_items_by_slot(
         items_by_slot = game_data::apply_copy_enchants(&items_by_slot);
     }
 
-    profileset_generator::mark_excluded_equipped(&mut items_by_slot, &req.excluded_equipped);
-    items_by_slot
+    let base_profile = profileset_generator::apply_equipped_replacements(
+        &resolved.base_profile,
+        &mut items_by_slot,
+        &req.equipped_replacements,
+    );
+    (base_profile, items_by_slot)
 }
 
 // Arguments are actix extractors; the count is the framework's, not a design choice.
@@ -117,8 +123,7 @@ pub(super) async fn create_top_gear_sim(
     if req.void_forge {
         gear_resolver::generate_void_forge_alternatives(&mut resolved.slots);
     }
-    let base_profile = resolved.base_profile.clone();
-    let items_by_slot = build_items_by_slot(&req, &resolved);
+    let (base_profile, items_by_slot) = build_items_by_slot(&req, &resolved);
     let variants = request_variants(&req);
     let max_combinations = capped_max_combinations(req.max_combinations);
     let socketed_ids = socketed_item_ids(&resolved);
@@ -325,8 +330,7 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
     if req.void_forge {
         gear_resolver::generate_void_forge_alternatives(&mut resolved.slots);
     }
-    let base_profile = resolved.base_profile.clone();
-    let items_by_slot = build_items_by_slot(&req, &resolved);
+    let (base_profile, items_by_slot) = build_items_by_slot(&req, &resolved);
     let variants = request_variants(&req);
     let max_combinations = capped_max_combinations(req.max_combinations);
     let socketed_item_ids = socketed_item_ids(&resolved);
