@@ -1477,6 +1477,69 @@ finger2=,id=101\n";
         assert_eq!(count, 0, "combos: {:?}", ring_pairs(&input));
     }
 
+    /// Trinkets `a` and `b` selected for both trinket slots, equipped 100/101.
+    fn trinket_pair_count(a: u64, b: u64) -> usize {
+        let base_profile = "mage=test
+spec=frost
+trinket1=,id=100
+trinket2=,id=101
+";
+        let mut items_by_slot = HashMap::new();
+        let mut selected = HashMap::new();
+        for (slot, equipped) in [("trinket1", 100), ("trinket2", 101)] {
+            let mut items = vec![make_item(
+                slot,
+                equipped,
+                true,
+                &format!(",id={equipped}"),
+                vec![],
+                0,
+                0,
+            )];
+            for id in [a, b] {
+                items.push(make_item(
+                    slot,
+                    id,
+                    false,
+                    &format!(",id={id}"),
+                    vec![],
+                    0,
+                    0,
+                ));
+            }
+            items_by_slot.insert(slot.to_string(), items);
+            selected.insert(
+                slot.to_string(),
+                vec![uid(a, &[], "bags", slot), uid(b, &[], "bags", slot)],
+            );
+        }
+        count_top_gear_combos_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn top_gear_two_on_use_trinkets_are_simmed_in_both_slot_orders() {
+        ensure_game_data_loaded();
+        // The APL presses trinkets by slot, so a/b and b/a differ. Both are
+        // on-use: 100+a, 100+b, a+101, b+101, a+b and b+a.
+        assert_eq!(trinket_pair_count(249344, 270168), 6);
+    }
+
+    #[test]
+    fn top_gear_on_use_and_passive_trinket_pair_is_simmed_once() {
+        ensure_game_data_loaded();
+        // A passive partner leaves no order to get wrong: a+b but not b+a.
+        assert_eq!(trinket_pair_count(249344, 270165), 5);
+    }
+
     #[test]
     fn top_gear_ring_swap_kept_when_fingers_carry_different_enchants() {
         ensure_game_data_loaded();

@@ -304,6 +304,15 @@ impl ProfilesetIterator {
             else {
                 continue;
             };
+            // The APL presses trinkets by slot, so two on-use trinkets fire in
+            // a different order once swapped: a different profile, not a copy.
+            if *slot_a == "trinket1"
+                && [item_a, item_b]
+                    .iter()
+                    .all(|item| item_id(item).is_some_and(crate::item_db::is_on_use_trinket))
+            {
+                continue;
+            }
             let list_a = &self.cfg.slot_item_lists[*slot_a];
             let list_b = &self.cfg.slot_item_lists[*slot_b];
 
