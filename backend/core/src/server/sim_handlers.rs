@@ -2,7 +2,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 use super::client_request::{parse_client_request, ClientRequest};
@@ -382,6 +382,12 @@ pub(super) async fn sim_row(
         "single_actor_batch": true,
         "simc_branch": simc_branch,
     });
+    let mut options = options;
+    // The verify rewrites the source's (possibly shared) profileset lines into
+    // actor lines, so it keeps the final input check a shared sim's run had.
+    if inherits_untrusted(source.rerun_of.as_deref(), envelope.payload.get("options")) {
+        options["untrusted"] = json!(true);
+    }
 
     // Render the input the same way Quick Sim does so "View Raw Input" on
     // the new job shows the full simc input with options inline.
@@ -508,9 +514,32 @@ pub(super) async fn sim_row(
     })
 }
 
+/// Whether a job derived from `source` must keep the shared-sim input check: the
+/// source was a re-run of a share, or its own options already carried the flag
+/// (a verify of a verify, or a sim loaded from a share).
+fn inherits_untrusted(rerun_of: Option<&str>, source_options: Option<&Value>) -> bool {
+    rerun_of.is_some()
+        || source_options
+            .and_then(|o| o.get("untrusted"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod sim_row_tests {
     use super::*;
+
+    #[test]
+    fn a_verify_of_a_shared_sim_keeps_the_input_check() {
+        assert!(inherits_untrusted(Some("AbCdEfGhIj"), None));
+        assert!(inherits_untrusted(None, Some(&json!({"untrusted": true}))));
+        assert!(!inherits_untrusted(
+            None,
+            Some(&json!({"untrusted": false}))
+        ));
+        assert!(!inherits_untrusted(None, Some(&json!({}))));
+        assert!(!inherits_untrusted(None, None));
+    }
 
     #[test]
     fn strips_profileset_prefix_from_each_line() {
