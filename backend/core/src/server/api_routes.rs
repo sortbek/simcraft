@@ -16,6 +16,7 @@ use super::resolve_drops;
 use super::roster_handlers;
 use super::roster_run_handlers;
 use super::route_handlers;
+use super::share_handlers;
 use super::sim_handlers;
 use super::system_handlers;
 use super::top_gear_handlers;
@@ -91,6 +92,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
             web::get().to(job_handlers::get_sim_logs),
         )
         .route(
+            "/api/sim/{id}/combos",
+            web::get().to(job_handlers::get_sim_combos),
+        )
+        .route(
             "/api/sim/{id}/cancel",
             web::post().to(job_handlers::cancel_sim),
         )
@@ -101,6 +106,18 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
         .route(
             "/api/sim/{id}/resume",
             web::post().to(job_handlers::resume_sim),
+        )
+        .route(
+            "/api/sim/{id}/share",
+            web::post().to(share_handlers::create_share),
+        )
+        .route(
+            "/api/sim/{id}/share",
+            web::delete().to(share_handlers::delete_share),
+        )
+        .route(
+            "/api/share/sanitize",
+            web::post().to(share_handlers::sanitize_shared),
         )
         .route("/api/jobs", web::get().to(job_handlers::list_jobs))
         .route("/api/jobs/{id}", web::delete().to(job_handlers::delete_job))

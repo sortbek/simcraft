@@ -15,6 +15,7 @@ import CategorySelector from '../loot/CategorySelector';
 import DifficultySelect from '../loot/DifficultySelect';
 import UpgradeSelect from '../loot/UpgradeSelect';
 import { useLootCatalog } from '../loot/useLootCatalog';
+import Button from '../ui/Button';
 
 const NO_INSTANCES: Instance[] = [];
 const NO_TRACKS: UpgradeTracks = {};
@@ -237,10 +238,8 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
   ]);
 
   return (
-    <div className="space-y-6 border-t border-outline-variant/10 pt-6">
-      <div className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-        Loot Report
-      </div>
+    <div className="space-y-6 border-t border-line/[0.06] pt-6">
+      <div className="lbl">Loot Report</div>
 
       {/* Source category: raids vs dungeon categories */}
       <CategorySelector category={category} onChange={setCategory} dungeonCats={dungeonCats} />
@@ -250,14 +249,12 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {isRaid && (
             <div className="space-y-1">
-              <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                Raid
-              </label>
+              <label className="label-text">Raid</label>
               <select
                 value={selectedRaidId ?? ''}
                 onChange={(e) => setSelectedRaidId(Number(e.target.value))}
                 disabled={running || raids.length === 0}
-                className="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+                className="sel disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {raids.length === 0 && <option value="">Loading…</option>}
                 {raids.map((raid) => (
@@ -271,9 +268,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
 
           {activeDifficulties.length > 0 && (
             <div className="space-y-1">
-              <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                Difficulty
-              </label>
+              <label className="label-text">Difficulty</label>
               <div className={running ? 'pointer-events-none opacity-50' : ''}>
                 <DifficultySelect
                   value={difficulty}
@@ -289,9 +284,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
 
           {!isFixedDifficultyRaid && (
             <div className="space-y-1">
-              <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                Upgrade level
-              </label>
+              <label className="label-text">Upgrade level</label>
               <div className={running ? 'pointer-events-none opacity-50' : ''}>
                 <UpgradeSelect
                   value={upgradeLevel}
@@ -304,9 +297,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
 
           {usesPreferredStats && (
             <div className="space-y-1">
-              <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                Preferred stats
-              </label>
+              <label className="label-text">Preferred stats</label>
               <div className={running ? 'pointer-events-none opacity-50' : ''}>
                 <PreferredStatsSelect
                   value={preferredStats}
@@ -322,24 +313,24 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
             (tier) sibling drops, matching the Drop Finder. */}
         <div className="flex flex-wrap items-center gap-4">
           {VOID_FORGE_ENABLED && (
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-on-surface-variant">
               <input
                 type="checkbox"
                 checked={voidForge}
                 onChange={(e) => setVoidForge(e.target.checked)}
                 disabled={running}
-                className="h-3.5 w-3.5 rounded border-outline-variant/30 accent-primary disabled:opacity-50"
+                className="h-3.5 w-3.5 accent-gold-fill disabled:opacity-50"
               />
               Void Forged
             </label>
           )}
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+          <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-on-surface-variant">
             <input
               type="checkbox"
               checked={catalyst}
               onChange={(e) => setCatalyst(e.target.checked)}
               disabled={running}
-              className="h-3.5 w-3.5 rounded border-outline-variant/30 accent-primary disabled:opacity-50"
+              className="h-3.5 w-3.5 accent-gold-fill disabled:opacity-50"
             />
             Catalyst
           </label>
@@ -349,25 +340,23 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
         {isRaid && raidEncounters.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <label className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                Bosses
-              </label>
-              <button
-                type="button"
+              <label className="lbl">Bosses</label>
+              <Button
+                variant="text"
+                size="sm"
                 onClick={() => setSelectedBosses(new Set(raidEncounters.map((e) => e.id)))}
                 disabled={running}
-                className="text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               >
                 All
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="text"
+                size="sm"
                 onClick={() => setSelectedBosses(new Set())}
                 disabled={running}
-                className="text-xs font-semibold text-on-surface-variant hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               >
                 None
-              </button>
+              </Button>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {raidEncounters.map((boss) => {
@@ -375,10 +364,10 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
                 return (
                   <label
                     key={boss.id}
-                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                    className={`flex h-[38px] cursor-pointer items-center gap-2 rounded-[6px] border px-3 text-[13px] font-semibold transition-colors ${
                       checked
-                        ? 'border-primary/30 bg-primary/10 text-on-surface'
-                        : 'border-outline-variant/10 bg-surface-container-high text-on-surface-variant'
+                        ? 'border-gold-edge bg-gold-tint text-on-surface'
+                        : 'border-line/[0.06] bg-surface-container-high text-outline hover:text-on-surface-variant'
                     } ${running ? 'pointer-events-none opacity-50' : ''}`}
                   >
                     <input
@@ -386,7 +375,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
                       checked={checked}
                       onChange={() => toggleBoss(boss.id)}
                       disabled={running}
-                      className="accent-primary"
+                      className="accent-gold-fill"
                     />
                     <span className="truncate">{boss.name}</span>
                   </label>
@@ -398,9 +387,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              Target error
-            </label>
+            <label className="label-text">Target error</label>
             <input
               type="number"
               step={0.01}
@@ -408,14 +395,12 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
               value={targetError}
               onChange={(e) => setTargetError(Number(e.target.value))}
               disabled={running}
-              className="w-24 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+              className="input-field w-24 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
           <div className="w-44 space-y-1">
-            <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              Fight style
-            </label>
+            <label className="label-text">Fight style</label>
             <div className={running ? 'pointer-events-none opacity-50' : ''}>
               <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
             </div>
@@ -436,25 +421,25 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
           />
         </div>
         {isRaid && raidEncounters.length > 0 && selectedBosses.size === 0 && (
-          <p className="text-xs text-amber-400/80">Select at least one boss to run a report.</p>
+          <p className="text-[12.5px] text-gold">Select at least one boss to run a report.</p>
         )}
       </div>
 
       {running && (
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-on-surface-variant">
+          <div className="flex items-center justify-between text-[12.5px] text-on-surface-variant">
             <span>Simulating…</span>
             <span>
               {done}/{total} jobs
             </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container-high">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest">
             <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
+              className="h-full rounded-full bg-gradient-to-r from-gold-dark to-gold-fill transition-all duration-500"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="text-right text-[11px] text-on-surface-variant/60">
+          <div className="text-right font-headline text-[11px] font-bold text-outline">
             {progressPct.toFixed(0)}%
           </div>
         </div>
@@ -463,14 +448,14 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
       {catalog.status === 'error' && (
         <p
           role="alert"
-          className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+          className="rounded-[6px] border border-negative/25 bg-negative/[0.08] px-4 py-3 text-sm text-negative"
         >
           Could not load loot data: {catalog.error}
         </p>
       )}
 
       {error && (
-        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <p className="rounded-[6px] border border-negative/25 bg-negative/[0.08] px-4 py-3 text-sm text-negative">
           {error}
         </p>
       )}

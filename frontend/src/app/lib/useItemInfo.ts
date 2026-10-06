@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { API_URL, apiUrl, fetchJsonOr } from './api';
+import { VIEWER_BUILD } from './featureFlags';
 import { QUALITY_HEX } from './qualityColors';
 
 export interface ItemQuery {
@@ -351,7 +352,74 @@ function loadIconFileIds(): Promise<void> {
 
 // Warm the map at import so the common case builds a working URL on first
 // render. Browser-only: during SSR there is no API base to resolve against.
-if (typeof window !== 'undefined') void loadIconFileIds();
+if (typeof window !== 'undefined' && !VIEWER_BUILD) void loadIconFileIds();
+
+/** Cached display data a shared result carries so it renders without the backend. */
+export interface ItemLookups {
+  items?: Record<string, ItemInfo>;
+  enchants?: Record<number, EnchantInfo>;
+  gems?: Record<number, GemInfo>;
+  iconFileIds?: Record<string, number>;
+  itemNames?: Record<number, Record<string, string>>;
+}
+
+function pick<T>(src: Record<number, T>, ids: number[]): Record<number, T> {
+  return Object.fromEntries(ids.filter((id) => src[id]).map((id) => [id, src[id]]));
+}
+
+/** Copy the cached entries for these ids; anything not yet fetched is left out. */
+export function snapshotItemLookups(
+  queries: ItemQuery[],
+  enchantIds: number[],
+  gemIds: number[],
+  extraIcons: (string | undefined)[] = []
+): ItemLookups {
+  const items: Record<string, ItemInfo> = {};
+  for (const q of queries) {
+    const key = cacheKey(q.item_id, q.bonus_ids);
+    if (cache[key]) items[key] = cache[key];
+  }
+  const enchants = pick(enchantCache, enchantIds);
+  const gems = pick(gemCache, gemIds);
+  const icons: Record<string, number> = {};
+  for (const name of [
+    ...Object.values(items).map((i) => i.icon),
+    ...Object.values(gems).map((g) => g.icon),
+    ...extraIcons,
+  ]) {
+    const key = name?.toLowerCase();
+    if (key && iconFileIds[key]) icons[key] = iconFileIds[key];
+  }
+  const lookups: ItemLookups = { items, enchants, gems, iconFileIds: icons };
+  if (itemNamesMap) {
+    const ids = [
+      ...Object.values(items).map((i) => i.item_id),
+      ...gemIds,
+      ...Object.values(enchants).flatMap((e) => (e.item_id ? [e.item_id] : [])),
+    ];
+    lookups.itemNames = pick(itemNamesMap, ids);
+  }
+  return lookups;
+}
+
+/** Copy own keys of untrusted JSON, skipping ones that would re-prototype `target`. */
+export function assignOwn<T>(target: Record<string, T>, src: Record<string, T> = {}): void {
+  for (const key of Object.keys(src)) {
+    if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') target[key] = src[key];
+  }
+}
+
+/** Seed the caches from a share and mark the icon and name maps as loaded, so
+ *  nothing is fetched. Viewer only: the data is uploader-supplied. */
+export function primeItemLookups(l: ItemLookups): void {
+  assignOwn(cache, l.items);
+  assignOwn(enchantCache, l.enchants);
+  assignOwn(gemCache, l.gems);
+  assignOwn(iconFileIds, l.iconFileIds);
+  iconFileIdsPromise = Promise.resolve();
+  itemNamesMap ??= {};
+  assignOwn(itemNamesMap, l.itemNames);
+}
 
 function getIconUrl(iconName: string): string {
   const fileDataId = iconFileIds[iconName?.toLowerCase()];

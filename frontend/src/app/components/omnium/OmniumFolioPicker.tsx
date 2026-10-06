@@ -44,7 +44,7 @@ export default function OmniumFolioPicker({
   useWowheadTooltips([rows.length]);
 
   if (!tree) {
-    return <p className="py-1 text-sm text-muted">{t('common.loading')}</p>;
+    return <p className="py-1 text-sm text-outline">{t('common.loading')}</p>;
   }
   if (rows.length === 0) return null;
 
@@ -54,14 +54,14 @@ export default function OmniumFolioPicker({
         {/* Two keys rather than an English-only "{s}" suffix: German pluralises
             "Kombination" as "Kombinationen", so no trailing letter works. */}
         {t(combos === 1 ? 'omnium.combinationsOne' : 'omnium.combinations', { count: combos })}
-        {mode === 'multi' && <span className="ml-2 text-muted">{t('omnium.multiSelectHint')}</span>}
+        {mode === 'multi' && (
+          <span className="ml-2 text-outline">{t('omnium.multiSelectHint')}</span>
+        )}
       </p>
 
       {rows.map((row, rowIndex) => (
         <div key={row.id} className="flex flex-wrap items-center gap-2">
-          <span className="w-14 shrink-0 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-            {t('omnium.row', { number: rowIndex + 1 })}
-          </span>
+          <span className="lbl w-14 shrink-0">{t('omnium.row', { number: rowIndex + 1 })}</span>
           {row.entries.map((entry) => {
             const picks = selections[row.id] ?? [];
             const selected = picks.includes(entry.id);
@@ -87,18 +87,18 @@ export default function OmniumFolioPicker({
                   e.preventDefault();
                   onChange(row.id, next);
                 }}
-                className={`flex cursor-pointer items-center rounded-lg border transition-all duration-150 ${metrics.row} ${
+                className={`flex cursor-pointer items-center rounded-[7px] border transition-colors duration-[120ms] ${metrics.row} ${
                   selected
-                    ? 'border-gold/40 bg-gold/[0.08] text-gold'
-                    : 'border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
+                    ? 'border-gold-edge bg-gold-tint text-on-surface'
+                    : 'border-line/[0.06] bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
                 }`}
               >
                 <img
                   {...iconProps(entry.icon)}
                   alt=""
-                  className={`${metrics.icon} shrink-0 rounded`}
+                  className={`${metrics.icon} shrink-0 rounded-[5px] border border-line/[0.11]`}
                 />
-                <span className={`${metrics.name} font-medium`}>{runeLabel(entry.name)}</span>
+                <span className={`${metrics.name} font-semibold`}>{runeLabel(entry.name)}</span>
               </a>
             );
           })}

@@ -3,6 +3,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::client_request::{parse_client_request, ClientRequest};
 use super::handler_prep::{
     preprocess_simc_input, serialize_combo_metadata_value, validate_profile,
 };
@@ -20,13 +21,21 @@ use crate::profileset_generator;
 
 pub(super) async fn create_droptimizer_sim(
     http_req: HttpRequest,
-    req: web::Json<DroptimizerRequest>,
+    body: web::Json<serde_json::Value>,
     repo: web::Data<JobRepo>,
     settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
+    let ClientRequest {
+        req,
+        raw: client_request,
+        rerun_of,
+    } = match parse_client_request::<DroptimizerRequest>(body.into_inner()) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
     // Upgrading runs BEFORE generation, so it lands on the equipped profile
     // alone: every candidate is added afterwards at the rank the browser priced
     // it at. Reversing the order would silently lift each drop to its track max.
@@ -151,6 +160,8 @@ pub(super) async fn create_droptimizer_sim(
             combo_count,
             combo_metadata_serialized,
             envelope_payload,
+            client_request: Some(client_request),
+            rerun_of,
         },
         &req.options,
         provider,

@@ -16,6 +16,7 @@ import {
   routeUsesLevelKnobs,
 } from '../../lib/routes-model';
 import { IPlus, IMinus } from '../route-map/routeIcons';
+import { buttonClass } from '../ui/Button';
 
 const IRoute = () => (
   <svg
@@ -50,25 +51,23 @@ const Stepper = ({
   onChange: (v: number) => void;
 }) => (
   <div className="flex items-center gap-1.5">
-    <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/55">
-      {label}
-    </span>
-    <div className="flex items-center overflow-hidden rounded-lg border border-outline-variant/30 bg-surface-container-lowest">
+    <span className="lbl">{label}</span>
+    <div className="flex items-center overflow-hidden rounded-[6px] border border-line/[0.06] bg-surface-container-high">
       <button
         type="button"
         onClick={() => onChange(Math.max(min, value - 1))}
-        className="flex h-7 w-6 items-center justify-center text-on-surface-variant/70 transition-colors hover:bg-surface-container-high hover:text-gold"
+        className="flex h-8 w-7 items-center justify-center text-outline transition-colors hover:bg-surface-container-highest hover:text-on-surface"
       >
         <IMinus s={11} />
       </button>
-      <span className="min-w-[2.1rem] text-center text-[13px] font-bold tabular-nums text-on-surface">
+      <span className="min-w-[2.1rem] text-center font-headline text-[13px] font-extrabold tabular-nums text-on-surface">
         {prefix}
         {value}
       </span>
       <button
         type="button"
         onClick={() => onChange(Math.min(max, value + 1))}
-        className="flex h-7 w-6 items-center justify-center text-on-surface-variant/70 transition-colors hover:bg-surface-container-high hover:text-gold"
+        className="flex h-8 w-7 items-center justify-center text-outline transition-colors hover:bg-surface-container-highest hover:text-on-surface"
       >
         <IPlus s={11} />
       </button>
@@ -134,32 +133,30 @@ export default function ActiveRouteIndicator() {
   const currentName = activeRoute?.name ?? null;
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-gold/35 bg-gold/[0.05] px-4 py-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold">
+    <div className="card flex items-center gap-3 !border-gold/35 px-4 py-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-gold/10 text-gold">
         <IRoute />
       </span>
 
       <div className="min-w-0 flex-1">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-gold/70">
-          {t('route.active.label')}
-        </div>
+        <div className="lbl mb-2 text-gold">{t('route.active.label')}</div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {/* Custom route dropdown — mirrors FightStyleSelector for consistency. */}
           <div className="relative" onBlur={() => setOpen(false)}>
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="flex max-w-[18rem] items-center gap-2 rounded-lg border border-gold/30 bg-surface-container-lowest px-3 py-1.5 text-left transition-colors hover:border-gold/55"
+              className="flex h-[38px] max-w-[18rem] items-center gap-2 rounded-[6px] border border-line/[0.06] bg-surface-container-high px-3 text-left transition-colors hover:border-line/[0.11]"
             >
               <span
-                className={`truncate text-sm font-bold ${
-                  currentName ? 'text-gold' : 'text-on-surface-variant/60'
+                className={`truncate text-sm font-semibold ${
+                  currentName ? 'text-on-surface' : 'text-outline'
                 }`}
               >
                 {currentName ?? t('route.active.selectPlaceholder')}
               </span>
               <svg
-                className={`h-4 w-4 shrink-0 text-on-surface-variant/60 transition-transform duration-150 ${
+                className={`h-4 w-4 shrink-0 text-outline transition-transform duration-150 ${
                   open ? 'rotate-180' : ''
                 }`}
                 viewBox="0 0 16 16"
@@ -174,19 +171,17 @@ export default function ActiveRouteIndicator() {
             </button>
             {open && (
               <div
-                className="absolute z-50 mt-1 min-w-full overflow-y-auto overscroll-contain rounded-lg bg-surface-container-high py-1 shadow-lg shadow-black/40"
+                className="popover absolute z-50 mt-1 min-w-full overflow-y-auto overscroll-contain py-1"
                 style={{ maxHeight: '14rem' }}
               >
                 {groups.length === 0 ? (
-                  <div className="px-3.5 py-2 text-sm text-on-surface-variant/50">
+                  <div className="px-3.5 py-2 text-sm text-outline">
                     {t('route.active.noneSaved')}
                   </div>
                 ) : (
                   groups.map((g) => (
                     <div key={g.key ?? 'other'}>
-                      <div className="px-3.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40">
-                        {g.name}
-                      </div>
+                      <div className="lbl px-3.5 pb-1.5 pt-2.5">{g.name}</div>
                       {g.routes.map((r) => (
                         <button
                           key={r.id}
@@ -231,11 +226,7 @@ export default function ActiveRouteIndicator() {
       </div>
 
       {activeRoute && (
-        <button
-          type="button"
-          onClick={clearRoute}
-          className="shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] text-on-surface-variant/70 transition-colors hover:bg-surface-container-high hover:text-on-surface"
-        >
+        <button type="button" onClick={clearRoute} className={`shrink-0 ${buttonClass('text')}`}>
           {t('common.clear')}
         </button>
       )}

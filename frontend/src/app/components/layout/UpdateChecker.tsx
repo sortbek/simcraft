@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
+import Button from '../ui/Button';
 
 const SEEN_KEY = 'simhammer_update_seen';
 
@@ -89,13 +90,13 @@ export default function UpdateChecker() {
   if (!updateAvailable) return null;
 
   return (
-    <div className="border-t border-outline-variant/20 px-4 py-2">
+    <div className="px-[22px] py-3">
       <div ref={containerRef} className="relative">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
           title={`${t('layout.updateAvailable')} — v${version}`}
-          className="flex w-full items-center gap-2.5 border border-primary bg-primary px-4 py-3 font-headline text-xs font-bold uppercase tracking-wider text-on-primary transition-all hover:bg-primary/90"
+          className="flex h-[42px] w-full items-center gap-2.5 rounded-[6px] border border-gold-fill bg-gold-fill px-4 font-headline text-xs font-extrabold uppercase tracking-[0.14em] text-on-primary transition-colors hover:bg-gold-fill-hover"
         >
           <svg
             className="h-4 w-4 shrink-0"
@@ -114,27 +115,19 @@ export default function UpdateChecker() {
         </button>
 
         {open && (
-          <div className="absolute bottom-full left-0 right-0 z-50 mb-2 rounded-lg border border-outline-variant bg-surface-container-high p-3 shadow-lg shadow-black/40">
+          <div className="popover absolute bottom-full left-0 right-0 z-50 mb-2 p-3">
             <p className="text-sm font-medium text-on-surface">{t('layout.updateAvailable')}</p>
             <p className="mt-0.5 text-xs text-on-surface-variant">
               {t('layout.updateReady', { version })}
             </p>
-            {error && <p className="mt-1 text-xs text-error">{t('layout.updateFailed')}</p>}
+            {error && <p className="mt-1 text-xs text-negative">{t('layout.updateFailed')}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                onClick={handleInstall}
-                disabled={installing}
-                className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
+              <Button size="sm" variant="solid" onClick={handleInstall} disabled={installing}>
                 {installing ? t('layout.downloading', { progress }) : t('layout.installRestart')}
-              </button>
-              <button
-                onClick={() => setOpen(false)}
-                disabled={installing}
-                className="rounded px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:text-on-surface"
-              >
+              </Button>
+              <Button size="sm" variant="text" onClick={() => setOpen(false)} disabled={installing}>
                 {t('layout.later')}
-              </button>
+              </Button>
             </div>
           </div>
         )}

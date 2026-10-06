@@ -35,12 +35,12 @@ function DeltaMetric({ value, label }: { value: number; label: string }) {
     <div className="text-right">
       <div
         className={`font-mono text-[15px] font-bold tabular-nums ${
-          value > 0 ? 'text-emerald-400' : 'text-muted'
+          value > 0 ? 'text-positive' : 'text-outline'
         }`}
       >
         {formatDelta(value)}
       </div>
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="lbl">{label}</div>
     </div>
   );
 }
@@ -69,9 +69,9 @@ function ItemPip({
   const sourceName = source ? localizedItemName(source, sourceInfo?.name || '', locale) : '';
   const gems = item ? appliedGems(item, gemInfoMap) : [];
   const badge = item?.is_catalyst
-    ? { label: t('gear.catalystShort'), tone: 'bg-sky-500 text-white' }
+    ? { label: t('gear.catalystShort'), tone: 'bg-quality-rare text-on-badge' }
     : item?.is_void_forge
-      ? { label: t('gear.voidForgeShort'), tone: 'bg-purple-500 text-white' }
+      ? { label: t('gear.voidForgeShort'), tone: 'bg-quality-epic text-on-badge' }
       : null;
   return (
     <div className="flex w-12 shrink-0 flex-col items-center gap-1">
@@ -107,7 +107,7 @@ function ItemPip({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(event) => event.preventDefault()}
-                className="block h-3 w-3 overflow-hidden rounded-[2px] ring-1 ring-black/70"
+                className="block h-3 w-3 overflow-hidden rounded-[2px] ring-1 ring-shade/70"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -129,7 +129,7 @@ function ItemPip({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(event) => event.preventDefault()}
-            className="absolute -bottom-1 -right-1 block h-3.5 w-3.5 overflow-hidden rounded-[2px] ring-1 ring-sky-400/70"
+            className="absolute -bottom-1 -right-1 block h-3.5 w-3.5 overflow-hidden rounded-[2px] ring-1 ring-quality-rare/70"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -151,8 +151,8 @@ function ItemPip({
         )}
       </div>
       <span
-        className={`font-mono text-[10px] tabular-nums ${
-          notable ? 'text-emerald-400' : 'text-muted'
+        className={`font-mono text-[11px] tabular-nums ${
+          notable ? 'text-positive' : 'text-outline'
         }`}
       >
         {pct >= 0 ? '' : '−'}
@@ -223,7 +223,7 @@ export default function EncounterSummary({
   return (
     <div className="card p-5">
       <div className="mb-3 flex items-center justify-between gap-4">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted">
+        <p className="text-xs font-medium uppercase tracking-widest text-outline">
           {t('gear.sourceSummary')}
         </p>
         <div className="w-52">
@@ -246,7 +246,7 @@ export default function EncounterSummary({
             <div key={row.encounter} className="py-3 first:pt-0">
               <div
                 onClick={() => toggle(row.encounter)}
-                className="flex cursor-pointer flex-wrap items-center gap-x-5 gap-y-3 rounded-lg px-1 transition-colors hover:bg-white/[0.03]"
+                className="flex cursor-pointer flex-wrap items-center gap-x-5 gap-y-3 rounded-lg px-1 transition-colors hover:bg-overlay/[0.03]"
               >
                 <button
                   type="button"
@@ -276,7 +276,7 @@ export default function EncounterSummary({
                   <div className="font-headline text-[14px] font-bold text-on-surface">
                     {row.encounter}
                   </div>
-                  <div className="text-[11px] text-muted">
+                  <div className="text-[11px] text-outline">
                     {row.instance || t('gear.itemsFromSource', { count: row.results.length })}
                   </div>
                 </div>
@@ -301,9 +301,7 @@ export default function EncounterSummary({
                     <div className="font-mono text-[15px] font-bold tabular-nums text-gold">
                       {row.priority}
                     </div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted">
-                      {t('gear.priority')}
-                    </div>
+                    <div className="lbl">{t('gear.priority')}</div>
                   </div>
                 </div>
               </div>
@@ -334,7 +332,7 @@ export default function EncounterSummary({
         })}
       </div>
 
-      <p className="mt-3 text-center text-[11px] text-muted">{t('gear.summaryNote')}</p>
+      <p className="mt-3 text-center text-[11px] text-outline">{t('gear.summaryNote')}</p>
     </div>
   );
 }

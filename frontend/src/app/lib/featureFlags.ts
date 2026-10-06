@@ -6,3 +6,6 @@
  * when existing items are Void Forged, independently of this flag.
  */
 export const VOID_FORGE_ENABLED = false;
+
+/** Static share viewer hosted on simhammer.com/viewer — no app backend to call. */
+export const VIEWER_BUILD = !!process.env.NEXT_PUBLIC_VIEWER_BUILD;

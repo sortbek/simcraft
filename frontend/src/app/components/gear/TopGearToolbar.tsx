@@ -1,7 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import Button from '../ui/Button';
 import ClearButton from '../ui/ClearButton';
+import Pill from '../ui/Pill';
 import ToggleButtonGroup from '../ui/ToggleButtonGroup';
 import type { GearRowDensity } from './gearDensity';
 
@@ -46,29 +48,26 @@ export default function TopGearToolbar({
   t,
 }: TopGearToolbarProps) {
   return (
-    <div className="sticky top-14 z-30 -mx-8 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-outline-variant/20 bg-background/90 px-8 py-1.5 backdrop-blur-sm">
+    <div className="sticky top-16 z-30 -mx-8 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line/[0.06] bg-background/85 px-8 py-2 backdrop-blur-lg">
       <div className="flex items-center">
         {sections.map((section, index) => (
           <div key={section.key} className="flex items-center">
-            {index > 0 && <span className="mx-1 h-4 w-px bg-outline-variant/30" />}
+            {index > 0 && <span className="mx-1 h-4 w-px bg-overlay/[0.06]" />}
             <button
               type="button"
               onClick={section.onNavigate}
               title={t('topGear.jumpToSection', { section: section.label })}
-              className={`group flex items-center gap-1.5 rounded-md px-2 py-1 font-headline text-[11px] font-bold uppercase tracking-widest transition-colors hover:bg-white/[0.04] ${
-                section.open ? 'text-on-surface' : 'text-muted hover:text-on-surface-variant'
+              className={`lbl group flex items-center gap-2 rounded-[6px] px-2 py-1 transition-colors hover:bg-overlay/[0.02] ${
+                section.open ? 'text-on-surface' : 'text-outline hover:text-on-surface-variant'
               }`}
             >
               {section.label}
-              <span
-                className={`min-w-[1.5rem] rounded px-1 py-px text-center text-[11px] font-bold tabular-nums tracking-normal transition-colors ${
-                  section.count > 0
-                    ? 'bg-gold/15 text-gold'
-                    : 'bg-surface-container-highest text-muted'
-                }`}
+              <Pill
+                variant={section.count > 0 ? 'gold' : 'neutral'}
+                className={`min-w-[1.5rem] justify-center tabular-nums ${section.count > 0 ? '' : 'text-outline'}`}
               >
                 {section.count}
-              </span>
+              </Pill>
             </button>
             {/* Always rendered so clearing one section can't slide the others. */}
             <ClearButton
@@ -93,12 +92,12 @@ export default function TopGearToolbar({
             { key: 'ultra', label: t('topGear.densityUltra') },
           ]}
         />
-        <button
-          type="button"
+        <Button
+          variant="quiet"
           onClick={onResetAll}
           disabled={resetDisabled}
           title={t('topGear.resetAllTooltip')}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-outline-variant/30 px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-200 disabled:pointer-events-none disabled:opacity-40"
+          className="shrink-0 hover:border-negative/25 hover:text-negative"
         >
           <svg
             className="h-3 w-3"
@@ -112,7 +111,7 @@ export default function TopGearToolbar({
             <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13 2v3h-3" />
           </svg>
           {t('topGear.resetAll')}
-        </button>
+        </Button>
       </div>
     </div>
   );

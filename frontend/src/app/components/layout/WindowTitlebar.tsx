@@ -33,18 +33,18 @@ export default function WindowControls() {
 
   return (
     <div
-      className="desktop-only-flex"
+      className="desktop-only-flex -mr-7"
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
     >
-      <div className="flex items-center">
-        <div className="mx-2 h-3.5 w-px bg-zinc-700/60" />
+      <div className="flex items-center text-outline">
+        <div className="mr-2.5 h-5 w-px bg-overlay/[0.06]" />
 
         <button
           onClick={() => windowAction('minimize')}
-          className="group flex h-9 w-11 items-center justify-center transition-colors duration-100 hover:bg-white/[0.07]"
+          className="grid h-9 w-11 place-items-center transition-colors duration-100 hover:bg-surface-container-high hover:text-on-surface"
         >
           <svg
-            className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-zinc-300"
+            className="h-[10px] w-[10px]"
             viewBox="0 0 10 10"
             fill="none"
             stroke="currentColor"
@@ -56,11 +56,11 @@ export default function WindowControls() {
 
         <button
           onClick={() => windowAction('toggleMaximize')}
-          className="group flex h-9 w-11 items-center justify-center transition-colors duration-100 hover:bg-white/[0.07]"
+          className="grid h-9 w-11 place-items-center transition-colors duration-100 hover:bg-surface-container-high hover:text-on-surface"
         >
           {isMaximized ? (
             <svg
-              className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-zinc-300"
+              className="h-[10px] w-[10px]"
               viewBox="0 0 10 10"
               fill="none"
               stroke="currentColor"
@@ -71,7 +71,7 @@ export default function WindowControls() {
             </svg>
           ) : (
             <svg
-              className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-zinc-300"
+              className="h-[10px] w-[10px]"
               viewBox="0 0 10 10"
               fill="none"
               stroke="currentColor"
@@ -84,10 +84,10 @@ export default function WindowControls() {
 
         <button
           onClick={() => windowAction('close')}
-          className="group flex h-9 w-11 items-center justify-center transition-colors duration-100 hover:bg-[#c42b1c]"
+          className="grid h-9 w-11 place-items-center transition-colors duration-100 hover:bg-win-close hover:text-white"
         >
           <svg
-            className="h-[10px] w-[10px] text-zinc-500 transition-colors duration-100 group-hover:text-white"
+            className="h-[10px] w-[10px]"
             viewBox="0 0 10 10"
             fill="none"
             stroke="currentColor"

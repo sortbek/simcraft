@@ -46,7 +46,7 @@ function enchantDetails(e: ItemOption): { text: string; color?: string }[] {
     parts.push({ text: e.stats.map(statLabel).join(', ') });
   }
   if (e.craftingQuality) {
-    parts.push({ text: `Rank ${e.craftingQuality}`, color: 'text-on-surface-variant/40' });
+    parts.push({ text: `Rank ${e.craftingQuality}`, color: 'text-fg-4' });
   }
   return parts;
 }
@@ -119,7 +119,7 @@ export default function EnchantSelector({
   // Still fetching: a placeholder rather than `null`, so the section heading is
   // never left sitting over nothing.
   if (!loaded) {
-    return <p className="py-1 text-sm text-muted">{t('common.loading')}</p>;
+    return <p className="py-1 text-sm text-outline">{t('common.loading')}</p>;
   }
 
   if (enchantSlots.length === 0) {
@@ -146,9 +146,7 @@ export default function EnchantSelector({
             <div
               className={`flex items-center justify-between ${GEAR_DENSITY_LAYOUT[density].title}`}
             >
-              <p className="font-headline font-semibold uppercase tracking-widest text-muted">
-                {t(SLOT_DISPLAY[slot])}
-              </p>
+              <p className="h-card">{t(SLOT_DISPLAY[slot])}</p>
               {candidateIds.length > 0 && (
                 <button
                   onClick={() =>
@@ -156,7 +154,7 @@ export default function EnchantSelector({
                       ? onDeselectAllEnchants(slot)
                       : onSelectAllEnchants(slot, candidateIds)
                   }
-                  className="text-[11px] text-gold/60 transition-colors hover:text-gold"
+                  className="font-headline text-[11.5px] font-extrabold uppercase tracking-[0.12em] text-gold/70 transition-colors hover:text-gold"
                 >
                   {allSelected ? t('enchantGem.deselectAll') : t('enchantGem.selectAll')}
                 </button>
@@ -179,9 +177,7 @@ export default function EnchantSelector({
             )}
 
             {equippedId > 0 && equippedName && candidates.length > 0 && (
-              <div
-                className={`border-t border-outline-variant/20 ${GEAR_DENSITY_LAYOUT[density].rule}`}
-              />
+              <div className={`border-t border-line/[0.06] ${GEAR_DENSITY_LAYOUT[density].rule}`} />
             )}
 
             {candidates.map((e) => {

@@ -44,21 +44,30 @@ function buildBackend() {
   console.log("[dev] Backend built.");
 }
 
-function waitForUrl(url, timeout = 30000) {
+// A cold Next.js dev server compiles the page on the first request, which can
+// take well over 30s on Windows — so wait long, and let each probe ride out the compile.
+function waitForUrl(url, timeout = 120000) {
   const start = Date.now();
+  const progress = setInterval(() => {
+    console.log(`[dev] Still waiting for ${url} (${Math.round((Date.now() - start) / 1000)}s)...`);
+  }, 10000);
   return new Promise((resolve, reject) => {
     function check() {
       if (Date.now() - start > timeout) {
+        clearInterval(progress);
         return reject(new Error(`Timed out waiting for ${url}`));
       }
       const req = http.get(url, (res) => {
-        if (res.statusCode === 200) resolve();
-        else setTimeout(check, 300);
+        res.resume();
+        if (res.statusCode === 200) {
+          clearInterval(progress);
+          resolve();
+        } else setTimeout(check, 500);
       });
-      req.on("error", () => setTimeout(check, 300));
-      req.setTimeout(1000, () => {
+      req.on("error", () => setTimeout(check, 500));
+      req.setTimeout(30000, () => {
         req.destroy();
-        setTimeout(check, 300);
+        setTimeout(check, 500);
       });
     }
     check();

@@ -11,11 +11,11 @@ const TRACK_SHORT: Record<string, string> = {
 };
 
 const TRACK_COLORS: Record<string, string> = {
-  Adventurer: 'text-green-400',
-  Veteran: 'text-blue-400',
-  Champion: 'text-purple-400',
-  Hero: 'text-orange-400',
-  Myth: 'text-amber-300',
+  Adventurer: 'text-positive',
+  Veteran: 'text-quality-rare',
+  Champion: 'text-quality-epic',
+  Hero: 'text-quality-legendary',
+  Myth: 'text-gold',
 };
 
 interface DifficultySelectProps {

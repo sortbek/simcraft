@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { readStoredJson } from '../../lib/storage';
 import { apiUrl, fetchJson, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
-import { QUALITY_TEXT_CLASS, qualityBorderColor } from '../../lib/qualityColors';
+import { qualityBorderColor, qualityHex } from '../../lib/qualityColors';
 import { iconProps } from '../../lib/useItemInfo';
+import CardHeader from '../ui/CardHeader';
 import Checkbox from '../ui/Checkbox';
 import { detectClass, detectSpec } from '../loot/types';
 import type { ResolvedItem } from '../../lib/types';
@@ -166,54 +167,61 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
         type="button"
         onClick={toggleOpen}
         aria-expanded={open}
-        className="group flex w-full items-center gap-2.5 px-3 py-2 text-left"
+        className="group block w-full text-left"
       >
-        <svg
-          className="h-3.5 w-3.5 shrink-0 text-gold/70"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        >
-          <path d="M8 3v10M3 8h10" />
-        </svg>
-        <span className="shrink-0 font-headline text-[12px] font-bold uppercase tracking-widest text-on-surface-variant transition-colors group-hover:text-on-surface">
-          Add item
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[11px] text-on-surface-variant/50">
-          Search items your class can use and sim gear you don&apos;t own yet.
-        </span>
-        <svg
-          className={`h-3.5 w-3.5 shrink-0 text-on-surface-variant/40 transition-transform duration-200 group-hover:text-on-surface-variant ${
-            open ? 'rotate-180' : ''
-          }`}
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 6l4 4 4-4" />
-        </svg>
+        <CardHeader
+          className={open ? '' : '!border-transparent'}
+          title={
+            <span className="flex items-center gap-2.5 transition-colors group-hover:text-on-surface">
+              <svg
+                className="h-3.5 w-3.5 shrink-0 text-gold"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <path d="M8 3v10M3 8h10" />
+              </svg>
+              Add item
+            </span>
+          }
+          right={
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="min-w-0 truncate text-[12.5px] text-outline">
+                Search items your class can use and sim gear you don&apos;t own yet.
+              </span>
+              <svg
+                className={`h-3.5 w-3.5 shrink-0 text-outline transition-transform duration-200 group-hover:text-on-surface-variant ${
+                  open ? 'rotate-180' : ''
+                }`}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M4 6l4 4 4-4" />
+              </svg>
+            </span>
+          }
+        />
       </button>
 
       {error && (
-        <p className="mx-3 mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+        <p className="mx-6 mt-4 rounded-[6px] border border-negative/25 bg-negative/[0.08] px-3 py-2 text-sm text-negative">
           {error}
         </p>
       )}
 
       {open && (
-        <div className="space-y-3 border-t border-outline-variant/15 p-3">
+        <div className="space-y-4 px-6 py-[22px]">
           <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-              Name
-            </label>
+            <label className="label-text">Name</label>
             <div className="relative">
               <svg
-                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/55"
+                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline"
                 viewBox="0 0 16 16"
                 fill="none"
                 stroke="currentColor"
@@ -228,13 +236,13 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by item name or id"
-                className="h-10 w-full rounded-lg border border-transparent bg-surface-container-high py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/45 outline-none transition-all duration-150 hover:bg-surface-container-highest focus:border-gold/40 focus:bg-surface-container-highest focus:ring-2 focus:ring-gold/15"
+                className="input-field h-[38px] py-0 pl-10 pr-10"
               />
               {hasQuery && (
                 <button
                   type="button"
                   onClick={() => setQuery('')}
-                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant/55 transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[5px] text-outline transition-colors hover:bg-surface-container-highest hover:text-on-surface"
                   aria-label="Clear search"
                 >
                   <svg
@@ -253,44 +261,38 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
           </div>
 
           <div className="space-y-2">
-            <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+            <label className="group flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
               <Checkbox
-                variant="primary"
                 size="sm"
                 checked={seasonalOnly}
                 onChange={() => setSeasonalOnly((v) => !v)}
                 aria-label="Seasonal items only"
               />
               Seasonal items only
-              <span className="text-xs text-on-surface-variant/50">
-                (off: search every expansion)
-              </span>
+              <span className="text-xs text-outline">(off: search every expansion)</span>
             </label>
 
             {/* The all-expansions search does no spec filtering, so this would be a
             dead control there. */}
             {seasonalOnly && (
-              <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
+              <label className="group flex w-fit cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
                 <Checkbox
-                  variant="primary"
                   size="sm"
                   checked={lootSpecOnly}
                   onChange={() => setLootSpecOnly((v) => !v)}
                   aria-label="My loot spec only"
                 />
                 My loot spec only
-                <span className="text-xs text-on-surface-variant/50">
-                  (off: any gear your class can equip)
-                </span>
+                <span className="text-xs text-outline">(off: any gear your class can equip)</span>
               </label>
             )}
           </div>
 
           {hasQuery && results.length > 0 && (
             <>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
                 {results.map((item) => {
-                  const qualityColor = QUALITY_TEXT_CLASS[item.quality] ?? 'text-on-surface';
+                  const qualityColor = qualityHex(item.quality);
                   const options = item.ilvl_options ?? [];
                   // Resolve the option FIRST, then read the level off it: a remembered
                   // choice can be absent from a later result set (toggling "Seasonal
@@ -303,23 +305,27 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                   return (
                     <div
                       key={item.item_id}
-                      className="group flex items-center gap-2 rounded-xl border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2 transition-all duration-150 hover:border-gold/30 hover:bg-surface-container-high"
+                      className="group flex items-center gap-3 rounded-[7px] px-2.5 py-[7px] transition-colors duration-[120ms] hover:bg-surface-container-high"
                     >
                       <div
-                        className="h-9 w-9 shrink-0 overflow-hidden rounded-md border-b-2 bg-surface-container-highest"
-                        style={{ borderBottomColor: qualityBorderColor(item.quality) }}
+                        className="relative h-[38px] w-[38px] shrink-0 overflow-hidden rounded-[5px] border bg-surface-container-highest"
+                        style={{ borderColor: qualityBorderColor(item.quality) }}
                       >
                         <img
                           {...iconProps(item.icon)}
                           alt=""
                           className="h-full w-full object-cover"
                         />
+                        <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`truncate text-[13px] font-bold ${qualityColor}`}>
+                        <p
+                          className="truncate text-sm font-semibold leading-tight"
+                          style={{ color: qualityColor }}
+                        >
                           {item.name}
                         </p>
-                        <p className="text-[11px] text-on-surface-variant/60">
+                        <p className="mt-px text-xs text-outline">
                           {SLOT_LABELS[item.inventory_type] ?? ''}
                         </p>
                       </div>
@@ -333,7 +339,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                           }))
                         }
                         aria-label={`Item level for ${item.name}`}
-                        className="h-7 shrink-0 rounded-md border border-transparent bg-surface-container-highest px-1 text-xs font-bold tabular-nums text-on-surface outline-none transition-all duration-150 hover:border-gold/30 focus:border-gold/40 focus:ring-2 focus:ring-gold/15"
+                        className="h-7 shrink-0 rounded-[5px] border border-line/[0.06] bg-surface-container-highest px-1 font-headline text-xs font-bold tabular-nums text-on-surface outline-none transition-colors hover:border-line/[0.11] focus:ring-1 focus:ring-primary/30"
                       >
                         {options.map((opt) => (
                           <option key={opt.ilvl} value={opt.ilvl}>
@@ -346,7 +352,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                         disabled={isAdding}
                         onClick={() => handleAdd(item, option)}
                         aria-label={`Add ${item.name}`}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant/50 transition-colors hover:bg-gold/25 hover:text-gold disabled:opacity-50 group-hover:bg-gold/15 group-hover:text-gold"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-line/[0.06] bg-surface-container-highest text-outline transition-colors hover:bg-gold/20 hover:text-gold disabled:opacity-40 group-hover:border-gold/35 group-hover:bg-gold/10 group-hover:text-gold"
                       >
                         {isAdding ? (
                           <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
@@ -383,7 +389,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
                 })}
               </div>
               {capped && (
-                <p className="text-center text-xs text-on-surface-variant/50">
+                <p className="text-center text-xs text-outline">
                   More items match this search than can be shown. Make your search more specific.
                 </p>
               )}
@@ -391,7 +397,7 @@ export default function AddItemSearch({ simcInput, onItemsResolved }: AddItemSea
           )}
 
           {hasQuery && results.length === 0 && (
-            <p className="py-2 text-center text-sm text-on-surface-variant/50">No items found.</p>
+            <p className="py-2 text-center text-sm text-outline">No items found.</p>
           )}
         </div>
       )}

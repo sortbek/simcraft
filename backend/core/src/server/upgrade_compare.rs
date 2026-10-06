@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::client_request::{parse_client_request, ClientRequest};
 use super::handler_prep::{preprocess_simc_input, serialize_combo_metadata_vec, validate_profile};
 use super::job_spawn::{
     resolve_provider_for_request, submit_profileset_sim, validate_batch, ProfilesetSubmission,
@@ -377,13 +378,21 @@ pub(super) async fn get_upgrade_compare_combo_count(
 
 pub(super) async fn create_upgrade_compare_sim(
     http_req: HttpRequest,
-    req: web::Json<UpgradeCompareRequest>,
+    body: web::Json<serde_json::Value>,
     repo: web::Data<JobRepo>,
     settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
+    let ClientRequest {
+        req,
+        raw: client_request,
+        rerun_of,
+    } = match parse_client_request::<UpgradeCompareRequest>(body.into_inner()) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
     let simc_input = preprocess_simc_input(
         &req.simc_input,
         &req.options.talents,
@@ -461,6 +470,8 @@ pub(super) async fn create_upgrade_compare_sim(
             combo_count,
             combo_metadata_serialized,
             envelope_payload,
+            client_request: Some(client_request),
+            rerun_of,
         },
         &req.options,
         provider,

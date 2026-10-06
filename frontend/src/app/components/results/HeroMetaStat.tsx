@@ -2,19 +2,16 @@ interface HeroMetaStatProps {
   label: string;
   value: string;
   note?: string;
-  border?: boolean;
 }
 
-export default function HeroMetaStat({ label, value, note, border }: HeroMetaStatProps) {
+export default function HeroMetaStat({ label, value, note }: HeroMetaStatProps) {
   return (
-    <div className={`flex flex-col ${border ? 'border-l border-outline-variant/10 pl-4' : ''}`}>
-      <span className="font-headline text-[10px] font-bold uppercase text-on-surface-variant opacity-60">
-        {label}
-      </span>
-      <span className="font-headline text-sm font-bold text-on-surface">
+    <div className="px-9 py-4">
+      <span className="lbl">{label}</span>
+      <span className="mt-[7px] block font-headline text-base font-extrabold text-on-surface">
         {value}
         {note && (
-          <span className="ml-1 text-[10px] font-normal text-on-surface-variant/40">{note}</span>
+          <span className="ml-1.5 font-sans text-[11px] font-semibold text-fg-4">{note}</span>
         )}
       </span>
     </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import DpsHeroCard from '../results/DpsHeroCard';
+import Button from '../ui/Button';
 import GearOverview from './GearOverview';
 import TopGearRankings from './TopGearRankings';
 import EncounterSummary from './EncounterSummary';
@@ -42,6 +43,7 @@ export default function TopGearResults({
   targetError,
   elapsedTime,
   backLink,
+  heroAside,
   sourceJobId,
 }: TopGearResultsProps) {
   const { t } = useLanguage();
@@ -128,16 +130,17 @@ export default function TopGearResults({
         targetError={targetError}
         elapsedTime={elapsedTime}
         topAction={backLink}
+        aside={heroAside}
       >
         {selectedResult && selectedResult.delta > 0 ? (
-          <div className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-3 py-1.5 text-emerald-400">
+          <div className="mt-3.5 inline-flex items-center gap-1.5 rounded-md bg-positive/10 px-3 py-1.5 text-positive">
             <span className="text-sm font-semibold tabular-nums">
               +{Math.round(selectedResult.delta).toLocaleString()}
             </span>
             <span className="text-xs opacity-60">{t('gear.upgradeText')}</span>
           </div>
         ) : (
-          <p className="mt-4 text-sm text-on-surface-variant">{t('gear.currentGearOptimal')}</p>
+          <p className="mt-3.5 text-sm text-on-surface-variant">{t('gear.currentGearOptimal')}</p>
         )}
       </DpsHeroCard>
 
@@ -260,13 +263,13 @@ function CompareOverview({
       <div className="card flex items-center justify-between gap-3 px-4 py-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px]">
           <span className="truncate font-semibold text-on-surface">{selectedResult.name}</span>
-          <span className="shrink-0 text-[12px] uppercase tracking-wider text-muted">
+          <span className="shrink-0 text-[12px] uppercase tracking-wider text-outline">
             {t('gear.compareVs')}
           </span>
-          <span className="truncate font-semibold text-sky-300">{compareResult.name}</span>
+          <span className="truncate font-semibold text-info">{compareResult.name}</span>
           <span
             className={`shrink-0 font-mono text-[13px] tabular-nums ${
-              delta > 0 ? 'text-emerald-400' : delta < 0 ? 'text-red-400' : 'text-muted'
+              delta > 0 ? 'text-positive' : delta < 0 ? 'text-negative' : 'text-outline'
             }`}
           >
             {delta > 0 ? '+' : ''}
@@ -277,24 +280,21 @@ function CompareOverview({
         <div className="flex shrink-0 items-center gap-3">
           <div className="flex items-center gap-3 text-[11px] text-on-surface-variant/70">
             <span className="flex items-center gap-1">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+              <span className="h-2 w-2 shrink-0 rounded-full bg-positive" />
               {t('gear.compareBetterSide')}
             </span>
             <span className="flex items-center gap-1">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" />
+              <span className="h-2 w-2 shrink-0 rounded-full bg-negative" />
               {t('gear.compareWorseSide')}
             </span>
             <span className="flex items-center gap-1">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400" />
+              <span className="h-2 w-2 shrink-0 rounded-full bg-info" />
               {t('gear.compareSharedChange')}
             </span>
           </div>
-          <button
-            onClick={onClear}
-            className="shrink-0 rounded border border-outline-variant/20 bg-surface-container-high/60 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-          >
+          <Button variant="quiet" size="sm" onClick={onClear} className="shrink-0">
             {t('gear.compareClear')}
-          </button>
+          </Button>
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">

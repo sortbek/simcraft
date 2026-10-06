@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   API_URL,
   deleteJob,
+  ShareRevokeError,
   fetchAllJobs,
   pauseSim,
   resumeSim,
@@ -16,6 +17,8 @@ import { useLanguage } from '../lib/i18n';
 import { ActiveView } from './_components/ActiveView';
 import { AllView } from './_components/AllView';
 import { StatsOverview } from './_components/StatsOverview';
+import PageHeader from '../components/ui/PageHeader';
+import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 
 type ViewMode = 'active' | 'all';
 
@@ -156,7 +159,19 @@ export default function SimsPage() {
   const handleDelete = useCallback(
     (id: string) => {
       if (!window.confirm(t('sims.confirmDelete'))) return;
-      wrapAction(id, () => deleteJob(id), t('sims.errDelete'));
+      wrapAction(
+        id,
+        async () => {
+          try {
+            await deleteJob(id);
+          } catch (e) {
+            if (!(e instanceof ShareRevokeError)) throw e;
+            // Declining keeps the sim; that is the user's choice, not an error.
+            if (window.confirm(t('sims.confirmDeleteShared'))) await deleteJob(id, true);
+          }
+        },
+        t('sims.errDelete')
+      );
     },
     [wrapAction, t]
   );
@@ -164,40 +179,25 @@ export default function SimsPage() {
   const error = actionError ?? pollError ?? allError;
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-5 pb-20">
       <div className="flex items-end justify-between gap-6">
-        <div>
-          <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-            {t('sims.title')}
-          </h1>
-          <p className="max-w-2xl text-sm text-on-surface-variant">{t('sims.description')}</p>
-        </div>
-        <div className="flex gap-1 rounded-lg border border-outline-variant/10 bg-surface-container-low p-1">
-          <button
-            onClick={() => setView('active')}
-            className={`rounded-md px-3 py-1 text-[12px] font-medium uppercase tracking-wider transition-colors ${
-              view === 'active'
-                ? 'bg-primary-container/20 text-primary'
-                : 'text-on-surface-variant/60 hover:text-on-surface'
-            }`}
-          >
-            {t('sims.tabActive', { count: activeList.length })}
-          </button>
-          <button
-            onClick={() => setView('all')}
-            className={`rounded-md px-3 py-1 text-[12px] font-medium uppercase tracking-wider transition-colors ${
-              view === 'all'
-                ? 'bg-primary-container/20 text-primary'
-                : 'text-on-surface-variant/60 hover:text-on-surface'
-            }`}
-          >
-            {t('sims.tabAll', { count: mergedJobs.length })}
-          </button>
-        </div>
+        <PageHeader
+          eyebrow={t('nav.library')}
+          title={t('sims.title')}
+          subtitle={t('sims.description')}
+        />
+        <ToggleButtonGroup<ViewMode>
+          value={view}
+          onChange={setView}
+          options={[
+            { key: 'active', label: t('sims.tabActive', { count: activeList.length }) },
+            { key: 'all', label: t('sims.tabAll', { count: mergedJobs.length }) },
+          ]}
+        />
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-[13px] text-red-400">
+        <div className="rounded-[6px] border border-negative/25 bg-negative/[0.08] px-3 py-2 text-[13px] text-negative">
           {error}
         </div>
       )}

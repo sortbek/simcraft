@@ -6,7 +6,7 @@ export default function Home() {
   const { t } = useLanguage();
   return (
     <div className="py-12 text-center">
-      <p className="text-sm text-muted">{t('home.selectSimType')}</p>
+      <p className="text-sm text-outline">{t('home.selectSimType')}</p>
     </div>
   );
 }

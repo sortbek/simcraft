@@ -53,6 +53,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("simc:status-changed", handler);
   },
 
+  // simhammer://sim/<id> while the app is open
+  onOpenShare: (callback) => {
+    const handler = (_event, id) => callback(id);
+    ipcRenderer.on("deeplink:open-share", handler);
+    return () => ipcRenderer.removeListener("deeplink:open-share", handler);
+  },
+
   // App settings
   getSetting: (key, defaultValue) => ipcRenderer.invoke("settings:get", key, defaultValue),
   setSetting: (key, value) => ipcRenderer.invoke("settings:set", key, value),

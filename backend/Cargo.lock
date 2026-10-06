@@ -2308,6 +2308,7 @@ dependencies = [
  "actix-files",
  "actix-web",
  "async-trait",
+ "base64",
  "chrono",
  "flate2",
  "hex",

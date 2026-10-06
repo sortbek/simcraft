@@ -31,11 +31,7 @@ export default function TopGearQuickSelectBar({
         <button
           type="button"
           onClick={() => onToggleGroup(vaultUids)}
-          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-            allVaultSelected
-              ? 'bg-amber-400/15 text-amber-300'
-              : 'text-amber-400/60 hover:bg-amber-400/10 hover:text-amber-300'
-          }`}
+          className={`chip ${allVaultSelected ? 'chip-on' : ''}`}
         >
           {t('gear.vault')}
         </button>
@@ -44,11 +40,7 @@ export default function TopGearQuickSelectBar({
         <button
           type="button"
           onClick={() => onToggleGroup(lootUids)}
-          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-            allLootSelected
-              ? 'bg-sky-400/15 text-sky-300'
-              : 'text-sky-400/60 hover:bg-sky-400/10 hover:text-sky-300'
-          }`}
+          className={`chip ${allLootSelected ? 'chip-on' : ''}`}
         >
           Loot
         </button>
@@ -57,11 +49,7 @@ export default function TopGearQuickSelectBar({
         <button
           type="button"
           onClick={() => onToggleGroup(catalystUids)}
-          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-            allCatalystSelected
-              ? 'bg-purple-400/15 text-purple-300'
-              : 'text-purple-400/60 hover:bg-purple-400/10 hover:text-purple-300'
-          }`}
+          className={`chip ${allCatalystSelected ? 'chip-on' : ''}`}
         >
           {t('gear.catalyst')}
         </button>

@@ -15,7 +15,14 @@ import { useDropFinderData } from './useDropFinderData';
 import { useLootSelection } from './useLootSelection';
 import { dropUid, effectiveUpgradeLevel, getTrackInfo, resolveUpgrade } from './dropUtils';
 import { bossKey, poolSources } from './lootSources';
-import { readDropFinderPrefs, restoreConfiguration, writeDropFinderPrefs } from './dropFinderPrefs';
+import {
+  parseDropFinderPrefs,
+  readDropFinderPrefs,
+  restoreConfiguration,
+  writeDropFinderPrefs,
+  type DropFinderPrefs,
+} from './dropFinderPrefs';
+import { clearPageEdit, peekPageEdit } from '../../lib/share/editShared';
 import { isAlreadyOwned, type OwnedItem } from './ownedDrops';
 import { compareSlots } from './slotOrder';
 import { embellishmentCapReached } from './lootTableModel';
@@ -24,6 +31,31 @@ import { dropPayload, resolveDropConfiguration } from './dropConfiguration';
 import type { DropItemPayload } from './types';
 import { DEFAULT_PREFERRED_STATS } from './PreferredStatsSelect';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
+/** The browser setup behind a run, so a shared Drop Finder sim reopens as it was. */
+export interface DropFinderEditor {
+  prefs: DropFinderPrefs;
+  selected: string[];
+  specs: string[];
+  embellishments: Record<number, number>;
+}
+
+function sharedEditor(): DropFinderEditor | null {
+  const editor = peekPageEdit(['droptimizer'])?.editor as Partial<DropFinderEditor> | undefined;
+  const prefs = editor && parseDropFinderPrefs({ ...editor.prefs, v: 1 });
+  if (!editor || !prefs) return null;
+  const strings = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  const picks: Record<number, number> = {};
+  for (const [id, pick] of Object.entries(editor.embellishments ?? {}))
+    if (typeof pick === 'number') picks[Number(id)] = pick;
+  return {
+    prefs,
+    selected: strings(editor.selected),
+    specs: strings(editor.specs),
+    embellishments: picks,
+  };
+}
+
 export type LootSubmission = {
   drop_items: DropItemPayload[];
   preferred_crafted_stats?: [number, number];
@@ -34,6 +66,8 @@ export type LootSubmission = {
   add_vault_socket?: boolean;
   /** Sim every combo at the selected precision instead of pruning to the top few. */
   force_single_pass?: boolean;
+  /** Not read by the backend; kept on the stored request for shared sims. */
+  editor: DropFinderEditor;
 };
 export function useLootBrowserModel(
   catalog: LootCatalog,
@@ -135,9 +169,26 @@ export function useLootBrowserModel(
       !selection.excludedSources.has(sourceByUid[entry.uid])
   );
   const restoreFilters = selection.restoreFilters;
+  // A shared sim being edited: its item picks land once its pool has loaded.
+  const sharedSelectionRef = useRef<{ category: string; selected: string[] } | null>(null);
+  // Read once and taken out of session storage at once, so a later visit (or an
+  // effect re-run) never applies the sharer's setup again.
+  const sharedRef = useRef<DropFinderEditor | null | undefined>(undefined);
   useEffect(() => {
-    const saved = readDropFinderPrefs();
+    if (sharedRef.current === undefined) {
+      sharedRef.current = sharedEditor();
+      // Only our own stash; another page's may still be waiting for its mount.
+      if (sharedRef.current) clearPageEdit();
+    }
+    const shared = sharedRef.current;
+    const saved = shared?.prefs ?? readDropFinderPrefs();
     setHydrated(true);
+    if (shared) {
+      sharedSelectionRef.current = { category: shared.prefs.category, selected: shared.selected };
+      const specs = shared.specs.filter((spec) => character.specs.includes(spec));
+      if (specs.length) setActiveSpecs(new Set(specs));
+      setEmbellishmentPicks(shared.embellishments);
+    }
     if (!saved) return;
     const restored = restoreConfiguration(catalog, saved);
     if (restored) setConfiguration(restored);
@@ -152,6 +203,19 @@ export function useLootBrowserModel(
     // Mount only: a later write must not read itself back in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const availabilityKey = JSON.stringify(availableBySlot);
+  useEffect(() => {
+    const shared = sharedSelectionRef.current;
+    if (!shared || !hydrated || query.status !== 'success') return;
+    if (configuration.category !== shared.category) return;
+    sharedSelectionRef.current = null;
+    const wanted = new Set(shared.selected);
+    const all = Object.values(availableBySlot).flat();
+    selection.clearItems(all.filter((uid) => !wanted.has(uid)));
+    selection.selectItems(all.filter((uid) => wanted.has(uid)));
+    // `availabilityKey` stands in for the rebuilt-every-render map.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, query.status, configuration.category, availabilityKey]);
   const savedSetup = JSON.stringify({
     category: configuration.category,
     difficulty: configuration.difficulty,
@@ -264,6 +328,12 @@ export function useLootBrowserModel(
         ...(preferredGemId ? { preferred_gem_id: preferredGemId } : {}),
         ...(addVaultSocket ? { add_vault_socket: true } : {}),
         force_single_pass: forceSinglePass,
+        editor: {
+          prefs: JSON.parse(savedSetup),
+          selected: [...selection.selected],
+          specs: [...activeSpecs],
+          embellishments: embellishmentPicks,
+        },
       }
     : null;
   const trackName = rankTrackName(configuration, details) ?? undefined;

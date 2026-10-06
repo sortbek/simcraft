@@ -83,6 +83,11 @@ pub struct SimOptions {
     /// backend pick; Some("local") / Some("simmit") = explicit selection.
     #[serde(default)]
     pub compute_provider: Option<String>,
+    /// The SimC text came from a shared result: the finished input is checked
+    /// again before SimC runs it. Forced on for re-runs; the editor sets it for a
+    /// loaded share. Only ever adds a check, so a body can't use it to skip one.
+    #[serde(default)]
+    pub untrusted: bool,
 }
 
 impl SimOptions {
@@ -122,6 +127,9 @@ impl SimOptions {
         }
         if let Some(n) = self.triage_max_batch_profilesets {
             v["triage_max_batch_profilesets"] = json!(n);
+        }
+        if self.untrusted {
+            v["untrusted"] = json!(true);
         }
         v
     }
@@ -312,9 +320,23 @@ pub(super) struct ModifyItemRequest {
 }
 
 #[derive(Deserialize)]
+pub(super) struct DeleteJobQuery {
+    /// Delete even when the public share link could not be revoked.
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Deserialize)]
 pub(super) struct LogsQuery {
     #[serde(default)]
     pub after: usize,
+}
+
+#[derive(Deserialize)]
+pub(super) struct CombosQuery {
+    /// Comma-separated profileset names, e.g. `Combo 5,Combo 6`.
+    #[serde(default)]
+    pub names: String,
 }
 
 #[derive(Debug, Deserialize)]

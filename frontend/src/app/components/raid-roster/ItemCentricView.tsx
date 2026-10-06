@@ -20,29 +20,27 @@ function ResultRow({ result, playerName }: { result: ReportItemResult; playerNam
   const barWidth = Math.min(Math.abs(pct) / 5, 1) * 100;
 
   const barColor = isUpgrade
-    ? 'bg-green-500'
+    ? 'bg-positive'
     : isDowngrade
-      ? 'bg-red-400/60'
+      ? 'bg-negative/60'
       : 'bg-surface-container-highest';
 
-  const textColor = isUpgrade
-    ? 'text-green-400'
-    : isDowngrade
-      ? 'text-red-400/80'
-      : 'text-on-surface-variant/60';
+  const textColor = isUpgrade ? 'text-positive' : isDowngrade ? 'text-negative/80' : 'text-outline';
 
   const sign = pct > 0 ? '+' : '';
 
   return (
     <div className="flex items-center gap-3 py-1">
       <span className="w-32 shrink-0 truncate text-sm text-on-surface">{playerName}</span>
-      <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-surface-container-highest">
+      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-surface-container-highest">
         <div
           className={`absolute left-0 top-0 h-full rounded-full transition-all ${barColor}`}
           style={{ width: `${barWidth}%` }}
         />
       </div>
-      <span className={`w-14 shrink-0 text-right text-sm font-bold tabular-nums ${textColor}`}>
+      <span
+        className={`w-14 shrink-0 text-right font-headline text-sm font-extrabold tabular-nums ${textColor}`}
+      >
         {sign}
         {pct.toFixed(1)}%
       </span>
@@ -79,39 +77,32 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
 
   if (items.length === 0) {
     return (
-      <div className="py-12 text-center text-sm text-on-surface-variant/50">
+      <div className="py-12 text-center text-sm text-outline">
         No results match the current filters.
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       {bossOrder.map((boss) => {
         const bossItems = byBoss.get(boss)!;
         const isCollapsed = collapsed.has(boss);
 
         return (
-          <div
-            key={boss}
-            className="overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container shadow-md"
-          >
+          <div key={boss} className="card overflow-hidden">
             {/* Boss header */}
             <button
               type="button"
               onClick={() => toggleBoss(boss)}
-              className="flex w-full items-center justify-between border-b border-outline-variant/10 bg-surface-container-low px-4 py-3 transition-colors hover:bg-surface-container-high/40"
+              className="flex h-[58px] w-full items-center justify-between gap-3 border-b border-line/[0.06] px-6 transition-colors hover:bg-overlay/[0.015]"
             >
-              <span className="font-headline text-sm font-black uppercase tracking-wider text-on-surface">
-                {boss}
-              </span>
-              <span className="text-base text-on-surface-variant/60">
-                {isCollapsed ? '▸' : '▾'}
-              </span>
+              <span className="h-card">{boss}</span>
+              <span className="text-base text-outline">{isCollapsed ? '▸' : '▾'}</span>
             </button>
 
             {!isCollapsed && (
-              <div className="divide-y divide-outline-variant/5">
+              <div className="divide-y divide-line/[0.06]">
                 {bossItems.map((item) => {
                   const info = itemInfo[item.item_id];
                   const quality = info?.quality ?? 3;
@@ -119,7 +110,7 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
                   const displayName = item.name || info?.name || String(item.item_id);
 
                   return (
-                    <div key={item.uid} className="px-4 py-3">
+                    <div key={item.uid} className="px-6 py-4">
                       {/* Item header row */}
                       <div className="mb-2 flex items-start gap-3">
                         {/* Icon */}
@@ -143,13 +134,13 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
                               target="_blank"
                               rel="noreferrer"
                               className="text-sm font-bold hover:underline"
-                              style={{ color: QUALITY_HEX[quality] ?? '#ffffff' }}
+                              style={{ color: QUALITY_HEX[quality] ?? QUALITY_HEX[1] }}
                             >
                               {displayName}
                             </a>
                             <VariantBadges item={item} />
                           </div>
-                          <p className="mt-0.5 text-xs text-on-surface-variant/60">
+                          <p className="mt-0.5 text-xs text-outline">
                             ilvl {item.ilevel} · {SLOT_LABELS[item.slot] ?? item.slot}
                           </p>
                         </div>

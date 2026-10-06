@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { shade } from '../../lib/themeColors';
 import { T } from '../route-map/routeTheme';
 
 /** Route-card thumbnail. With a real `shape` (pull centroids) it draws the actual
@@ -106,9 +107,9 @@ function RouteMiniMap({
         position: 'relative',
         overflow: 'hidden',
         flexShrink: 0,
-        background: 'radial-gradient(130% 120% at 30% 20%, #2a2a28 0%, #1c1c1b 55%, #161615 100%)',
+        background: `radial-gradient(130% 120% at 30% 20%, ${T.surfaceHi} 0%, ${T.surface} 55%, ${T.panel} 100%)`,
         border: `1px solid ${T.borderHi}`,
-        boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.4)',
+        boxShadow: `inset 0 0 0 1px ${shade(0.4)}`,
       }}
     >
       <div

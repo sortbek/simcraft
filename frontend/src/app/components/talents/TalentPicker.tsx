@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Checkbox from '../ui/Checkbox';
+import CardHeader from '../ui/CardHeader';
+import { buttonClass } from '../ui/Button';
 import { useSimContext } from '../sim-config/SimContext';
 import {
   parseTalentLoadouts,
@@ -20,6 +22,9 @@ import { getCharacters, getTalentBuilds, type SavedTalentBuild } from '../../lib
 import { useLanguage } from '../../lib/i18n';
 
 /** Check if a talent build has all points allocated. */
+/** Header toggle: gold-edged while on, text-only while off. */
+const toggleBtn = (on: boolean) => buttonClass(on ? 'gold' : 'text');
+
 function getBuildStatus(
   talentString: string,
   tree: TalentTreeData | null
@@ -292,104 +297,74 @@ export default function TalentPicker({
 
   return (
     <div className="card overflow-hidden">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gold/[0.08]">
-            <svg
-              className="h-3.5 w-3.5 text-gold/60"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M2 2h12v12H2zM5 6h6M5 10h4" />
-            </svg>
-          </div>
-          <span className="text-xs font-medium text-on-surface-variant">{t('config.talents')}</span>
-          {allLoadouts.length >= 2 && (
-            <select
-              value={selectedLoadoutIdx}
-              onChange={(e) => {
-                const idx = Number(e.target.value);
-                setSelectedLoadoutIdx(idx);
-                setSelectedTalent(allLoadouts[idx].talentString);
-                if (viewMode === 'edit') setViewMode('view');
+      {/* Sections below draw their own top hairline, so the header skips its bottom one. */}
+      <CardHeader
+        className="!border-b-0"
+        title={t('config.talents')}
+        right={
+          <div className="flex items-center gap-1">
+            {allLoadouts.length >= 2 && (
+              <select
+                value={selectedLoadoutIdx}
+                onChange={(e) => {
+                  const idx = Number(e.target.value);
+                  setSelectedLoadoutIdx(idx);
+                  setSelectedTalent(allLoadouts[idx].talentString);
+                  if (viewMode === 'edit') setViewMode('view');
+                }}
+                className="sel mr-2 h-[34px] w-auto text-[13px]"
+              >
+                {allLoadouts.map((l, i) => (
+                  <option key={`${l.name}-${i}`} value={i}>
+                    {l.name}
+                    {l.isActive ? ` ${t('talent.equipped')}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {viewMode !== 'collapsed' && (
+              <>
+                {!hideCompare && (
+                  <button
+                    onClick={() => setCompareMode((v) => !v)}
+                    className={toggleBtn(compareMode)}
+                  >
+                    {t('talent.compare')}
+                    {talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
+                  </button>
+                )}
+                <button onClick={() => setShowImport((v) => !v)} className={toggleBtn(showImport)}>
+                  {t('talent.import')}
+                </button>
+                <button onClick={handleBlankBuild} className={buttonClass('text')}>
+                  {t('talent.blank')}
+                </button>
+                {!compareMode && (
+                  <button
+                    onClick={() => setViewMode((v) => (v === 'edit' ? 'view' : 'edit'))}
+                    className={toggleBtn(viewMode === 'edit')}
+                  >
+                    {viewMode === 'edit' ? t('common.done') : t('talent.edit')}
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              onClick={() => {
+                setViewMode((v) => (v === 'collapsed' ? 'view' : 'collapsed'));
+                setShowImport(false);
               }}
-              className="input-field !w-auto !border-transparent !bg-surface-container-high !px-2.5 !py-1 !text-[13px]"
+              className={buttonClass('text')}
             >
-              {allLoadouts.map((l, i) => (
-                <option key={`${l.name}-${i}`} value={i}>
-                  {l.name}
-                  {l.isActive ? ` ${t('talent.equipped')}` : ''}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {viewMode !== 'collapsed' && (
-            <>
-              {!hideCompare && (
-                <button
-                  onClick={() => setCompareMode((v) => !v)}
-                  className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
-                    compareMode
-                      ? 'bg-gold/10 font-medium text-gold'
-                      : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
-                  }`}
-                >
-                  {t('talent.compare')}
-                  {talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
-                </button>
-              )}
-              <button
-                onClick={() => setShowImport((v) => !v)}
-                className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
-                  showImport
-                    ? 'bg-gold/10 font-medium text-gold'
-                    : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
-                }`}
-              >
-                {t('talent.import')}
-              </button>
-              <button
-                onClick={handleBlankBuild}
-                className="rounded-md px-2.5 py-1 text-[13px] text-on-surface-variant/60 transition-all hover:bg-surface-container-high hover:text-on-surface-variant"
-              >
-                {t('talent.blank')}
-              </button>
-              {!compareMode && (
-                <button
-                  onClick={() => setViewMode((v) => (v === 'edit' ? 'view' : 'edit'))}
-                  className={`rounded-md px-2.5 py-1 text-[13px] transition-all ${
-                    viewMode === 'edit'
-                      ? 'bg-gold/10 font-medium text-gold'
-                      : 'text-on-surface-variant/60 hover:bg-surface-container-high hover:text-on-surface-variant'
-                  }`}
-                >
-                  {viewMode === 'edit' ? t('common.done') : t('talent.edit')}
-                </button>
-              )}
-            </>
-          )}
-          <button
-            onClick={() => {
-              setViewMode((v) => (v === 'collapsed' ? 'view' : 'collapsed'));
-              setShowImport(false);
-            }}
-            className="rounded-md px-2.5 py-1 text-[13px] text-on-surface-variant/60 transition-all hover:bg-surface-container-high hover:text-on-surface-variant"
-          >
-            {viewMode !== 'collapsed' ? t('common.hide') : t('common.show')}
-          </button>
-        </div>
-      </div>
+              {viewMode !== 'collapsed' ? t('common.hide') : t('common.show')}
+            </button>
+          </div>
+        }
+      />
 
       {/* Import bar */}
       {showImport && viewMode !== 'collapsed' && (
-        <div className="border-t border-outline-variant/10 px-4 py-3">
+        <div className="border-t border-line/[0.06] px-4 py-3">
           <div className="flex gap-2">
             <input
               type="text"
@@ -403,24 +378,19 @@ export default function TalentPicker({
               className="input-field !py-1.5 !text-[13px]"
               autoFocus
             />
-            <button
-              onClick={handleImport}
-              className="shrink-0 rounded-lg bg-gold/10 px-3 py-1.5 text-[13px] font-medium text-gold transition-colors hover:bg-gold/20"
-            >
+            <button onClick={handleImport} className={`shrink-0 ${buttonClass('gold')}`}>
               {t('common.apply')}
             </button>
           </div>
-          {importError && <p className="mt-1.5 text-[13px] text-red-400">{importError}</p>}
+          {importError && <p className="mt-1.5 text-[13px] text-negative">{importError}</p>}
         </div>
       )}
 
       {/* Compare mode — talent tree card grid */}
       {compareMode && viewMode !== 'collapsed' && (
-        <div className="border-t border-outline-variant/10 px-4 py-3">
+        <div className="border-t border-line/[0.06] px-4 py-3">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[12px] font-medium uppercase tracking-wider text-muted">
-              {t('talent.selectBuildsCompare')}
-            </p>
+            <p className="lbl">{t('talent.selectBuildsCompare')}</p>
             {talentBuilds.length > 1 && (
               <p className="text-[12px] text-gold/70">
                 {t('talent.buildsGearCombos', { count: talentBuilds.length })}
@@ -453,7 +423,7 @@ export default function TalentPicker({
                   {/* Spec label (only when different from base spec) */}
                   {loadoutSpecName && baseSpecId != null && loadoutSpecId !== baseSpecId && (
                     <div
-                      className="absolute left-1.5 top-1.5 z-10 rounded px-1.5 py-px text-[10px] font-bold"
+                      className="absolute left-1.5 top-1.5 z-10 rounded px-1.5 py-px text-[11px] font-bold"
                       style={{
                         color: classColorForSpec(loadoutSpecName) ?? '#c4b5fd',
                         backgroundColor: `${classColorForSpec(loadoutSpecName) ?? '#8b5cf6'}20`,
@@ -486,7 +456,7 @@ export default function TalentPicker({
       {/* Tree content */}
       {viewMode !== 'collapsed' && !compareMode && (
         <div
-          className={`border-t border-outline-variant/10 p-4 ${compact ? 'max-h-[280px] overflow-auto' : ''}`}
+          className={`border-t border-line/[0.06] p-4 ${compact ? 'max-h-[280px] overflow-auto' : ''}`}
         >
           {viewMode === 'view' && currentTalent && (
             <TalentTree talentString={currentTalent} bare vertical={compact} />

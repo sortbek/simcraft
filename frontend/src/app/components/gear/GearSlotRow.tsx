@@ -16,6 +16,11 @@ import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { SLOT_LABELS } from '../../lib/types';
 import type { GearItem } from './gearOverviewTypes';
+import Pill from '../ui/Pill';
+
+/** Mock `.gr`: 7px-radius row with a hover fill. */
+const ROW =
+  'flex items-center gap-3 rounded-[7px] px-2.5 py-[7px] transition-colors duration-[120ms] hover:bg-surface-container-high';
 
 interface GearSlotRowProps {
   slot: string;
@@ -47,13 +52,11 @@ export default function GearSlotRow({
 
   if (!item || item.item_id <= 0) {
     return (
-      <div
-        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}
-      >
-        <div className="h-7 w-7 shrink-0 rounded-md bg-surface-container-high" />
+      <div className={`${ROW} ${rtl ? 'flex-row-reverse' : ''}`}>
+        <div className="h-[38px] w-[38px] shrink-0 rounded-[5px] border border-dashed border-line/[0.11] bg-surface-container-high" />
         <div className={rtl ? 'text-right' : ''}>
-          <p className="text-[13px] text-on-surface-variant">{SLOT_LABELS[slot] || slot}</p>
-          <p className="text-[11px] text-on-surface-variant/50">{t('gear.empty')}</p>
+          <p className="text-sm text-outline">{SLOT_LABELS[slot] || slot}</p>
+          <p className="mt-px text-xs text-outline">{t('gear.empty')}</p>
         </div>
       </div>
     );
@@ -63,7 +66,7 @@ export default function GearSlotRow({
   const enchant = item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined;
   const gemIdList = toGemIdList(item);
   const gems = gemIdList.map((id) => gemInfoMap[id]).filter((g): g is GemInfo => !!g);
-  const qualityColor = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
+  const qualityColor = info ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
   const name = localizedItemName(
     item.item_id,
     info?.name || item.name || `Item ${item.item_id}`,
@@ -74,12 +77,10 @@ export default function GearSlotRow({
   const fadeDir = rtl ? 'to left' : 'to right';
 
   return (
-    <div
-      className={`relative flex items-center gap-2 rounded-lg px-2 py-1.5 ${rtl ? 'flex-row-reverse' : ''}`}
-    >
+    <div className={`relative ${ROW} ${rtl ? 'flex-row-reverse' : ''}`}>
       {isUpgrade && (
         <div
-          className="pointer-events-none absolute inset-0 rounded-lg bg-emerald-500/[0.15] ring-1 ring-emerald-500/30"
+          className="pointer-events-none absolute inset-0 rounded-[7px] bg-positive/[0.15] ring-1 ring-positive/30"
           style={{
             maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
             WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
@@ -88,7 +89,7 @@ export default function GearSlotRow({
       )}
       {isDowngrade && (
         <div
-          className="pointer-events-none absolute inset-0 rounded-lg bg-red-500/[0.15] ring-1 ring-red-500/30"
+          className="pointer-events-none absolute inset-0 rounded-[7px] bg-negative/[0.15] ring-1 ring-negative/30"
           style={{
             maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
             WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
@@ -97,7 +98,7 @@ export default function GearSlotRow({
       )}
       {isShared && (
         <div
-          className="pointer-events-none absolute inset-0 rounded-lg bg-sky-500/[0.15] ring-1 ring-sky-500/30"
+          className="pointer-events-none absolute inset-0 rounded-[7px] bg-info/[0.15] ring-1 ring-info/30"
           style={{
             maskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
             WebkitMaskImage: `linear-gradient(${fadeDir}, black 20%, transparent 85%)`,
@@ -107,7 +108,8 @@ export default function GearSlotRow({
       <a
         href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
         data-wowhead={wowheadData}
-        className="block h-7 w-7 shrink-0 overflow-hidden rounded-md border border-outline-variant/20"
+        className="relative block h-[38px] w-[38px] shrink-0 overflow-hidden rounded-[5px] border"
+        style={{ borderColor: qualityColor }}
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.preventDefault()}
@@ -115,18 +117,19 @@ export default function GearSlotRow({
         <img
           {...iconProps(icon)}
           alt=""
-          width={28}
-          height={28}
+          width={38}
+          height={38}
           className="h-full w-full"
           loading="lazy"
         />
+        <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
       </a>
       <div className={`min-w-0 flex-1 ${rtl ? 'text-right' : ''}`}>
         <div className={`flex items-center gap-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
           <a
             href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
             data-wowhead={wowheadData}
-            className="truncate text-[13px] font-medium leading-tight no-underline"
+            className="truncate text-sm font-semibold leading-tight no-underline"
             style={{ color: qualityColor }}
             target="_blank"
             rel="noopener noreferrer"
@@ -135,35 +138,35 @@ export default function GearSlotRow({
             {name}
           </a>
           {isUpgrade && item.upgrade_levels ? (
-            <span className="shrink-0 rounded bg-emerald-500/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+            <Pill variant="positive" size="sm" className="shrink-0">
               +{item.upgrade_levels} {item.upgrade_levels === 1 ? 'level' : 'levels'}
-            </span>
+            </Pill>
           ) : isUpgrade ? (
-            <span className="shrink-0 rounded bg-emerald-500/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+            <Pill variant="positive" size="sm" className="shrink-0">
               {t('gear.upgrade')}
-            </span>
+            </Pill>
           ) : isDowngrade ? (
-            <span className="shrink-0 rounded bg-red-500/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-red-400">
+            <Pill variant="negative" size="sm" className="shrink-0">
               {t('gear.downgrade')}
-            </span>
+            </Pill>
           ) : null}
           {item.origin === 'vault' && (
-            <span className="shrink-0 rounded bg-amber-400/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-amber-400">
+            <Pill variant="warning" size="sm" className="shrink-0">
               Vault
-            </span>
+            </Pill>
           )}
           {item.origin === 'loot' && (
-            <span className="shrink-0 rounded bg-sky-400/10 px-1 py-px text-[10px] font-bold uppercase tracking-wider text-sky-400">
+            <Pill variant="info" size="sm" className="shrink-0">
               Loot
-            </span>
+            </Pill>
           )}
         </div>
-        <p className="truncate text-[11px] text-muted">
+        <p className="mt-px truncate text-xs text-outline">
           {SLOT_LABELS[slot] || slot}
           {item.ilevel > 0 && ` · ${item.ilevel}`}
           {info?.tag && ` · ${info.tag}`}
           {gems.length > 0 ? (
-            <span className="text-sky-400/70">
+            <span className="text-gem">
               {' '}
               ·{' '}
               {gems.map((g, i) => (
@@ -183,14 +186,14 @@ export default function GearSlotRow({
             </span>
           ) : (
             (info?.sockets ?? 0) > 0 && (
-              <span className="text-sky-400/70">
+              <span className="text-gem">
                 {' '}
                 · {(info?.sockets ?? 0) > 1 ? t('gear.sockets') : t('gear.socket')}
               </span>
             )
           )}
           {enchant?.name && (
-            <span className="text-emerald-400/70">
+            <span className="text-ench">
               {' '}
               ·{' '}
               {enchant.item_id ? (
@@ -209,7 +212,7 @@ export default function GearSlotRow({
             </span>
           )}
           {item.embellishment && (
-            <span className="text-purple-400/80"> · {item.embellishment.name}</span>
+            <span className="text-quality-epic/80"> · {item.embellishment.name}</span>
           )}
         </p>
       </div>

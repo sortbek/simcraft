@@ -17,16 +17,16 @@ const GEAR_ORDER_BOTTOM = ['main_hand', 'off_hand'];
 const ALL_SLOTS = [...GEAR_ORDER_LEFT, ...GEAR_ORDER_RIGHT, ...GEAR_ORDER_BOTTOM];
 
 export function gemBadgeClass(name?: string): string {
-  if (!name) return 'bg-sky-500/10 text-sky-300';
+  if (!name) return 'bg-gem/10 text-gem';
   const lower = name.toLowerCase();
-  if (lower.includes('garnet')) return 'bg-red-500/10 text-red-300';
-  if (lower.includes('amethyst')) return 'bg-purple-500/10 text-purple-300';
-  if (lower.includes('peridot')) return 'bg-green-500/10 text-green-300';
-  if (lower.includes('lapis')) return 'bg-blue-500/10 text-blue-300';
+  if (lower.includes('garnet')) return 'bg-negative/10 text-negative';
+  if (lower.includes('amethyst')) return 'bg-quality-epic/10 text-quality-epic';
+  if (lower.includes('peridot')) return 'bg-positive/10 text-positive';
+  if (lower.includes('lapis')) return 'bg-quality-rare/10 text-quality-rare';
   if (lower.includes('diamond') || lower.includes('eversong')) {
-    return 'bg-amber-500/10 text-amber-300';
+    return 'bg-warning/10 text-warning';
   }
-  return 'bg-sky-500/10 text-sky-300';
+  return 'bg-gem/10 text-gem';
 }
 
 export function dedupeEncounterResults(

@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
+import PageHeader from '../components/ui/PageHeader';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import { useComputeChoice, type ComputeChoice } from '../lib/useComputeChoice';
@@ -76,12 +77,11 @@ export default function DropFinderContent() {
   return (
     <div className="space-y-4 pb-20">
       {/* Page header */}
-      <div>
-        <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          {t('dropFinder.title')}
-        </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">{t('dropFinder.description')}</p>
-      </div>
+      <PageHeader
+        eyebrow={t('nav.simTools')}
+        title={t('dropFinder.title')}
+        subtitle={t('dropFinder.description')}
+      />
 
       <LootBrowser
         footer={(submission) => {

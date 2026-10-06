@@ -100,7 +100,7 @@ export default function DungeonDrawer({
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggleInstance(String(inst.id))}
-                  className="h-4 w-4 accent-gold"
+                  className="h-4 w-4 accent-gold-fill"
                 />
                 <span className="text-sm text-on-surface">{inst.name}</span>
               </label>

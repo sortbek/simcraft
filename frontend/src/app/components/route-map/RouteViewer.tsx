@@ -4,7 +4,6 @@ import { useCallback, useRef, useState } from 'react';
 import type { MdtConversion } from '../../lib/api';
 import { saveRoute, type SavedRoute } from '../../lib/saved-routes';
 import { useLanguage } from '../../lib/i18n';
-import { T } from './routeTheme';
 import RouteHeader from './RouteHeader';
 import RouteMap from './RouteMap';
 import ForcesTimeline from './ForcesTimeline';
@@ -73,19 +72,7 @@ export default function RouteViewer({
   };
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        background: T.bg,
-        borderRadius: 8,
-        overflow: 'hidden',
-        border: `1px solid ${T.border}`,
-        fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
-      }}
-    >
+    <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-line/[0.06] bg-background">
       <RouteHeader
         dungeonName={conv.dungeon_name}
         keystoneLevel={conv.keystone_level}
@@ -102,8 +89,8 @@ export default function RouteViewer({
         onSwitch={onSwitch}
       />
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <div style={{ flex: 1, position: 'relative', padding: 16, minWidth: 0 }}>
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-w-0 flex-1 p-4">
           <RouteMap editor={editor} map={conv.map} />
         </div>
         <ForcesTimeline

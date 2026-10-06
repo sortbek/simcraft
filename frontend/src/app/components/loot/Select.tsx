@@ -150,7 +150,7 @@ export default function Select<T>({
     return (
       <div key={String(opt.value)}>
         {opt.group && opt.group !== options[index - 1]?.group && (
-          <div className="px-3 py-1.5 text-xs text-on-surface-variant">{opt.group}</div>
+          <div className="lbl px-3 pb-1.5 pt-2.5">{opt.group}</div>
         )}
         <button
           role="option"
@@ -163,15 +163,13 @@ export default function Select<T>({
             triggerRef.current?.focus();
           }}
           className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium transition-colors ${
-            isActive
-              ? 'bg-gold/[0.06] text-gold'
-              : 'text-on-surface hover:bg-surface-container-high'
+            isActive ? 'bg-gold/10 text-gold' : 'text-on-surface hover:bg-surface-container-high'
           }`}
         >
           <span className="truncate">{opt.label}</span>
           {opt.sublabel && (
             <span
-              className={`text-right text-xs tabular-nums ${isActive ? 'text-gold/70' : 'text-on-surface-variant/50'}`}
+              className={`text-right text-xs tabular-nums ${isActive ? 'text-gold/70' : 'text-outline'}`}
             >
               {opt.sublabel}
             </span>
@@ -210,7 +208,7 @@ export default function Select<T>({
           )}
         </span>
         <svg
-          className={`h-4 w-4 shrink-0 text-on-surface-variant/40 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 text-outline transition-transform ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
@@ -236,7 +234,7 @@ export default function Select<T>({
                   ? { top: portalRect.top }
                   : { bottom: portalRect.bottom }),
               }}
-              className="fixed z-30 overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container shadow-xl"
+              className="popover fixed z-30 overflow-y-auto py-1.5"
             >
               {optionButtons}
             </div>,
@@ -250,7 +248,7 @@ export default function Select<T>({
           id={listId}
           role="listbox"
           onKeyDown={panelKeyDown}
-          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container shadow-xl"
+          className="popover absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-y-auto py-1.5"
         >
           {optionButtons}
         </div>

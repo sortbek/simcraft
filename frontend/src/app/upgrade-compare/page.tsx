@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
+import PageHeader from '../components/ui/PageHeader';
+import Pill from '../components/ui/Pill';
 import GearItemRow from '../components/gear/GearItemRow';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { API_URL } from '../lib/api';
@@ -17,6 +19,7 @@ import { useLanguage } from '../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../lib/useItemInfo';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
 import { useComputeChoice } from '../lib/useComputeChoice';
+import { clearPageEdit, peekPageEdit } from '../lib/share/editShared';
 
 // ---- Types ----
 
@@ -112,9 +115,16 @@ export default function UpgradeComparePage() {
   const currencies = useMemo(() => data?.currencies ?? {}, [data]);
   const hasCurrencies = Object.keys(currencies).length > 0;
 
-  // Reset selection when candidates change
+  // Reset selection when candidates change; a shared sim being edited picks its slots.
   useEffect(() => {
-    setSelectedSlots(new Set());
+    const shared = data ? peekPageEdit(['upgrade_compare'])?.selected_slots : undefined;
+    if (!Array.isArray(shared)) {
+      setSelectedSlots(new Set());
+      return;
+    }
+    clearPageEdit();
+    const offered = new Set(data?.candidates.map((c) => c.slot));
+    setSelectedSlots(new Set(shared.filter((s): s is string => offered.has(s))));
   }, [data]);
 
   // Item info for display
@@ -199,7 +209,9 @@ export default function UpgradeComparePage() {
   };
 
   if (!hasCharacter) {
-    return <p className="py-6 text-center text-sm text-muted">{t('upgradeCompare.pasteExport')}</p>;
+    return (
+      <p className="py-6 text-center text-sm text-outline">{t('upgradeCompare.pasteExport')}</p>
+    );
   }
 
   const submitLabel = !hasCurrencies
@@ -210,17 +222,14 @@ export default function UpgradeComparePage() {
 
   return (
     <div className="space-y-6 pb-20">
-      <div>
-        <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          {t('nav.crestUpgrades')}
-        </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">
-          {t('page.crestUpgradesSubtitle')}
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={t('nav.simTools')}
+        title={t('nav.crestUpgrades')}
+        subtitle={t('page.crestUpgradesSubtitle')}
+      />
       <TalentPicker />
       {/* Explainer */}
-      <div className="rounded-lg bg-surface-container-high/50 px-4 py-3">
+      <div className="card px-6 py-4">
         <p className="text-[15px] leading-relaxed text-on-surface-variant">
           {t('upgradeCompare.explainer')}
         </p>
@@ -229,21 +238,16 @@ export default function UpgradeComparePage() {
       {/* Currency Budget */}
       {hasCurrencies && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[12px] font-medium uppercase tracking-widest text-muted">
-            {t('upgradeCompare.budget')}
-          </span>
+          <span className="lbl">{t('upgradeCompare.budget')}</span>
           {Object.values(currencies)
             .filter((c) => c.name)
             .sort((a, b) => a.id - b.id)
             .map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center gap-1.5 rounded-md bg-surface-container-high px-2 py-1"
-              >
+              <Pill key={c.id}>
                 <img {...iconProps(c.icon)} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
-                <span className="text-[13px] text-on-surface-variant">{c.name}</span>
-                <span className="font-mono text-[13px] tabular-nums text-white">{c.amount}</span>
-              </div>
+                {c.name}
+                <span className="tabular-nums text-on-surface">{c.amount}</span>
+              </Pill>
             ))}
         </div>
       )}
@@ -251,13 +255,9 @@ export default function UpgradeComparePage() {
       {/* Upgradeable Items */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium uppercase tracking-widest text-muted">
-            {t('upgradeCompare.selectItems')}
-          </p>
+          <p className="lbl">{t('upgradeCompare.selectItems')}</p>
           {comboCount > 0 && (
-            <span className="rounded-md bg-surface-container-high px-2.5 py-1 font-mono text-xs text-on-surface">
-              {t('upgradeCompare.combosCount', { count: comboCount.toLocaleString() })}
-            </span>
+            <Pill>{t('upgradeCompare.combosCount', { count: comboCount.toLocaleString() })}</Pill>
           )}
         </div>
 
@@ -275,7 +275,7 @@ export default function UpgradeComparePage() {
           </div>
         ) : candidates.length === 0 ? (
           <div className="card p-8 text-center">
-            <p className="text-sm text-muted">{t('upgradeCompare.noUpgradeable')}</p>
+            <p className="text-sm text-outline">{t('upgradeCompare.noUpgradeable')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -293,7 +293,7 @@ export default function UpgradeComparePage() {
                         alt=""
                         className="h-4 w-4 shrink-0 rounded-sm"
                       />
-                      <p className="text-[13px] font-semibold uppercase tracking-widest text-muted">
+                      <p className="lbl">
                         {group.currency?.name ||
                           t('upgradeCompare.unknownCurrency', { id: group.currencyId })}
                       </p>
@@ -309,7 +309,9 @@ export default function UpgradeComparePage() {
 
                   {group.candidates.map((c) => {
                     const info = itemInfo[c.item_id];
-                    const qc = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
+                    const qc = info
+                      ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1]
+                      : QUALITY_COLORS[1];
 
                     return (
                       <GearItemRow

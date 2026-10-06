@@ -6,6 +6,7 @@ import { useLanguage } from '../../lib/i18n';
 import { T, DEFAULT_PULL_COLOR } from './routeTheme';
 import { IBoss, IPlus, IMinus } from './routeIcons';
 import { ModeBanner } from './RouteOverlays';
+import { TABS_TRACK, tabClass } from '../ui/ToggleButtonGroup';
 import type { RouteEditor } from './useRouteEditor';
 
 // MDT maps composite to a 1920x1280 image; mob coords are in 840x560 base space, plotted at (x*S, -y*S).
@@ -255,17 +256,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
     [{ x: e.x, y: e.y }, ...e.patrol].map((p) => `${p.x * SCALE_X},${-p.y * SCALE_Y}`).join(' ');
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        height: '100%',
-        width: '100%',
-        overflow: 'hidden',
-        borderRadius: 8,
-        border: `1px solid ${T.borderHi}`,
-        background: '#0c0c0c',
-      }}
-    >
+    <div className="relative h-full w-full overflow-hidden rounded-[10px] border border-line/[0.11] bg-background">
       {mode !== 'view' && (
         <ModeBanner
           mode={mode}
@@ -481,31 +472,18 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
               left: pan.x + hover.sx * zoom + 12,
               top: pan.y + hover.sy * zoom + 12,
               pointerEvents: 'none',
-              borderRadius: 7,
-              background: 'rgba(26,26,26,0.96)',
-              border: `1px solid ${T.border}`,
-              boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
-              padding: '7px 10px',
             }}
+            className="rounded-[6px] border border-line/[0.11] bg-popover/[0.96] px-2.5 py-[7px] shadow-[0_6px_20px_rgb(var(--c-shade)/calc(0.5*var(--c-shade-k)))]"
           >
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: T.text,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
+            <div className="flex items-center gap-1.5 text-[12px] font-semibold text-on-surface">
               {hover.enemy.is_boss && (
-                <span style={{ color: T.boss, display: 'flex' }}>
+                <span className="flex" style={{ color: T.boss }}>
                   <IBoss s={11} />
                 </span>
               )}
               {hover.enemy.name}
             </div>
-            <div style={{ fontSize: 10.5, color: T.muted, marginTop: 3 }}>
+            <div className="mt-[3px] text-[11px] text-outline">
               {hover.pull !== null ? t('route.pullN', { n: hover.pull }) : t('route.map.notPulled')}{' '}
               · {t('route.map.hp', { value: formatHp(hover.enemy.health) })}
             </div>
@@ -532,36 +510,14 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
 
       {/* Sublevel tabs (only when a dungeon has more than one) */}
       {map.sublevels.length > 1 && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 16,
-            top: 16,
-            zIndex: 20,
-            display: 'flex',
-            gap: 4,
-            background: 'rgba(20,20,20,0.82)',
-            backdropFilter: 'blur(8px)',
-            border: `1px solid ${T.border}`,
-            borderRadius: 7,
-            padding: 3,
-          }}
-        >
+        <div className={`absolute left-4 top-4 z-20 backdrop-blur ${TABS_TRACK}`}>
           {map.sublevels.map((s) => (
             <button
               key={s.index}
               type="button"
               onClick={() => setSublevel(s.index)}
-              style={{
-                padding: '5px 10px',
-                borderRadius: 5,
-                fontSize: 10.5,
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-                border: 'none',
-                background: s.index === sublevel ? T.goldSub : 'transparent',
-                color: s.index === sublevel ? T.gold : T.text2,
-              }}
+              aria-pressed={s.index === sublevel}
+              className={tabClass(s.index === sublevel)}
             >
               {s.name}
             </button>
@@ -570,27 +526,11 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
       )}
 
       {/* Zoom control (bottom-left) */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 16,
-          bottom: 16,
-          zIndex: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          background: 'rgba(20,20,20,0.82)',
-          backdropFilter: 'blur(8px)',
-          border: `1px solid ${T.border}`,
-          borderRadius: 7,
-          padding: 3,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-        }}
-      >
+      <div className={`absolute bottom-4 left-4 z-20 flex items-center gap-0.5 p-[3px] ${OVERLAY}`}>
         <button
           type="button"
           onClick={() => zoomAround(1 / 1.2)}
-          style={zbtn}
+          className={ZBTN}
           title={t('route.map.zoomOut')}
         >
           <IMinus s={12} />
@@ -598,17 +538,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
         <button
           type="button"
           onClick={fit}
-          style={{
-            fontSize: 11,
-            color: T.text2,
-            width: 44,
-            textAlign: 'center',
-            fontVariantNumeric: 'tabular-nums',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
+          className="w-11 text-center font-headline text-[11px] font-bold tabular-nums text-on-surface-variant hover:text-on-surface"
           title={t('route.map.zoomFit')}
         >
           {Number.isFinite(zoomPct) ? `${zoomPct}%` : '100%'}
@@ -616,7 +546,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
         <button
           type="button"
           onClick={() => zoomAround(1.2)}
-          style={zbtn}
+          className={ZBTN}
           title={t('route.map.zoomIn')}
         >
           <IPlus s={12} />
@@ -625,34 +555,18 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
 
       {/* Legend (bottom-right) */}
       <div
-        style={{
-          position: 'absolute',
-          right: 16,
-          bottom: 16,
-          zIndex: 20,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 5,
-          padding: '8px 11px',
-          fontSize: 10,
-          color: T.text2,
-          background: 'rgba(20,20,20,0.82)',
-          backdropFilter: 'blur(8px)',
-          border: `1px solid ${T.border}`,
-          borderRadius: 7,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-        }}
+        className={`absolute bottom-4 right-4 z-20 flex flex-col gap-[5px] px-3 py-2 text-[11px] text-on-surface-variant ${OVERLAY}`}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.gold }} />{' '}
+        <div className="flex items-center gap-[7px]">
+          <span className="h-[9px] w-[9px] rounded-full bg-gold-fill" />{' '}
           {t('route.map.legendInPull')}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: UNPULLED_COLOR }} />{' '}
+        <div className="flex items-center gap-[7px]">
+          <span className="h-[9px] w-[9px] rounded-full" style={{ background: UNPULLED_COLOR }} />{' '}
           {t('route.map.notPulled')}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ color: T.boss, display: 'flex' }}>
+        <div className="flex items-center gap-[7px]">
+          <span className="flex" style={{ color: T.boss }}>
             <IBoss s={11} />
           </span>{' '}
           {t('route.map.legendBoss')}
@@ -662,15 +576,7 @@ export default function RouteMap({ editor, map }: { editor: RouteEditor; map: Md
   );
 }
 
-const zbtn: React.CSSProperties = {
-  width: 24,
-  height: 24,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'transparent',
-  border: 'none',
-  color: T.text2,
-  cursor: 'pointer',
-  borderRadius: 5,
-};
+const OVERLAY =
+  'rounded-[8px] border border-line/[0.06] bg-background/80 shadow-[0_4px_16px_rgb(var(--c-shade)/calc(0.4*var(--c-shade-k)))] backdrop-blur';
+const ZBTN =
+  'flex h-6 w-6 items-center justify-center rounded-[5px] text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface';

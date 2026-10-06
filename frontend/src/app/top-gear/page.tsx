@@ -1,5 +1,10 @@
+import RemountOnRestore from '../components/share/RemountOnRestore';
 import TopGearScreen from './TopGearScreen';
 
 export default function TopGearPage() {
-  return <TopGearScreen />;
+  return (
+    <RemountOnRestore>
+      <TopGearScreen />
+    </RemountOnRestore>
+  );
 }

@@ -1,41 +1,40 @@
 /** Semantic status styling for gear rows: vault/loot/catalyst/voidForge color
- *  families (icon ring + row background, checked/unchecked). Exact Tailwind classes
- *  already in use — no visual change. */
+ *  families (icon border + row edge/background, checked/unchecked). */
 export type GearStatus = 'vault' | 'loot' | 'catalyst' | 'voidForge';
 
 interface GearStatusStyle {
-  /** Ring on the item icon. */
+  /** Border color on the item icon. */
   iconRing: string;
-  /** Row background + ring when the row is selected (checked). */
+  /** Row edge + background when the row is selected (checked). */
   rowChecked: string;
-  /** Row background + ring when not selected. */
+  /** Row edge + background when not selected. */
   rowUnchecked: string;
 }
 
 export const GEAR_STATUS_STYLES: Record<GearStatus, GearStatusStyle> = {
   vault: {
-    iconRing: 'ring-2 ring-amber-400/70',
-    rowChecked: 'bg-amber-400/[0.12] ring-2 ring-amber-400/50',
+    iconRing: 'border-warning',
+    rowChecked: 'border-warning/50 bg-warning/10 ring-1 ring-warning/40',
     rowUnchecked:
-      'bg-amber-400/[0.04] ring-1 ring-amber-400/30 hover:bg-amber-400/[0.08] hover:ring-amber-400/50',
+      'border-warning/[0.15] bg-warning/[0.03] hover:border-warning/25 hover:bg-warning/[0.06]',
   },
   loot: {
-    iconRing: 'ring-2 ring-sky-400/70',
-    rowChecked: 'bg-sky-400/[0.12] ring-2 ring-sky-400/50',
+    iconRing: 'border-quality-rare',
+    rowChecked: 'border-quality-rare/35 bg-quality-rare/10',
     rowUnchecked:
-      'bg-sky-400/[0.04] ring-1 ring-sky-400/30 hover:bg-sky-400/[0.08] hover:ring-sky-400/50',
+      'border-quality-rare/[0.15] bg-quality-rare/[0.03] hover:border-quality-rare/25 hover:bg-quality-rare/[0.06]',
   },
   catalyst: {
-    iconRing: 'ring-2 ring-purple-400/70',
-    rowChecked: 'bg-purple-400/[0.12] ring-2 ring-purple-400/50',
+    iconRing: 'border-quality-epic',
+    rowChecked: 'border-quality-epic/35 bg-quality-epic/10',
     rowUnchecked:
-      'bg-purple-400/[0.04] ring-1 ring-purple-400/30 hover:bg-purple-400/[0.08] hover:ring-purple-400/50',
+      'border-quality-epic/[0.15] bg-quality-epic/[0.03] hover:border-quality-epic/25 hover:bg-quality-epic/[0.06]',
   },
   voidForge: {
-    iconRing: 'ring-2 ring-violet-400/70',
-    rowChecked: 'bg-violet-400/[0.12] ring-2 ring-violet-400/50',
+    iconRing: 'border-quality-legendary',
+    rowChecked: 'border-quality-legendary/35 bg-quality-legendary/10',
     rowUnchecked:
-      'bg-violet-400/[0.04] ring-1 ring-violet-400/30 hover:bg-violet-400/[0.08] hover:ring-violet-400/50',
+      'border-quality-legendary/[0.15] bg-quality-legendary/[0.03] hover:border-quality-legendary/25 hover:bg-quality-legendary/[0.06]',
   },
 };
 
@@ -59,7 +58,7 @@ export const STATUS_TEXT = {
   /** Upgrade / crest cost emphasis. */
   upgrade: 'text-gold/70',
   /** Positive delta (DPS gain). */
-  deltaPositive: 'text-green-400',
+  deltaPositive: 'text-positive',
   /** Negative delta (DPS loss). */
-  deltaNegative: 'text-red-400',
+  deltaNegative: 'text-negative',
 } as const;

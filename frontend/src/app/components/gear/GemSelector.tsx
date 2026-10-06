@@ -40,11 +40,11 @@ interface GemSelectorProps {
 }
 
 const GEM_COLOR_CLASS: Record<string, string> = {
-  amethyst: 'text-purple-400',
-  garnet: 'text-red-400',
-  lapis: 'text-blue-400',
-  peridot: 'text-green-400',
-  other: 'text-muted',
+  amethyst: 'text-quality-epic',
+  garnet: 'text-negative',
+  lapis: 'text-quality-rare',
+  peridot: 'text-positive',
+  other: 'text-outline',
 };
 
 function gemDetails(g: GemOption): { text: string; color?: string }[] {
@@ -114,7 +114,7 @@ export default function GemSelector({
   // Still fetching: a placeholder rather than `null`, so the section heading is
   // never left sitting over nothing.
   if (hasSocketedSlots && !loaded) {
-    return <p className="py-1 text-sm text-muted">{t('common.loading')}</p>;
+    return <p className="py-1 text-sm text-outline">{t('common.loading')}</p>;
   }
 
   if (socketedSlots.length === 0 || gemOptions.length === 0) {
@@ -138,7 +138,7 @@ export default function GemSelector({
             disabled={!hasAnyGemSelected}
             aria-label={t('enchantGem.replaceGems')}
           />
-          <span className="text-[11px] font-semibold leading-tight text-on-surface-variant transition-colors group-hover:text-gold">
+          <span className="text-[12.5px] font-semibold leading-tight text-on-surface-variant transition-colors group-hover:text-on-surface">
             {t('enchantGem.replaceGems')}
           </span>
           <InfoIcon tooltip={t('enchantGem.replaceGemsTooltip')} />
@@ -152,11 +152,10 @@ export default function GemSelector({
               <Switch
                 checked={diamondAlwaysUse}
                 onChange={onDiamondAlwaysUseChange}
-                onColor="bg-amber-500"
                 disabled={!hasDiamondSelected}
                 aria-label={t('enchantGem.alwaysUse')}
               />
-              <span className="text-[11px] font-semibold text-on-surface-variant transition-colors group-hover:text-amber-400">
+              <span className="text-[12.5px] font-semibold text-on-surface-variant transition-colors group-hover:text-on-surface">
                 {t('enchantGem.alwaysUse')}
               </span>
             </div>
@@ -168,11 +167,10 @@ export default function GemSelector({
               <Switch
                 checked={maxColors}
                 onChange={onMaxColorsChange}
-                onColor="bg-amber-500"
                 disabled={!hasDiamondSelected || !diamondAlwaysUse}
                 aria-label={t('enchantGem.onlyMaxColors')}
               />
-              <span className="text-[11px] font-semibold text-on-surface-variant transition-colors group-hover:text-amber-400">
+              <span className="text-[12.5px] font-semibold text-on-surface-variant transition-colors group-hover:text-on-surface">
                 {t('enchantGem.onlyMaxColors')}
               </span>
             </div>
@@ -185,7 +183,7 @@ export default function GemSelector({
               ? (onClearAllGems ?? (() => onDeselectAllGems('')))()
               : onSelectAllGems('', allGemIds)
           }
-          className="ml-auto text-[11px] text-gold/60 transition-colors hover:text-gold"
+          className="ml-auto font-headline text-[11.5px] font-extrabold uppercase tracking-[0.12em] text-gold/70 transition-colors hover:text-gold"
         >
           {allSelected ? t('enchantGem.deselectAll') : t('enchantGem.selectAll')}
         </button>
@@ -196,9 +194,7 @@ export default function GemSelector({
         {diamonds.length > 0 && (
           <div className={gearCardClass(density)}>
             <div className={GEAR_DENSITY_LAYOUT[density].title}>
-              <p className="font-headline font-semibold uppercase tracking-widest text-amber-400">
-                {t('enchantGem.diamonds')}
-              </p>
+              <p className="h-card text-gold">{t('enchantGem.diamonds')}</p>
             </div>
             {diamonds.map((d) => {
               const gemItemId = d.itemId!;
@@ -210,7 +206,7 @@ export default function GemSelector({
                   key={d.id}
                   icon={d.itemIcon || ''}
                   name={d.itemName || d.displayName}
-                  nameColor={isSelected ? 'text-amber-400' : 'text-on-surface'}
+                  nameColor={isSelected ? 'text-gold' : 'text-on-surface'}
                   href={getWowheadUrl(gemItemId, locale)}
                   details={gemDetails(d)}
                   selectable
@@ -233,16 +229,12 @@ export default function GemSelector({
               <div
                 className={`flex items-center justify-between ${GEAR_DENSITY_LAYOUT[density].title}`}
               >
-                <p
-                  className={`font-headline font-semibold uppercase tracking-widest ${GEM_COLOR_CLASS[color] || 'text-muted'}`}
-                >
-                  {colorLabel}
-                </p>
+                <p className={`h-card ${GEM_COLOR_CLASS[color] || 'text-outline'}`}>{colorLabel}</p>
                 <button
                   onClick={() =>
                     groupSelected ? onDeselectAllGems('', groupIds) : onSelectAllGems('', groupIds)
                   }
-                  className="text-[11px] text-gold/60 transition-colors hover:text-gold"
+                  className="font-headline text-[11.5px] font-extrabold uppercase tracking-[0.12em] text-gold/70 transition-colors hover:text-gold"
                 >
                   {groupSelected ? t('enchantGem.deselectAll') : t('enchantGem.selectAll')}
                 </button>

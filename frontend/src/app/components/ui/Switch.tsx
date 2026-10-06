@@ -3,19 +3,17 @@ import { cn } from '../../lib/cn';
 interface SwitchProps {
   checked: boolean;
   onChange: (value: boolean) => void;
-  /** Tailwind bg class for the ON track, e.g. 'bg-gold', 'bg-amber-500', 'bg-primary'. */
-  onColor?: string;
   disabled?: boolean;
   'aria-label'?: string;
+  /** Set when the switch also shows/hides a panel. */
+  'aria-expanded'?: boolean;
   className?: string;
 }
 
-/** Accessible toggle switch; shared primitive for GemSelector and TopGearScreen's
- *  Toggle. Geometry matches the existing 18×32 track + 12px knob exactly. */
+/** Accessible toggle switch rendered as the mock's `.tog` track/thumb. */
 export default function Switch({
   checked,
   onChange,
-  onColor = 'bg-gold',
   disabled = false,
   className,
   ...aria
@@ -26,20 +24,10 @@ export default function Switch({
       role="switch"
       aria-checked={checked}
       aria-label={aria['aria-label']}
+      aria-expanded={aria['aria-expanded']}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={cn(
-        'relative h-[18px] w-8 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed',
-        checked ? onColor : 'bg-surface-container-highest',
-        className
-      )}
-    >
-      <span
-        className={cn(
-          'absolute top-[3px] h-3 w-3 rounded-full transition-all',
-          checked ? 'right-[3px] bg-white' : 'left-[3px] bg-on-surface-variant'
-        )}
-      />
-    </button>
+      className={cn('tog disabled:cursor-not-allowed', checked && 'tog-on', className)}
+    />
   );
 }

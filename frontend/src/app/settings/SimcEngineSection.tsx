@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../lib/i18n';
-import SettingsToggle from './SettingsToggle';
+import Switch from '../components/ui/Switch';
+import CardHeader from '../components/ui/CardHeader';
+import Button from '../components/ui/Button';
 
 interface DesktopAvailableUpdate {
   tag: string;
@@ -103,26 +105,31 @@ export default function SimcEngineSection() {
   }, [versions, updates]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="text-primary-fixed-dim flex items-center gap-2">
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
-          </svg>
-          <h2 className="text-sm font-bold uppercase tracking-[0.2em]">SimC Engine</h2>
-        </div>
-        <button
-          onClick={handleCheckUpdates}
-          disabled={checking || !!sourceVersion}
-          className="rounded bg-surface-container-highest px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-surface-bright disabled:opacity-50"
-        >
-          {checking ? t('settings.checking') : t('settings.checkForUpdates')}
-        </button>
-      </div>
+    <div className="card">
+      <CardHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            <svg className="h-4 w-4 text-gold" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
+            </svg>
+            SimC Engine
+          </span>
+        }
+        right={
+          <Button
+            size="sm"
+            variant="quiet"
+            onClick={handleCheckUpdates}
+            disabled={checking || !!sourceVersion}
+          >
+            {checking ? t('settings.checking') : t('settings.checkForUpdates')}
+          </Button>
+        }
+      />
 
-      <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
+      <div className="space-y-3 p-6">
         {sourceVersion && (
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <div className="rounded-[8px] border border-gold/35 bg-gold/[0.05] p-3">
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
@@ -133,40 +140,31 @@ export default function SimcEngineSection() {
                     {t('settings.builtFromSource')}
                   </p>
                 </div>
-                <p className="mt-0.5 text-[10px] text-on-surface-variant/70">
+                <p className="mt-0.5 text-[11px] text-on-surface-variant/70">
                   {formatVersionTag(sourceVersion.tag)}
                 </p>
               </div>
-              <button
-                onClick={() => handleRemove(sourceVersion.tag)}
-                className="rounded px-3 py-1 text-[10px] font-bold uppercase text-error/60 transition-all hover:bg-error/10 hover:text-error"
-              >
+              <Button size="sm" variant="danger" onClick={() => handleRemove(sourceVersion.tag)}>
                 {t('settings.remove')}
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
-        <div className="flex items-center border-b border-outline-variant/20 px-3 pb-2">
-          <span className="w-12 shrink-0 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-            {t('settings.auto')}
-          </span>
-          <span className="ml-4 flex-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-            {t('settings.branchVersion')}
-          </span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-            {t('settings.actions')}
-          </span>
+        <div className="flex items-center border-b border-line/[0.06] px-3 pb-2">
+          <span className="lbl w-12 shrink-0 text-center">{t('settings.auto')}</span>
+          <span className="lbl ml-4 flex-1">{t('settings.branchVersion')}</span>
+          <span className="lbl">{t('settings.actions')}</span>
         </div>
 
         <div className={`space-y-2 ${sourceVersion ? 'pointer-events-none opacity-40' : ''}`}>
           {branchData.map(({ branch, installed, available }) => (
             <div
               key={branch}
-              className="flex items-center justify-between rounded-lg border border-outline-variant/10 bg-surface-container p-3"
+              className="flex items-center justify-between rounded-[8px] border border-line/[0.06] bg-surface-container-low p-3"
             >
               <div className="flex w-12 shrink-0 justify-center">
-                <SettingsToggle
+                <Switch
                   checked={branch === 'weekly' ? autoUpdate : useNightly}
                   onChange={(value) => {
                     if (branch === 'weekly') {
@@ -182,10 +180,10 @@ export default function SimcEngineSection() {
 
               <div className="ml-4 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold capitalize">{branch}</p>
+                  <p className="text-sm font-semibold capitalize text-on-surface">{branch}</p>
                 </div>
                 {installed ? (
-                  <p className="text-[10px] text-on-surface-variant/70">
+                  <p className="text-[11px] text-on-surface-variant/70">
                     {t('settings.installedTag', { tag: formatVersionTag(installed.tag) })}
                     {available && (
                       <span className="ml-2 text-primary">
@@ -194,7 +192,7 @@ export default function SimcEngineSection() {
                     )}
                   </p>
                 ) : (
-                  <p className="text-[10px] text-on-surface-variant/50">
+                  <p className="text-[11px] text-on-surface-variant/50">
                     {available
                       ? t('settings.availableTag', { tag: formatVersionTag(available.tag) })
                       : t('settings.notInstalled')}
@@ -204,25 +202,22 @@ export default function SimcEngineSection() {
 
               <div className="flex gap-2">
                 {available && (
-                  <button
+                  <Button
+                    size="sm"
                     onClick={() => handleInstall(available)}
                     disabled={installing === available.tag}
-                    className="rounded bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase text-primary transition-all hover:bg-primary/20 disabled:opacity-50"
                   >
                     {installing === available.tag
                       ? `${Math.round(progress * 100)}%`
                       : installed
                         ? t('settings.update')
                         : t('settings.install')}
-                  </button>
+                  </Button>
                 )}
                 {installed && (
-                  <button
-                    onClick={() => handleRemove(installed.tag)}
-                    className="rounded px-3 py-1 text-[10px] font-bold uppercase text-error/60 transition-all hover:bg-error/10 hover:text-error"
-                  >
+                  <Button size="sm" variant="danger" onClick={() => handleRemove(installed.tag)}>
                     {t('settings.remove')}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -230,10 +225,10 @@ export default function SimcEngineSection() {
         </div>
 
         {sourceVersion && (
-          <p className="text-[10px] text-on-surface-variant/50">{t('settings.sourceBuildNote')}</p>
+          <p className="text-[11px] text-on-surface-variant/50">{t('settings.sourceBuildNote')}</p>
         )}
 
-        {error && <p className="pt-1 text-xs text-error">{error}</p>}
+        {error && <p className="pt-1 text-xs text-negative">{error}</p>}
       </div>
     </div>
   );

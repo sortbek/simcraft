@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
+import CardHeader from '../ui/CardHeader';
 import ResultsChartRow from './ResultsChartRow';
 import { useSpellIcons } from './useSpellIcons';
 
@@ -24,16 +25,6 @@ const FALLBACK_ICONS: Record<string, string> = {
   auto_attack: 'inv_sword_04',
 };
 
-const SCHOOL_COLORS: Record<string, string> = {
-  physical: '#D4A843',
-  holy: '#F5E6A3',
-  fire: '#EF6461',
-  nature: '#6BCB77',
-  frost: '#6CB4EE',
-  shadow: '#B07CD8',
-  arcane: '#E88AED',
-};
-
 export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -47,13 +38,10 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
   const icons = useSpellIcons(spellIds);
 
   return (
-    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-8">
-      <h3 className="mb-8 border-b border-outline-variant/10 pb-4 font-headline text-sm font-black uppercase tracking-widest text-on-surface-variant">
-        {t('results.damageBreakdown')}
-      </h3>
-      <div className="space-y-4">
+    <section className="card">
+      <CardHeader title={t('results.damageBreakdown')} />
+      <div className="px-6 py-2.5 [&>*+*]:border-t [&>*+*]:border-line/[0.06]">
         {top.map((ability, index) => {
-          const color = SCHOOL_COLORS[ability.school] || SCHOOL_COLORS.physical;
           const percent = totalDps > 0 ? (ability.portion_dps / totalDps) * 100 : 0;
           const barWidth = maxDps > 0 ? (ability.portion_dps / maxDps) * 100 : 0;
           const hasChildren = !!ability.children?.length;
@@ -63,7 +51,6 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
             <div key={index}>
               <ResultsChartRow
                 ability={ability}
-                color={color}
                 percent={percent}
                 barWidth={barWidth}
                 iconName={
@@ -87,14 +74,12 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
               />
               {isOpen &&
                 ability.children?.map((child, childIndex) => {
-                  const childColor = SCHOOL_COLORS[child.school] || SCHOOL_COLORS.physical;
                   const childPercent = totalDps > 0 ? (child.portion_dps / totalDps) * 100 : 0;
                   const childBarWidth = maxDps > 0 ? (child.portion_dps / maxDps) * 100 : 0;
                   return (
                     <ResultsChartRow
                       key={childIndex}
                       ability={child}
-                      color={childColor}
                       percent={childPercent}
                       barWidth={childBarWidth}
                       iconName={
@@ -108,6 +93,6 @@ export default function ResultsChart({ dps, abilities }: ResultsChartProps) {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "build:desktop": "cross-env DESKTOP_BUILD=1 NEXT_PUBLIC_API_URL=http://127.0.0.1:17384 next build",
+    "build:viewer": "cross-env VIEWER_BUILD=1 next build",
     "start": "next start",
     "generate:realms": "node scripts/generate-realms.mjs",
     "lint": "eslint src/",
@@ -15,7 +16,9 @@
     "test:loot": "node --test scripts/test-loot.cjs scripts/test-loot-interactions.cjs",
     "test:topgear": "node --test scripts/test-topgear.cjs",
     "test:omnium": "node --test scripts/test-omnium.cjs",
-    "test:simc": "node --test scripts/test-simc-validation.cjs"
+    "test:simc": "node --test scripts/test-simc-validation.cjs",
+    "test:share": "node --test scripts/test-share.cjs",
+    "test:simclog": "node --test scripts/test-simc-log.cjs"
   },
   "dependencies": {
     "next": "^15.5.14",

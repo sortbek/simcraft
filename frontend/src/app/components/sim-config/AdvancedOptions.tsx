@@ -8,6 +8,7 @@ import ActiveRouteIndicator from './ActiveRouteIndicator';
 import ScenarioBuilder from './ScenarioBuilder';
 import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
+import Pill from '../ui/Pill';
 
 const ITERATION_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 
@@ -106,11 +107,7 @@ export default function AdvancedOptions() {
           <span className="text-sm font-medium text-on-surface-variant">
             {t('config.advancedOptions')}
           </span>
-          {!open && !isDefault && (
-            <span className="rounded-md bg-gold/10 px-1.5 py-0.5 text-[12px] font-medium text-gold">
-              {t('config.modified')}
-            </span>
-          )}
+          {!open && !isDefault && <Pill variant="gold">{t('config.modified')}</Pill>}
         </div>
         <svg
           className={`h-3.5 w-3.5 text-on-surface-variant/40 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -144,7 +141,7 @@ export default function AdvancedOptions() {
                     step={30}
                     value={Math.min(fightLength, 1800)}
                     onChange={(e) => setFightLength(Number(e.target.value))}
-                    className="flex-1 accent-gold"
+                    className="flex-1 accent-gold-fill"
                   />
                   <input
                     type="number"
@@ -170,7 +167,7 @@ export default function AdvancedOptions() {
                     max={10}
                     value={targetCount}
                     onChange={(e) => setTargetCount(Number(e.target.value))}
-                    className="flex-1 accent-gold"
+                    className="flex-1 accent-gold-fill"
                   />
                   <span className="w-6 text-right font-mono text-sm tabular-nums text-on-surface">
                     {targetCount}
@@ -188,7 +185,7 @@ export default function AdvancedOptions() {
                   step={0.01}
                   value={targetError}
                   onChange={(e) => setTargetError(Number(e.target.value))}
-                  className="flex-1 accent-gold"
+                  className="flex-1 accent-gold-fill"
                 />
                 <span className="w-12 text-right font-mono text-sm tabular-nums text-on-surface">
                   {targetError}%
@@ -205,7 +202,7 @@ export default function AdvancedOptions() {
                   step={1}
                   value={iterationSliderIndex(iterations)}
                   onChange={(e) => setIterations(ITERATION_PRESETS[Number(e.target.value)])}
-                  className="flex-1 accent-gold"
+                  className="flex-1 accent-gold-fill"
                 />
                 <input
                   type="number"

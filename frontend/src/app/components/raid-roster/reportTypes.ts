@@ -58,10 +58,10 @@ export function resultLookup(items: ReportItem[]): Map<string, Map<string, Repor
  *  big upgrade → strong green … ~0 → neutral … downgrade → red.
  *  `undefined` = item not eligible for that player (blank/muted cell). */
 export function heatClasses(pct: number | undefined): string {
-  if (pct === undefined) return 'bg-surface-container text-on-surface-variant/40';
-  if (pct >= 3) return 'bg-green-500/30 text-green-300';
-  if (pct >= 1) return 'bg-green-500/15 text-green-300';
-  if (pct > 0) return 'bg-green-500/5 text-green-400/80';
-  if (pct === 0) return 'bg-surface-container text-on-surface-variant/60';
-  return 'bg-red-500/15 text-red-300';
+  if (pct === undefined) return 'bg-surface-container text-fg-4';
+  if (pct >= 3) return 'bg-positive/30 text-positive';
+  if (pct >= 1) return 'bg-positive/15 text-positive';
+  if (pct > 0) return 'bg-positive/5 text-positive/80';
+  if (pct === 0) return 'bg-surface-container text-outline';
+  return 'bg-negative/15 text-negative';
 }

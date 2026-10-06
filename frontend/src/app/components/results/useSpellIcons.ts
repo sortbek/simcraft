@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 const iconCache = new Map<number, string>();
 
+export const spellIconNames = (): string[] => [...iconCache.values()];
+
 export function useSpellIcons(spellIds: number[]) {
   const [icons, setIcons] = useState<Map<number, string>>(new Map());
   const depKey = useMemo(() => spellIds.join(','), [spellIds]);

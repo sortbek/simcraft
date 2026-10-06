@@ -5,6 +5,8 @@ import { useIsDesktop } from '../lib/useIsDesktop';
 import GeneralSettingsSection from './GeneralSettingsSection';
 import SimcEngineSection from './SimcEngineSection';
 import ComputeProvidersSection from './ComputeProvidersSection';
+import AppearanceSection from './AppearanceSection';
+import PageHeader from '../components/ui/PageHeader';
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -13,10 +15,11 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-20">
       <header className="mb-10">
-        <h1 className="font-headline text-3xl font-extrabold uppercase tracking-tight text-primary">
-          {t('common.settings')}
-        </h1>
-        <p className="text-on-surface-variant">{t('settings.pageDescription')}</p>
+        <PageHeader
+          eyebrow={t('nav.app')}
+          title={t('common.settings')}
+          subtitle={t('settings.pageDescription')}
+        />
       </header>
       <ComputeProvidersSection />
       {isDesktop && (
@@ -27,6 +30,7 @@ export default function SettingsPage() {
           <GeneralSettingsSection />
         </>
       )}
+      <AppearanceSection />
     </div>
   );
 }

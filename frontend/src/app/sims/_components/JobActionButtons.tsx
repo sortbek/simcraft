@@ -1,6 +1,7 @@
 import type { JobOverviewSummary } from '../../lib/api';
 import { isActiveStatus } from '../../lib/useActiveSims';
 import { useLanguage } from '../../lib/i18n';
+import Button from '../../components/ui/Button';
 
 interface Props {
   job: JobOverviewSummary;
@@ -23,47 +24,50 @@ export function JobActionButtons({
   compact = false,
 }: Props) {
   const { t } = useLanguage();
-  const text = compact ? 'text-[11px]' : 'text-[12px]';
-  const pad = compact ? 'px-2 py-0.5' : 'px-2 py-1';
+  const size = compact ? 'sm' : 'default';
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
     <div className="flex items-center justify-end gap-1">
       {job.status === 'running' && job.simc_input_mode === 'streamed' && (
-        <button
+        <Button
           disabled={busy || job.pause_requested}
-          onClick={(e) => {
+          onClick={(e: React.MouseEvent) => {
             stop(e);
             onPause();
           }}
-          className={`rounded ${pad} ${text} text-on-surface-variant/60 hover:bg-white/5 hover:text-on-surface disabled:opacity-40`}
+          variant="text"
+          size={size}
         >
           {job.pause_requested ? t('sims.pausing') : t('sims.pause')}
-        </button>
+        </Button>
       )}
       {job.status === 'paused' && (
-        <button
+        <Button
           disabled={busy}
-          onClick={(e) => {
+          onClick={(e: React.MouseEvent) => {
             stop(e);
             onResume();
           }}
-          className={`rounded ${pad} ${text} text-primary hover:bg-primary/10 disabled:opacity-40`}
+          variant="gold"
+          size={size}
         >
           {t('sims.resume')}
-        </button>
+        </Button>
       )}
       {isActiveStatus(job.status) && (
-        <button
+        <Button
           disabled={busy}
-          onClick={(e) => {
+          onClick={(e: React.MouseEvent) => {
             stop(e);
             onCancel();
           }}
-          className={`rounded ${pad} ${text} text-on-surface-variant/60 hover:bg-red-500/10 hover:text-error disabled:opacity-40`}
+          variant="text"
+          size={size}
+          className="hover:text-negative"
         >
           {t('common.cancel')}
-        </button>
+        </Button>
       )}
     </div>
   );

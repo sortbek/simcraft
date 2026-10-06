@@ -155,6 +155,8 @@ interface SimContextType {
    *  to the suspension and land when it's cleared; a stored 'DungeonRoute' style
    *  falls back to Patchwerk. */
   applyProfile: (profile: SimProfile) => void;
+  /** Load config data without making it a profile (a shared sim's settings). */
+  applyConfig: (data: SimProfileData) => void;
   /** Snapshot the shared config as profile data. Reports the suspended fight
    *  setup rather than a route's forced values, so it is what both a new profile
    *  stores and the dirty check compares. */
@@ -565,12 +567,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
     statWeights,
   ]);
 
-  const applyProfile = useCallback(
-    (profile: SimProfile) => {
-      // Newer-schema profiles can't be applied faithfully; the picker shows
-      // them disabled — this is the seam's backstop.
-      if (!isProfileSupported(profile)) return;
-      const d = profile.data;
+  const applyConfig = useCallback(
+    (d: SimProfileData) => {
       // A stored DungeonRoute style can't be honored without a route. While one
       // is loaded it forces these two fields, so the profile's own go into the
       // suspension and land when the route is cleared: writing them to live state
@@ -605,13 +603,11 @@ export function SimProvider({ children }: { children: ReactNode }) {
       setParallelProfilesets(d.parallelProfilesets);
       setTriageMaxBatchProfilesets(d.triageMaxBatchProfilesets);
       setStatWeights(d.statWeights);
-      setActiveProfile(profile);
     },
     [
       suspendedFight,
       persistSuspendedFight,
       setFightStyle,
-      setActiveProfile,
       setThreads,
       setTargetError,
       setIterations,
@@ -623,6 +619,17 @@ export function SimProvider({ children }: { children: ReactNode }) {
       setTriageMaxBatchProfilesets,
       setStatWeights,
     ]
+  );
+
+  const applyProfile = useCallback(
+    (profile: SimProfile) => {
+      // Newer-schema profiles can't be applied faithfully; the picker shows
+      // them disabled — this is the seam's backstop.
+      if (!isProfileSupported(profile)) return;
+      applyConfig(profile.data);
+      setActiveProfile(profile);
+    },
+    [applyConfig, setActiveProfile]
   );
 
   const saveActiveProfile = useCallback(async () => {
@@ -746,6 +753,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setStatWeights,
         activeProfile,
         applyProfile,
+        applyConfig,
         captureProfileData,
         saveActiveProfile,
         setActiveProfile,

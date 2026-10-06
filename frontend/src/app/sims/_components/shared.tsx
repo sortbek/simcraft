@@ -1,4 +1,9 @@
 import type { JobStatus } from '../../lib/api';
+import type { PillVariant } from '../../components/ui/Pill';
+
+/** Table cell shared by the Active and All views. */
+export const TD =
+  'h-[62px] border-b border-line/[0.06] px-6 group-last:border-b-0 group-hover:bg-overlay/[0.015] group-focus-visible:bg-gold/[0.06]';
 
 export const SIM_TYPE_LABELS: Record<string, string> = {
   quick: 'Quick Sim',
@@ -8,24 +13,28 @@ export const SIM_TYPE_LABELS: Record<string, string> = {
   upgrade_compare: 'Crest Upgrades',
 };
 
-export const SIM_TYPE_COLORS: Record<string, string> = {
-  quick: 'border-primary/20 bg-primary/10 text-primary',
-  stat_weights: 'border-primary/20 bg-primary/10 text-primary',
-  top_gear: 'border-tertiary/20 bg-tertiary/10 text-tertiary',
-  droptimizer: 'border-secondary/20 bg-secondary/10 text-secondary',
+export const SIM_TYPE_PILL: Record<string, PillVariant> = {
+  quick: 'gold',
+  stat_weights: 'gold',
+  top_gear: 'info',
+  droptimizer: 'positive',
 };
 
 const STATUS_DOT_COLOR: Record<JobStatus, string> = {
-  pending: 'bg-on-surface-variant/40',
-  running: 'bg-amber-500 animate-pulse',
-  paused: 'bg-sky-400',
-  done: 'bg-emerald-500',
-  failed: 'bg-red-500',
-  cancelled: 'bg-on-surface-variant/40',
+  pending: 'bg-fg-4 ring-fg-4/15',
+  running: 'bg-quality-rare ring-quality-rare/15 animate-pulse',
+  paused: 'bg-gold-fill ring-gold/15',
+  done: 'bg-positive ring-positive/15',
+  failed: 'bg-negative ring-negative/15',
+  cancelled: 'bg-fg-4 ring-fg-4/15',
 };
 
 export function StatusDot({ status }: { status: JobStatus }) {
-  return <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLOR[status]}`} />;
+  return (
+    <span
+      className={`inline-block h-[7px] w-[7px] shrink-0 rounded-full ring-[3px] ${STATUS_DOT_COLOR[status]}`}
+    />
+  );
 }
 
 export function timeAgo(

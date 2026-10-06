@@ -266,7 +266,6 @@ function LootBrowserSession({
               title={t('dropFinder.upgradeEquippedTooltip')}
             >
               <Checkbox
-                variant="primary"
                 size="sm"
                 checked={model.upgradeEquipped}
                 onChange={() => model.setUpgradeEquipped((value) => !value)}
@@ -279,7 +278,6 @@ function LootBrowserSession({
               title={t('dropFinder.addVaultSocketTooltip')}
             >
               <Checkbox
-                variant="primary"
                 size="sm"
                 checked={model.addVaultSocket}
                 onChange={() => model.setAddVaultSocket((value) => !value)}
@@ -293,7 +291,6 @@ function LootBrowserSession({
                 InfoIcon swallows its own clicks, so it can't toggle the box. */}
             <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
               <Checkbox
-                variant="primary"
                 size="sm"
                 checked={model.forceSinglePass}
                 onChange={() => model.setForceSinglePass((value) => !value)}
@@ -305,7 +302,6 @@ function LootBrowserSession({
             {VOID_FORGE_ENABLED && (
               <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
                 <Checkbox
-                  variant="primary"
                   size="sm"
                   checked={includeVoidForge}
                   onChange={() => setIncludeVoidForge((v) => !v)}
@@ -318,7 +314,6 @@ function LootBrowserSession({
             {!isCrafted && (
               <label className="group flex cursor-pointer items-center gap-2 text-sm text-on-surface-variant">
                 <Checkbox
-                  variant="primary"
                   size="sm"
                   checked={includeCatalyst}
                   onChange={() => setIncludeCatalyst((v) => !v)}
@@ -369,7 +364,7 @@ function LootBrowserSession({
             )}
           </>
         ) : (
-          <p className="text-xs text-muted">{t('dropFinder.pasteExport')}</p>
+          <p className="text-xs text-outline">{t('dropFinder.pasteExport')}</p>
         )}
 
         <div className="ml-auto flex items-center gap-2">
@@ -391,7 +386,7 @@ function LootBrowserSession({
       {query.status === 'error' && <LoadError message={query.error} retry={query.retry} />}
       {model.table.embellishmentLimitReached &&
         model.table.rows.some((row) => row.selected && row.embellishment?.value != null) && (
-          <p role="status" className="text-xs text-amber-400/80">
+          <p role="status" className="text-xs text-gold">
             {t('dropFinder.embellishmentCapWarning')}
           </p>
         )}

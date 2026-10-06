@@ -2,7 +2,9 @@ import LootItemRow from './LootItemRow';
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { groupLootRows, type LootTableModel } from './lootTableModel';
+import CardHeader from '../ui/CardHeader';
 import Checkbox from '../ui/Checkbox';
+import ToggleButtonGroup from '../ui/ToggleButtonGroup';
 interface ItemTableProps {
   model: LootTableModel;
   onToggle: (uid: string) => void;
@@ -32,92 +34,79 @@ export default function ItemTable({
   const selectedCount = rows.filter((row) => row.selected).length;
   const allSelected = filteredTotal > 0 && visibleRows.every((row) => row.selected);
   return (
-    <div className="overflow-hidden rounded-xl border border-outline-variant/5 bg-surface-container shadow-2xl">
-      <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h3 className="font-headline text-base font-black uppercase tracking-tight text-on-surface">
+    <div className="card overflow-hidden">
+      <CardHeader
+        title={
+          <span className="flex items-baseline gap-3">
             {t('loot.availableDrops')}
-          </h3>
-          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">
-            {headerLabel} &mdash; {t('gear.itemsCount', { count: filteredTotal })}
-            {selectedCount > 0 && (
-              <span className="ml-1.5 normal-case tracking-normal text-gold">
-                ({selectedCount} {t('dropFinder.selected')})
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/55"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            >
-              <circle cx="6.5" cy="6.5" r="4.5" />
-              <path d="M10 10l4 4" />
-            </svg>
-            <input
-              type="text"
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              placeholder={t('loot.filterItems')}
-              className="h-10 w-64 rounded-lg border border-transparent bg-surface-container-high py-2 pl-10 pr-10 text-sm text-on-surface placeholder-on-surface-variant/45 outline-none transition-all duration-150 hover:bg-surface-container-highest focus:border-gold/40 focus:bg-surface-container-highest focus:ring-2 focus:ring-gold/15"
-            />
-            {filterText && (
-              <button
-                type="button"
-                onClick={() => setFilterText('')}
-                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant/55 transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-                aria-label={t('loot.clearSearch')}
+            <span className="font-sans text-[12.5px] font-medium normal-case tracking-normal text-outline">
+              {headerLabel} &mdash; {t('gear.itemsCount', { count: filteredTotal })}
+              {selectedCount > 0 && (
+                <span className="ml-1.5 text-gold">
+                  ({selectedCount} {t('dropFinder.selected')})
+                </span>
+              )}
+            </span>
+          </span>
+        }
+        right={
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <svg
+                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg
-                  viewBox="0 0 12 12"
-                  className="h-3.5 w-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
+                <circle cx="6.5" cy="6.5" r="4.5" />
+                <path d="M10 10l4 4" />
+              </svg>
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder={t('loot.filterItems')}
+                className="input-field h-[38px] w-64 py-0 pl-10 pr-10"
+              />
+              {filterText && (
+                <button
+                  type="button"
+                  onClick={() => setFilterText('')}
+                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[5px] text-outline transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+                  aria-label={t('loot.clearSearch')}
                 >
-                  <path d="M3 3l6 6M9 3L3 9" />
-                </svg>
-              </button>
+                  <svg
+                    viewBox="0 0 12 12"
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  >
+                    <path d="M3 3l6 6M9 3L3 9" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {hasMultipleDungeons && (
+              <ToggleButtonGroup<'slot' | 'dungeon'>
+                value={groupBy}
+                onChange={setGroupBy}
+                options={[
+                  { key: 'slot', label: t('loot.bySlot') },
+                  { key: 'dungeon', label: t('loot.byInstance') },
+                ]}
+              />
             )}
           </div>
-          {hasMultipleDungeons && (
-            <div className="flex h-10 items-center rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-0">
-              <button
-                onClick={() => setGroupBy('slot')}
-                className={`flex h-10 items-center rounded-md px-3 text-sm font-medium transition-all duration-150 ${
-                  groupBy === 'slot'
-                    ? 'bg-secondary-container text-primary shadow-sm'
-                    : 'text-on-surface-variant/60 hover:text-on-surface-variant'
-                }`}
-              >
-                {t('loot.bySlot')}
-              </button>
-              <button
-                onClick={() => setGroupBy('dungeon')}
-                className={`flex h-10 items-center rounded-md px-3 text-sm font-medium transition-all duration-150 ${
-                  groupBy === 'dungeon'
-                    ? 'bg-secondary-container text-primary shadow-sm'
-                    : 'text-on-surface-variant/60 hover:text-on-surface-variant'
-                }`}
-              >
-                {t('loot.byInstance')}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+        }
+      />
 
-      <div className="grid grid-cols-12 border-b border-outline-variant/5 bg-surface-container-low px-4 py-2">
+      <div className="grid h-11 grid-cols-12 items-center border-b border-line/[0.06] px-6">
         <div className="col-span-5 flex items-center gap-4">
           <Checkbox
-            variant="primary"
             size="sm"
             checked={allSelected}
             onChange={() =>
@@ -125,30 +114,22 @@ export default function ItemTable({
             }
             aria-label={t('loot.selectAllItems')}
           />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-            {t('loot.itemName')}
-          </span>
+          <span className="lbl">{t('loot.itemName')}</span>
         </div>
-        <div
-          className={`text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 ${hasEmbellishmentColumn ? 'col-span-3' : 'col-span-5'}`}
-        >
+        <div className={`lbl text-center ${hasEmbellishmentColumn ? 'col-span-3' : 'col-span-5'}`}>
           {t('loot.slot')}
         </div>
-        <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-          {t('loot.level')}
-        </div>
+        <div className="lbl col-span-2 text-center">{t('loot.level')}</div>
         {hasEmbellishmentColumn && (
-          <div className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-            {t('dropFinder.embellishment')}
-          </div>
+          <div className="lbl col-span-2 text-center">{t('dropFinder.embellishment')}</div>
         )}
       </div>
 
-      <div className="divide-y divide-outline-variant/5">
+      <div className="divide-y divide-line/[0.06]">
         {rowGroups.map(({ key, group, rows }) => (
           <div key={key}>
-            <div className="bg-surface-container-low/50 px-4 py-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40">
+            <div className="bg-surface-container-low px-6 py-2">
+              <span className="lbl">
                 {group} ({rows.length})
               </span>
             </div>
@@ -168,7 +149,7 @@ export default function ItemTable({
       </div>
 
       {filteredTotal === 0 && (
-        <div className="p-8 text-center text-sm text-on-surface-variant/40">
+        <div className="p-8 text-center text-sm text-outline">
           {filterText ? t('loot.noItemsMatch') : t('dropFinder.noDrops')}
         </div>
       )}

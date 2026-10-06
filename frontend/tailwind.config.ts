@@ -1,71 +1,88 @@
 import type { Config } from 'tailwindcss';
 
+// Theme colors live in globals.css as `--c-*` RGB channels so alpha modifiers keep working.
+const c = (name: string) => `rgb(var(--c-${name}) / <alpha-value>)`;
+// Alpha scaled by --c-{name}-k, so a light theme can strengthen hairlines without per-class changes.
+const k = (name: string) => `rgb(var(--c-${name}) / calc(<alpha-value> * var(--c-${name}-k)))`;
+
 const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
         // Core accent
-        primary: { DEFAULT: '#f2bf4e', container: '#c8992a' },
-        background: '#131313',
-        'on-surface': '#e5e2e1',
-        'on-surface-variant': '#d2c5b0',
+        primary: { DEFAULT: c('primary'), container: c('primary-container') },
+        background: c('background'),
+        'on-surface': c('on-surface'),
+        'on-surface-variant': c('on-surface-variant'),
 
         // Surface hierarchy (tonal elevation system)
         surface: {
-          DEFAULT: '#131313',
-          dim: '#131313',
-          container: '#201f1f',
-          'container-lowest': '#0e0e0e',
-          'container-low': '#1c1b1b',
-          'container-high': '#2a2a2a',
-          'container-highest': '#353534',
-          bright: '#3a3939',
+          DEFAULT: c('background'),
+          dim: c('background'),
+          container: c('surface-container'),
+          'container-lowest': c('surface-container-lowest'),
+          'container-low': c('surface-container-low'),
+          'container-high': c('surface-container-high'),
+          'container-highest': c('surface-container-highest'),
         },
 
         // Outlines (ghost borders)
-        outline: { DEFAULT: '#9b8f7c', variant: '#4f4635' },
+        outline: { DEFAULT: c('outline'), variant: c('outline-variant') },
+        // Faintest text (mock --fg-4)
+        'fg-4': c('fg-4'),
+
+        // Semantic tints from the UI-polish mock
+        positive: c('positive'),
+        negative: c('negative'),
+        info: c('info'),
+        warning: c('warning'),
+        ench: c('ench'),
+        gem: c('gem'),
+        quality: {
+          poor: c('q-poor'),
+          common: c('q-common'),
+          uncommon: c('q-uncommon'),
+          rare: c('q-rare'),
+          epic: c('q-epic'),
+          legendary: c('q-legendary'),
+          artifact: c('q-artifact'),
+          heirloom: c('q-heirloom'),
+        },
+        // Hairlines (border/divide/ring), hover overlays and dark shades/backdrops
+        line: k('line'),
+        overlay: k('overlay'),
+        shade: k('shade'),
+        popover: c('popover'),
+        // Windows title-bar close button hover
+        'win-close': '#c42b1c',
 
         // Secondary / Tertiary
-        secondary: { DEFAULT: '#dfc38e', container: '#5a461d' },
-        tertiary: { DEFAULT: '#a9c7ff', container: '#75a1eb' },
+        secondary: { DEFAULT: c('secondary'), container: c('secondary-container') },
+        tertiary: { DEFAULT: c('tertiary'), container: c('tertiary-container') },
 
         // On-primary (dark text on gold surfaces)
-        'on-primary': { DEFAULT: '#402d00', container: '#483400' },
-
-        // Error
-        error: { DEFAULT: '#ffb4ab', container: '#93000a' },
+        'on-primary': { DEFAULT: c('on-primary'), container: c('on-primary-container') },
+        // Ink on saturated non-gold badges (quality, negative)
+        'on-badge': c('on-badge'),
 
         // Game-specific aliases (kept for compatibility)
         gold: {
-          DEFAULT: '#f2bf4e',
-          light: '#E4BE6A',
-          dark: '#c8992a',
-          muted: '#c8992a',
-        },
-        bg: '#131313',
-        muted: '#9b8f7c',
-
-        // Legacy border tokens (used by many components — maps to outline-variant)
-        border: {
-          DEFAULT: '#4f4635',
-          light: '#9b8f7c',
+          DEFAULT: c('primary'),
+          light: c('gold-light'),
+          dark: c('primary-container'),
+          // Solid gold surfaces (filled buttons, checkboxes, dots, progress); DEFAULT is text/borders
+          fill: c('primary-fill'),
+          'fill-hover': c('primary-fill-hover'),
+          // Opaque-capable selected-state colors (globals.css --gold-*)
+          tint: 'var(--gold-tint)',
+          sel: 'var(--gold-sel)',
+          edge: 'var(--gold-edge)',
         },
       },
       fontFamily: {
-        sans: [
-          'Inter',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'sans-serif',
-        ],
-        headline: [
-          'Manrope',
-          'Inter',
-          '-apple-system',
-          'sans-serif',
-        ],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        headline: ['Manrope', 'Inter', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       borderRadius: {
@@ -76,11 +93,8 @@ const config: Config = {
         '2xl': '0.75rem',
       },
       boxShadow: {
-        glow: '0 0 20px rgba(242, 191, 78, 0.08)',
-        'glow-lg': '0 0 40px rgba(242, 191, 78, 0.12)',
-        card: 'none',
-        'card-hover': '0 4px 12px rgba(0, 0, 0, 0.4)',
-        ambient: '0 20px 40px rgba(0, 0, 0, 0.4)',
+        glow: '0 0 20px rgb(var(--c-primary) / 0.08)',
+        ambient: '0 20px 40px rgb(var(--c-shade) / calc(0.4 * var(--c-shade-k)))',
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-out',

@@ -4,6 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { getWowheadData, getWowheadUrl, iconProps, localizedItemName } from '../../lib/useItemInfo';
+import { qualityHex } from '../../lib/qualityColors';
 import { unchangedSlotCount, type VisibleGroup } from './topGearSelection';
 
 interface TopGearUnchangedStripProps {
@@ -22,12 +23,10 @@ export default function TopGearUnchangedStrip({
   if (groups.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dashed border-outline-variant/25 bg-surface-container/50 px-3 py-2">
-      <p className="font-headline text-[11px] font-semibold uppercase tracking-widest text-muted">
-        {t('topGear.unchangedSlots')}
-      </p>
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-[10px] border border-line/[0.06] bg-shade/[0.15] px-6 py-3.5">
+      <p className="lbl">{t('topGear.unchangedSlots')}</p>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-[5px]">
         {groups.map(({ group, equipped }) =>
           equipped.map((item) => {
             const label = `${t(group.label)}: ${localizedItemName(item.item_id, item.name, locale)}`;
@@ -35,14 +34,15 @@ export default function TopGearUnchangedStrip({
               <img
                 {...iconProps(item.icon)}
                 alt=""
-                width={24}
-                height={24}
+                width={22}
+                height={22}
                 className="h-full w-full"
                 loading="lazy"
               />
             );
+            const frame = { borderColor: qualityHex(item.quality) };
             const shared =
-              'block h-6 w-6 shrink-0 cursor-pointer overflow-hidden rounded ring-1 ring-white/5 transition-all hover:ring-2 hover:ring-gold/60';
+              'block h-[22px] w-[22px] shrink-0 cursor-pointer overflow-hidden rounded-[4px] border transition-all hover:ring-2 hover:ring-gold/60';
 
             // With a Wowhead id this is an anchor, so the tooltip attaches as it
             // does everywhere else and the href keeps it keyboard focusable; the
@@ -61,6 +61,7 @@ export default function TopGearUnchangedStrip({
                   onPromote(group.label);
                 }}
                 className={shared}
+                style={frame}
               >
                 {icon}
               </a>
@@ -72,6 +73,7 @@ export default function TopGearUnchangedStrip({
                 title={label}
                 onClick={() => onPromote(group.label)}
                 className={shared}
+                style={frame}
               >
                 {icon}
               </button>
@@ -80,7 +82,7 @@ export default function TopGearUnchangedStrip({
         )}
       </div>
 
-      <p className="ml-auto text-[11px] text-on-surface-variant/50">
+      <p className="text-[12.5px] text-outline">
         {t('topGear.unchangedSlotsHint', { count: unchangedSlotCount(groups) })}
       </p>
     </div>

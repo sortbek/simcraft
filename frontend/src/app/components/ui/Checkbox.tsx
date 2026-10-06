@@ -3,8 +3,6 @@ import { cn } from '../../lib/cn';
 interface CheckboxProps {
   checked: boolean;
   onChange?: () => void;
-  /** Visual family. `gold` = GearItemRow/TalentPicker, `primary` = loot table. */
-  variant?: 'gold' | 'primary';
   /** Render size. */
   size?: 'sm' | 'md';
   disabled?: boolean;
@@ -28,33 +26,26 @@ const SIZE: Record<NonNullable<CheckboxProps['size']>, string> = {
 export default function Checkbox({
   checked,
   onChange,
-  variant = 'gold',
   size = 'md',
   disabled = false,
   className,
   ...aria
 }: CheckboxProps) {
-  const gold = variant === 'gold';
-  const box = gold
-    ? cn(
-        'rounded-[3px] border',
-        checked
-          ? 'border-gold bg-gold'
-          : 'border-outline-variant group-hover:border-outline-variant/40'
-      )
-    : cn(
-        'rounded border-2',
-        checked
-          ? 'border-primary bg-primary'
-          : 'border-outline-variant/40 bg-transparent hover:border-on-surface-variant/60'
-      );
+  const box = cn(
+    'rounded-[3px] border',
+    checked
+      ? cn(
+          'border-gold-fill bg-gold-fill',
+          size === 'sm'
+            ? 'shadow-[inset_0_0_0_2px_var(--cb-ring)]'
+            : 'shadow-[inset_0_0_0_3px_var(--cb-ring)]'
+        )
+      : 'border-outline-variant hover:border-outline group-hover:border-outline'
+  );
 
   const checkmark = checked ? (
     <svg
-      className={cn(
-        size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3',
-        gold ? 'text-black' : 'text-on-primary'
-      )}
+      className={cn(size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3', 'text-on-primary')}
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"

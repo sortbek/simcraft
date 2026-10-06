@@ -12,6 +12,7 @@ import {
 import type { Instance } from '../loot/types';
 import RosterReportView from './RosterReportView';
 import { StatusBadge } from './StatusBadge';
+import Button from '../ui/Button';
 
 interface Selected {
   run: RosterRun;
@@ -66,14 +67,10 @@ export default function RosterHistory({ roster }: { roster: Roster }) {
 
   if (selected) {
     return (
-      <div className="space-y-4 border-t border-outline-variant/10 pt-6">
-        <button
-          type="button"
-          onClick={() => setSelected(null)}
-          className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
-        >
+      <div className="space-y-4 border-t border-line/[0.06] pt-6">
+        <Button variant="text" onClick={() => setSelected(null)}>
           &larr; Back to history
-        </button>
+        </Button>
 
         <div className="text-sm text-on-surface-variant">
           <span className="font-semibold text-on-surface">
@@ -99,43 +96,38 @@ export default function RosterHistory({ roster }: { roster: Roster }) {
   }
 
   return (
-    <div className="space-y-4 border-t border-outline-variant/10 pt-6">
+    <div className="space-y-4 border-t border-line/[0.06] pt-6">
       <div className="flex items-center justify-between">
-        <div className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-          Past runs
-        </div>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={loadingRuns}
-          className="font-headline text-xs font-bold uppercase tracking-wider text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <div className="lbl">Past runs</div>
+        <Button variant="quiet" size="sm" onClick={handleRefresh} disabled={loadingRuns}>
           Refresh
-        </button>
+        </Button>
       </div>
 
       {loadingRuns ? (
-        <p className="text-sm text-on-surface-variant/60">Loading…</p>
+        <p className="text-sm text-outline">Loading…</p>
       ) : runs.length === 0 ? (
-        <p className="text-sm text-on-surface-variant/60">
+        <p className="text-sm text-outline">
           No reports yet — generate one from the Loot Report tab.
         </p>
       ) : (
-        <div className="space-y-0.5">
+        <div className="card divide-y divide-line/[0.06] overflow-hidden">
           {runs.map((run) => (
             <button
               key={run.id}
               type="button"
               onClick={() => handleSelectRun(run)}
               disabled={loadingRun}
-              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-[62px] w-full items-center justify-between px-6 py-3 text-left transition-colors hover:bg-overlay/[0.015] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-on-surface">
+                <div className="truncate text-sm font-bold text-on-surface">
                   {instanceName(run.instance_id)}
-                  <span className="ml-2 capitalize text-on-surface-variant">{run.difficulty}</span>
+                  <span className="ml-2 font-normal capitalize text-on-surface-variant">
+                    {run.difficulty}
+                  </span>
                 </div>
-                <div className="text-[11px] text-on-surface-variant/60">
+                <div className="text-[12px] text-outline">
                   {new Date(run.created_at).toLocaleString()}
                 </div>
               </div>

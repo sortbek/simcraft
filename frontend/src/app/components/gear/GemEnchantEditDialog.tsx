@@ -6,6 +6,8 @@ import { apiUrl, fetchJsonOr } from '../../lib/api';
 import type { ResolvedItem } from '../../lib/types';
 import { localizedItemName, useGemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
+import { QUALITY_HEX, serverQualityColor } from '../../lib/qualityColors';
+import Button from '../ui/Button';
 import GearItemRow from './GearItemRow';
 import {
   ENCHANT_SLOTS,
@@ -103,33 +105,23 @@ export default function GemEnchantEditDialog({
     const gemId = gemIds[socket];
     const info = gemId > 0 ? gemInfo[gemId] : undefined;
     return (
-      <div key={socket} className="flex items-center justify-between gap-2 py-1.5">
+      <div key={socket} className="flex items-center justify-between gap-3 py-2.5">
         <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-muted">
-            {t('gear.socketLabel', { n: socket + 1 })}
-          </p>
-          <p className="truncate text-[13px] text-on-surface">
+          <p className="lbl">{t('gear.socketLabel', { n: socket + 1 })}</p>
+          <p className={`mt-1.5 truncate text-sm ${gemId > 0 ? 'text-gem' : 'text-outline'}`}>
             {gemId > 0
               ? localizedItemName(gemId, info?.name || `Gem ${gemId}`, locale)
               : t('gear.emptySocket')}
           </p>
         </div>
         <div className="flex shrink-0 gap-1.5">
-          <button
-            type="button"
-            onClick={() => setPickerFor(pickerFor === socket ? null : socket)}
-            className="rounded px-2 py-1 text-[12px] text-gold/80 transition-colors hover:bg-gold/10 hover:text-gold"
-          >
+          <Button onClick={() => setPickerFor(pickerFor === socket ? null : socket)}>
             {t('common.change')}
-          </button>
+          </Button>
           {gemId > 0 && (
-            <button
-              type="button"
-              onClick={() => pickGem(socket, 0)}
-              className="rounded px-2 py-1 text-[12px] text-red-300/80 transition-colors hover:bg-red-500/10 hover:text-red-300"
-            >
+            <Button variant="danger" onClick={() => pickGem(socket, 0)}>
               {t('common.clear')}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -140,20 +132,21 @@ export default function GemEnchantEditDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-shade/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[80vh] w-full max-w-md flex-col rounded-xl border border-outline-variant/20 bg-surface-container shadow-2xl"
+        className="popover flex max-h-[80vh] w-full max-w-md flex-col"
       >
-        <div className="border-b border-outline-variant/20 px-5 py-3">
-          <p className="text-[11px] uppercase tracking-widest text-muted">
-            {t('gear.editGemsEnchant')}
-          </p>
-          <p className="truncate text-[14px] font-semibold" style={{ color: item.quality_color }}>
+        <div className="border-b border-line/[0.06] px-5 py-4">
+          <p className="lbl">{t('gear.editGemsEnchant')}</p>
+          <p
+            className="mt-2 truncate text-sm font-semibold"
+            style={{ color: serverQualityColor(item.quality, item.quality_color) }}
+          >
             {localizedItemName(item.item_id, item.name, locale)}
           </p>
         </div>
@@ -162,12 +155,12 @@ export default function GemEnchantEditDialog({
           {Array.from({ length: socketCount }, (_, i) => gemRow(i))}
 
           {enchantable && (
-            <div className="flex items-center justify-between gap-2 border-t border-outline-variant/10 py-1.5">
+            <div className="flex items-center justify-between gap-3 border-t border-line/[0.06] py-2.5">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-widest text-muted">
-                  {t('gear.enchantLabel')}
-                </p>
-                <p className="truncate text-[13px] text-emerald-400/80">
+                <p className="lbl">{t('gear.enchantLabel')}</p>
+                <p
+                  className={`mt-1.5 truncate text-sm ${enchantId > 0 ? 'text-ench' : 'text-outline'}`}
+                >
                   {enchantId > 0
                     ? currentEnchant
                       ? currentEnchant.itemName || currentEnchant.displayName
@@ -178,28 +171,20 @@ export default function GemEnchantEditDialog({
                 </p>
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPickerFor(pickerFor === 'enchant' ? null : 'enchant')}
-                  className="rounded px-2 py-1 text-[12px] text-gold/80 transition-colors hover:bg-gold/10 hover:text-gold"
-                >
+                <Button onClick={() => setPickerFor(pickerFor === 'enchant' ? null : 'enchant')}>
                   {t('common.change')}
-                </button>
+                </Button>
                 {enchantId > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setEnchantId(0)}
-                    className="rounded px-2 py-1 text-[12px] text-red-300/80 transition-colors hover:bg-red-500/10 hover:text-red-300"
-                  >
+                  <Button variant="danger" onClick={() => setEnchantId(0)}>
                     {t('common.clear')}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
           )}
 
           {typeof pickerFor === 'number' && (
-            <div className="mt-1 rounded-lg border border-outline-variant/20 bg-surface p-2">
+            <div className="mt-1 rounded-[7px] border border-line/[0.06] bg-background p-1.5">
               {diamonds.length > 0 && (
                 <div className="mb-2">
                   {diamonds.map((g) => (
@@ -207,7 +192,7 @@ export default function GemEnchantEditDialog({
                       key={g.id}
                       icon={g.itemIcon || ''}
                       name={g.itemName || g.displayName}
-                      nameColor="#ff8000"
+                      nameColor={QUALITY_HEX[5]}
                       details={optionDetails(g)}
                       selectable
                       checked={gemIds[pickerFor] === g.itemId}
@@ -223,7 +208,7 @@ export default function GemEnchantEditDialog({
                       key={g.id}
                       icon={g.itemIcon || ''}
                       name={g.itemName || g.displayName}
-                      nameColor="#0070dd"
+                      nameColor={QUALITY_HEX[3]}
                       details={optionDetails(g)}
                       selectable
                       checked={gemIds[pickerFor] === g.itemId}
@@ -236,13 +221,13 @@ export default function GemEnchantEditDialog({
           )}
 
           {pickerFor === 'enchant' && (
-            <div className="mt-1 rounded-lg border border-outline-variant/20 bg-surface p-2">
+            <div className="mt-1 rounded-[7px] border border-line/[0.06] bg-background p-1.5">
               {enchantOptions.map((e) => (
                 <GearItemRow
                   key={e.id}
                   icon={e.itemIcon || ''}
                   name={e.itemName || e.displayName}
-                  nameColor="#1eff00"
+                  nameColor={QUALITY_HEX[2]}
                   details={optionDetails(e)}
                   selectable
                   checked={enchantId === e.id}
@@ -256,22 +241,13 @@ export default function GemEnchantEditDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-outline-variant/20 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-3 py-1.5 text-[13px] text-on-surface-variant transition-colors hover:bg-white/[0.05]"
-          >
+        <div className="flex justify-end gap-2 border-t border-line/[0.06] px-5 py-3.5">
+          <Button variant="text" onClick={onClose}>
             {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            disabled={unchanged || saving}
-            onClick={confirm}
-            className="rounded-lg bg-gold/20 px-3 py-1.5 text-[13px] font-semibold text-gold transition-colors hover:bg-gold/30 disabled:cursor-default disabled:opacity-40"
-          >
+          </Button>
+          <Button disabled={unchanged || saving} onClick={confirm}>
             {t('gear.addAsOption')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

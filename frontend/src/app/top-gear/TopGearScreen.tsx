@@ -15,6 +15,8 @@ import ConfigFooter from '../components/sim-config/ConfigPanel';
 import TalentPicker from '../components/talents/TalentPicker';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import InfoIcon from '../components/ui/InfoIcon';
+import PageHeader from '../components/ui/PageHeader';
+import Pill from '../components/ui/Pill';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { postJson } from '../lib/api';
@@ -91,13 +93,7 @@ function Chip({
   children?: ReactNode;
 }) {
   return (
-    <div
-      className={`group flex shrink-0 select-none items-center gap-2 rounded-full border px-3 py-1 text-[12px] transition-colors ${
-        checked
-          ? 'border-gold/40 bg-gold/10 font-semibold text-on-surface'
-          : 'border-outline-variant/25 bg-surface-container font-medium text-on-surface-variant hover:border-outline-variant/40 hover:bg-surface-container-high'
-      }`}
-    >
+    <div className={`chip group shrink-0 select-none ${checked ? 'chip-on' : ''}`}>
       <button
         type="button"
         role="switch"
@@ -105,11 +101,6 @@ function Chip({
         onClick={() => onChange(!checked)}
         className="flex min-w-0 items-center gap-2 text-left"
       >
-        <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
-            checked ? 'bg-gold' : 'bg-on-surface-variant/40'
-          }`}
-        />
         <span className="truncate">{label}</span>
       </button>
       {children}
@@ -928,9 +919,9 @@ export default function TopGearScreen() {
       <span className="flex items-center gap-1.5">
         <span>{text}</span>
         {!cloudEstimate.affordable && (
-          <span className="rounded bg-red-950/80 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-red-100">
+          <Pill variant="negative" size="sm">
             {t('topGear.insufficientCredits')}
-          </span>
+          </Pill>
         )}
       </span>
     );
@@ -940,12 +931,11 @@ export default function TopGearScreen() {
 
   return (
     <div className={`space-y-6 ${largeLocalSim ? 'pb-36' : 'pb-20'}`}>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="font-headline text-xl font-black uppercase tracking-tight text-on-surface">
-          {t('nav.topGear')}
-        </h1>
-        <p className="text-xs text-on-surface-variant/70">{t('page.topGearSubtitle')}</p>
-      </div>
+      <PageHeader
+        eyebrow={t('nav.simTools')}
+        title={t('nav.topGear')}
+        subtitle={t('page.topGearSubtitle')}
+      />
 
       <TalentPicker />
 
@@ -979,9 +969,9 @@ export default function TopGearScreen() {
                   const value = parseInt(event.target.value, 10);
                   if (!Number.isNaN(value) && value >= 0) setCatalystCharges(value);
                 }}
-                className="w-8 rounded border border-outline-variant/30 bg-surface-container px-0.5 py-px text-center text-[12px] font-bold tabular-nums text-on-surface outline-none focus:border-gold/40"
+                className="w-8 rounded-[4px] border border-line/[0.11] bg-surface-container px-0.5 py-px text-center text-[12.5px] font-bold tabular-nums text-on-surface outline-none focus:border-gold/35"
               />
-              <span className="text-[11px] text-on-surface-variant/60">{t('topGear.charges')}</span>
+              <span className="text-[11.5px] text-outline">{t('topGear.charges')}</span>
             </span>
           </Chip>
         )}
@@ -991,7 +981,7 @@ export default function TopGearScreen() {
       </div>
 
       {!resolved ? (
-        <p className="py-6 text-center text-sm text-muted">
+        <p className="py-6 text-center text-sm text-outline">
           {resolving ? t('topGear.resolvingGear') : t('topGear.pasteExport')}
         </p>
       ) : (
@@ -1154,9 +1144,9 @@ export default function TopGearScreen() {
         subLabel={creditsSubLabel}
         notice={
           largeLocalSim ? (
-            <div className="border-t border-amber-500/30 bg-amber-950/95 backdrop-blur-xl">
-              <p className="mx-auto max-w-screen-2xl px-8 py-3 text-sm text-amber-100">
-                <span className="font-bold text-amber-300">{t('topGear.largeLocalSimTitle')}</span>{' '}
+            <div className="border-t border-gold/35 bg-popover/95 backdrop-blur-xl">
+              <p className="mx-auto max-w-screen-2xl px-8 py-3 text-sm text-on-surface-variant">
+                <span className="font-bold text-gold">{t('topGear.largeLocalSimTitle')}</span>{' '}
                 <span className="opacity-50">·</span>{' '}
                 {t('topGear.largeLocalSimBody', { count: comboCount.toLocaleString(bcp47) })}
               </p>
@@ -1165,17 +1155,11 @@ export default function TopGearScreen() {
         }
         status={
           resolved ? (
-            <div
-              className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 ${
-                comboError
-                  ? 'border-red-500/30 bg-red-500/10'
-                  : 'border-outline-variant/20 bg-surface-container-high'
-              }`}
-            >
+            <Pill variant={comboError ? 'negative' : 'neutral'} className="h-[34px] px-3">
               <span
-                className={`font-mono text-base font-bold tabular-nums ${
+                className={`font-headline text-[15px] tabular-nums ${
                   comboError
-                    ? 'text-red-400'
+                    ? 'text-negative'
                     : comboCount > 0
                       ? 'text-on-surface'
                       : 'text-on-surface-variant'
@@ -1183,10 +1167,8 @@ export default function TopGearScreen() {
               >
                 {comboCount.toLocaleString()}
               </span>
-              <span className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                {comboCount === 1 ? 'combo' : 'combos'}
-              </span>
-            </div>
+              {comboCount === 1 ? 'combo' : 'combos'}
+            </Pill>
           ) : undefined
         }
       />

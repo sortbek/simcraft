@@ -652,13 +652,17 @@ async fn resume_staged(
     let envelope: crate::jobs::request_json::NormalizedRequest =
         serde_json::from_str(request_json).map_err(|e| format!("Invalid request_json: {}", e))?;
     let payload = &envelope.payload;
-    let options = payload.get("options").cloned().unwrap_or_else(|| {
+    let mut options = payload.get("options").cloned().unwrap_or_else(|| {
         serde_json::json!({
             "iterations": job.iterations,
             "target_error": job.target_error,
             "fight_style": job.fight_style,
         })
     });
+    // A re-run of a shared sim keeps its final input check however it resumes.
+    if job.rerun_of.is_some() {
+        options["untrusted"] = serde_json::json!(true);
+    }
     let base_profile = payload
         .get("base_profile")
         .and_then(|v| v.as_str())

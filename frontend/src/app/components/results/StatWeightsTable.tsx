@@ -1,6 +1,7 @@
 'use client';
 
 import { useLanguage } from '../../lib/i18n';
+import CardHeader from '../ui/CardHeader';
 
 interface StatWeightsTableProps {
   statWeights: Record<string, number>;
@@ -18,14 +19,6 @@ const STAT_TRANSLATION_KEYS: Record<string, string> = {
   weapon_dps: 'stat.weaponDps',
 };
 
-const BAR_COLORS = [
-  'bg-primary',
-  'bg-primary-container',
-  'bg-on-surface-variant',
-  'bg-on-surface-variant opacity-40',
-  'bg-on-surface-variant opacity-40',
-];
-
 export default function StatWeightsTable({ statWeights }: StatWeightsTableProps) {
   const { t } = useLanguage();
   const entries = Object.entries(statWeights)
@@ -38,28 +31,28 @@ export default function StatWeightsTable({ statWeights }: StatWeightsTableProps)
   const maxWeight = entries.length > 0 ? entries[0].weight : 1;
 
   return (
-    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-8">
-      <h3 className="mb-6 font-headline text-sm font-black uppercase tracking-widest text-on-surface-variant">
-        {t('results.statWeights')}
-      </h3>
-      <div className="space-y-6">
-        {entries.map(({ stat, weight }, i) => (
-          <div key={stat} className="flex flex-col gap-2">
-            <div className="flex justify-between font-headline text-xs font-bold uppercase tracking-tight">
-              <span>{stat}</span>
-              <span className={i === 0 ? 'text-primary' : 'text-on-surface'}>
-                {weight.toFixed(2)}
-              </span>
+    <section className="card">
+      <CardHeader title={t('results.statWeights')} />
+      <div className="px-6 py-[22px] [&>*+*]:border-t [&>*+*]:border-line/[0.06]">
+        {entries.map(({ stat, weight }) => (
+          <div key={stat} className="grid grid-cols-[1fr_60px] items-center gap-3.5 py-2.5">
+            <div className="min-w-0">
+              <div className="mb-[7px] truncate font-headline text-xs font-extrabold uppercase tracking-[0.08em]">
+                {stat}
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-[6px] bg-surface-container-highest">
+                <div
+                  className="h-full rounded-[6px] bg-gradient-to-r from-gold-dark to-gold-fill"
+                  style={{ width: `${(weight / maxWeight) * 100}%` }}
+                />
+              </div>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container-highest">
-              <div
-                className={`h-full rounded-full ${BAR_COLORS[Math.min(i, BAR_COLORS.length - 1)]}`}
-                style={{ width: `${(weight / maxWeight) * 100}%` }}
-              />
+            <div className="text-right font-headline text-[15px] font-extrabold tabular-nums">
+              {weight.toFixed(2)}
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

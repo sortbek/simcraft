@@ -2,9 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSimContext } from './SimContext';
-import { DEFAULT_EXPANSION_OPTIONS, DEFAULT_RAID_BUFFS } from '../../lib/sim-config-defaults';
+import {
+  CONSUMABLE_LABELS,
+  DEFAULT_EXPANSION_OPTIONS,
+  DEFAULT_RAID_BUFFS,
+  RAID_BUFF_LIST,
+} from '../../lib/sim-config-defaults';
 import { useLanguage } from '../../lib/i18n';
 import { API_URL, apiUrl, fetchJsonOr } from '../../lib/api';
+import { buttonClass } from '../ui/Button';
 
 interface ConsumableEntry {
   value: string;
@@ -49,32 +55,11 @@ function buildOptions(
   return options;
 }
 
-const RAID_BUFF_LIST = [
-  { key: 'bloodlust', label: 'Bloodlust' },
-  { key: 'arcane_intellect', label: 'Arcane Intellect' },
-  { key: 'power_word_fortitude', label: 'Power Word: Fortitude' },
-  { key: 'mark_of_the_wild', label: 'Mark of the Wild' },
-  { key: 'battle_shout', label: 'Battle Shout' },
-  { key: 'mystic_touch', label: 'Mystic Touch (5% Phys)' },
-  { key: 'chaos_brand', label: 'Chaos Brand (3% Magic)' },
-  { key: 'skyfury', label: 'Skyfury' },
-  { key: 'hunters_mark', label: "Hunter's Mark" },
-  { key: 'bleeding', label: 'Bleeding' },
-] as const;
-
 const EXPANSION_OPTION_LIST = [
   { key: 'midnight.crucible_of_erratic_energies_violence', label: 'Crucible: Violence' },
   { key: 'midnight.crucible_of_erratic_energies_sustenance', label: 'Crucible: Sustenance' },
   { key: 'midnight.crucible_of_erratic_energies_predation', label: 'Crucible: Predation' },
 ] as const;
-
-const CONSUMABLE_LABELS: Record<string, string> = {
-  food: 'Food',
-  flask: 'Flask',
-  potion: 'Potion',
-  augmentation: 'Augmentation',
-  weapon_rune: 'Weapon Rune',
-};
 
 interface ConsumablesApiResponse {
   flasks: ConsumableEntry[];
@@ -161,52 +146,36 @@ export default function RaidBuffsConsumables() {
     <div className="space-y-4 pt-1">
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
-          <label className="label-text">{t('config.raidBuffs')}</label>
-          <div className="flex items-center gap-1.5">
+          <label className="lbl">{t('config.raidBuffs')}</label>
+          <div className="flex items-center">
             <button
               type="button"
               onClick={() => setAllBuffs(true)}
-              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                allBuffsOn
-                  ? 'bg-gold/15 text-gold'
-                  : 'text-on-surface-variant/50 hover:text-on-surface-variant'
-              }`}
+              className={`${buttonClass('text')} ${allBuffsOn ? '!text-gold' : ''}`}
             >
               All
             </button>
             <button
               type="button"
               onClick={() => setAllBuffs(false)}
-              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                allBuffsOff
-                  ? 'bg-red-500/15 text-red-400'
-                  : 'text-on-surface-variant/50 hover:text-on-surface-variant'
-              }`}
+              className={`${buttonClass('text')} ${allBuffsOff ? '!text-negative' : ''}`}
             >
               None
             </button>
             {!isDefault && (
-              <button
-                type="button"
-                onClick={resetAll}
-                className="rounded-md px-2 py-0.5 text-[11px] font-medium text-on-surface-variant/50 hover:text-on-surface-variant"
-              >
+              <button type="button" onClick={resetAll} className={buttonClass('text')}>
                 Reset
               </button>
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {RAID_BUFF_LIST.map(({ key, label }) => (
             <button
               key={key}
               type="button"
               onClick={() => toggleBuff(key)}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                raidBuffs[key]
-                  ? 'bg-gold/10 text-gold ring-1 ring-gold/30'
-                  : 'bg-surface-container-high/50 text-on-surface-variant/40 ring-1 ring-outline-variant/10 hover:text-on-surface-variant/60'
-              }`}
+              className={`chip ${raidBuffs[key] ? 'chip-on' : ''}`}
             >
               {label}
             </button>
@@ -219,14 +188,12 @@ export default function RaidBuffsConsumables() {
         <label className="label-text">{t('config.consumables')}</label>
         <div className="grid grid-cols-5 gap-3">
           {Object.entries(consumableOptions).map(([key, options]) => (
-            <div key={key} className="space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant/50">
-                {CONSUMABLE_LABELS[key]}
-              </span>
+            <div key={key} className="space-y-2">
+              <span className="lbl block">{CONSUMABLE_LABELS[key]}</span>
               <select
                 value={consumables[key] || ''}
                 onChange={(e) => setConsumable(key, e.target.value)}
-                className="w-full rounded-md bg-surface-container-high/50 px-2 py-1.5 text-[11px] text-on-surface ring-1 ring-outline-variant/10 focus:outline-none focus:ring-1 focus:ring-gold/30"
+                className="sel"
               >
                 {options.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -242,17 +209,13 @@ export default function RaidBuffsConsumables() {
       {/* Expansion Options */}
       <div className="space-y-2.5">
         <label className="label-text">{t('config.expansionOptions')}</label>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {EXPANSION_OPTION_LIST.map(({ key, label }) => (
             <button
               key={key}
               type="button"
               onClick={() => toggleExpansionOption(key)}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                expansionOptions[key]
-                  ? 'bg-gold/10 text-gold ring-1 ring-gold/30'
-                  : 'bg-surface-container-high/50 text-on-surface-variant/40 ring-1 ring-outline-variant/10 hover:text-on-surface-variant/60'
-              }`}
+              className={`chip ${expansionOptions[key] ? 'chip-on' : ''}`}
             >
               {label}
             </button>

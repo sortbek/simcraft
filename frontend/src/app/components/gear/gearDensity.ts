@@ -10,10 +10,10 @@ export const GEAR_ROW_DENSITIES: GearRowDensity[] = ['comfortable', 'compact', '
 /** Per-row classes, applied inside `GearItemRow`. */
 export const GEAR_ROW_METRICS = {
   comfortable: {
-    row: 'gap-2.5 px-2.5 py-2',
-    icon: 'h-8 w-8',
-    name: 'text-[15px]',
-    details: 'text-[13px]',
+    row: 'gap-3 px-2.5 py-[7px]',
+    icon: 'h-[38px] w-[38px]',
+    name: 'text-sm',
+    details: 'text-xs',
     box: 'h-5 w-5',
     check: 'h-3 w-3',
     button: 'h-7 w-7',
@@ -48,7 +48,7 @@ export const GEAR_DENSITY_LAYOUT = {
   comfortable: {
     card: 'p-3.5',
     cardGap: 'space-y-1',
-    title: 'mb-2 text-[13px]',
+    title: 'mb-2',
     rule: '!my-1.5',
     gap: 'gap-3',
     minCol: 300,
@@ -57,7 +57,7 @@ export const GEAR_DENSITY_LAYOUT = {
   compact: {
     card: 'p-2.5',
     cardGap: 'space-y-0.5',
-    title: 'mb-1 text-[12px]',
+    title: 'mb-1',
     rule: '!my-1',
     gap: 'gap-2',
     minCol: 300,
@@ -66,7 +66,7 @@ export const GEAR_DENSITY_LAYOUT = {
   ultra: {
     card: 'p-2',
     cardGap: 'space-y-0.5',
-    title: 'mb-1 text-[12px]',
+    title: 'mb-1',
     rule: '!my-1',
     gap: 'gap-2',
     minCol: 260,

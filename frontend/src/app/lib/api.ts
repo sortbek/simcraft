@@ -307,8 +307,18 @@ export async function fetchAllJobs(opts?: {
   return fetchJson<JobOverviewSummary[]>(`${API_URL}/api/jobs?${params}`);
 }
 
+/** The job is shared and its public link could not be taken down (offline). */
+export class ShareRevokeError extends Error {}
+
 /** Delete a terminal-state job (Done/Failed/Cancelled); active jobs must be cancelled
- * first. Also removes per-job rows in combo_metadata, combo_dedup, and triage_batches. */
-export async function deleteJob(jobId: string): Promise<void> {
-  await apiDelete(`/api/jobs/${jobId}`);
+ * first. Also removes per-job rows in combo_metadata, combo_dedup, and triage_batches.
+ * A shared job is kept, throwing {@link ShareRevokeError}, unless `force` is set. */
+export async function deleteJob(jobId: string, force = false): Promise<void> {
+  const res = await fetch(apiUrl(`/api/jobs/${jobId}${force ? '?force=true' : ''}`), {
+    method: 'DELETE',
+  });
+  if (res.ok) return;
+  const data = await res.json().catch(() => ({}));
+  if (data.share_revoke_failed) throw new ShareRevokeError(data.detail);
+  throw new Error(data.detail || `Server error ${res.status}`);
 }

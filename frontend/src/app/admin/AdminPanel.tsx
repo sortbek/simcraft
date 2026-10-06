@@ -2,6 +2,7 @@
 
 import { clearAdminToken } from '../lib/adminAuth';
 import AdminLimitsSection from './AdminLimitsSection';
+import Button from '../components/ui/Button';
 
 interface AdminPanelProps {
   onLogout: () => void;
@@ -12,16 +13,16 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
     <div className="space-y-8">
       <AdminLimitsSection />
 
-      <div className="border-t border-outline-variant/10 pt-6">
-        <button
+      <div className="border-t border-line/[0.06] pt-6">
+        <Button
+          variant="quiet"
           onClick={() => {
             clearAdminToken();
             onLogout();
           }}
-          className="rounded-lg border border-outline-variant/20 px-4 py-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
         >
           Sign Out
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import {
 import ItemCentricView from './ItemCentricView';
 import MatrixView from './MatrixView';
 import { SLOT_LABELS } from '../../lib/types';
+import ToggleButtonGroup from '../ui/ToggleButtonGroup';
 
 export default function RosterReportView({ report }: { report: RosterReport }) {
   const [mode, setMode] = useState<ReportViewMode>('item');
@@ -84,40 +85,27 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
     });
   }
 
-  const chipBase = 'rounded-full border px-2.5 py-0.5 text-xs transition-colors';
-  const chipOn = 'border-primary/40 bg-primary/15 text-on-surface';
-  const chipOff =
-    'border-outline-variant/10 bg-surface-container-high text-on-surface-variant/70 hover:text-on-surface';
-
   return (
     <div className="space-y-4">
       {/* Controls bar */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         {/* View toggle */}
-        <div className="inline-flex overflow-hidden rounded-lg border border-outline-variant/10">
-          {(['item', 'matrix'] as ReportViewMode[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${
-                mode === m
-                  ? 'bg-primary text-on-primary'
-                  : 'bg-surface-container-high text-on-surface-variant/70 hover:text-on-surface'
-              }`}
-            >
-              {m === 'item' ? 'Item-centric' : 'Matrix'}
-            </button>
-          ))}
-        </div>
+        <ToggleButtonGroup<ReportViewMode>
+          value={mode}
+          onChange={setMode}
+          options={[
+            { key: 'item', label: 'Item-centric' },
+            { key: 'matrix', label: 'Matrix' },
+          ]}
+        />
 
         {/* Hide downgrades */}
-        <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-on-surface-variant">
+        <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-on-surface-variant">
           <input
             type="checkbox"
             checked={filters.hideDowngrades}
             onChange={(e) => setFilters((f) => ({ ...f, hideDowngrades: e.target.checked }))}
-            className="h-3.5 w-3.5 rounded border-outline-variant/30 accent-primary"
+            className="h-3.5 w-3.5 accent-gold-fill"
           />
           Hide downgrades
         </label>
@@ -125,10 +113,8 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
 
       {/* Player filter */}
       {playerOptions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-            Players
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="lbl mr-1">Players</span>
           {playerOptions.map((p) => {
             const on = filters.players.includes(p.member_id);
             return (
@@ -136,7 +122,7 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
                 key={p.member_id}
                 type="button"
                 onClick={() => togglePlayer(p.member_id)}
-                className={`${chipBase} ${on ? chipOn : chipOff}`}
+                className={`chip ${on ? 'chip-on' : ''}`}
               >
                 {p.name}
               </button>
@@ -147,10 +133,8 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
 
       {/* Slot filter */}
       {slotOptions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-            Slots
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="lbl mr-1">Slots</span>
           {slotOptions.map((s) => {
             const on = filters.slots.includes(s);
             return (
@@ -158,7 +142,7 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
                 key={s}
                 type="button"
                 onClick={() => toggleSlot(s)}
-                className={`${chipBase} ${on ? chipOn : chipOff}`}
+                className={`chip ${on ? 'chip-on' : ''}`}
               >
                 {SLOT_LABELS[s] ?? s}
               </button>
@@ -168,23 +152,23 @@ export default function RosterReportView({ report }: { report: RosterReport }) {
       )}
 
       {/* Summary line */}
-      <div className="text-xs text-on-surface-variant/60">
+      <div className="text-[12.5px] text-outline">
         {filtered.length} items · {columns.length} players
       </div>
 
       {failedCount > 0 && (
         <details
           open={columns.length === 0}
-          className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2"
+          className="rounded-[6px] border border-negative/25 bg-negative/[0.08] px-3 py-2"
         >
-          <summary className="cursor-pointer text-sm font-medium text-red-400">
+          <summary className="cursor-pointer text-sm font-semibold text-negative">
             {failedCount} {failedCount === 1 ? 'player' : 'players'} failed to sim
           </summary>
           <ul className="mt-2 space-y-2">
             {failures.map((f) => (
               <li key={f.reason}>
                 <div className="text-sm text-on-surface">{f.names.join(', ')}</div>
-                <div className="break-words text-sm text-on-surface-variant/80">{f.reason}</div>
+                <div className="break-words text-sm text-on-surface-variant">{f.reason}</div>
               </li>
             ))}
           </ul>

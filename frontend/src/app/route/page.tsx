@@ -18,7 +18,8 @@ import { ROUTES, MDT_ROUTE_SESSION_KEY } from '../lib/routes';
 import { getSavedRoutes, type SavedRoute } from '../lib/saved-routes';
 import { classifyRoute, routeToActiveRoute, routeUsesLevelKnobs } from '../lib/routes-model';
 import RouteViewer from '../components/route-map/RouteViewer';
-import { T } from '../components/route-map/routeTheme';
+import PageHeader from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
 import { IImport } from '../components/route-map/routeIcons';
 
 export default function RoutePage() {
@@ -109,7 +110,7 @@ export default function RoutePage() {
       loadActiveRoute(ar);
     };
     return (
-      <div style={{ height: 'calc(100vh - 1rem)', padding: 8 }}>
+      <div className="h-[calc(100vh-1rem)] p-2">
         <RouteViewer
           key={loadId}
           conv={conv}
@@ -130,46 +131,20 @@ export default function RoutePage() {
 
   // ── Empty state: import an MDT route ─────────────────────────────
   return (
-    <div
-      style={{
-        height: 'calc(100vh - 1rem)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-        background: T.bg,
-      }}
-    >
-      <div style={{ width: 540, maxWidth: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
-          <span style={{ color: T.gold, display: 'flex' }}>
-            <IImport s={16} />
-          </span>
-          <h1 style={{ fontSize: 18, fontWeight: 700, color: T.text }}>{t('route.title')}</h1>
+    <div className="flex h-[calc(100vh-1rem)] items-center justify-center p-6">
+      <div className="w-[540px] max-w-full">
+        <div className="mb-5">
+          <PageHeader
+            eyebrow={t('nav.library')}
+            title={t('route.title')}
+            subtitle={t('route.subtitle')}
+          />
         </div>
-        <p style={{ fontSize: 12.5, color: T.muted, marginBottom: 18 }}>{t('route.subtitle')}</p>
 
-        <div
-          style={{
-            background: T.panel,
-            border: `1px solid ${T.border}`,
-            borderRadius: 10,
-            padding: 18,
-          }}
-        >
+        <div className="card px-6 py-[22px]">
           {dungeons.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <label
-                style={{
-                  fontSize: 9.5,
-                  fontWeight: 700,
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  color: T.muted,
-                }}
-              >
-                {t('route.browseDungeon')}
-              </label>
+            <div className="mb-4">
+              <label className="label-text">{t('route.browseDungeon')}</label>
               <select
                 defaultValue=""
                 disabled={busy}
@@ -177,18 +152,7 @@ export default function RoutePage() {
                   const idx = Number(e.target.value);
                   if (idx) loadOverview(idx);
                 }}
-                style={{
-                  width: '100%',
-                  marginTop: 8,
-                  padding: '10px 12px',
-                  borderRadius: 7,
-                  background: T.surface,
-                  border: `1px solid ${T.borderHi}`,
-                  color: T.text,
-                  fontSize: 12,
-                  outline: 'none',
-                  cursor: busy ? 'not-allowed' : 'pointer',
-                }}
+                className="sel cursor-pointer disabled:cursor-not-allowed"
               >
                 <option value="">{t('route.selectDungeon')}</option>
                 {dungeons.map((d) => (
@@ -197,73 +161,22 @@ export default function RoutePage() {
                   </option>
                 ))}
               </select>
-              <div
-                style={{
-                  textAlign: 'center',
-                  fontSize: 11,
-                  color: T.muted,
-                  margin: '14px 0 2px',
-                }}
-              >
-                {t('route.or')}
-              </div>
+              <div className="lbl mb-0.5 mt-3.5 text-center">{t('route.or')}</div>
             </div>
           )}
-          <label
-            style={{
-              fontSize: 9.5,
-              fontWeight: 700,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              color: T.muted,
-            }}
-          >
-            {t('route.mdtImportLabel')}
-          </label>
+          <label className="label-text">{t('route.mdtImportLabel')}</label>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={t('route.placeholder')}
             rows={3}
-            style={{
-              width: '100%',
-              marginTop: 8,
-              padding: '10px 12px',
-              borderRadius: 7,
-              background: T.surface,
-              border: `1px solid ${T.borderHi}`,
-              color: T.text,
-              fontSize: 12,
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-              resize: 'vertical',
-              outline: 'none',
-            }}
+            className="input-field resize-y font-mono text-[12px]"
           />
-          {error && <div style={{ marginTop: 10, fontSize: 12, color: T.red }}>{error}</div>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-            <button
-              type="button"
-              onClick={() => load(input)}
-              disabled={busy || !input.trim()}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '8px 16px',
-                borderRadius: 7,
-                fontFamily: 'inherit',
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: '0.03em',
-                background: T.gold,
-                color: '#141414',
-                border: 'none',
-                cursor: busy || !input.trim() ? 'not-allowed' : 'pointer',
-                opacity: busy || !input.trim() ? 0.5 : 1,
-              }}
-            >
+          {error && <div className="mt-2.5 text-[12px] text-negative">{error}</div>}
+          <div className="mt-3 flex justify-end">
+            <Button variant="solid" onClick={() => load(input)} disabled={busy || !input.trim()}>
               <IImport s={13} /> {busy ? t('route.loading') : t('route.load')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

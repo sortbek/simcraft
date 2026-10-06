@@ -46,7 +46,7 @@ export default function SidebarCharacter() {
         className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-headline text-xs font-bold uppercase transition-all duration-150 ${
           open
             ? 'bg-primary-container/10 text-primary'
-            : 'text-on-surface-variant hover:bg-surface hover:text-white'
+            : 'text-on-surface-variant hover:bg-surface hover:text-on-surface'
         }`}
       >
         <svg
@@ -118,7 +118,7 @@ export default function SidebarCharacter() {
                           .catch((e) => console.error('Delete character failed', e))
                           .finally(refreshCharacters)
                       }
-                      className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 transition-colors hover:text-red-400"
+                      className="ml-2 shrink-0 text-[13px] text-on-surface-variant/30 transition-colors hover:text-negative"
                     >
                       &times;
                     </button>

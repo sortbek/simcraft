@@ -147,6 +147,10 @@ fn row_to_job(r: &sqlx::any::AnyRow) -> Job {
         provider_id: r
             .try_get("provider_id")
             .unwrap_or_else(|_| "local".to_string()),
+        client_request: r.try_get("client_request").ok().flatten(),
+        share_id: r.try_get("share_id").ok().flatten(),
+        share_delete_token: r.try_get("share_delete_token").ok().flatten(),
+        rerun_of: r.try_get("rerun_of").ok().flatten(),
     }
 }
 
@@ -259,9 +263,11 @@ impl JobRepo {
                     "INSERT INTO jobs (id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, batch_id,
-                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id, seq)
+                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id,
+                     client_request, share_id, share_delete_token, rerun_of, seq)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                             $16, $17, $18, $19, $20, (SELECT COALESCE(MAX(seq), 0) + 1 FROM jobs))",
+                             $16, $17, $18, $19, $20, $21, $22, $23, $24,
+                             (SELECT COALESCE(MAX(seq), 0) + 1 FROM jobs))",
                 )
                 .bind(&job.id)
                 .bind(Self::status_to_str(&job.status))
@@ -283,11 +289,16 @@ impl JobRepo {
                 .bind(&job.checkpoint)
                 .bind(if job.pause_requested { 1i32 } else { 0i32 })
                 .bind(&job.provider_id)
+                .bind(&job.client_request)
+                .bind(&job.share_id)
+                .bind(&job.share_delete_token)
+                .bind(&job.rerun_of)
                 .execute(pool)
                 .await?;
 
                 // Cap terminal jobs only, ordered by insertion (seq), never by
                 // created_at — a wrong clock must not evict live jobs.
+                // Shares of GC'd jobs are not revoked; they expire remotely on their own.
                 let max_jobs = super::MAX_JOBS.load(Ordering::Relaxed) as i32;
                 let status_clause = JobStatusFilter::Terminal.sql_where();
                 let gc_sql = format!(
@@ -312,7 +323,8 @@ impl JobRepo {
                     "SELECT id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
-                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id
+                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id,
+                     client_request, share_id, share_delete_token, rerun_of
                      FROM jobs WHERE id = $1",
                 )
                 .bind(id)
@@ -348,7 +360,8 @@ impl JobRepo {
                     "SELECT id, status, sim_type, simc_input, result_json,
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
-                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id
+                     request_json, simc_input_mode, checkpoint, pause_requested, provider_id,
+                     client_request, share_id, share_delete_token, rerun_of
                      FROM jobs WHERE id IN ({placeholders})"
                 );
                 let mut query = sqlx::query(&sql);
@@ -680,6 +693,52 @@ impl JobRepo {
         }
     }
 
+    /// Rewrite a finished job's stored result (a one-off backfill of a new field).
+    pub async fn update_result_json(&self, id: &str, result_json: &str) -> Result<(), sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                sqlx::query("UPDATE jobs SET result_json = $1 WHERE id = $2")
+                    .bind(result_json)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
+            JobBackend::Memory(jobs) => {
+                let mut jobs = jobs.lock().unwrap();
+                if let Some(job) = jobs.iter_mut().find(|j| j.id == id) {
+                    job.result_json = Some(result_json.to_string());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn set_share(
+        &self,
+        id: &str,
+        share_id: Option<&str>,
+        delete_token: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        match &self.backend {
+            JobBackend::Database(pool) => {
+                sqlx::query("UPDATE jobs SET share_id = $1, share_delete_token = $2 WHERE id = $3")
+                    .bind(share_id)
+                    .bind(delete_token)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+            }
+            JobBackend::Memory(jobs) => {
+                let mut jobs = jobs.lock().unwrap();
+                if let Some(job) = jobs.iter_mut().find(|j| j.id == id) {
+                    job.share_id = share_id.map(ToString::to_string);
+                    job.share_delete_token = delete_token.map(ToString::to_string);
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// All active (Pending/Running/Paused) jobs plus the most recent
     /// `limit_recent` terminal jobs, as slim `JobOverviewSummary` (no full
     /// simc_input/result_json). The Database backend reads only the first 4 KB of
@@ -865,7 +924,7 @@ impl JobRepo {
                 let row = sqlx::query(
                     "SELECT id, status, progress_pct, progress_stage, progress_detail,
                      stages_completed, result_json, error_message, simc_input_mode,
-                     pause_requested, provider_id
+                     pause_requested, provider_id, share_id, rerun_of
                      FROM jobs WHERE id = $1",
                 )
                 .bind(id)
@@ -900,6 +959,8 @@ impl JobRepo {
                         provider_id: r
                             .try_get("provider_id")
                             .unwrap_or_else(|_| "local".to_string()),
+                        share_id: r.try_get("share_id").ok().flatten(),
+                        rerun_of: r.try_get("rerun_of").ok().flatten(),
                     }
                 }))
             }
@@ -925,6 +986,8 @@ impl JobRepo {
                         simc_input_mode: j.simc_input_mode,
                         pause_requested: j.pause_requested,
                         provider_id: j.provider_id.clone(),
+                        share_id: j.share_id.clone(),
+                        rerun_of: j.rerun_of.clone(),
                     }))
             }
         }
@@ -960,6 +1023,10 @@ mod tests {
             checkpoint: None,
             pause_requested: false,
             provider_id: "local".to_string(),
+            client_request: None,
+            share_id: None,
+            share_delete_token: None,
+            rerun_of: None,
         }
     }
 
@@ -1258,6 +1325,47 @@ mod tests {
         assert_eq!(ids[0], "chatty-1");
         let chatty_summary = summaries.iter().find(|s| s.id == "chatty-1").unwrap();
         assert_eq!(chatty_summary.player_name.as_deref(), Some("Tester"));
+    }
+
+    async fn assert_share_columns_round_trip(repo: JobRepo) {
+        let mut job = Job::new_with_provider(
+            "in".into(),
+            "quick".into(),
+            1000,
+            "Patchwerk".into(),
+            0.1,
+            "local".into(),
+        );
+        job.client_request = Some(r#"{"simc_input":"x"}"#.into());
+        job.rerun_of = Some("AbCdEfGhIj".into());
+        repo.insert(&job).await.unwrap();
+
+        repo.set_share(&job.id, Some("K3Fq9xTz2a"), Some("tok"))
+            .await
+            .unwrap();
+        let got = repo.get(&job.id).await.unwrap().unwrap();
+        assert_eq!(got.client_request.as_deref(), Some(r#"{"simc_input":"x"}"#));
+        assert_eq!(got.share_id.as_deref(), Some("K3Fq9xTz2a"));
+        assert_eq!(got.share_delete_token.as_deref(), Some("tok"));
+        assert_eq!(got.rerun_of.as_deref(), Some("AbCdEfGhIj"));
+
+        let summary = repo.get_status_summary(&job.id).await.unwrap().unwrap();
+        assert_eq!(summary.share_id.as_deref(), Some("K3Fq9xTz2a"));
+        assert_eq!(summary.rerun_of.as_deref(), Some("AbCdEfGhIj"));
+
+        repo.set_share(&job.id, None, None).await.unwrap();
+        let got = repo.get(&job.id).await.unwrap().unwrap();
+        assert!(got.share_id.is_none() && got.share_delete_token.is_none());
+    }
+
+    #[tokio::test]
+    async fn share_columns_round_trip() {
+        assert_share_columns_round_trip(JobRepo::new_memory()).await;
+    }
+
+    #[tokio::test]
+    async fn share_columns_round_trip_sqlite() {
+        assert_share_columns_round_trip(sqlite_repo().await).await;
     }
 }
 

@@ -1,10 +1,11 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { type EnchantInfo, type GemInfo, type ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
+import CardHeader from '../ui/CardHeader';
 import GearSlotRow from './GearSlotRow';
 import {
   GEAR_ORDER_BOTTOM,
@@ -52,26 +53,38 @@ export default function GearOverview({
     return null;
   }
 
-  const gridCols = characterRenderUrl ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2';
+  // minmax(0,…): a long gem/enchant line truncates instead of pushing the right column out.
+  const gridCols = characterRenderUrl
+    ? 'grid-cols-[minmax(0,1fr)_220px_minmax(0,1fr)]'
+    : 'grid-cols-2';
+  const avgIlvl = averageItemLevel(gear);
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-low p-6">
-      {characterRenderUrl && (
-        <img
-          src={characterRenderUrl}
-          alt=""
-          className="pointer-events-none absolute inset-0 mx-auto h-[130%] w-auto -translate-y-[12%] object-contain opacity-30"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = 'none';
-          }}
-        />
-      )}
-      <div className="relative">
-        <h3 className="mb-8 border-b border-outline-variant/10 pb-4 font-headline text-sm font-black uppercase tracking-widest text-on-surface-variant">
-          {resolvedTitle}
-        </h3>
-        <div className={`grid gap-x-4 ${gridCols}`}>
-          <div className="space-y-1">
+    <section className="card relative overflow-hidden">
+      <CardHeader
+        title={resolvedTitle}
+        right={
+          avgIlvl != null && (
+            <span className="text-[12.5px] text-outline">
+              ilvl{' '}
+              <b className="font-headline tabular-nums text-on-surface">{avgIlvl.toFixed(1)}</b>
+            </span>
+          )
+        }
+      />
+      <div className="relative px-6 py-[22px]">
+        {characterRenderUrl && (
+          <img
+            src={characterRenderUrl}
+            alt=""
+            className="pointer-events-none absolute inset-0 mx-auto h-[130%] w-auto -translate-y-[12%] object-contain opacity-30"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        )}
+        <div className={`relative grid items-start gap-2 ${gridCols}`}>
+          <div className="flex flex-col gap-1.5">
             {GEAR_ORDER_LEFT.map((slot) => (
               <GearSlotRow
                 key={slot}
@@ -87,7 +100,7 @@ export default function GearOverview({
             ))}
           </div>
           {characterRenderUrl && <div />}
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1.5">
             {GEAR_ORDER_RIGHT.map((slot) => (
               <GearSlotRow
                 key={slot}
@@ -104,24 +117,37 @@ export default function GearOverview({
             ))}
           </div>
         </div>
-        <div className={`mt-1 grid gap-x-4 ${gridCols}`}>
+        <div className={`relative mt-1.5 grid gap-2 ${gridCols}`}>
           {GEAR_ORDER_BOTTOM.map((slot, index) => (
-            <GearSlotRow
-              key={slot}
-              slot={slot}
-              item={gear[slot]}
-              isUpgrade={upgradeSlots?.has(slot)}
-              isDowngrade={downgradeSlots?.has(slot)}
-              isShared={sharedSlots?.has(slot)}
-              itemInfoMap={itemInfoMap}
-              enchantInfoMap={enchantInfoMap}
-              gemInfoMap={gemInfoMap}
-              align={index === 1 ? 'right' : 'left'}
-            />
+            <Fragment key={slot}>
+              {index === 1 && characterRenderUrl && <div />}
+              <GearSlotRow
+                slot={slot}
+                item={gear[slot]}
+                isUpgrade={upgradeSlots?.has(slot)}
+                isDowngrade={downgradeSlots?.has(slot)}
+                isShared={sharedSlots?.has(slot)}
+                itemInfoMap={itemInfoMap}
+                enchantInfoMap={enchantInfoMap}
+                gemInfoMap={gemInfoMap}
+                align={index === 1 ? 'right' : 'left'}
+              />
+            </Fragment>
           ))}
-          {characterRenderUrl && <div />}
         </div>
       </div>
-    </div>
+    </section>
   );
+}
+
+/** Equipped item level the way the game shows it: 16 slots, a main hand with no
+ *  off hand counted twice. Null when nothing has an item level. */
+function averageItemLevel(gear: Record<string, GearItem>): number | null {
+  const items = Object.values(gear).filter((g) => g.item_id > 0 && g.ilevel > 0);
+  if (items.length === 0) return null;
+  const sum = items.reduce((total, g) => total + g.ilevel, 0);
+  const mainHand = gear.main_hand;
+  const offHandEmpty = !gear.off_hand || gear.off_hand.item_id <= 0;
+  const doubled = offHandEmpty && mainHand && mainHand.item_id > 0 && mainHand.ilevel > 0;
+  return doubled ? (sum + mainHand.ilevel) / (items.length + 1) : sum / items.length;
 }

@@ -25,10 +25,10 @@ export default function ClearButton({ onClick, empty, title, label }: ClearButto
       aria-label={title}
       title={title}
       className={cn(
-        'flex shrink-0 items-center justify-center gap-1.5 rounded transition-all hover:bg-red-500/10 hover:text-red-400',
+        'flex shrink-0 items-center justify-center gap-1.5 rounded transition-all hover:bg-negative/10 hover:text-negative',
         label
-          ? 'h-6 gap-1.5 rounded-md border border-outline-variant/25 px-2 text-[11px] font-semibold text-on-surface-variant/70 hover:border-red-500/40 hover:text-red-300'
-          : 'h-5 w-5 text-on-surface-variant/50',
+          ? 'h-7 gap-1.5 rounded-[6px] border border-line/[0.11] px-2.5 font-headline text-[11px] font-extrabold uppercase tracking-[0.12em] text-outline hover:border-negative/25'
+          : 'h-5 w-5 text-outline',
         empty ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
     >

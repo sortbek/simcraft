@@ -41,8 +41,14 @@ function createAppConfig(app) {
     return `http://127.0.0.1:${backendPort}`;
   }
 
+  // Exact host match: a prefix check would let http://localhost.evil.com in.
   function isLocalUrl(url) {
-    return url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
+    try {
+      const { protocol, hostname } = new URL(url);
+      return protocol === "http:" && (hostname === "127.0.0.1" || hostname === "localhost");
+    } catch {
+      return false;
+    }
   }
 
   return {

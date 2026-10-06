@@ -1,6 +1,7 @@
 use crate::compute::provider::{
     ProviderAuth, ProviderCaps, RunCtx, RunError, SimcOutput, SimcProvider,
 };
+use crate::simc_directives::{BLOCKED_PREFIXES, BLOCKED_PREFIX_GLOBS};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -187,41 +188,6 @@ impl SimcProvider for SimmitProvider {
         self.fetch_result(&bearer, remote_job_id).await
     }
 }
-
-/// Lines whose first `=`-prefix matches any of these are stripped before
-/// submitting to Simmit. Source: docs.simmit.com /docs/api/input-constraints.
-const BLOCKED_PREFIXES: &[&str] = &[
-    "threads",
-    "profileset_work_threads",
-    "profileset_init_threads",
-    "process_priority",
-    "output",
-    "html",
-    "json",
-    "json2",
-    "log",
-    "save",
-    "save_actor_lists",
-    "save_gear",
-    "save_profiles",
-    "save_talent_str",
-    "debug_seed",
-    "debug_each",
-    "debug",
-    "full_states",
-    "local_json",
-    "proxy",
-    "http_clear_cache",
-    "guild",
-    "apiKey",
-    "apikey",
-    "api_key",
-    "spell_query_xml_output_file",
-    "reforge_plot_output_file",
-    "progressbar_type",
-];
-
-const BLOCKED_PREFIX_GLOBS: &[&str] = &["dps_plot_", "reforge_plot_"];
 
 /// Whether to let Simmit stage the run server-side. A job that asked for a single
 /// full-precision pass opts out, or its pruned rows come back at coarse precision.

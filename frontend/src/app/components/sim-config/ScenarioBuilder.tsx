@@ -5,6 +5,7 @@ import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import { formatScenarioLabel } from '../../lib/scenario-siblings';
 import { apiUrl, fetchJsonOr } from '../../lib/api';
+import { buttonClass } from '../ui/Button';
 
 export default function ScenarioBuilder() {
   const { t } = useLanguage();
@@ -26,32 +27,25 @@ export default function ScenarioBuilder() {
   if (isDungeonRoute || activeRoute) return null;
 
   return (
-    <div className="space-y-3 border-t border-outline-variant/10 pt-2">
+    <div className="space-y-3 border-t border-line/[0.06] pt-4">
       <div className="flex items-center justify-between">
-        <label className="label-text">{t('config.scenarios')}</label>
+        <label className="lbl">{t('config.scenarios')}</label>
         {scenarios.length > 0 && (
-          <button
-            type="button"
-            onClick={clearScenarios}
-            className="text-[13px] text-on-surface-variant/60 transition-colors hover:text-on-surface-variant"
-          >
+          <button type="button" onClick={clearScenarios} className={buttonClass('text')}>
             {t('common.clearAll')}
           </button>
         )}
       </div>
 
       {scenarios.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {scenarios.map((s) => (
-            <div
-              key={s.id}
-              className="flex items-center gap-1.5 rounded-lg bg-surface-container-high px-2.5 py-1.5 text-[14px] text-on-surface-variant"
-            >
+            <div key={s.id} className="chip text-on-surface-variant">
               <span>{formatScenarioLabel(s)}</span>
               <button
                 type="button"
                 onClick={() => removeScenario(s.id)}
-                className="ml-0.5 text-on-surface-variant/60 transition-colors hover:text-on-surface"
+                className="ml-0.5 text-outline transition-colors hover:text-on-surface"
               >
                 <svg
                   className="h-3 w-3"
@@ -74,11 +68,11 @@ export default function ScenarioBuilder() {
           type="button"
           onClick={addScenario}
           disabled={scenarios.length >= maxScenarios}
-          className="text-[14px] font-medium text-gold transition-colors hover:text-gold/80 disabled:cursor-not-allowed disabled:text-on-surface-variant/40"
+          className={buttonClass('gold')}
         >
           {t('config.addCurrentConfig')}
         </button>
-        <p className="text-[13px] text-on-surface-variant/40">{t('config.scenarioHelp')}</p>
+        <p className="text-[13px] text-outline">{t('config.scenarioHelp')}</p>
       </div>
     </div>
   );

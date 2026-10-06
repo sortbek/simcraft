@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
+import { buttonClass } from './Button';
+import { ERROR_ALERT } from './ErrorAlert';
 
 export default function SimcDownloadBanner() {
   const { t } = useLanguage();
@@ -29,7 +31,7 @@ export default function SimcDownloadBanner() {
   if (status.downloading) {
     const percent = Math.round(status.progress * 100);
     return (
-      <div className="rounded-lg bg-surface-container px-4 py-3 text-sm text-on-surface-variant">
+      <div className="card px-4 py-3 text-sm text-on-surface-variant">
         <div className="flex items-center gap-3">
           <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle
@@ -48,9 +50,9 @@ export default function SimcDownloadBanner() {
           </svg>
           <span>{t('layout.downloadingSimc', { percent })}</span>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-outline-variant/20">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-container-highest">
           <div
-            className="h-full rounded-full bg-primary transition-all duration-300"
+            className="h-full rounded-full bg-gold-fill transition-all duration-300"
             style={{ width: `${percent}%` }}
           />
         </div>
@@ -60,13 +62,10 @@ export default function SimcDownloadBanner() {
 
   if (status.error) {
     return (
-      <div className="rounded-lg bg-error-container/10 px-4 py-3 text-sm text-error">
+      <div className={ERROR_ALERT}>
         <div className="flex items-center justify-between">
           <span>{t('layout.downloadSimcFailed', { error: status.error })}</span>
-          <Link
-            href="/settings"
-            className="rounded px-3 py-1 text-xs font-medium text-error hover:bg-error-container/20"
-          >
+          <Link href="/settings" className={buttonClass('danger', 'sm')}>
             {t('common.settings')}
           </Link>
         </div>

@@ -97,7 +97,7 @@ export default function CategorySelector({
               </div>
               <span
                 className={`text-sm font-semibold transition-colors ${
-                  isActive ? 'text-gold' : 'text-on-surface group-hover:text-white'
+                  isActive ? 'text-gold' : 'text-on-surface-variant group-hover:text-on-surface'
                 }`}
               >
                 {cat.label}

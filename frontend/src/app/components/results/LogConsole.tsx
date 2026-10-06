@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { useLanguage } from '../../lib/i18n';
+import CardHeader from '../ui/CardHeader';
 
 function classifyLine(line: string): string {
   if (line.startsWith('SimulationCraft ')) return 'text-primary/70';
-  if (line.startsWith('Simulating...')) return 'text-on-surface-variant/40';
-  if (line.startsWith('Generating Baseline:') || line.startsWith('Generating Profileset:'))
-    return 'text-on-surface-variant/40';
-  if (line.startsWith('Implementation Not Yet Verified')) return 'text-amber-500/60 italic';
+  if (line.startsWith('✓ ')) return 'text-on-surface-variant';
+  if (line.startsWith('Implementation Not Yet Verified')) return 'text-warning/60 italic';
   if (
     line.startsWith('Generating reports') ||
     line.startsWith('DPS Ranking:') ||
@@ -17,11 +16,19 @@ function classifyLine(line: string): string {
     line.startsWith('Baseline Performance:')
   )
     return 'text-on-surface-variant';
-  if (/^\s+\d+\.\d+\s*:\s*Combo\s/.test(line)) return 'text-on-surface-variant/40';
   return 'text-on-surface-variant/40';
 }
 
-export default function LogConsole({ lines }: { lines: string[] }) {
+export default function LogConsole({
+  lines,
+  totalLines,
+  headerRight,
+}: {
+  lines: string[];
+  /** Line count shown in the header, when `lines` is a filtered view. */
+  totalLines?: number;
+  headerRight?: ReactNode;
+}) {
   const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const isAutoScroll = useRef(true);
@@ -39,29 +46,29 @@ export default function LogConsole({ lines }: { lines: string[] }) {
   }
 
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-outline-variant/10">
-      <div className="flex items-center justify-between bg-surface-container-high px-4 py-2">
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60" />
-          <span className="text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
-            {t('results.simcOutput')}
-          </span>
-        </div>
-        <span className="font-mono text-[12px] tabular-nums text-on-surface-variant/40">
-          {t('results.logLines', { count: lines.length })}
-        </span>
-      </div>
+    <section className="card w-full overflow-hidden">
+      <CardHeader
+        title={t('results.simcOutput')}
+        right={
+          <div className="flex items-center gap-3">
+            {headerRight}
+            <span className="lbl tabular-nums">
+              {t('results.logLines', { count: totalLines ?? lines.length })}
+            </span>
+          </div>
+        }
+      />
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="max-h-[320px] overflow-y-auto bg-surface-container-low p-4 font-mono text-[13px] leading-[1.7]"
+        className="max-h-[320px] overflow-y-auto px-6 py-4 font-mono text-[12.5px] leading-[1.75]"
       >
         {lines.map((line, i) => (
           <div key={i} className={`whitespace-pre-wrap break-all ${classifyLine(line)}`}>
-            {line || '\u00A0'}
+            {line || ' '}
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

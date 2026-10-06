@@ -16,6 +16,32 @@ export function parseRotationMode(value: unknown): RotationMode {
   return value === 'assisted_combat' || value === 'one_button' ? value : 'default';
 }
 
+export const RAID_BUFF_LIST = [
+  { key: 'bloodlust', label: 'Bloodlust', icon: 'spell_nature_bloodlust' },
+  { key: 'arcane_intellect', label: 'Arcane Intellect', icon: 'spell_holy_magicalsentry' },
+  { key: 'power_word_fortitude', label: 'Power Word: Fortitude', icon: 'spell_holy_wordfortitude' },
+  { key: 'mark_of_the_wild', label: 'Mark of the Wild', icon: 'spell_nature_regeneration' },
+  { key: 'battle_shout', label: 'Battle Shout', icon: 'ability_warrior_battleshout' },
+  { key: 'mystic_touch', label: 'Mystic Touch (5% Phys)', icon: 'ability_monk_sparring' },
+  { key: 'chaos_brand', label: 'Chaos Brand (3% Magic)', icon: 'ability_demonhunter_empowerwards' },
+  { key: 'skyfury', label: 'Skyfury', icon: 'achievement_raidprimalist_windelemental' },
+  { key: 'hunters_mark', label: "Hunter's Mark", icon: 'ability_hunter_markedfordeath' },
+  { key: 'bleeding', label: 'Bleeding', icon: 'ability_gouge' },
+] as const;
+
+/** Raid-wide effects SimC reports but the config doesn't offer as a toggle. */
+export const EXTRA_RAID_BUFFS: Record<string, { label: string; icon: string }> = {
+  mortal_wounds: { label: 'Mortal Wounds', icon: 'ability_criticalstrike' },
+};
+
+export const CONSUMABLE_LABELS: Record<string, string> = {
+  food: 'Food',
+  flask: 'Flask',
+  potion: 'Potion',
+  augmentation: 'Augmentation',
+  weapon_rune: 'Weapon Rune',
+};
+
 export const DEFAULT_RAID_BUFFS: Record<string, boolean> = {
   bloodlust: true,
   arcane_intellect: true,

@@ -6,16 +6,18 @@
  * 5 Legendary · 6 Artifact · 7 Heirloom.
  */
 
-/** Inline hex colors (for `style={{ color }}` / borders). */
+const q = (name: string) => `rgb(var(--c-q-${name}))`;
+
+/** Inline colors (for `style={{ color }}` / borders); theme-aware via globals.css `--c-q-*`. */
 export const QUALITY_HEX: Record<number, string> = {
-  0: '#9d9d9d',
-  1: '#ffffff',
-  2: '#1eff00',
-  3: '#0070dd',
-  4: '#a335ee',
-  5: '#ff8000',
-  6: '#e6cc80',
-  7: '#00ccff',
+  0: q('poor'),
+  1: q('common'),
+  2: q('uncommon'),
+  3: q('rare'),
+  4: q('epic'),
+  5: q('legendary'),
+  6: q('artifact'),
+  7: q('heirloom'),
 };
 
 /** Tailwind text-color classes (for class-based rendering, e.g. loot table). */
@@ -28,9 +30,14 @@ export const QUALITY_TEXT_CLASS: Record<number, string> = {
   6: 'text-amber-300',
 };
 
-/** Hex for the quality, falling back to white (Common). */
+/** Server-sent quality hex (dark palette), swapped for the themed color where a light theme sets --q-light-N. */
+export function serverQualityColor(quality: number, hex: string): string {
+  return `var(--q-light-${quality}, ${hex})`;
+}
+
+/** Color for the quality, falling back to Common. */
 export function qualityHex(quality: number): string {
-  return QUALITY_HEX[quality] ?? '#ffffff';
+  return QUALITY_HEX[quality] ?? QUALITY_HEX[1];
 }
 
 /** Border-color hex for loot item icons. Default = Poor grey, not white. */

@@ -32,6 +32,24 @@ interface InjectedResultFields {
   };
 }
 
+/** A consumable SimC ran with; name/icon present when it's in the app's lists. */
+export interface SetupConsumable {
+  value: string;
+  name?: string;
+  icon?: string;
+  item_id?: number;
+  quality?: number;
+}
+
+/** What SimC actually ran with (its defaults resolved). Absent on old shares. */
+export interface SimSetup {
+  consumables: Record<string, SetupConsumable | null>;
+  raid_buffs: Record<string, boolean>;
+  fight_style?: string | null;
+  desired_targets?: number | null;
+  max_time?: number | null;
+}
+
 /** Fields common to both result shapes. */
 interface CommonResultFields extends InjectedResultFields {
   player_name: string;
@@ -46,6 +64,8 @@ interface CommonResultFields extends InjectedResultFields {
   simc_version?: string;
   simc_git_revision?: string;
   equipped_gear?: Record<string, GearItem>;
+  /** `null` once a backfill found nothing to read. */
+  setup?: SimSetup | null;
 }
 
 /** Quick Sim / Stat Weights result. Has NO `result_kind` (the discriminant). */

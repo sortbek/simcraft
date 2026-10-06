@@ -35,6 +35,8 @@ pub(super) async fn start_cloud_streaming(
 
     let super::streaming_top_gear::StreamingTopGearStart {
         req,
+        client_request,
+        rerun_of,
         repo,
         simc_bins: _simc_bins,
         log_buffer: _log_buffer,
@@ -97,6 +99,8 @@ pub(super) async fn start_cloud_streaming(
     );
     job.simc_input_mode = SimcInputMode::Streamed;
     job.batch_id = req.options.batch_id.clone();
+    job.client_request = Some(client_request);
+    job.rerun_of = rerun_of;
 
     let envelope = NormalizedRequest::new(
         "top_gear",

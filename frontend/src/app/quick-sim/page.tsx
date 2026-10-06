@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
+import PageHeader from '../components/ui/PageHeader';
+import Pill from '../components/ui/Pill';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
@@ -102,42 +104,37 @@ export default function QuickSimPage() {
   });
 
   return (
-    <div className="space-y-6 pb-20">
-      <div>
-        <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          {t('nav.quickSim')}
-        </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">{t('page.quickSimSubtitle')}</p>
-      </div>
+    <div className="space-y-5 pb-20">
+      <PageHeader
+        eyebrow={t('nav.simTools')}
+        title={t('nav.quickSim')}
+        subtitle={t('page.quickSimSubtitle')}
+      />
 
       {/* Character summary card */}
       {characterInfo && (
-        <div className="flex items-center justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-6">
-          <div className="flex items-center gap-5">
-            {insetUrl && (
-              <img
-                src={insetUrl}
-                alt=""
-                className="h-16 w-16 rounded-full border-2 border-outline-variant/30 object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            )}
-            <div>
-              <h2 className="font-headline text-2xl font-extrabold tracking-tight text-on-surface">
-                {characterInfo.name}
-              </h2>
-              <div className="mt-1 flex items-center gap-3">
-                <span className="rounded bg-primary-container/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">
-                  {specDisplayName(characterInfo.spec)} {characterInfo.className.replace(/_/g, ' ')}
-                </span>
-                {characterInfo.realm && (
-                  <span className="border-l border-outline-variant/30 pl-3 text-sm text-on-surface-variant">
-                    {characterInfo.realm}
-                  </span>
-                )}
-              </div>
+        <div className="card flex items-center gap-[18px] px-6 py-5">
+          {insetUrl && (
+            <img
+              src={insetUrl}
+              alt=""
+              className="h-14 w-14 shrink-0 rounded-[10px] border border-line/[0.11] object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <h2 className="font-headline text-xl font-extrabold leading-[1.1] tracking-[-0.01em] text-on-surface">
+              {characterInfo.name}
+            </h2>
+            <div className="mt-[7px] flex items-center gap-2">
+              <Pill variant="gold">
+                {specDisplayName(characterInfo.spec)} {characterInfo.className.replace(/_/g, ' ')}
+              </Pill>
+              {characterInfo.realm && (
+                <span className="text-[12.5px] text-outline">{characterInfo.realm}</span>
+              )}
             </div>
           </div>
 
@@ -145,17 +142,14 @@ export default function QuickSimPage() {
           {lastSim && lastSim.dps && (
             <a
               href={`/sim/${lastSim.id}`}
-              className="text-right transition-colors hover:opacity-80"
+              className="text-right transition-opacity hover:opacity-80"
             >
-              <div className="mb-1 text-[10px] uppercase text-on-surface-variant/50">
-                {t('quickSim.lastSim')}
+              <div className="lbl">{t('quickSim.lastSim')}</div>
+              <div className="mt-1.5 font-headline text-2xl font-extrabold tabular-nums text-gold">
+                {Math.round(lastSim.dps).toLocaleString()}{' '}
+                <span className="text-xs text-gold-dark">DPS</span>
               </div>
-              <div className="font-headline text-2xl font-black tabular-nums text-primary">
-                {Math.round(lastSim.dps).toLocaleString()}
-              </div>
-              <div className="text-[10px] text-on-surface-variant/40">
-                {lastSim.fight_style} &middot; DPS
-              </div>
+              <div className="mt-0.5 text-xs text-outline">{lastSim.fight_style}</div>
             </a>
           )}
         </div>

@@ -9,7 +9,7 @@ function createWindowController(config, ipcMain, shell) {
       width: 1200,
       height: 800,
       frame: false,
-      backgroundColor: "#09090b",
+      backgroundColor: "#0d0c0b",
       show: false,
       webPreferences: {
         preload: path.join(__dirname, "..", "..", "preload.js"),

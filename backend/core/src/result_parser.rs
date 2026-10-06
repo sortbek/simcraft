@@ -257,6 +257,9 @@ pub fn parse_simc_result(raw: &Value) -> Value {
         "simc_version": extract_version(raw),
         "simc_git_revision": raw.get("git_revision").and_then(|v| v.as_str()).unwrap_or(""),
     });
+    if let Some(setup) = extract_setup(sim, player) {
+        result["setup"] = setup;
+    }
 
     // Ability breakdown (player + pets)
     let mut abilities: Vec<Value> = Vec::new();
@@ -722,7 +725,7 @@ pub fn parse_gear_comparison_result(
     let error_pct = precision_pct_from_simc(dps_block, base_dps).unwrap_or(target_error);
     let dps_error_abs = base_dps * error_pct / 100.0;
 
-    json!({
+    let mut out = json!({
         "type": sim_type,
         "result_kind": "gear_comparison",
         "base_dps": round1(base_dps),
@@ -743,7 +746,92 @@ pub fn parse_gear_comparison_result(
         "simc_git_revision": raw.get("git_revision").and_then(|v| v.as_str()).unwrap_or(""),
         "results": results,
         "equipped_gear": Value::Object(equipped_gear),
-    })
+    });
+    if let Some(setup) = extract_setup(sim, player) {
+        out["setup"] = setup;
+    }
+    out
+}
+
+/// Adds `setup` to a result stored before it existed, read from the job's raw SimC
+/// JSON. Sets `null` when there is nothing to read, so a caller that persists the
+/// result never tries again. Returns whether the result changed.
+pub fn backfill_setup(result: &mut Value, raw_json: Option<&str>) -> bool {
+    if result.get("setup").is_some() || !result.is_object() {
+        return false;
+    }
+    let raw = raw_json.and_then(|s| serde_json::from_str::<Value>(s).ok());
+    let setup = raw.as_ref().and_then(|raw| {
+        let sim = &raw["sim"];
+        let player = sim["players"].as_array().and_then(|p| p.first())?;
+        extract_setup(sim, player)
+    });
+    result["setup"] = setup.unwrap_or(Value::Null);
+    true
+}
+
+/// Consumables, raid buffs and fight shape SimC actually ran with (its own
+/// defaults resolved), so result pages can show them.
+fn extract_setup(sim: &Value, player: &Value) -> Option<Value> {
+    // SimC token plus display name/icon from the consumable lists, when known.
+    let describe = |token: Option<&str>, list: &[Value]| -> Value {
+        let Some(token) = token
+            .map(str::trim)
+            .filter(|v| !v.is_empty() && *v != "disabled" && *v != "none")
+        else {
+            return Value::Null;
+        };
+        let mut entry = json!({ "value": token });
+        if let Some(known) = list
+            .iter()
+            .find(|e| e.get("value").and_then(|v| v.as_str()) == Some(token))
+        {
+            for (from, to) in [
+                ("name", "name"),
+                ("icon", "icon"),
+                ("itemId", "item_id"),
+                ("craftingQuality", "quality"),
+            ] {
+                if let Some(v) = known.get(from) {
+                    entry[to] = v.clone();
+                }
+            }
+        }
+        entry
+    };
+    let token = |key: &str| player.get(key).and_then(|v| v.as_str());
+    // `temporary_enchant` is `main_hand:oil[/off_hand:oil]`; the main-hand oil is the rune.
+    let weapon_rune = token("temporary_enchant").and_then(|s| {
+        s.split('/')
+            .find_map(|part| part.strip_prefix("main_hand:"))
+    });
+    let consumables = json!({
+        "potion": describe(token("potion"), crate::game_data::list_potions()),
+        "flask": describe(token("flask"), crate::game_data::list_flasks()),
+        "food": describe(token("food"), crate::game_data::list_foods()),
+        "augmentation": describe(token("augmentation"), crate::game_data::list_augments()),
+        "weapon_rune": describe(weapon_rune, crate::game_data::list_temp_enchants()),
+    });
+    let raid_buffs: serde_json::Map<String, Value> = sim
+        .get("overrides")
+        .and_then(|o| o.as_object())
+        .map(|o| {
+            o.iter()
+                .map(|(k, v)| (k.clone(), json!(v.as_f64().unwrap_or(0.0) != 0.0)))
+                .collect()
+        })
+        .unwrap_or_default();
+    if raid_buffs.is_empty() && consumables.as_object()?.values().all(Value::is_null) {
+        return None;
+    }
+    let options = sim.get("options");
+    Some(json!({
+        "consumables": consumables,
+        "raid_buffs": raid_buffs,
+        "fight_style": options.and_then(|o| o.get("fight_style")).cloned().unwrap_or(Value::Null),
+        "desired_targets": options.and_then(|o| o.get("desired_targets")).cloned().unwrap_or(Value::Null),
+        "max_time": options.and_then(|o| o.get("max_time")).cloned().unwrap_or(Value::Null),
+    }))
 }
 
 /// 95% CI half-width as a percent of the mean, read from a simc result block.
@@ -817,6 +905,65 @@ mod tests {
             find_row(&parsed, "Combo 1")["precision_pct"].as_f64(),
             Some(0.70)
         );
+    }
+
+    /// Field values are a real simc.exe report: resolved consumables (SimC's own
+    /// defaults included) and the raid-buff overrides, with Bloodlust switched off.
+    #[test]
+    fn setup_reports_consumables_and_raid_buffs_simc_used() {
+        crate::test_support::ensure_game_data_loaded();
+        let raw = json!({
+            "sim": {
+                "options": { "fight_style": "Patchwerk", "desired_targets": 1, "max_time": 300.0 },
+                "overrides": { "arcane_intellect": 1, "bloodlust": 0 },
+                "players": [{
+                    "name": "Base",
+                    "potion": "liquid_luster_2",
+                    "flask": "flask_of_the_shattered_sun_2",
+                    "food": "harandar_celebration",
+                    "augmentation": "void_touched",
+                    "temporary_enchant": "main_hand:thalassian_phoenix_oil_2",
+                    "collected_data": { "dps": { "mean": 1000.0, "mean_std_dev": 2.0 } }
+                }]
+            }
+        });
+        for parsed in [
+            parse_simc_result(&raw),
+            parse_gear_comparison_result(&raw, None, "top_gear"),
+        ] {
+            let setup = &parsed["setup"];
+            let flask = &setup["consumables"]["flask"];
+            assert_eq!(flask["value"], "flask_of_the_shattered_sun_2");
+            assert!(flask["name"].as_str().is_some_and(|n| !n.is_empty()));
+            assert!(flask["icon"].as_str().is_some());
+            assert_eq!(
+                setup["consumables"]["weapon_rune"]["value"],
+                "thalassian_phoenix_oil_2"
+            );
+            assert_eq!(setup["raid_buffs"]["bloodlust"], false);
+            assert_eq!(setup["raid_buffs"]["arcane_intellect"], true);
+            assert_eq!(setup["fight_style"], "Patchwerk");
+        }
+    }
+
+    #[test]
+    fn backfill_marks_a_result_with_nothing_to_read_so_it_is_not_retried() {
+        let mut result = json!({"dps": 1.0});
+        assert!(backfill_setup(&mut result, None));
+        assert_eq!(result["setup"], Value::Null);
+        assert!(!backfill_setup(&mut result, None));
+    }
+
+    #[test]
+    fn setup_absent_when_simc_reports_nothing() {
+        let raw = json!({
+            "sim": { "players": [{
+                "name": "Base",
+                "temporary_enchant": "disabled",
+                "collected_data": { "dps": { "mean": 1000.0 } }
+            }] }
+        });
+        assert!(parse_simc_result(&raw).get("setup").is_none());
     }
 
     /// A folio combination is tagged on the combo's metadata, and the row has to

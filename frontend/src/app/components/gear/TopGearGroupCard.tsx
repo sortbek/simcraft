@@ -3,6 +3,8 @@ import type { ResolvedItem } from '../../lib/types';
 import { usePopupDismissal } from '../loot/usePopupDismissal';
 import { getWowheadData, getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
 import { VOID_FORGE_ENABLED } from '../../lib/featureFlags';
+import { serverQualityColor } from '../../lib/qualityColors';
+import Pill from '../ui/Pill';
 import GearItemRow from './GearItemRow';
 import {
   GEAR_DENSITY_LAYOUT,
@@ -113,14 +115,10 @@ export default function TopGearGroupCard({
 
   return (
     <div className={gearCardClass(density)}>
-      <p
-        className={`flex items-center gap-1.5 font-headline font-semibold uppercase tracking-widest text-muted ${layout.title}`}
-      >
+      <p className={`h-card flex items-center gap-2 ${layout.title}`}>
         {title}
         {alternatives.length > 0 && (
-          <span className="rounded bg-surface-container-highest px-1 text-[10px] font-bold tabular-nums tracking-normal text-muted/90">
-            {alternatives.length}
-          </span>
+          <Pill className="tabular-nums text-outline">{alternatives.length}</Pill>
         )}
         {onDemote && (
           <button
@@ -128,7 +126,7 @@ export default function TopGearGroupCard({
             onClick={onDemote}
             title={t('topGear.collapseSlot')}
             aria-label={t('topGear.collapseSlot')}
-            className="ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded text-on-surface-variant/40 transition-colors hover:bg-white/[0.06] hover:text-on-surface-variant"
+            className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-outline transition-colors hover:bg-overlay/[0.06] hover:text-on-surface-variant"
           >
             <svg
               className="h-2.5 w-2.5"
@@ -152,7 +150,7 @@ export default function TopGearGroupCard({
             key={`eq-${item.uid}-${index}`}
             icon={item.icon}
             name={localizedItemName(item.item_id, item.name, locale)}
-            nameColor={item.quality_color}
+            nameColor={serverQualityColor(item.quality, item.quality_color)}
             details={itemDetails(item)}
             ilevel={item.ilevel}
             equipped
@@ -190,7 +188,7 @@ export default function TopGearGroupCard({
       })}
 
       {equipped.length > 0 && alternatives.length > 0 && (
-        <div className={`border-t border-outline-variant/20 ${layout.rule}`} />
+        <div className={`border-t border-line/[0.06] ${layout.rule}`} />
       )}
 
       {alternatives.map((item, index) => (
@@ -198,7 +196,7 @@ export default function TopGearGroupCard({
           key={`alt-${item.uid}-${index}`}
           icon={item.icon}
           name={localizedItemName(item.item_id, item.name, locale)}
-          nameColor={item.quality_color}
+          nameColor={serverQualityColor(item.quality, item.quality_color)}
           details={itemDetails(item)}
           ilevel={item.ilevel}
           selectable
@@ -220,7 +218,7 @@ export default function TopGearGroupCard({
                 event.preventDefault();
                 onRemoveAdded(item);
               }}
-              className={`flex shrink-0 items-center justify-center rounded text-on-surface-variant/50 transition-colors hover:bg-red-500/10 hover:text-red-400 ${GEAR_ROW_METRICS[density].button}`}
+              className={`flex shrink-0 items-center justify-center rounded-[5px] text-outline transition-colors hover:bg-negative/10 hover:text-negative ${GEAR_ROW_METRICS[density].button}`}
               title="Remove item"
             >
               <svg
@@ -315,10 +313,10 @@ function UpgradeButton({
           event.preventDefault();
           onUpgradeClick();
         }}
-        className={`flex items-center justify-center rounded transition-colors ${GEAR_ROW_METRICS[density].button} ${
+        className={`flex items-center justify-center rounded-[5px] transition-colors ${GEAR_ROW_METRICS[density].button} ${
           isMenuOpen
             ? 'bg-gold/20 text-gold'
-            : 'text-on-surface-variant/50 hover:bg-white/[0.05] hover:text-on-surface-variant'
+            : 'text-outline hover:bg-overlay/[0.06] hover:text-on-surface-variant'
         }`}
         title={t('gear.addUpgradedCopy')}
       >
@@ -336,7 +334,7 @@ function UpgradeButton({
       {isMenuOpen && (
         <div
           onClick={(event) => event.stopPropagation()}
-          className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-outline-variant/20 bg-surface-container py-1 shadow-xl"
+          className="popover absolute right-0 top-full z-50 mt-2 min-w-[180px] py-1.5"
         >
           {onCatalystConvert && (
             <button
@@ -346,7 +344,7 @@ function UpgradeButton({
                 event.preventDefault();
                 onCatalystConvert();
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-purple-300 hover:bg-purple-500/10 hover:text-purple-200"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-quality-epic hover:bg-quality-epic/10"
             >
               <svg className="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a1 1 0 011 1v2.07A5.001 5.001 0 0113 9a5 5 0 01-10 0 5.001 5.001 0 014-4.93V2a1 1 0 011-1zm0 5a3 3 0 100 6 3 3 0 000-6z" />
@@ -362,7 +360,7 @@ function UpgradeButton({
                 event.preventDefault();
                 onVoidForgeConvert();
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-violet-300 hover:bg-violet-500/10 hover:text-violet-200"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-quality-legendary hover:bg-quality-legendary/10"
             >
               <svg className="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a1 1 0 011 1v2.07A5.001 5.001 0 0113 9a5 5 0 01-10 0 5.001 5.001 0 014-4.93V2a1 1 0 011-1zm0 5a3 3 0 100 6 3 3 0 000-6z" />
@@ -378,7 +376,7 @@ function UpgradeButton({
                 event.preventDefault();
                 onAddSocket();
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-sky-300 hover:bg-sky-500/10 hover:text-sky-200"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-gem hover:bg-gem/10"
             >
               <svg
                 className="h-3 w-3 shrink-0"
@@ -402,7 +400,7 @@ function UpgradeButton({
                 event.preventDefault();
                 onEditGemsEnchant();
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-gold/90 hover:bg-gold/10 hover:text-gold"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-gold hover:bg-gold/10"
             >
               <svg
                 className="h-3 w-3 shrink-0"
@@ -425,7 +423,7 @@ function UpgradeButton({
                 event.preventDefault();
                 onRemoveGem();
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-red-300 hover:bg-red-500/10 hover:text-red-200"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-negative hover:bg-negative/10"
             >
               <svg
                 className="h-3 w-3 shrink-0"
@@ -446,13 +444,15 @@ function UpgradeButton({
             onAddSocket ||
             onRemoveGem ||
             onEditGemsEnchant) &&
-            item.upgrade && <div className="my-1 border-t border-outline-variant/20" />}
+            item.upgrade && <div className="my-1.5 border-t border-line/[0.06]" />}
           {item.upgrade && (
             <>
               {loadingUpgrades ? (
-                <div className="px-3 py-2 text-[13px] text-muted">{t('common.loading')}</div>
+                <div className="px-3 py-2 text-[13px] text-outline">{t('common.loading')}</div>
               ) : upgradeOptions.length === 0 ? (
-                <div className="px-3 py-2 text-[13px] text-muted">{t('gear.noUpgradeOptions')}</div>
+                <div className="px-3 py-2 text-[13px] text-outline">
+                  {t('gear.noUpgradeOptions')}
+                </div>
               ) : (
                 upgradeOptions.map((option) => {
                   const isCurrent = item.bonus_ids.includes(option.bonus_id);
@@ -468,12 +468,12 @@ function UpgradeButton({
                       }}
                       className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[13px] ${
                         isCurrent
-                          ? 'cursor-default text-muted'
-                          : 'text-on-surface hover:bg-white/[0.05] hover:text-white'
+                          ? 'cursor-default text-outline'
+                          : 'text-on-surface hover:bg-surface-container-high'
                       }`}
                     >
                       <span>{option.fullName}</span>
-                      <span className="font-mono text-[12px] tabular-nums text-muted">
+                      <span className="font-headline text-xs font-bold tabular-nums text-outline">
                         {option.itemLevel}
                       </span>
                     </button>

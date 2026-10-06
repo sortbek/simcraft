@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
+import { buttonClass } from '../ui/Button';
 import {
   createProfile,
   decodeProfileString,
@@ -13,8 +14,7 @@ import {
   type ProfileDecodeError,
 } from '../../lib/sim-profiles';
 
-const BTN =
-  'shrink-0 rounded-lg px-3 py-2 text-[12px] font-bold uppercase tracking-wider transition-colors text-on-surface-variant/50 hover:bg-surface-container-high/50 hover:text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+const BTN = `shrink-0 ${buttonClass('text')}`;
 
 /** A newer-schema paste is a different problem from a corrupt one: telling the
  *  user it's invalid makes them retry the paste instead of updating SimHammer. */
@@ -113,7 +113,7 @@ export default function ProfileControls() {
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-1">
-      {error && <span className="mr-2 text-xs text-red-400">{error}</span>}
+      {error && <span className="mr-2 text-xs text-negative">{error}</span>}
       {mode === 'idle' ? (
         <>
           <button

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiUrl, fetchJson } from './api';
+import { assignOwn } from './useItemInfo';
 
 export interface TalentEntry {
   id: number;
@@ -72,6 +73,12 @@ export interface TalentTreeData {
 
 // Module-level cache (same pattern as useItemInfo)
 const cache: Record<number, TalentTreeData> = {};
+
+export const cachedTalentTree = (specId: number): TalentTreeData | undefined => cache[specId];
+
+export function primeTalentTrees(trees: Record<number, TalentTreeData>): void {
+  assignOwn(cache, trees);
+}
 
 export function useTalentTree(specId: number | null): TalentTreeData | null {
   const [tree, setTree] = useState<TalentTreeData | null>(

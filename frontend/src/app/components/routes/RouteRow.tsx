@@ -19,6 +19,8 @@ import { timeAgo } from '../../sims/_components/shared';
 import { T, SOURCE_COLORS } from '../route-map/routeTheme';
 import { IPlay, IList, ITrash, IPlus, IMinus } from '../route-map/routeIcons';
 import RouteMiniMap, { type ShapePoint } from './RouteMiniMap';
+import Button from '../ui/Button';
+import { cn } from '../../lib/cn';
 
 /** Localized source label per route kind (the badge next to the source dot). */
 const KIND_LABEL_KEY: Record<RouteKind, string> = {
@@ -43,66 +45,21 @@ const Stepper = ({
   prefix?: string;
   onChange: (v: number) => void;
 }) => {
-  const Btn = ({ dir }: { dir: number }) => {
-    const [bh, setBh] = useState(false);
-    return (
-      <button
-        type="button"
-        onMouseEnter={() => setBh(true)}
-        onMouseLeave={() => setBh(false)}
-        onClick={() => onChange(Math.max(min, Math.min(max, value + dir)))}
-        style={{
-          width: 22,
-          height: 26,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: bh ? T.surfaceHi : 'transparent',
-          border: 'none',
-          color: bh ? T.gold : T.text2,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-        }}
-      >
-        {dir > 0 ? <IPlus s={11} /> : <IMinus s={11} />}
-      </button>
-    );
-  };
+  const Btn = ({ dir }: { dir: number }) => (
+    <button
+      type="button"
+      onClick={() => onChange(Math.max(min, Math.min(max, value + dir)))}
+      className="flex h-[26px] w-[22px] items-center justify-center text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-gold"
+    >
+      {dir > 0 ? <IPlus s={11} /> : <IMinus s={11} />}
+    </button>
+  );
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span
-        style={{
-          fontSize: 9.5,
-          fontWeight: 700,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          color: T.muted,
-        }}
-      >
-        {label}
-      </span>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: T.surface,
-          border: `1px solid ${T.borderHi}`,
-          borderRadius: 6,
-          overflow: 'hidden',
-        }}
-      >
+    <div className="flex items-center gap-2">
+      <span className="lbl">{label}</span>
+      <div className="flex items-center overflow-hidden rounded-[6px] border border-line/[0.11] bg-surface-container-high">
         <Btn dir={-1} />
-        <span
-          style={{
-            minWidth: 34,
-            textAlign: 'center',
-            fontSize: 12,
-            fontWeight: 700,
-            color: T.text,
-            fontVariantNumeric: 'tabular-nums',
-            padding: '0 2px',
-          }}
-        >
+        <span className="min-w-[34px] px-0.5 text-center font-headline text-xs font-extrabold tabular-nums text-on-surface">
           {prefix}
           {value}
         </span>
@@ -124,66 +81,16 @@ const ActBtn = ({
   primary?: boolean;
   danger?: boolean;
   onClick: () => void;
-}) => {
-  const [h, setH] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setH(true)}
-      onMouseLeave={() => setH(false)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 7,
-        padding: label ? '7px 13px' : '7px 8px',
-        borderRadius: 7,
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: '0.03em',
-        transition: 'all .12s',
-        background: primary
-          ? h
-            ? T.gold
-            : T.goldSub
-          : h
-            ? danger
-              ? 'rgba(224,82,74,0.12)'
-              : T.surfaceHi
-            : 'transparent',
-        border: `1px solid ${
-          primary
-            ? h
-              ? T.gold
-              : T.goldBord
-            : danger
-              ? h
-                ? 'rgba(224,82,74,0.5)'
-                : T.border
-              : h
-                ? T.borderHi
-                : T.border
-        }`,
-        color: primary
-          ? h
-            ? '#141414'
-            : T.gold
-          : danger
-            ? h
-              ? T.red
-              : T.muted
-            : h
-              ? T.text
-              : T.text2,
-      }}
-    >
-      {icon}
-      {label && <span>{label}</span>}
-    </button>
-  );
-};
+}) => (
+  <Button
+    variant={primary ? 'gold' : 'quiet'}
+    onClick={onClick}
+    className={cn(!label && 'px-2', danger && 'hover:border-negative/25 hover:text-negative')}
+  >
+    {icon}
+    {label && <span>{label}</span>}
+  </Button>
+);
 
 /** One saved route, rendered as a library card. [Sim] sets the chosen key/HP +
  *  activates the route, then navigates to Quick Sim (activate-only flow). */
@@ -214,12 +121,10 @@ export default function RouteRow({
       return undefined;
     }
   }, [route.shape]);
-  const [h, setH] = useState(false);
   const [err, setErr] = useState('');
   const [key, setKey] = useState(() => getRouteSimParams().keystoneLevel);
   const [hp, setHp] = useState(() => getRouteSimParams().hpPercent);
-  // Re-render once a minute so the "updated Xm ago" label stays current on its
-  // own — previously it only refreshed when a hover toggled `h`.
+  // Re-render once a minute so the "updated Xm ago" label stays current.
   const [, setNowTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setNowTick((n) => n + 1), 60_000);
@@ -261,71 +166,38 @@ export default function RouteRow({
   const sourceColor = SOURCE_COLORS[kind] ?? T.muted;
 
   return (
-    <div
-      onMouseEnter={() => setH(true)}
-      onMouseLeave={() => setH(false)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 18,
-        padding: '13px 16px',
-        borderRadius: 11,
-        background: h ? T.surface : T.panel,
-        border: `1px solid ${h ? T.borderHi : T.border}`,
-        transition: 'all .12s',
-      }}
-    >
+    <div className="card flex items-center gap-[18px] px-4 py-[13px] hover:border-line/[0.11] hover:bg-surface-container-high">
       <RouteMiniMap seed={seed} count={stats.pulls ?? 8} shape={shape} />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>
-          <span
-            style={{
-              fontSize: 14.5,
-              fontWeight: 700,
-              color: T.text,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {route.name}
-          </span>
+      <div className="min-w-0 flex-1">
+        <div className="mb-[7px] flex items-center gap-2.5">
+          <span className="truncate text-[14.5px] font-bold text-on-surface">{route.name}</span>
         </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 9,
-            fontSize: 11,
-            color: T.muted,
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="flex flex-wrap items-center gap-[9px] text-xs text-outline">
           {stats.pulls != null && (
             <>
               <span>{t('route.row.pulls', { count: stats.pulls })}</span>
-              <span style={{ color: T.dim }}>·</span>
+              <span className="text-fg-4">·</span>
             </>
           )}
           {stats.enemies != null && (
             <>
               <span>{t('route.row.enemies', { count: stats.enemies })}</span>
-              <span style={{ color: T.dim }}>·</span>
+              <span className="text-fg-4">·</span>
             </>
           )}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: sourceColor }} />
+          <span className="inline-flex items-center gap-[5px]">
+            <span className="h-[5px] w-[5px] rounded-full" style={{ background: sourceColor }} />
             {t(KIND_LABEL_KEY[kind])}
           </span>
-          <span style={{ color: T.dim }}>·</span>
+          <span className="text-fg-4">·</span>
           <span>{t('route.row.updated', { time: timeAgo(route.created_at, t) })}</span>
         </div>
-        {err && <div style={{ marginTop: 6, fontSize: 11, color: T.red }}>{err}</div>}
+        {err && <div className="mt-1.5 text-xs text-negative">{err}</div>}
       </div>
 
       {isDungeonRoute && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div className="flex items-center gap-4">
           <Stepper
             label={t('route.row.keyLevel')}
             value={key}
@@ -338,9 +210,9 @@ export default function RouteRow({
         </div>
       )}
 
-      <span style={{ width: 1, height: 30, background: T.border }} />
+      <span className="h-[30px] w-px bg-overlay/[0.06]" />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+      <div className="flex items-center gap-[7px]">
         <ActBtn icon={<IPlay s={12} />} label={t('route.row.sim')} primary onClick={onSim} />
         {isDungeonRoute && (
           <ActBtn icon={<IList s={13} />} label={t('route.row.map')} onClick={onMap} />

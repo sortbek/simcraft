@@ -265,37 +265,37 @@ export default function TopGearItemSelector({
         parts.push({ text: t('topGear.baseline'), color: 'text-gold' });
       }
       if (addedKeys.has(buildAlternativeKey(item))) {
-        parts.push({ text: 'Added', color: 'text-gold/90' });
+        parts.push({ text: 'Added', color: 'text-gold' });
       }
       if (item.origin === 'vault') {
-        parts.push({ text: t('gear.greatVault'), color: 'text-amber-400/80' });
+        parts.push({ text: t('gear.greatVault'), color: 'text-gold' });
       }
       if (item.origin === 'loot') {
-        parts.push({ text: 'Group Loot', color: 'text-sky-400/80' });
+        parts.push({ text: 'Group Loot', color: 'text-quality-rare' });
       }
       if (item.is_catalyst) {
-        parts.push({ text: t('gear.catalyst'), color: 'text-purple-400/80' });
+        parts.push({ text: t('gear.catalyst'), color: 'text-quality-epic' });
       }
       if (item.tag) parts.push({ text: item.tag });
       if (item.upgrade) parts.push({ text: localizedUpgrade(item.upgrade, t) });
       if (item.gem_name) {
         parts.push({
           text: localizedItemName(item.gem_id, item.gem_name, locale),
-          color: 'text-sky-400/70',
+          color: 'text-gem',
         });
       } else if (item.sockets > 0) {
         parts.push({
           text: `${item.sockets > 1 ? `${item.sockets} ` : ''}${
             item.sockets > 1 ? t('gear.sockets') : t('gear.socket')
           }`,
-          color: 'text-sky-400/70',
+          color: 'text-gem',
         });
       }
       if (item.enchant_name) {
         const enchantName = item.enchant_item_id
           ? localizedItemName(item.enchant_item_id, item.enchant_name, locale)
           : item.enchant_name;
-        parts.push({ text: enchantName, color: 'text-emerald-400/70' });
+        parts.push({ text: enchantName, color: 'text-ench' });
       }
       return parts;
     },
@@ -328,7 +328,7 @@ export default function TopGearItemSelector({
   if (visibleGroups.length === 0) {
     return (
       <div className="card p-8 text-center">
-        <p className="text-sm text-muted">{t('gear.noAlternativesFound')}</p>
+        <p className="text-sm text-outline">{t('gear.noAlternativesFound')}</p>
       </div>
     );
   }

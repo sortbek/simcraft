@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_URL, apiUrl, fetchJsonOr, isDesktop as detectDesktop } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
+import LiveSimView from './LiveSimView';
 import LogConsole from './LogConsole';
+import type { LiveSim } from '../../lib/simcLog';
+import Button from '../ui/Button';
+import Pill from '../ui/Pill';
 
 interface SimStatusProps {
   status: string;
@@ -20,6 +24,10 @@ interface SimStatusProps {
   logLines?: string[];
   showLogs?: boolean;
   onToggleLogs?: () => void;
+  /** State folded from the SimC output; with combos, the live view replaces the spinner. */
+  live?: LiveSim;
+  /** The run writes SimC output (local sims), so the live view shows from the start. */
+  liveExpected?: boolean;
 }
 
 function useSmoothedProgress(serverProgress: number): number {
@@ -76,6 +84,8 @@ export default function SimStatus({
   logLines,
   showLogs,
   onToggleLogs,
+  live,
+  liveExpected = false,
 }: SimStatusProps) {
   const { t } = useLanguage();
   const isRunning = status === 'running';
@@ -100,24 +110,73 @@ export default function SimStatus({
     }
   }
 
+  const actions = jobId && (isRunning || isPending) && (
+    <div className="flex items-center gap-3">
+      {canCancel && (
+        <Button variant="text" onClick={handleCancel} disabled={cancelling}>
+          {cancelling ? t('results.cancelling') : t('results.cancelSim')}
+        </Button>
+      )}
+      {canPause && onPause && (
+        <Button variant="text" onClick={onPause} disabled={pauseRequested}>
+          {pauseRequested ? t('results.pausing') : t('results.pauseSim')}
+        </Button>
+      )}
+      {onToggleLogs && (
+        <Button variant="text" onClick={onToggleLogs}>
+          <svg
+            className="h-3.5 w-3.5"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="2" y="3" width="12" height="10" rx="1.5" />
+            <path d="M5 7l2 2 2-2" />
+          </svg>
+          {showLogs ? t('results.hideLogs') : t('results.showLogs')}
+        </Button>
+      )}
+    </div>
+  );
+
+  const hasCombos = !!live && Object.keys(live.combos).length > 0;
+  if (live && (isRunning || isPending) && (hasCombos || liveExpected)) {
+    return (
+      <div className="py-6">
+        <LiveSimView
+          jobId={jobId}
+          live={live}
+          title={title}
+          cpu={cpuUsage}
+          actions={actions}
+          logLines={logLines ?? []}
+          showLogs={!!showLogs}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center space-y-6 py-16">
       {isQueued && (
-        <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-[12px] font-bold uppercase tracking-wider text-amber-300">
+        <Pill variant="gold">
           <svg className="h-3.5 w-3.5 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7z" />
           </svg>
-          Waiting in local queue
-        </div>
+          {t('results.waitingInQueue')}
+        </Pill>
       )}
 
       <div className="relative">
         <div
-          className={`h-12 w-12 animate-spin rounded-full border-2 border-surface-container-highest ${isQueued ? 'border-t-amber-400' : 'border-t-primary'}`}
+          className={`h-12 w-12 animate-spin rounded-full border-2 border-surface-container-highest ${isQueued ? 'border-t-outline' : 'border-t-primary'}`}
         />
         <div className="absolute inset-0 flex items-center justify-center">
           <div
-            className={`h-2 w-2 animate-pulse rounded-full ${isQueued ? 'bg-amber-400/60' : 'bg-primary/60'}`}
+            className={`h-2 w-2 animate-pulse rounded-full ${isQueued ? 'bg-outline/60' : 'bg-primary/60'}`}
           />
         </div>
       </div>
@@ -132,7 +191,7 @@ export default function SimStatus({
       <div className="w-72">
         <div className="h-1 w-full overflow-hidden rounded-full bg-surface-container-highest">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-primary-container to-primary transition-all duration-700"
+            className="h-full rounded-full bg-gradient-to-r from-primary-container to-gold-fill transition-all duration-700"
             style={{ width: `${Math.max(displayProgress, status === 'pending' ? 2 : 5)}%` }}
           />
         </div>
@@ -148,55 +207,14 @@ export default function SimStatus({
         </div>
       </div>
 
-      {jobId && (isRunning || isPending) && (
-        <div className="flex items-center gap-3">
-          {canCancel && (
-            <button
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="rounded-lg px-3 py-1 text-[14px] text-on-surface-variant/60 transition-colors hover:bg-red-500/10 hover:text-error"
-            >
-              {cancelling ? t('results.cancelling') : t('results.cancelSim')}
-            </button>
-          )}
-          {canPause && onPause && (
-            <button
-              onClick={onPause}
-              disabled={pauseRequested}
-              className="rounded-lg px-3 py-1 text-[14px] text-amber-400 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
-            >
-              {pauseRequested ? 'Pausing at next checkpoint...' : 'Pause Sim'}
-            </button>
-          )}
-          {onToggleLogs && (
-            <button
-              onClick={onToggleLogs}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[14px] text-on-surface-variant/60 transition-colors hover:bg-white/5 hover:text-on-surface-variant"
-            >
-              <svg
-                className="h-3.5 w-3.5"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="3" width="12" height="10" rx="1.5" />
-                <path d="M5 7l2 2 2-2" />
-              </svg>
-              {showLogs ? t('results.hideLogs') : t('results.showLogs')}
-            </button>
-          )}
-        </div>
-      )}
+      {actions}
 
       {hasStages && (
         <div className="w-72 space-y-1 pt-2">
           {stagesCompleted!.map((stage, i) => (
             <div key={i} className="flex items-center gap-2">
               <svg
-                className="h-3 w-3 shrink-0 text-emerald-500"
+                className="h-3 w-3 shrink-0 text-positive"
                 viewBox="0 0 16 16"
                 fill="none"
                 stroke="currentColor"
@@ -212,7 +230,7 @@ export default function SimStatus({
           {progressStage && (
             <div className="flex items-center gap-2">
               <div className="flex h-3 w-3 shrink-0 items-center justify-center">
-                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-fill" />
               </div>
               <span className="text-[13px] text-on-surface-variant">
                 {progressStage}

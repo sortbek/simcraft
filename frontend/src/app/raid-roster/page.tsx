@@ -6,8 +6,13 @@ import RosterEditor from '../components/raid-roster/RosterEditor';
 import RosterRunPanel from '../components/raid-roster/RosterRunPanel';
 import RosterHistory from '../components/raid-roster/RosterHistory';
 import { REGIONS } from '../lib/regions';
+import { useLanguage } from '../lib/i18n';
+import PageHeader from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
+import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 
 export default function RaidRosterPage() {
+  const { t } = useLanguage();
   const [rosters, setRosters] = useState<Roster[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -60,33 +65,30 @@ export default function RaidRosterPage() {
   const selectedRoster = rosters.find((r) => r.id === selectedId) ?? null;
 
   return (
-    <div className="space-y-6 pb-20">
-      <div>
-        <h1 className="mb-2 font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-          Raid Roster
-        </h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">
-          Build and save a raid roster, then pull each member&apos;s gear from the armory.
-        </p>
-      </div>
+    <div className="space-y-5 pb-20">
+      <PageHeader
+        eyebrow={t('nav.simTools')}
+        title="Raid Roster"
+        subtitle={
+          <>Build and save a raid roster, then pull each member&apos;s gear from the armory.</>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-[20rem_1fr]">
         <div className="space-y-4">
           <form onSubmit={handleCreate} className="space-y-2">
-            <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              New roster
-            </label>
+            <label className="label-text">New roster</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Roster name..."
-              className="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 text-sm text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
+              className="input-field"
             />
             <div className="flex gap-2">
               <select
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
-                className="rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 text-sm uppercase text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/30"
+                className="sel w-auto uppercase"
               >
                 {REGIONS.map((r) => (
                   <option key={r} value={r}>
@@ -94,22 +96,21 @@ export default function RaidRosterPage() {
                   </option>
                 ))}
               </select>
-              <button
+              <Button
                 type="submit"
+                variant="solid"
                 disabled={!name.trim()}
-                className="flex-1 rounded-lg bg-primary px-4 py-2 font-headline text-xs font-bold uppercase tracking-wider text-on-primary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-[38px] flex-1"
               >
                 Create
-              </button>
+              </Button>
             </div>
           </form>
 
           <div className="space-y-1">
-            <div className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              Rosters ({rosters.length})
-            </div>
+            <div className="label-text">Rosters ({rosters.length})</div>
             {rosters.length === 0 ? (
-              <p className="py-2 text-sm text-on-surface-variant/60">No rosters yet.</p>
+              <p className="py-2 text-sm text-outline">No rosters yet.</p>
             ) : (
               <div className="space-y-0.5">
                 {rosters.map((r) => {
@@ -117,26 +118,24 @@ export default function RaidRosterPage() {
                   return (
                     <div
                       key={r.id}
-                      className={`flex items-center justify-between rounded-md px-3 py-2 ${
-                        isActive ? 'bg-primary-container/10' : 'hover:bg-surface-container'
+                      className={`flex items-center justify-between rounded-[6px] border px-3 py-2 transition-colors ${
+                        isActive
+                          ? 'border-gold-edge bg-gold-tint'
+                          : 'border-transparent hover:bg-surface-container-high'
                       }`}
                     >
                       <button
                         onClick={() => setSelectedId(r.id)}
                         className={`min-w-0 flex-1 text-left transition-colors ${
-                          isActive
-                            ? 'text-primary'
-                            : 'text-on-surface-variant hover:text-on-surface'
+                          isActive ? 'text-gold' : 'text-on-surface-variant hover:text-on-surface'
                         }`}
                       >
-                        <div className="truncate text-sm font-medium">{r.name}</div>
-                        <div className="truncate text-[11px] uppercase text-on-surface-variant/50">
-                          {r.region}
-                        </div>
+                        <div className="truncate text-sm font-semibold">{r.name}</div>
+                        <div className="lbl mt-1 truncate">{r.region}</div>
                       </button>
                       <button
                         onClick={() => handleDelete(r.id)}
-                        className="ml-2 shrink-0 text-base text-on-surface-variant/30 transition-colors hover:text-red-400"
+                        className="ml-2 shrink-0 text-base text-fg-4 transition-colors hover:text-negative"
                         aria-label={`Delete ${r.name}`}
                       >
                         &times;
@@ -152,27 +151,15 @@ export default function RaidRosterPage() {
         <div>
           {selectedRoster ? (
             <div className="space-y-4">
-              <div className="flex gap-1 border-b border-outline-variant/10">
-                {(
-                  [
-                    ['manage', 'Manage Roster'],
-                    ['report', 'Loot Report'],
-                    ['history', 'History'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setTab(key)}
-                    className={`-mb-px border-b-2 px-4 py-2 font-headline text-xs font-bold uppercase tracking-wider transition-colors ${
-                      tab === key
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <ToggleButtonGroup<'manage' | 'report' | 'history'>
+                value={tab}
+                onChange={setTab}
+                options={[
+                  { key: 'manage', label: 'Manage Roster' },
+                  { key: 'report', label: 'Loot Report' },
+                  { key: 'history', label: 'History' },
+                ]}
+              />
               {/* Both stay mounted (inactive hidden) so a running sim survives tab switches. */}
               <div className={tab === 'manage' ? '' : 'hidden'}>
                 <RosterEditor key={selectedRoster.id} roster={selectedRoster} />
@@ -185,7 +172,7 @@ export default function RaidRosterPage() {
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-outline-variant/20 px-6 py-12 text-center text-sm text-on-surface-variant/60">
+            <div className="rounded-[10px] border border-dashed border-line/[0.11] px-6 py-12 text-center text-sm text-outline">
               Select or create a roster to manage its members.
             </div>
           )}

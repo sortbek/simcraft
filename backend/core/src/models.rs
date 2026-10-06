@@ -149,6 +149,10 @@ pub struct Job {
     pub checkpoint: Option<String>,
     pub pause_requested: bool,
     pub provider_id: String,
+    pub client_request: Option<String>,
+    pub share_id: Option<String>,
+    pub share_delete_token: Option<String>,
+    pub rerun_of: Option<String>,
 }
 
 /// Slim view of a Job row used by the status polling endpoint.
@@ -167,6 +171,8 @@ pub struct JobStatusSummary {
     pub simc_input_mode: SimcInputMode,
     pub pause_requested: bool,
     pub provider_id: String,
+    pub share_id: Option<String>,
+    pub rerun_of: Option<String>,
 }
 
 /// Slim row for the sims-overview endpoint. Excludes large columns
@@ -330,6 +336,10 @@ impl Job {
             checkpoint: None,
             pause_requested: false,
             provider_id,
+            client_request: None,
+            share_id: None,
+            share_delete_token: None,
+            rerun_of: None,
         }
     }
 }

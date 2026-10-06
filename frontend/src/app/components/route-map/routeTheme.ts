@@ -1,24 +1,26 @@
-/* Design tokens for the M+ Route screens, mapped to the app's own palette
- * (tailwind.config.ts) so the pages match SimHammer, not the cooler design mock.
+import { line } from '../../lib/themeColors';
+
+/* Design tokens for the M+ Route screens, read from the active color theme
+ * (globals.css `--c-*`) so the pages match SimHammer, not the cooler design mock.
  * Pull-marker colors below stay as-is — semantic, not chrome. */
 export const T = {
-  bg: '#131313', // background
-  panel: '#201f1f', // surface-container (cards/panels)
-  surface: '#2a2a2a', // surface-container-high (inputs, steppers)
-  surfaceHi: '#353534', // surface-container-highest (hover)
-  border: 'rgba(79,70,53,0.5)', // outline-variant, ghost border
-  borderHi: 'rgba(155,143,124,0.35)', // outline, on hover
-  gold: '#f2bf4e', // primary / gold
-  goldDim: '#c8992a', // gold-dark
-  goldSub: 'rgba(242,191,78,0.12)',
-  goldBord: 'rgba(242,191,78,0.35)',
-  text: '#e5e2e1', // on-surface
-  text2: '#d2c5b0', // on-surface-variant
-  muted: '#9b8f7c', // muted / outline
-  dim: '#4f4635', // outline-variant (separators, faint labels)
-  faint: '#353534', // surface-container-highest (tracks, grid)
-  red: '#f87171', // destructive accent (matches app red-400)
-  boss: '#ffcf5a', // boss marker accent (semantic)
+  bg: 'rgb(var(--c-background))', // background
+  panel: 'rgb(var(--c-surface-container))', // surface-container (cards/panels)
+  surface: 'rgb(var(--c-surface-container-high))', // surface-container-high (inputs, steppers)
+  surfaceHi: 'rgb(var(--c-surface-container-highest))', // surface-container-highest (hover)
+  border: line(0.06), // card hairline
+  borderHi: line(0.11), // stronger hairline, on hover
+  gold: 'rgb(var(--c-primary))', // primary / gold
+  goldDim: 'rgb(var(--c-primary-container))', // gold-dark
+  goldSub: 'rgb(var(--c-primary) / 0.1)',
+  goldBord: 'rgb(var(--c-primary) / 0.35)',
+  text: 'rgb(var(--c-on-surface))', // on-surface
+  text2: 'rgb(var(--c-on-surface-variant))', // on-surface-variant
+  muted: 'rgb(var(--c-outline))', // outline
+  dim: 'rgb(var(--c-fg-4))', // fg-4 (separators, faint labels)
+  faint: 'rgb(var(--c-surface-container-highest))', // surface-container-highest (tracks, grid)
+  red: 'rgb(var(--c-negative))', // negative
+  boss: 'rgb(var(--c-route-boss))', // boss marker accent (semantic, darker in light themes)
   picked: '#5fbfff', // selection highlight (semantic)
 } as const;
 

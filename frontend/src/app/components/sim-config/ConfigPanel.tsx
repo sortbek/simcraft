@@ -49,7 +49,7 @@ export default function ConfigFooter({
   }, []);
 
   return (
-    <div className="fixed bottom-0 left-64 right-0 z-30">
+    <div className="fixed bottom-0 left-[248px] right-0 z-30">
       {drawerOpen && (
         <ConfigDrawer
           activeTab={activeTab}

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useLanguage } from '../lib/i18n';
 import { API_URL, apiUrl, fetchJsonOr } from '../lib/api';
-import SettingsToggle from './SettingsToggle';
+import Switch from '../components/ui/Switch';
+import CardHeader from '../components/ui/CardHeader';
+import { TABS_TRACK, tabClass } from '../components/ui/ToggleButtonGroup';
 
 const THREAD_PRESETS = [
   { labelKey: 'settings.balanced', pct: 0.3 },
@@ -42,35 +44,37 @@ export default function GeneralSettingsSection() {
   );
 
   return (
-    <section className="space-y-4 pt-4">
-      <div className="text-primary-fixed-dim flex items-center gap-2">
-        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
-        </svg>
-        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">{t('settings.general')}</h2>
-      </div>
+    <section className="card">
+      <CardHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            <svg className="h-4 w-4 text-gold" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
+            </svg>
+            {t('settings.general')}
+          </span>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="divide-y divide-line/[0.06]">
         {maxThreads > 0 && (
-          <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
+          <div className="p-6">
             <div className="mb-4 flex items-end justify-between">
               <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">
-                  {t('settings.cpuThreads')}
-                </h3>
-                <p className="text-xs text-on-surface-variant">{t('settings.cpuThreadsDesc')}</p>
+                <h3 className="lbl">{t('settings.cpuThreads')}</h3>
+                <p className="mt-2 text-xs text-on-surface-variant">
+                  {t('settings.cpuThreadsDesc')}
+                </p>
               </div>
               <div className="text-right">
-                <span className="font-headline text-xl font-black text-primary">
+                <span className="font-headline text-xl font-extrabold tracking-[-0.02em] text-gold">
                   {threads}/{maxThreads}
                 </span>
-                <p className="text-[10px] font-bold uppercase text-on-surface-variant">
-                  {t('settings.threadsActive')}
-                </p>
+                <p className="lbl mt-1">{t('settings.threadsActive')}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 rounded-lg bg-surface-container-lowest p-1.5">
+            <div className={`${TABS_TRACK} grid w-full grid-cols-3`}>
               {THREAD_PRESETS.map((preset, idx) => {
                 const threadCount = Math.max(1, Math.round(maxThreads * preset.pct));
                 const isActive = selectedPresetIdx === idx;
@@ -78,22 +82,11 @@ export default function GeneralSettingsSection() {
                   <button
                     key={preset.labelKey}
                     onClick={() => setThreads(threadCount)}
-                    className={`flex flex-col items-center justify-center rounded-md py-3 transition-all ${
-                      isActive
-                        ? 'bg-primary-container text-on-primary shadow-lg shadow-primary/10 ring-1 ring-primary/30'
-                        : 'hover:bg-surface-bright'
-                    }`}
+                    aria-pressed={isActive}
+                    className={`${tabClass(isActive)} flex !h-auto flex-col items-center justify-center gap-1 py-2.5`}
                   >
-                    <span
-                      className={`text-xs font-bold ${
-                        isActive ? 'font-extrabold uppercase tracking-tight' : 'text-on-surface'
-                      }`}
-                    >
-                      {t(preset.labelKey)}
-                    </span>
-                    <span
-                      className={`text-[10px] ${isActive ? 'opacity-80' : 'text-on-surface-variant'}`}
-                    >
+                    <span>{t(preset.labelKey)}</span>
+                    <span className="font-sans text-[11px] font-medium normal-case tracking-normal opacity-70">
                       {threadCount} {t('settings.threads')}
                     </span>
                   </button>
@@ -103,18 +96,16 @@ export default function GeneralSettingsSection() {
           </div>
         )}
 
-        <div className="flex flex-col justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
+        <div className="p-6">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="mb-1 text-sm font-bold uppercase text-on-surface">
-                {t('settings.clipboardSync')}
-              </h3>
+              <h3 className="lbl mb-2">{t('settings.clipboardSync')}</h3>
               <p className="text-xs italic leading-relaxed text-on-surface-variant">
                 {t('settings.clipboardSyncDesc')}
               </p>
             </div>
             <div className="mt-1">
-              <SettingsToggle
+              <Switch
                 checked={clipboardSync}
                 onChange={(value) => {
                   localStorage.setItem('simhammer_clipboard_sync', String(value));

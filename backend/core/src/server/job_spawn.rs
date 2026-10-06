@@ -175,6 +175,11 @@ pub(crate) struct ProfilesetSubmission {
     pub combo_metadata_serialized: Vec<(String, String)>,
     /// JSON body for the `NormalizedRequest` envelope (sim-type-specific).
     pub envelope_payload: Value,
+    /// Original client request body (minus `rerun_of`), kept on the job so a
+    /// shared result can be re-run. `None` for internally-spawned jobs (e.g.
+    /// roster batch children) that have no originating client request.
+    pub client_request: Option<String>,
+    pub rerun_of: Option<String>,
 }
 
 /// Resolve the compute provider for an incoming sim request. Shared by all
@@ -332,6 +337,8 @@ async fn insert_and_spawn_profileset_job(
     );
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     job.batch_id = batch_id;
+    job.client_request = submission.client_request;
+    job.rerun_of = submission.rerun_of;
 
     repo.insert(&job).await?;
 
@@ -419,6 +426,8 @@ pub(crate) async fn spawn_droptimizer_child(
         combo_count,
         combo_metadata_serialized,
         envelope_payload,
+        client_request: None,
+        rerun_of: None,
     };
 
     // Stamp every child with the shared run batch_id so the orchestrator can poll
@@ -548,6 +557,88 @@ pub(super) async fn validate_batch(
 #[cfg(test)]
 mod tests {
     use super::eager_branch_reject;
+
+    // Fake provider: `run_with_profilesets` returns an error immediately so the
+    // background task spawned by `insert_and_spawn_profileset_job` finishes fast
+    // without needing a real SimC binary.
+    struct FakeProvider;
+    #[async_trait::async_trait]
+    impl crate::compute::SimcProvider for FakeProvider {
+        fn id(&self) -> &'static str {
+            "local"
+        }
+        fn display_name(&self) -> &'static str {
+            "Fake"
+        }
+        fn capabilities(&self) -> crate::compute::ProviderCaps {
+            crate::compute::ProviderCaps {
+                cancel: false,
+                pause: false,
+                streaming_logs: false,
+                server_side_multistage: false,
+                cloud_streaming: false,
+            }
+        }
+        async fn run_quick(
+            &self,
+            _ctx: crate::compute::RunCtx<'_>,
+            _input: &str,
+            _opts: &serde_json::Value,
+        ) -> Result<crate::simc_runner::SimcOutput, crate::compute::RunError> {
+            unreachable!()
+        }
+        async fn run_with_profilesets(
+            &self,
+            _ctx: crate::compute::RunCtx<'_>,
+            _input: &str,
+            _opts: &serde_json::Value,
+            _combo_count: usize,
+            _staged_ctx: crate::compute::StagedExecutionContext,
+        ) -> Result<crate::simc_runner::SimcOutput, crate::compute::RunError> {
+            Err(crate::compute::RunError::Other("test".to_string()))
+        }
+    }
+
+    #[tokio::test]
+    async fn profileset_submission_client_request_and_rerun_of_land_on_the_inserted_job() {
+        use super::{insert_and_spawn_profileset_job, ProfilesetSubmission};
+        use crate::compute::ProviderAvailability;
+        use crate::db::JobRepo;
+        use crate::log_buffer::LogBuffer;
+        use crate::server::types::SimOptions;
+        use std::sync::Arc;
+
+        let repo = JobRepo::new_memory();
+        let log_buffer = Arc::new(LogBuffer::new());
+        let provider: Arc<dyn crate::compute::SimcProvider> = Arc::new(FakeProvider);
+        let avail = ProviderAvailability {
+            ready: Default::default(),
+            remote_order: Default::default(),
+            auth_by_id: Default::default(),
+        };
+        let options: SimOptions = serde_json::from_value(serde_json::json!({})).unwrap();
+
+        let submission = ProfilesetSubmission {
+            sim_type: "top_gear",
+            sim_mode: crate::models::SimMode::TopGear,
+            generated_input: "mage=\"Test\"\n".to_string(),
+            combo_count: 1,
+            combo_metadata_serialized: vec![],
+            envelope_payload: serde_json::json!({}),
+            client_request: Some(r#"{"simc_input":"x"}"#.to_string()),
+            rerun_of: Some("AbCdEfGhIj".to_string()),
+        };
+
+        let (job_id, _created_at) = insert_and_spawn_profileset_job(
+            submission, &options, None, provider, &avail, &repo, &log_buffer, false,
+        )
+        .await
+        .unwrap();
+
+        let job = repo.get(&job_id).await.unwrap().unwrap();
+        assert_eq!(job.client_request.as_deref(), Some(r#"{"simc_input":"x"}"#));
+        assert_eq!(job.rerun_of.as_deref(), Some("AbCdEfGhIj"));
+    }
 
     #[test]
     fn eager_branch_reject_only_rejects_bad_local_branch() {

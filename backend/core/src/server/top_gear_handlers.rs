@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::client_request::{parse_client_request, ClientRequest};
 use super::handler_prep::{
     capped_max_combinations, preprocess_simc_input, serialize_combo_metadata_vec,
     socketed_item_ids, validate_profile,
@@ -85,7 +86,7 @@ fn build_items_by_slot(
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn create_top_gear_sim(
     http_req: HttpRequest,
-    req: web::Json<TopGearRequest>,
+    body: web::Json<serde_json::Value>,
     repo: web::Data<JobRepo>,
     settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
@@ -93,6 +94,14 @@ pub(super) async fn create_top_gear_sim(
     registry: web::Data<Arc<ProviderRegistry>>,
     local_queue: web::Data<crate::compute::local::LocalSimQueue>,
 ) -> HttpResponse {
+    let ClientRequest {
+        req,
+        raw: client_request,
+        rerun_of,
+    } = match parse_client_request::<TopGearRequest>(body.into_inner()) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
     let raw_input = if req.max_upgrade {
         game_data::upgrade_simc_input(&req.simc_input)
     } else {
@@ -206,6 +215,8 @@ pub(super) async fn create_top_gear_sim(
         return super::streaming_top_gear::start_streaming_top_gear_job(
             super::streaming_top_gear::StreamingTopGearStart {
                 req,
+                client_request,
+                rerun_of,
                 repo,
                 simc_bins: simc_bins.get_ref().clone(),
                 log_buffer,
@@ -292,6 +303,8 @@ pub(super) async fn create_top_gear_sim(
             combo_count,
             combo_metadata_serialized,
             envelope_payload,
+            client_request: Some(client_request),
+            rerun_of,
         },
         &req.options,
         provider,

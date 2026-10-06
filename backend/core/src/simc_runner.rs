@@ -607,15 +607,18 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    // Extract character name for the name= line
+    // Character name for the name= line, from the `class="Name"` actor line. It is
+    // written unquoted, so a value with whitespace or quotes would split into extra
+    // SimC tokens (an include, or another option); such a name is left out.
     let char_name: Option<String> = simc_input.lines().find_map(|l| {
         let trimmed = l.trim();
-        if let Some(idx) = trimmed.find("=\"") {
-            let after = &trimmed[idx + 2..];
-            after.strip_suffix('"').map(|s| s.to_string())
-        } else {
-            None
+        if trimmed.starts_with('#') {
+            return None;
         }
+        let idx = trimmed.find("=\"")?;
+        let name = trimmed[idx + 2..].strip_suffix('"')?;
+        (!name.is_empty() && !name.contains(|c: char| c.is_whitespace() || c == '"'))
+            .then(|| name.to_string())
     });
 
     // --- Base actor options (consumables + expansion) injected before combos ---
@@ -859,6 +862,15 @@ async fn run_simc_subprocess(
             is_dungeon_route,
         ))
     };
+    // A shared sim's request was sanitized, but backend rewrites happen after
+    // that, so the text SimC will actually read is checked once more.
+    if options.get("untrusted").and_then(|v| v.as_bool()) == Some(true) {
+        if let Some(line) = crate::simc_directives::first_unsafe_line(&final_input) {
+            return Err(format!(
+                "Refusing to run a blocked SimC directive from a shared sim: {line}"
+            ));
+        }
+    }
     std::fs::write(&input_file, &final_input)
         .map_err(|e| format!("Failed to write input file: {}", e))?;
 
@@ -1750,6 +1762,58 @@ pub async fn run_simc_triage_batch(
         .unwrap_or_default();
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod name_line_tests {
+    use super::*;
+
+    fn name_line(simc_input: &str) -> Option<String> {
+        build_simc_input_from_options(simc_input, &serde_json::json!({}))
+            .lines()
+            .find(|l| l.starts_with("name="))
+            .map(str::to_string)
+    }
+
+    #[test]
+    fn the_name_line_comes_from_the_actor_line() {
+        assert_eq!(
+            name_line("# x=\"Commented\"\nmage=\"Thrall\""),
+            Some("name=Thrall".into())
+        );
+    }
+
+    /// The re-run guard reads the finished input, so everything the backend writes
+    /// into it for an ordinary profile has to pass.
+    #[test]
+    fn a_finished_input_passes_the_shared_sim_check() {
+        let fixture = include_str!("../tests/fixtures/roster_simc_paste.txt");
+        let options = serde_json::json!({
+            "consumables": {"flask": "flask_x", "weapon_rune": "oil_x"},
+            "raid_buffs": {"bloodlust": 0},
+            "expansion_options": {"midnight.crucible_of_erratic_energies_violence": 0},
+        });
+        let input = build_full_simc_input(&SimcInputBuild::new(
+            fixture,
+            &options,
+            "Patchwerk",
+            0.1,
+            1000,
+            1,
+            300,
+            false,
+            true,
+            false,
+        ));
+        assert_eq!(crate::simc_directives::first_unsafe_line(&input), None);
+    }
+
+    /// Written unquoted, a name with whitespace would split into extra SimC tokens.
+    #[test]
+    fn a_name_that_would_split_into_tokens_is_left_out() {
+        assert_eq!(name_line(r#"evoker="Dusk C:\x\inc.simc""#), None);
+        assert_eq!(name_line("evoker=\"a\" output=x \"b\""), None);
+    }
 }
 
 #[cfg(test)]

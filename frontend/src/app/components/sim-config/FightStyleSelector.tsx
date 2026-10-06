@@ -28,14 +28,10 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
 
   return (
     <div className="relative" onBlur={() => setOpen(false)}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="input-field flex w-full items-center justify-between text-sm"
-      >
+      <button type="button" onClick={() => setOpen(!open)} className="sel">
         <span>{activeLabel}</span>
         <svg
-          className={`h-4 w-4 text-on-surface-variant/60 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-outline transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
@@ -48,7 +44,7 @@ export default function FightStyleSelector({ value, onChange }: FightStyleSelect
       </button>
       {open && (
         <div
-          className="absolute z-50 mt-1 w-full overflow-y-auto overscroll-contain rounded-lg bg-surface-container-high py-1 shadow-lg shadow-black/40"
+          className="popover absolute z-50 mt-1 w-full overflow-y-auto overscroll-contain py-1"
           style={{ maxHeight: '12rem' }}
         >
           {FIGHT_STYLES.map((fs) => (

@@ -7,6 +7,8 @@ import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import type { GroupMode, TopGearResult } from './topGearResultsTypes';
 import { ResultRow } from './ResultRow';
+import CardHeader from '../ui/CardHeader';
+import ToggleButtonGroup from '../ui/ToggleButtonGroup';
 import { bestDelta, bestPerItem, expectedDelta, groupResults } from './topGearResultsUtils';
 
 /** Rows revealed per step. The ranked list starts here and grows by this much whenever the
@@ -55,43 +57,33 @@ export default function TopGearRankings({
   const grouped = useMemo(() => groupResults(results, groupMode), [results, groupMode]);
 
   return (
-    <div className="card p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted">
-          {t('gear.rankings')}
-        </p>
-        <div className="flex items-center gap-3">
-          {hasEncounterData && (
-            <div className="flex gap-1">
-              {(
-                [
-                  ['rank', t('gear.byRank')],
-                  ['slot', t('gear.bySlot')],
-                  ['encounter', t('gear.byBoss')],
-                ] as [GroupMode, string][]
-              ).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  onClick={() => onGroupModeChange(mode)}
-                  className={`rounded px-2.5 py-1 text-[13px] font-medium transition-all ${
-                    groupMode === mode
-                      ? 'bg-white text-black'
-                      : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-          <span className="font-mono text-[13px] text-muted">
-            {t('gear.resultsCount', { count: results.length })}
-          </span>
-        </div>
-      </div>
+    <section className="card overflow-hidden">
+      <CardHeader
+        title={
+          <>
+            {t('gear.rankings')}
+            <span className="ml-2 font-semibold normal-case tracking-[0.04em] text-outline">
+              {t('gear.resultsCount', { count: results.length })}
+            </span>
+          </>
+        }
+        right={
+          hasEncounterData && (
+            <ToggleButtonGroup
+              value={groupMode}
+              onChange={onGroupModeChange}
+              options={[
+                { key: 'rank', label: t('gear.byRank') },
+                { key: 'slot', label: t('gear.bySlot') },
+                { key: 'encounter', label: t('gear.byBoss') },
+              ]}
+            />
+          )
+        }
+      />
 
       {(groupMode === 'encounter' || groupMode === 'slot') && grouped ? (
-        <div className="space-y-6">
+        <div>
           {grouped.map(([groupKey, group]) => {
             const groupBest = bestDelta(group);
             // Same per-item collapse as the summary: a ring simmed in both
@@ -100,36 +92,36 @@ export default function TopGearRankings({
             const groupLabel = groupMode === 'slot' ? SLOT_LABELS[groupKey] || groupKey : groupKey;
 
             return (
-              <div key={groupKey}>
-                <div className="mb-3 flex items-center justify-between border-b border-outline-variant/20 pb-2">
+              <div key={groupKey} className="border-b border-line/[0.06] last:border-b-0">
+                <div className="flex items-center justify-between gap-3 border-b border-line/[0.06] bg-shade/[0.15] px-6 py-3">
                   <div className="flex items-center gap-3">
-                    <span className="font-headline text-[14px] font-bold text-on-surface">
+                    <span className="font-headline text-sm font-extrabold text-on-surface">
                       {groupLabel}
                     </span>
-                    <span className="font-mono text-[12px] text-muted">
+                    <span className="text-[12.5px] text-outline">
                       {t('gear.itemsCount', { count: group.length })}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 text-[11px]">
-                    <span className="text-on-surface-variant/60">
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="text-outline">
                       {t('gear.expectedUpgrade')}
                       <span
-                        className={`font-bold ${avgDelta > 0 ? 'text-emerald-400' : 'text-muted'}`}
+                        className={`font-headline font-extrabold ${avgDelta > 0 ? 'text-positive' : 'text-fg-4'}`}
                       >
                         {avgDelta > 0 ? `+${((avgDelta / baseDps) * 100).toFixed(2)}%` : '--'}
                       </span>
                     </span>
-                    <span className="text-on-surface-variant/60">
+                    <span className="text-outline">
                       {t('gear.bestUpgrade')}
                       <span
-                        className={`font-bold ${groupBest > 0 ? 'text-emerald-400' : 'text-muted'}`}
+                        className={`font-headline font-extrabold ${groupBest > 0 ? 'text-positive' : 'text-fg-4'}`}
                       >
                         {groupBest > 0 ? `+${((groupBest / baseDps) * 100).toFixed(2)}%` : '--'}
                       </span>
                     </span>
                   </div>
                 </div>
-                <div className="space-y-1">
+                <div>
                   {group.map((result) => (
                     <ResultRow
                       key={result.name}
@@ -169,7 +161,7 @@ export default function TopGearRankings({
           sourceJobId={sourceJobId}
         />
       )}
-    </div>
+    </section>
   );
 }
 
@@ -230,7 +222,7 @@ function RankedResults({
   const visible = results.slice(0, visibleCount);
 
   return (
-    <div className="space-y-1">
+    <div>
       {visible.map((result, idx) => (
         <ResultRow
           key={result.name}

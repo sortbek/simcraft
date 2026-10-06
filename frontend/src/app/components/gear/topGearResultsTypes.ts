@@ -38,6 +38,8 @@ export interface TopGearResultsProps {
   targetError?: number;
   elapsedTime?: number;
   backLink?: ReactNode;
+  /** Hero card corner content (the sim setup). */
+  heroAside?: ReactNode;
   /** Source job id — enables the per-row "Sim" verify button. Omit on historical/imported views where re-running isn't applicable. */
   sourceJobId?: string;
 }

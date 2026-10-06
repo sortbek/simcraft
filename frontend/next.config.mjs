@@ -1,11 +1,17 @@
 import path from 'path';
 
+// VIEWER_BUILD=1: static share viewer served by simhammer.com under /viewer.
+const viewer = !!process.env.VIEWER_BUILD;
+const staticExport = !!process.env.DESKTOP_BUILD || viewer;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: process.env.DESKTOP_BUILD ? "export" : "standalone",
+  output: staticExport ? "export" : "standalone",
+  ...(viewer ? { basePath: "/viewer" } : {}),
   outputFileTracingRoot: path.join(process.cwd(), '..'),
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+    NEXT_PUBLIC_API_URL: viewer ? "" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"),
+    NEXT_PUBLIC_VIEWER_BUILD: viewer ? "1" : "",
   },
   async rewrites() {
     // In dev, the renderer loads from the Next dev server (localhost:3000) but
@@ -13,7 +19,7 @@ const nextConfig = {
     // can use window.location.origin uniformly across dev and production.
     // Skipped for the static export (DESKTOP_BUILD=1) — rewrites aren't supported
     // there, and production has the backend serving the frontend itself.
-    if (process.env.DESKTOP_BUILD) return [];
+    if (staticExport) return [];
     const target = process.env.NEXT_PUBLIC_DEV_BACKEND ?? "http://127.0.0.1:17384";
     return [
       { source: "/api/:path*", destination: `${target}/api/:path*` },
@@ -23,7 +29,7 @@ const nextConfig = {
     ];
   },
   images: {
-    unoptimized: !!process.env.DESKTOP_BUILD,
+    unoptimized: staticExport,
     remotePatterns: [
       {
         protocol: "https",

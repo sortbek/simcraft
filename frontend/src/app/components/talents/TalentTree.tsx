@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decodeHeader, decodeNodes } from '../../lib/talentDecode';
 import type { NodeSelection } from '../../lib/talentDecode';
 import { encodeTalentString } from '../../lib/talentEncode';
+import { line } from '../../lib/themeColors';
 import {
   canSelectNode,
   canDeselectNode,
@@ -20,6 +21,8 @@ import type { TalentNode, TalentTreeData } from '../../lib/useTalentTree';
 import { iconHrefProps } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
+import CardHeader from '../ui/CardHeader';
+import Pill from '../ui/Pill';
 
 interface TalentTreeProps {
   talentString?: string;
@@ -39,8 +42,12 @@ const NODE_SIZE = 260;
 const ICON_SIZE = 210;
 const PADDING = 200;
 
-const GOLD = '#f2bf4e';
-const DIM = 'rgba(255,255,255,0.15)';
+// SVG colors follow the active theme (globals.css `--c-*`)
+const GOLD = 'rgb(var(--c-primary))';
+const GOLD_EDGE = 'rgb(var(--c-primary-container) / 0.4)';
+const NODE_FILL = 'rgb(var(--c-background))';
+const RANK_DIM = 'rgb(var(--c-outline))';
+const DIM = line(0.15);
 const DIM_ICON = 0.3;
 const LOCKED_ICON = 0.15;
 
@@ -184,7 +191,7 @@ export default function TalentTree({
     if (mini) return null;
     return (
       <div className="card flex items-center justify-center p-5">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-800 border-t-gold" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-container-highest border-t-gold" />
       </div>
     );
   }
@@ -223,62 +230,66 @@ export default function TalentTree({
     );
   }
 
-  return (
-    <div className={bare ? 'space-y-3' : 'card space-y-3 p-4'}>
-      {!bare && (
-        <p className="text-xs font-medium uppercase tracking-widest text-on-surface-variant/60">
-          {t('config.talents')}
-        </p>
+  const sectionProps = {
+    selections,
+    allNodes: allNodesArr,
+    editable,
+    tree,
+    nodeMap,
+    onNodeClick: handleNodeClick,
+    onNodeRightClick: handleNodeRightClick,
+    onChoiceCycle: handleChoiceCycle,
+    tabbed: !bare,
+  };
+
+  const sections = (
+    <>
+      <TreeSection
+        label={tree.className}
+        nodes={tree.classNodes}
+        pointsDisplay={`${classSpent}/${CLASS_POINTS}`}
+        {...sectionProps}
+      />
+      {bare && <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />}
+      <TreeSection
+        label={tree.specName}
+        nodes={tree.specNodes}
+        pointsDisplay={`${specSpent}/${SPEC_POINTS}`}
+        {...sectionProps}
+      />
+      {activeHeroNodes.length > 0 && (
+        <>
+          {bare && <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />}
+          <TreeSection
+            label={selectedSubTree?.name ?? 'Hero'}
+            nodes={activeHeroNodes}
+            pointsDisplay={`${heroSpent}`}
+            compact
+            {...sectionProps}
+          />
+        </>
       )}
-      <div className={`flex flex-col gap-3 ${vertical ? '' : 'lg:flex-row lg:gap-4'}`}>
-        <TreeSection
-          label={tree.className}
-          nodes={tree.classNodes}
-          selections={selections}
-          allNodes={[...tree.classNodes, ...tree.specNodes, ...tree.heroNodes]}
-          editable={editable}
-          tree={tree}
-          nodeMap={nodeMap}
-          onNodeClick={handleNodeClick}
-          onNodeRightClick={handleNodeRightClick}
-          onChoiceCycle={handleChoiceCycle}
-          pointsDisplay={`${classSpent}/${CLASS_POINTS}`}
-        />
-        <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />
-        <TreeSection
-          label={tree.specName}
-          nodes={tree.specNodes}
-          selections={selections}
-          allNodes={[...tree.classNodes, ...tree.specNodes, ...tree.heroNodes]}
-          editable={editable}
-          tree={tree}
-          nodeMap={nodeMap}
-          onNodeClick={handleNodeClick}
-          onNodeRightClick={handleNodeRightClick}
-          onChoiceCycle={handleChoiceCycle}
-          pointsDisplay={`${specSpent}/${SPEC_POINTS}`}
-        />
-        {activeHeroNodes.length > 0 && (
-          <>
-            <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />
-            <TreeSection
-              label={selectedSubTree?.name ?? 'Hero'}
-              nodes={activeHeroNodes}
-              selections={selections}
-              allNodes={[...tree.classNodes, ...tree.specNodes, ...tree.heroNodes]}
-              editable={editable}
-              tree={tree}
-              nodeMap={nodeMap}
-              onNodeClick={handleNodeClick}
-              onNodeRightClick={handleNodeRightClick}
-              onChoiceCycle={handleChoiceCycle}
-              pointsDisplay={`${heroSpent}`}
-              compact
-            />
-          </>
-        )}
+    </>
+  );
+
+  if (bare) {
+    return (
+      <div className="space-y-3">
+        <div className={`flex flex-col gap-3 ${vertical ? '' : 'lg:flex-row lg:gap-4'}`}>
+          {sections}
+        </div>
       </div>
-    </div>
+    );
+  }
+
+  // Card mode (result page): mock `.trees` header row across the three trees.
+  return (
+    <section className="card overflow-hidden">
+      <CardHeader title={t('config.talents')} />
+      <div className="flex flex-col lg:flex-row lg:[&>*+*]:shadow-[inset_1px_0_0_rgb(var(--c-line)/calc(0.06*var(--c-line-k)))]">
+        {sections}
+      </div>
+    </section>
   );
 }
 
@@ -295,6 +306,8 @@ interface TreeSectionProps {
   onNodeRightClick?: (nodeId: number) => void;
   onChoiceCycle?: (nodeId: number) => void;
   pointsDisplay?: string;
+  /** Result-page card: full-bleed 52px header cell with a count pill. */
+  tabbed?: boolean;
 }
 
 function TreeSection({
@@ -310,6 +323,7 @@ function TreeSection({
   onNodeRightClick,
   onChoiceCycle,
   pointsDisplay,
+  tabbed,
 }: TreeSectionProps) {
   const nodeById = useMemo(() => new Map(allNodes.map((n) => [n.id, n])), [allNodes]);
 
@@ -336,20 +350,29 @@ function TreeSection({
   const sectionNodeIds = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
 
   return (
-    <div className={compact ? 'w-[180px] shrink-0' : 'min-w-0 flex-1'}>
-      <div className="mb-1 flex items-center justify-center gap-2">
-        <p className="text-center text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
+    <div
+      className={compact ? `${tabbed ? 'lg:w-[220px]' : 'w-[180px]'} shrink-0` : 'min-w-0 flex-1'}
+    >
+      {tabbed ? (
+        <div className="h-card flex h-[52px] items-center justify-center gap-2.5 border-b border-line/[0.06]">
           {label}
-        </p>
-        {pointsDisplay && (
-          <span className="rounded bg-surface-container-high px-1.5 py-0.5 text-[12px] font-bold tabular-nums text-on-surface-variant/60">
-            {pointsDisplay}
-          </span>
-        )}
-      </div>
+          {pointsDisplay && <Pill className="tabular-nums">{pointsDisplay}</Pill>}
+        </div>
+      ) : (
+        <div className="mb-1 flex items-center justify-center gap-2">
+          <p className="text-center text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
+            {label}
+          </p>
+          {pointsDisplay && (
+            <span className="rounded bg-surface-container-high px-1.5 py-0.5 text-[12px] font-bold tabular-nums text-on-surface-variant/60">
+              {pointsDisplay}
+            </span>
+          )}
+        </div>
+      )}
       <svg
         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
-        className={`w-full ${compact ? 'max-h-[320px]' : 'max-h-[420px]'}`}
+        className={`w-full ${compact ? 'max-h-[320px]' : 'max-h-[420px]'} ${tabbed ? 'px-[30px] py-[26px]' : ''}`}
         preserveAspectRatio="xMidYMid meet"
         onContextMenu={editable ? (e) => e.preventDefault() : undefined}
       >
@@ -445,11 +468,7 @@ function TalentNodeSvg({
   const half = NODE_SIZE / 2;
   const iconHalf = ICON_SIZE / 2;
 
-  const borderColor = isSelected
-    ? GOLD
-    : editable && selectable
-      ? 'rgba(200,153,42,0.4)'
-      : 'rgba(255,255,255,0.1)';
+  const borderColor = isSelected ? GOLD : editable && selectable ? GOLD_EDGE : line(0.1);
   const borderWidth = isSelected ? 12 : 6;
 
   const opacity = isSelected ? 1 : editable ? (selectable ? 0.5 : LOCKED_ICON) : DIM_ICON;
@@ -481,7 +500,7 @@ function TalentNodeSvg({
           cx={node.posX}
           cy={node.posY}
           size={half}
-          fill="#0a0a0a"
+          fill={NODE_FILL}
           stroke={borderColor}
           strokeWidth={borderWidth}
         />
@@ -492,7 +511,7 @@ function TalentNodeSvg({
           width={NODE_SIZE}
           height={NODE_SIZE}
           rx={isActive ? 8 : half}
-          fill="#0a0a0a"
+          fill={NODE_FILL}
           stroke={borderColor}
           strokeWidth={borderWidth}
         />
@@ -530,7 +549,7 @@ function TalentNodeSvg({
             width={110}
             height={70}
             rx={16}
-            fill="#0a0a0a"
+            fill={NODE_FILL}
             stroke={borderColor}
             strokeWidth={6}
           />
@@ -538,7 +557,7 @@ function TalentNodeSvg({
             x={node.posX + half - 35}
             y={node.posY + half - 28}
             textAnchor="middle"
-            fill={selection.ranks >= node.maxRanks ? GOLD : '#999'}
+            fill={selection.ranks >= node.maxRanks ? GOLD : RANK_DIM}
             fontSize={46}
             fontFamily="system-ui, sans-serif"
             fontWeight="bold"
@@ -619,7 +638,7 @@ function MiniTreeSvg({
                 y1={node.posY}
                 x2={target.posX}
                 y2={target.posY}
-                stroke={active ? GOLD : 'rgba(255,255,255,0.08)'}
+                stroke={active ? GOLD : line(0.08)}
                 strokeWidth={active ? 40 : 24}
                 strokeLinecap="round"
               />
@@ -651,7 +670,7 @@ function MiniTreeSvg({
                 clipPath={`url(#mini-clip-${node.id})`}
               />
             ) : (
-              <circle cx={node.posX} cy={node.posY} r={r} fill="rgba(255,255,255,0.08)" />
+              <circle cx={node.posX} cy={node.posY} r={r} fill={line(0.08)} />
             )}
             {selected && (
               <circle

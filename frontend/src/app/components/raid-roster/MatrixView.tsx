@@ -16,7 +16,7 @@ interface Props {
 export default function MatrixView({ items, players, lookup, itemInfo }: Props) {
   if (items.length === 0 || players.length === 0) {
     return (
-      <div className="py-12 text-center text-sm text-on-surface-variant/50">
+      <div className="py-12 text-center text-sm text-outline">
         No results match the current filters.
       </div>
     );
@@ -31,17 +31,14 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
     const quality = info?.quality ?? 3;
     const iconName = info?.icon ?? 'inv_misc_questionmark';
     const displayName = item.name || info?.name || String(item.item_id);
-    const qualityColor = QUALITY_HEX[quality] ?? '#ffffff';
+    const qualityColor = QUALITY_HEX[quality] ?? QUALITY_HEX[1];
     const itemResults = lookup.get(item.uid);
 
     if (item.boss !== prevBoss) {
       prevBoss = item.boss;
       rows.push(
         <tr key={`boss-${item.boss}-${item.uid}`}>
-          <td
-            colSpan={players.length + 1}
-            className="bg-surface-container px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60"
-          >
+          <td colSpan={players.length + 1} className="lbl bg-surface-container px-3 py-2">
             {item.boss}
           </td>
         </tr>
@@ -82,7 +79,7 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
           return (
             <td
               key={player.member_id}
-              className={`border border-outline-variant/10 px-2 py-1 text-center text-xs tabular-nums ${heatClasses(pct)}`}
+              className={`border border-line/[0.06] px-2 py-1 text-center text-xs tabular-nums ${heatClasses(pct)}`}
             >
               {label}
             </td>
@@ -98,13 +95,13 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
         <thead>
           <tr>
             {/* Sticky top-left corner */}
-            <th className="sticky left-0 z-30 bg-surface-container-high px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
+            <th className="lbl sticky left-0 z-30 h-11 bg-surface-container-high px-2 text-left">
               Item
             </th>
             {players.map((player) => (
               <th
                 key={player.member_id}
-                className="min-w-[3.5rem] border border-outline-variant/10 px-2 py-2 text-center text-[10px] text-on-surface-variant/70"
+                className="min-w-[3.5rem] border border-line/[0.06] px-2 py-2 text-center text-[11px] font-semibold text-on-surface-variant"
               >
                 <span className="block truncate">{player.name}</span>
               </th>

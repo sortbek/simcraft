@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
+import { overlay, shade } from '../../lib/themeColors';
 import { T } from './routeTheme';
 import { IBoss } from './routeIcons';
 import type { DerivedPull } from './useRouteEditor';
@@ -71,7 +72,7 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
             fontSize: 11,
             fontWeight: 800,
             color: '#fff',
-            boxShadow: selected || picked ? `0 0 8px ${accent}` : '0 1px 3px rgba(0,0,0,0.5)',
+            boxShadow: selected || picked ? `0 0 8px ${accent}` : `0 1px 3px ${shade(0.5)}`,
             transition: 'all .12s',
           }}
         >
@@ -88,7 +89,7 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
               : selected
                 ? T.goldSub
                 : h
-                  ? 'rgba(255,255,255,0.03)'
+                  ? overlay(0.03)
                   : T.surface,
             border: `1px solid ${picked ? 'rgba(95,191,255,0.4)' : selected ? T.goldBord : T.border}`,
             transition: 'all .1s',
@@ -124,7 +125,7 @@ function TimelineNode({ p, selected, picked, last, onClick }: NodeProps) {
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
-            <span style={{ fontSize: 10, color: T.muted, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 11, color: T.muted, whiteSpace: 'nowrap' }}>
               {t('route.timeline.mobs', { count: p.mobs })}
             </span>
             <div
@@ -172,42 +173,26 @@ export default function ForcesTimeline({
   const { t } = useLanguage();
   const shown = Math.round(coveragePct);
   return (
-    <div
-      style={{
-        width: 288,
-        background: T.panel,
-        borderLeft: `1px solid ${T.border}`,
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0,
-        height: '100%',
-      }}
-    >
-      <div style={{ padding: '16px 18px', borderBottom: `1px solid ${T.border}` }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, marginBottom: 9 }}>
-          {t('route.timeline.progression')}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 9 }}>
-          <span style={{ fontSize: 26, fontWeight: 800, color: T.gold, lineHeight: 1 }}>
+    <div className="flex h-full w-[288px] shrink-0 flex-col border-l border-line/[0.06] bg-surface-container">
+      <div className="border-b border-line/[0.06] px-[18px] py-4">
+        <div className="h-card mb-[9px]">{t('route.timeline.progression')}</div>
+        <div className="mb-[9px] flex items-baseline gap-[7px]">
+          <span className="font-headline text-[26px] font-extrabold leading-none text-gold">
             {shown}
-            <span style={{ fontSize: 15 }}>%</span>
+            <span className="text-[15px]">%</span>
           </span>
-          <span style={{ fontSize: 11, color: T.muted }}>
+          <span className="text-[12px] text-outline">
             {t('route.timeline.enemyForces', { count: enemyCount })}
           </span>
         </div>
-        <div style={{ height: 7, background: T.faint, borderRadius: 4, overflow: 'hidden' }}>
+        <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
           <div
-            style={{
-              width: `${Math.min(100, coveragePct)}%`,
-              height: '100%',
-              background: `linear-gradient(90deg, ${T.goldDim}, ${T.gold})`,
-              borderRadius: 4,
-            }}
+            className="h-full rounded-full bg-gradient-to-r from-gold-dark to-gold-fill"
+            style={{ width: `${Math.min(100, coveragePct)}%` }}
           />
         </div>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0 8px' }}>
+      <div className="flex-1 overflow-y-auto pb-2 pt-4">
         {pulls.map((p, i) => (
           <TimelineNode
             key={p.n}
@@ -219,7 +204,7 @@ export default function ForcesTimeline({
           />
         ))}
         {pulls.length === 0 && (
-          <div style={{ padding: '8px 18px', fontSize: 11, color: T.muted }}>
+          <div className="px-[18px] py-2 text-[12px] text-outline">
             {t('route.timeline.noPulls')}
           </div>
         )}

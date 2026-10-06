@@ -47,6 +47,8 @@ interface ElectronAPI {
   onSimcDownloadProgress: (callback: (progress: number) => void) => () => void;
   onSimcStatusChanged: (callback: (status: SimcStatus) => void) => () => void;
   getSetting: <T>(key: string, defaultValue: T) => Promise<T>;
+  /** A simhammer://sim/<id> link opened while the app runs; returns an unsubscribe. */
+  onOpenShare?: (callback: (id: string) => void) => () => void;
   setSetting: <T>(key: string, value: T) => Promise<void>;
 }
 

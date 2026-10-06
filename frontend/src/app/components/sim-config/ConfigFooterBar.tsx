@@ -4,6 +4,8 @@ import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import RunButton from './RunButton';
 import ProfilePicker from './ProfilePicker';
+import { buttonClass } from '../ui/Button';
+import Switch from '../ui/Switch';
 import type { ComputeChoice } from '../../lib/useComputeChoice';
 import type { ReactNode } from 'react';
 
@@ -45,52 +47,46 @@ export default function ConfigFooterBar({
   const fightLengthLabel = `${Math.floor(fightLength / 60)}:${String(fightLength % 60).padStart(2, '0')}`;
 
   return (
-    <div className="border-t border-outline-variant/10 bg-[#131313]/95 shadow-[0_-4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl">
-      <div className="mx-auto flex h-20 max-w-screen-2xl items-center gap-6 px-8">
-        <div className="flex items-center gap-4 text-sm text-on-surface-variant">
-          <ProfilePicker />
-          <span className="h-4 w-px bg-outline-variant/30" />
-          <span className="font-headline font-bold uppercase">{fightStyle}</span>
-          <span className="h-4 w-px bg-outline-variant/30" />
-          <span className="font-mono tabular-nums">{fightLengthLabel}</span>
-          <span className="h-4 w-px bg-outline-variant/30" />
-          <span className="font-mono tabular-nums">
-            {targetCount} {targetCount === 1 ? t('config.boss') : t('config.bosses')}
-          </span>
-          {showStatWeightsToggle && (
-            <>
-              <span className="h-4 w-px bg-outline-variant/30" />
-              <label
-                className="flex cursor-pointer select-none items-center gap-2"
-                title={t('config.statWeightsHint')}
-              >
-                <input
-                  type="checkbox"
-                  checked={statWeights}
-                  onChange={(e) => setStatWeights(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-primary"
-                />
-                <span className="text-[11px] font-bold uppercase tracking-widest">
-                  {t('config.statWeights')}
-                </span>
-              </label>
-            </>
-          )}
+    <div className="border-t border-line/[0.06] bg-background/90 backdrop-blur-lg">
+      <div className="mx-auto flex max-w-screen-2xl items-center gap-3.5 px-8 py-3.5">
+        <ProfilePicker />
+        <div className="flex items-center gap-[22px]">
+          <div className="flex flex-col gap-[5px]">
+            <span className="lbl">{t('config.fightStyle')}</span>
+            <b className="font-headline text-[13px] font-extrabold text-on-surface">
+              {fightStyle} · <span className="tabular-nums">{fightLengthLabel}</span>
+            </b>
+          </div>
+          <div className="flex flex-col gap-[5px]">
+            <span className="lbl">{t('results.targets')}</span>
+            <b className="font-headline text-[13px] font-extrabold tabular-nums text-on-surface">
+              {targetCount} {targetCount === 1 ? t('config.boss') : t('config.bosses')}
+            </b>
+          </div>
         </div>
 
         <div className="flex-1" />
 
+        {showStatWeightsToggle && (
+          <label
+            className="lbl flex cursor-pointer select-none items-center gap-2.5"
+            title={t('config.statWeightsHint')}
+          >
+            <Switch
+              checked={statWeights}
+              onChange={setStatWeights}
+              className="focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold/55"
+            />
+            <span className="text-on-surface-variant">{t('config.statWeights')}</span>
+          </label>
+        )}
+
         <button
           type="button"
           onClick={onToggleDrawer}
-          className={`flex items-center gap-2 rounded-lg px-4 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
-            drawerOpen
-              ? 'bg-primary/10 text-primary'
-              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-primary'
-          }`}
+          className={`${buttonClass('quiet')} ${drawerOpen ? '!border-line/20 !text-on-surface' : ''}`}
         >
           <svg
-            className="h-5 w-5"
             viewBox="0 0 16 16"
             fill="none"
             stroke="currentColor"

@@ -91,11 +91,11 @@ export default function GearItemRow({
       ) : equipped ? (
         <div
           className={cn(
-            'flex shrink-0 items-center justify-center rounded-[3px] bg-white/10',
+            'flex shrink-0 items-center justify-center rounded-[3px] bg-overlay/[0.06]',
             metrics.box
           )}
         >
-          <svg className={cn('text-white/40', metrics.check)} viewBox="0 0 16 16" fill="none">
+          <svg className={cn('text-outline', metrics.check)} viewBox="0 0 16 16" fill="none">
             <path
               d="M12 5L6.5 10.5L4 8"
               stroke="currentColor"
@@ -111,10 +111,12 @@ export default function GearItemRow({
         href={href}
         data-wowhead={wowheadData}
         className={cn(
-          'block shrink-0 overflow-hidden rounded',
+          'relative block shrink-0 overflow-hidden rounded-[5px]',
           metrics.icon,
-          statusStyle ? statusStyle.iconRing : 'ring-1 ring-white/5'
+          'border',
+          statusStyle?.iconRing
         )}
+        style={statusStyle ? undefined : { borderColor: nameColor }}
         target="_blank"
         rel="noopener noreferrer"
         onClick={href ? (e) => e.preventDefault() : undefined}
@@ -122,11 +124,12 @@ export default function GearItemRow({
         <img
           {...iconProps(icon)}
           alt=""
-          width={32}
-          height={32}
+          width={38}
+          height={38}
           className="h-full w-full"
           loading="lazy"
         />
+        <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
       </a>
 
       <div
@@ -139,7 +142,7 @@ export default function GearItemRow({
           href={href}
           data-wowhead={wowheadData}
           className={cn(
-            'truncate leading-tight no-underline',
+            'truncate font-semibold leading-tight no-underline',
             metrics.name,
             density === 'ultra' ? 'block shrink' : 'block'
           )}
@@ -153,14 +156,14 @@ export default function GearItemRow({
         {details && details.length > 0 && (
           <span
             className={cn(
-              'block truncate text-muted',
+              'block truncate text-outline',
               metrics.details,
               density === 'ultra' ? 'min-w-0 flex-1' : 'mt-0.5'
             )}
           >
             {details.map((p, i) => (
               <span key={i}>
-                {i > 0 && <span className="opacity-40"> · </span>}
+                {i > 0 && <span> · </span>}
                 <span className={p.color || ''}>{p.text}</span>
               </span>
             ))}
@@ -170,14 +173,22 @@ export default function GearItemRow({
 
       {children}
       {ilevel != null && ilevel > 0 && (
-        <span className={cn('shrink-0 font-mono tabular-nums text-muted', metrics.ilevel)}>
+        <span
+          className={cn(
+            'shrink-0 font-headline font-bold tabular-nums text-outline',
+            metrics.ilevel
+          )}
+        >
           {ilevel}
         </span>
       )}
     </>
   );
 
-  const baseClass = cn('flex items-center rounded-md transition-colors', metrics.row);
+  const baseClass = cn(
+    'flex items-center rounded-[7px] border border-transparent transition-colors duration-[120ms]',
+    metrics.row
+  );
 
   if (selectable) {
     // A div, not a label: a label ignores clicks on its links (the icon and
@@ -194,11 +205,11 @@ export default function GearItemRow({
             ? statusStyle
               ? statusStyle.rowChecked
               : equipped
-                ? 'bg-white/[0.03]'
-                : 'bg-gold/[0.07]'
+                ? 'border-line/[0.06] bg-overlay/[0.02]'
+                : 'border-gold-edge bg-gold-sel'
             : statusStyle
               ? statusStyle.rowUnchecked
-              : 'hover:bg-white/[0.02]'
+              : 'hover:bg-surface-container-high'
         )}
       >
         {content}
@@ -206,5 +217,11 @@ export default function GearItemRow({
     );
   }
 
-  return <div className={`${baseClass} ${equipped ? 'bg-white/[0.03]' : ''}`}>{content}</div>;
+  return (
+    <div
+      className={`${baseClass} ${equipped ? 'border-line/[0.06] bg-overlay/[0.02]' : 'hover:bg-surface-container-high'}`}
+    >
+      {content}
+    </div>
+  );
 }

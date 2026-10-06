@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import { usePopupDismissal } from './usePopupDismissal';
+import { buttonClass } from '../ui/Button';
+import Pill from '../ui/Pill';
 import type { PoolSource } from './lootSources';
 
 interface SourceFilterProps {
@@ -57,18 +59,14 @@ export default function SourceFilter({
       <summary
         ref={triggerRef}
         aria-expanded={open}
-        className={`flex cursor-pointer list-none items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all duration-150 [&::-webkit-details-marker]:hidden ${
-          open || narrowed
-            ? 'border-gold/40 bg-gold/[0.08] text-gold'
-            : 'border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'
+        className={`chip cursor-pointer list-none [&::-webkit-details-marker]:hidden ${
+          open || narrowed ? 'chip-on' : ''
         }`}
       >
         <span className="font-semibold">{t('dropFinder.bosses')}</span>
-        <span className={open || narrowed ? 'text-gold/90' : ''}>{summary}</span>
+        <span className={open || narrowed ? 'text-gold' : ''}>{summary}</span>
         {narrowed && (
-          <span className="rounded-full border border-gold/20 bg-black/10 px-1.5 py-0.5 text-[10px] font-bold text-gold">
-            {t('dropFinder.hiddenCount', { count: hiddenCount })}
-          </span>
+          <Pill variant="gold">{t('dropFinder.hiddenCount', { count: hiddenCount })}</Pill>
         )}
         <svg
           className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -82,13 +80,11 @@ export default function SourceFilter({
           <path d="M2.5 4.5L6 8l3.5-3.5" />
         </svg>
       </summary>
-      <div className="absolute right-0 top-full z-20 mt-2 max-h-[70vh] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-outline-variant/15 bg-surface-container p-3 shadow-2xl">
-        <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-2">
+      <div className="popover absolute right-0 top-full z-20 mt-2 max-h-[70vh] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto p-4">
+        <div className="flex items-center justify-between gap-3 border-b border-line/[0.06] pb-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant/60">
-              {t('dropFinder.sourceFilter')}
-            </p>
-            <p className="mt-1 text-xs text-on-surface-variant">
+            <p className="lbl">{t('dropFinder.sourceFilter')}</p>
+            <p className="mt-1.5 text-xs text-on-surface-variant">
               {t('dropFinder.sourceFilterDesc')}
             </p>
           </div>
@@ -104,7 +100,7 @@ export default function SourceFilter({
                   )
                 )
               }
-              className="rounded-lg border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-on-surface-variant transition-colors hover:border-outline-variant/35 hover:text-on-surface"
+              className={buttonClass('quiet')}
             >
               {t('common.reset')}
             </button>
@@ -125,20 +121,20 @@ export default function SourceFilter({
                   type="button"
                   onClick={() => toggleSource(keys)}
                   aria-pressed={!allOff}
-                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  className={`lbl flex w-full items-center justify-between gap-2 rounded-[6px] border px-2.5 py-2.5 text-left transition-colors ${
                     allOff
-                      ? 'bg-surface-container-high text-on-surface-variant/45 hover:text-on-surface-variant/70'
-                      : 'bg-gold/[0.08] text-on-surface hover:bg-gold/[0.12]'
+                      ? 'border-line/[0.06] bg-surface-container-high text-fg-4 hover:text-outline'
+                      : 'border-gold-edge bg-gold-tint text-on-surface hover:bg-gold/20'
                   }`}
                 >
                   <span className={allOff ? 'line-through' : ''}>{source.name}</span>
                   <span
                     className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                       allOff
-                        ? 'bg-outline-variant/30'
+                        ? 'bg-overlay/[0.11]'
                         : offCount > 0
                           ? 'bg-gold/40 ring-1 ring-gold'
-                          : 'bg-gold'
+                          : 'bg-gold-fill'
                     }`}
                   />
                 </button>
@@ -151,15 +147,15 @@ export default function SourceFilter({
                         type="button"
                         onClick={() => toggleSource([boss.key])}
                         aria-pressed={isOn}
-                        className={`flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[12px] transition-colors ${
+                        className={`flex w-full items-center justify-between gap-2 rounded-[6px] border px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
                           isOn
-                            ? 'border-gold/20 bg-gold/[0.05] text-on-surface hover:border-gold/35'
-                            : 'border-outline-variant/10 bg-surface-container-high text-on-surface-variant/45 hover:text-on-surface-variant/70'
+                            ? 'border-gold-edge bg-gold-tint text-on-surface hover:bg-gold/20'
+                            : 'border-line/[0.06] bg-surface-container-high text-fg-4 hover:text-outline'
                         }`}
                       >
                         <span className={isOn ? '' : 'line-through'}>{boss.name}</span>
                         <span
-                          className={`h-2 w-2 shrink-0 rounded-full ${isOn ? 'bg-gold' : 'bg-outline-variant/30'}`}
+                          className={`h-2 w-2 shrink-0 rounded-full ${isOn ? 'bg-gold-fill' : 'bg-overlay/[0.11]'}`}
                         />
                       </button>
                     );

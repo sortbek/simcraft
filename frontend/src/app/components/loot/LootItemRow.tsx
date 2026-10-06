@@ -1,6 +1,7 @@
 import { iconProps } from '../../lib/useItemInfo';
 import type { LootItemRowModel } from './lootItemRowModel';
-import { QUALITY_TEXT_CLASS, qualityBorderColor } from '../../lib/qualityColors';
+import { qualityBorderColor, qualityHex } from '../../lib/qualityColors';
+import Pill from '../ui/Pill';
 import Checkbox from '../ui/Checkbox';
 import VariantBadges from './VariantBadges';
 import EmbellishmentSelect from './EmbellishmentSelect';
@@ -22,7 +23,7 @@ export default function LootItemRow({
   onEmbellishmentChange,
 }: LootItemRowProps) {
   const { t } = useLanguage();
-  const qualityColor = QUALITY_TEXT_CLASS[row.quality] || 'text-gray-400';
+  const qualityColor = qualityHex(row.quality);
   // At the 2-piece cap an unselected embellished drop cannot be added — the
   // limit categories that would reject it live in the item's own bonusLists and
   // never reach the submitted bonus_ids, so nothing downstream would catch it.
@@ -40,15 +41,16 @@ export default function LootItemRow({
     <div
       onClick={() => !blocked && onToggle(row.uid)}
       title={blockedReason}
-      className={`group grid grid-cols-12 items-center px-4 py-2 transition-colors ${
+      className={`group grid grid-cols-12 items-center px-6 py-3 transition-colors duration-[120ms] ${
         blocked
           ? 'cursor-not-allowed opacity-50'
-          : 'cursor-pointer hover:bg-surface-container-high/40'
+          : row.selected
+            ? 'cursor-pointer bg-gold-sel ring-1 ring-inset ring-gold-edge'
+            : 'cursor-pointer hover:bg-overlay/[0.015]'
       }`}
     >
       <div className="col-span-5 flex items-center gap-3">
         <Checkbox
-          variant="primary"
           size="sm"
           checked={row.selected}
           disabled={blocked}
@@ -65,20 +67,21 @@ export default function LootItemRow({
             className="block"
           >
             <div
-              className={`h-9 w-9 overflow-hidden rounded-md border-b-2 bg-surface-container-highest`}
-              style={{ borderBottomColor: qualityBorderColor(row.quality) }}
+              className="relative h-[38px] w-[38px] overflow-hidden rounded-[5px] border bg-surface-container-highest"
+              style={{ borderColor: qualityBorderColor(row.quality) }}
             >
               <img
                 {...iconProps(row.icon)}
                 alt=""
                 className={`h-full w-full object-cover ${row.offSpec ? 'opacity-60' : ''}`}
               />
+              <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
             </div>
           </a>
           {row.embellished && (
             <div
               title={t(embellishmentLimitReached ? 'loot.embellishmentLimit' : 'loot.embellished')}
-              className={`absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-bold text-white ${embellishmentLimitReached ? 'bg-red-500' : 'bg-purple-500'}`}
+              className={`absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[11px] font-bold leading-none text-on-badge ${embellishmentLimitReached ? 'bg-negative' : 'bg-quality-epic'}`}
             >
               E
             </div>
@@ -86,7 +89,7 @@ export default function LootItemRow({
           {row.offSpec && (
             <div
               title={t('loot.offSpecWarning')}
-              className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-black"
+              className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold-fill text-[11px] font-bold leading-none text-on-primary"
             >
               !
             </div>
@@ -100,15 +103,19 @@ export default function LootItemRow({
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className={`text-[13px] font-bold group-hover:underline ${qualityColor}`}
+              className="text-sm font-semibold leading-tight group-hover:underline"
+              style={{ color: qualityColor }}
             >
               {row.name}
             </a>
             <VariantBadges item={row.variants} />
           </div>
-          {row.source && <p className="text-[10px] text-on-surface-variant/60">{row.source}</p>}
+          {row.source && <p className="mt-px text-xs text-outline">{row.source}</p>}
           {row.catalystSource && (
-            <p title={t('loot.catalystFromReason')} className="text-[10px] italic text-sky-300/70">
+            <p
+              title={t('loot.catalystFromReason')}
+              className="mt-px text-xs italic text-quality-rare/70"
+            >
               {t('loot.catalystFrom', { item: row.catalystSource })}
             </p>
           )}
@@ -116,13 +123,11 @@ export default function LootItemRow({
       </div>
 
       <div className={`text-center ${hasEmbellishmentColumn ? 'col-span-3' : 'col-span-5'}`}>
-        <span className="rounded bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase text-on-surface-variant">
-          {row.slot}
-        </span>
+        <Pill>{row.slot}</Pill>
       </div>
 
       <div className="col-span-2 text-center">
-        <span className="font-headline text-xs font-black tabular-nums text-on-surface">
+        <span className="font-headline text-sm font-extrabold tabular-nums text-on-surface">
           {row.ilevel}
         </span>
       </div>

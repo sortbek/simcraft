@@ -16,7 +16,11 @@ use crate::profileset_generator;
 use crate::simc_runner;
 
 pub(super) struct StreamingTopGearStart {
-    pub req: web::Json<TopGearRequest>,
+    pub req: TopGearRequest,
+    /// Original client request body (minus `rerun_of`), kept on the job so a
+    /// shared result can be re-run.
+    pub client_request: String,
+    pub rerun_of: Option<String>,
     pub repo: web::Data<JobRepo>,
     /// Local SimC binary registry, resolved to a path only on the LOCAL branch
     /// (after the cloud/local fork) so a cloud-only deploy with no local SimC can
@@ -74,6 +78,8 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
 
     let StreamingTopGearStart {
         req,
+        client_request,
+        rerun_of,
         repo,
         simc_bins,
         log_buffer,
@@ -133,6 +139,8 @@ pub(super) async fn start_streaming_top_gear_job(mut start: StreamingTopGearStar
     );
     job.simc_input_mode = SimcInputMode::Streamed;
     job.batch_id = req.options.batch_id.clone();
+    job.client_request = Some(client_request);
+    job.rerun_of = rerun_of;
 
     let envelope = NormalizedRequest::new(
         "top_gear",

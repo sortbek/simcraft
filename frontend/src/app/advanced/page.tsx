@@ -4,6 +4,9 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ErrorAlert from '../components/ui/ErrorAlert';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
+import Button from '../components/ui/Button';
+import CardHeader from '../components/ui/CardHeader';
+import PageHeader from '../components/ui/PageHeader';
 import { API_URL, providerKeyHeaders } from '../lib/api';
 import { useLanguage } from '../lib/i18n';
 
@@ -47,31 +50,33 @@ export default function AdvancedPage() {
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="card space-y-4 p-6">
-        <div>
-          <h2 className="mb-1 font-headline text-sm font-bold uppercase tracking-widest text-on-surface-variant">
-            {t('advanced.title')}
-          </h2>
-          <p className="text-[13px] text-on-surface-variant/50">{t('advanced.description')}</p>
+      <PageHeader
+        eyebrow={t('nav.simTools')}
+        title={t('nav.advancedSim')}
+        subtitle={t('advanced.description')}
+      />
+      <div className="card">
+        <CardHeader title={t('advanced.title')} />
+        <div className="space-y-4 px-6 py-[22px]">
+          <textarea
+            value={rawInput}
+            onChange={(e) => setRawInput(e.target.value)}
+            placeholder={t('advanced.placeholder')}
+            className="input-field h-[50vh] resize-y font-mono text-xs leading-relaxed"
+            spellCheck={false}
+          />
         </div>
-        <textarea
-          value={rawInput}
-          onChange={(e) => setRawInput(e.target.value)}
-          placeholder={t('advanced.placeholder')}
-          className="input-field h-[50vh] resize-y font-mono text-xs leading-relaxed"
-          spellCheck={false}
-        />
       </div>
 
       <SimcDownloadBanner />
       <ErrorAlert message={error} />
 
       <div className="flex justify-end">
-        <button
-          type="button"
+        <Button
+          variant="solid"
+          size="lg"
           onClick={submit}
           disabled={submitting || rawInput.trim().length < 10}
-          className="flex items-center gap-3 rounded-lg bg-gradient-to-r from-primary to-primary-container px-12 py-4 font-headline text-sm font-black uppercase tracking-widest text-on-primary shadow-[0_4px_20px_rgba(200,153,42,0.3)] transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
         >
           {submitting ? (
             <>
@@ -89,7 +94,7 @@ export default function AdvancedPage() {
           ) : (
             t('button.runSimulation')
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );

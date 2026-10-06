@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
@@ -13,6 +13,7 @@ import ExpertToggle, { EXPERT_TABS, type ExpertTabKey } from './ExpertToggle';
 import RaidBuffsConsumables from './RaidBuffsConsumables';
 import ActiveRouteIndicator from './ActiveRouteIndicator';
 import ProfileControls from './ProfileControls';
+import { TABS_TRACK, tabClass } from '../ui/ToggleButtonGroup';
 
 const ITERATION_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 
@@ -24,6 +25,16 @@ function iterationSliderIndex(value: number): number {
   }
   return idx;
 }
+
+/** Fill position for the `.range` track, passed as `--v`. */
+function rangeFill(value: number, min: number, max: number) {
+  const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+  return { '--v': `${pct}%` } as CSSProperties;
+}
+
+const VALUE = 'font-headline text-[12.5px] font-extrabold text-on-surface';
+const VALUE_INPUT = `bg-transparent text-right tabular-nums focus:outline-none ${VALUE}`;
+const HELP = 'text-xs text-outline';
 
 interface ConfigDrawerProps {
   children?: ReactNode;
@@ -121,36 +132,35 @@ export default function ConfigDrawer({
   const expertActiveTabInfo = EXPERT_TABS.find((tab) => tab.key === expertActiveTab)!;
 
   return (
-    <div className="animate-fade-in border-t border-outline-variant/10 bg-[#0e0e0e]/95 backdrop-blur-xl">
+    <div className="animate-fade-in border-t border-line/[0.06] bg-surface-container-lowest/95 backdrop-blur-xl">
       <div className="mx-auto max-w-screen-2xl px-8 py-5">
         {/* Wraps rather than compressing: the tab labels and the six profile
             buttons together overflow a narrow window in the longer locales. */}
         <div className="mb-5 flex flex-wrap items-center gap-1">
-          {[
-            { key: 'simulation' as const, label: t('config.simulation'), modified: false },
-            {
-              key: 'buffs' as const,
-              label: `${t('config.raidBuffs')} & ${t('config.consumables')}`,
-              modified: false,
-            },
-            { key: 'expert' as const, label: t('config.expertMode'), modified: hasExpertContent },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => onActiveTabChange(tab.key)}
-              className={`rounded-lg px-4 py-2 text-[12px] font-bold uppercase tracking-wider transition-colors ${
-                activeTab === tab.key
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-on-surface-variant/50 hover:bg-surface-container-high/50 hover:text-on-surface-variant'
-              }`}
-            >
-              {tab.label}
-              {tab.modified && activeTab !== tab.key && (
-                <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-gold align-middle" />
-              )}
-            </button>
-          ))}
+          <div className={TABS_TRACK}>
+            {[
+              { key: 'simulation' as const, label: t('config.simulation'), modified: false },
+              {
+                key: 'buffs' as const,
+                label: `${t('config.raidBuffs')} & ${t('config.consumables')}`,
+                modified: false,
+              },
+              { key: 'expert' as const, label: t('config.expertMode'), modified: hasExpertContent },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => onActiveTabChange(tab.key)}
+                aria-pressed={activeTab === tab.key}
+                className={tabClass(activeTab === tab.key)}
+              >
+                {tab.label}
+                {tab.modified && activeTab !== tab.key && (
+                  <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-gold-fill align-middle" />
+                )}
+              </button>
+            ))}
+          </div>
           {/* Grows to push the controls right, but may collapse to 0 so the
               longer locales wrap the profile buttons instead of squeezing them. */}
           <div className="min-w-0 flex-1" />
@@ -162,9 +172,7 @@ export default function ConfigDrawer({
             <ActiveRouteIndicator />
             <div className="grid grid-cols-4 gap-6">
               <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.fightStyle')}
-                </label>
+                <label className="lbl block">{t('config.fightStyle')}</label>
                 <FightStyleSelector value={fightStyle} onChange={setFightStyle} />
               </div>
 
@@ -172,20 +180,9 @@ export default function ConfigDrawer({
                   route, so hide them in Dungeon Route mode. */}
               {!isDungeonRoute && (
                 <div className="space-y-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                    {t('config.fightLength')}
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={30}
-                      max={1800}
-                      step={30}
-                      value={Math.min(fightLength, 1800)}
-                      onChange={(event) => setFightLength(Number(event.target.value))}
-                      className="flex-1 accent-primary"
-                    />
-                    <div className="min-w-[4.5rem] rounded-lg border border-outline-variant/20 bg-surface-container-lowest text-center">
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="lbl block">{t('config.fightLength')}</label>
+                    <div className="flex items-baseline gap-1">
                       <input
                         type="number"
                         min={10}
@@ -198,48 +195,48 @@ export default function ConfigDrawer({
                           );
                           setFightLength(value);
                         }}
-                        className="w-16 bg-transparent px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"
+                        className={`w-14 ${VALUE_INPUT}`}
                       />
-                      <span className="pr-2 text-[9px] text-on-surface-variant/50">
-                        {t('config.sec')}
-                      </span>
+                      <span className={VALUE}>{t('config.sec')}</span>
                     </div>
                   </div>
+                  <input
+                    type="range"
+                    min={30}
+                    max={1800}
+                    step={30}
+                    value={Math.min(fightLength, 1800)}
+                    onChange={(event) => setFightLength(Number(event.target.value))}
+                    style={rangeFill(fightLength, 30, 1800)}
+                    className="range"
+                  />
                 </div>
               )}
 
               {!isDungeonRoute && (
                 <div className="space-y-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                    {t('config.numberOfBosses')}
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={1}
-                      max={10}
-                      value={targetCount}
-                      onChange={(event) => setTargetCount(Number(event.target.value))}
-                      className="flex-1 accent-primary"
-                    />
-                    <div className="min-w-[4.5rem] rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-1.5 text-center">
-                      <span className="font-mono text-sm font-bold tabular-nums text-primary">
-                        {targetCount}
-                      </span>
-                      <span className="ml-1 text-[9px] text-on-surface-variant/50">
-                        {targetCount === 1 ? t('config.boss') : t('config.bosses')}
-                      </span>
-                    </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="lbl block">{t('config.numberOfBosses')}</label>
+                    <span className={`tabular-nums ${VALUE}`}>
+                      {targetCount} {targetCount === 1 ? t('config.boss') : t('config.bosses')}
+                    </span>
                   </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={10}
+                    value={targetCount}
+                    onChange={(event) => setTargetCount(Number(event.target.value))}
+                    style={rangeFill(targetCount, 1, 10)}
+                    className="range"
+                  />
                 </div>
               )}
 
               {availableBranches.length > 1 && (
                 <div className="space-y-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                    SimC Branch
-                  </label>
-                  <div className="flex gap-1.5">
+                  <label className="lbl block">SimC Branch</label>
+                  <div className={`${TABS_TRACK} !flex`}>
                     {availableBranches.map((branch) => {
                       const isActive =
                         simcBranch === branch || (!simcBranch && branch === 'weekly');
@@ -248,11 +245,8 @@ export default function ConfigDrawer({
                           key={branch}
                           type="button"
                           onClick={() => setSimcBranch(branch)}
-                          className={`flex-1 rounded-lg px-3 py-2 text-center text-xs font-bold uppercase transition-all ${
-                            isActive
-                              ? 'bg-primary-container text-on-primary'
-                              : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
-                          }`}
+                          aria-pressed={isActive}
+                          className={`flex-1 ${tabClass(isActive)}`}
                         >
                           {branch}
                         </button>
@@ -268,10 +262,8 @@ export default function ConfigDrawer({
             <ScenarioBuilder />
 
             <div className="space-y-2">
-              <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                {t('config.rotationMode')}
-              </label>
-              <div className="flex gap-2">
+              <label className="lbl block">{t('config.rotationMode')}</label>
+              <div className={`${TABS_TRACK} !flex`}>
                 {(
                   [
                     { value: 'default', label: t('config.rotationModeDefault'), hint: null },
@@ -293,15 +285,12 @@ export default function ConfigDrawer({
                       key={mode.value}
                       type="button"
                       onClick={() => setRotationMode(mode.value)}
-                      className={`flex-1 rounded-lg px-3 py-2 text-center transition-all ${
-                        isActive
-                          ? 'bg-primary-container text-on-primary'
-                          : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
-                      }`}
+                      aria-pressed={isActive}
+                      className={`flex-1 ${tabClass(isActive)} !h-auto min-h-7 py-1.5`}
                     >
-                      <div className="text-xs font-bold uppercase">{mode.label}</div>
+                      <div>{mode.label}</div>
                       {mode.hint && (
-                        <div className="mt-0.5 text-[10px] font-normal normal-case opacity-70">
+                        <div className="mt-0.5 font-sans text-[11px] font-medium normal-case tracking-normal opacity-70">
                           {mode.hint}
                         </div>
                       )}
@@ -309,17 +298,13 @@ export default function ConfigDrawer({
                   );
                 })}
               </div>
-              <p className="text-[11px] text-on-surface-variant/40">
-                {t('config.rotationModeDpsOnly')}
-              </p>
+              <p className={HELP}>{t('config.rotationModeDpsOnly')}</p>
             </div>
 
             <div className="space-y-2">
-              <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                {t('config.customAplSimcOptions')}
-              </label>
+              <label className="lbl block">{t('config.customAplSimcOptions')}</label>
               {rotationMode !== 'default' && (
-                <div className="text-on-tertiary-container rounded-md bg-tertiary-container/40 px-3 py-2 text-[11px]">
+                <div className="rounded-[6px] border border-gold/35 bg-gold/10 px-3 py-2 text-xs text-gold">
                   {t('config.rotationModeAplWarning')}
                 </div>
               )}
@@ -344,54 +329,43 @@ export default function ConfigDrawer({
               expertSetters={expertSetters}
               activeTabInfo={expertActiveTabInfo}
             >
-              <div className="space-y-2 border-t border-outline-variant/10 pt-3">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.targetError')}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0.01}
-                    max={1.0}
-                    step={0.01}
-                    value={targetError}
-                    onChange={(event) => setTargetError(Number(event.target.value))}
-                    className="flex-1 accent-primary"
-                  />
-                  <input
-                    type="number"
-                    min={0.01}
-                    max={5}
-                    step={0.01}
-                    value={targetError}
-                    onChange={(event) => {
-                      const value = Math.max(0.01, Math.min(5, Number(event.target.value) || 0.05));
-                      setTargetError(value);
-                    }}
-                    className="w-16 rounded border border-outline-variant/20 bg-surface-container-lowest px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"
-                  />
-                  <span className="text-[9px] text-on-surface-variant/50">%</span>
+              <div className="space-y-2 border-t border-line/[0.06] pt-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="lbl block">{t('config.targetError')}</label>
+                  <div className="flex items-baseline gap-1">
+                    <input
+                      type="number"
+                      min={0.01}
+                      max={5}
+                      step={0.01}
+                      value={targetError}
+                      onChange={(event) => {
+                        const value = Math.max(
+                          0.01,
+                          Math.min(5, Number(event.target.value) || 0.05)
+                        );
+                        setTargetError(value);
+                      }}
+                      className={`w-14 ${VALUE_INPUT}`}
+                    />
+                    <span className={VALUE}>%</span>
+                  </div>
                 </div>
-                <p className="text-[11px] text-on-surface-variant/40">
-                  {t('config.targetErrorHelp')}
-                </p>
+                <input
+                  type="range"
+                  min={0.01}
+                  max={1.0}
+                  step={0.01}
+                  value={targetError}
+                  onChange={(event) => setTargetError(Number(event.target.value))}
+                  style={rangeFill(targetError, 0.01, 1)}
+                  className="range"
+                />
+                <p className={HELP}>{t('config.targetErrorHelp')}</p>
               </div>
-              <div className="space-y-2 border-t border-outline-variant/10 pt-3">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  {t('config.iterations')}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={ITERATION_PRESETS.length - 1}
-                    step={1}
-                    value={iterationSliderIndex(iterations)}
-                    onChange={(event) =>
-                      setIterations(ITERATION_PRESETS[Number(event.target.value)])
-                    }
-                    className="flex-1 accent-primary"
-                  />
+              <div className="space-y-2 border-t border-line/[0.06] pt-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="lbl block">{t('config.iterations')}</label>
                   <input
                     type="number"
                     min={100}
@@ -405,28 +379,38 @@ export default function ConfigDrawer({
                       );
                       setIterations(value);
                     }}
-                    className="w-20 rounded border border-outline-variant/20 bg-surface-container-lowest px-1 py-1.5 text-center font-mono text-sm font-bold tabular-nums text-primary focus:outline-none"
+                    className={`w-24 ${VALUE_INPUT}`}
                   />
                 </div>
-                <p className="text-[11px] text-on-surface-variant/40">
-                  {t('config.iterationsHelp')}
-                </p>
+                <input
+                  type="range"
+                  min={0}
+                  max={ITERATION_PRESETS.length - 1}
+                  step={1}
+                  value={iterationSliderIndex(iterations)}
+                  onChange={(event) => setIterations(ITERATION_PRESETS[Number(event.target.value)])}
+                  style={rangeFill(
+                    iterationSliderIndex(iterations),
+                    0,
+                    ITERATION_PRESETS.length - 1
+                  )}
+                  className="range"
+                />
+                <p className={HELP}>{t('config.iterationsHelp')}</p>
               </div>
-              <div className="space-y-2 border-t border-outline-variant/10 pt-3">
+              <div className="space-y-2 border-t border-line/[0.06] pt-3">
                 <label className="flex cursor-pointer items-start gap-3">
                   <input
                     type="checkbox"
                     checked={parallelProfilesets}
                     onChange={(event) => setParallelProfilesets(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-primary"
+                    className="mt-0.5 h-4 w-4 accent-gold-fill"
                   />
                   <div className="flex-1">
-                    <div className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                      {t('config.parallelProfilesets')}
-                    </div>
-                    <p className="mt-1 text-[11px] text-on-surface-variant/40">
+                    <div className="lbl">{t('config.parallelProfilesets')}</div>
+                    <p className={`mt-1.5 ${HELP}`}>
                       {t('config.parallelProfilesetsHelpBefore')}{' '}
-                      <code className="font-mono text-on-surface-variant/70">
+                      <code className="font-mono text-on-surface-variant">
                         profileset_work_threads=1
                       </code>{' '}
                       {t('config.parallelProfilesetsHelpAfter')}
@@ -435,14 +419,12 @@ export default function ConfigDrawer({
                 </label>
               </div>
               {isTopGear && (
-                <div className="space-y-2 border-t border-outline-variant/10 pt-3">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                    {t('config.triageMaxBatch')}
-                  </label>
+                <div className="space-y-2 border-t border-line/[0.06] pt-3">
+                  <label className="lbl block">{t('config.triageMaxBatch')}</label>
                   <select
                     value={triageMaxBatchProfilesets}
                     onChange={(event) => setTriageMaxBatchProfilesets(Number(event.target.value))}
-                    className="w-full rounded border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:outline-none"
+                    className="sel"
                   >
                     {TRIAGE_BATCH_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -450,9 +432,7 @@ export default function ConfigDrawer({
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-on-surface-variant/40">
-                    {t('config.triageMaxBatchHelp')}
-                  </p>
+                  <p className={HELP}>{t('config.triageMaxBatchHelp')}</p>
                 </div>
               )}
             </ExpertToggle>

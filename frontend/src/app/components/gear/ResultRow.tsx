@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { memo, useRef, useState } from 'react';
+import { memo, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { simRow } from '../../lib/api';
 import { SLOT_LABELS, specDisplayName } from '../../lib/types';
@@ -19,6 +19,8 @@ import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import type { ResultItem, TopGearResult } from './topGearResultsTypes';
 import { appliedGems, gemBadgeClass } from './topGearResultsUtils';
+import Button from '../ui/Button';
+import Pill from '../ui/Pill';
 
 /** Numeric combo id from a "Combo N" name; null for other shapes (e.g. "Currently Equipped"). */
 function comboIdFromName(name: string): number | null {
@@ -76,7 +78,7 @@ function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number 
           <div
             role="tooltip"
             style={{ position: 'fixed', top: tip.top - 8, left: tip.left }}
-            className="pointer-events-none z-[60] -translate-x-full -translate-y-full rounded-lg border border-outline-variant/20 bg-surface-container-highest px-3 py-2 shadow-xl"
+            className="popover pointer-events-none z-[60] -translate-x-full -translate-y-full rounded-[6px] px-3 py-2"
           >
             <div className="flex items-center gap-1.5">
               <span className={`h-2 w-2 shrink-0 rounded-full ${precisionDotTone(pct)}`} />
@@ -159,15 +161,15 @@ export const ResultRow = memo(function ResultRow({
   const talentBadge = (
     <>
       {hasTalentBuild && (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded bg-purple-500/10 px-1.5 py-px text-[11px] font-medium">
+        <span className="inline-flex shrink-0 items-center gap-1 rounded bg-quality-epic/10 px-1.5 py-px text-[11px] font-medium">
           {result.talent_spec && (
-            <span className="text-purple-300">{specDisplayName(result.talent_spec)}</span>
+            <span className="text-quality-epic">{specDisplayName(result.talent_spec)}</span>
           )}
-          <span className="text-purple-400/70">{result.talent_build}</span>
+          <span className="text-quality-epic/70">{result.talent_build}</span>
         </span>
       )}
       {hasFolioBuild && (
-        <span className="inline-flex shrink-0 items-center rounded bg-sky-500/10 px-1.5 py-px text-[11px] font-medium text-sky-300/80">
+        <span className="inline-flex shrink-0 items-center rounded bg-info/10 px-1.5 py-px text-[11px] font-medium text-info/80">
           {result.folio_build}
         </span>
       )}
@@ -182,153 +184,147 @@ export const ResultRow = memo(function ResultRow({
     return false;
   });
 
+  const deltaPct = baseDps > 0 ? (result.delta / baseDps) * 100 : 0;
+  const deltaTone =
+    result.delta > 0 ? 'text-positive' : result.delta < 0 ? 'text-negative' : 'text-fg-4';
+  const deltaSubTone =
+    result.delta > 0 ? 'text-positive/70' : result.delta < 0 ? 'text-negative/70' : 'text-fg-4';
+  // Mock `.rank.best`: gold wash + 3px inset bar; selection and compare reuse the shape.
+  const stateClass = isBest
+    ? 'bg-gradient-to-r from-gold/10 to-transparent to-55% shadow-[inset_3px_0_0_theme(colors.gold.fill)]'
+    : isSelected
+      ? 'bg-gradient-to-r from-positive/10 to-transparent to-55% shadow-[inset_3px_0_0_theme(colors.positive)]'
+      : isCompareTarget
+        ? 'bg-gradient-to-r from-quality-rare/10 to-transparent to-55% shadow-[inset_3px_0_0_theme(colors.quality.rare)]'
+        : 'hover:bg-overlay/[0.015]';
+
   return (
     <div
       onClick={() => onSelect?.(result.name)}
-      className={`relative cursor-pointer overflow-hidden rounded-lg transition-colors [contain-intrinsic-size:auto_37px] [content-visibility:auto] hover:bg-white/[0.04] ${
-        isSelected && !isBest
-          ? 'bg-emerald-500/[0.04] ring-1 ring-emerald-500/50'
-          : isBest
-            ? `ring-1 ring-gold/30 ${isSelected ? 'bg-gold/[0.05]' : 'bg-transparent'}`
-            : isCompareTarget
-              ? 'bg-sky-500/[0.04] ring-1 ring-sky-500/50'
-              : isEquipped
-                ? 'ring-1 ring-white/5'
-                : ''
-      }`}
+      className={`relative grid cursor-pointer items-center gap-4 border-b border-line/[0.06] px-6 py-3 transition-colors [contain-intrinsic-size:auto_62px] [content-visibility:auto] last:border-b-0 ${
+        rank != null
+          ? 'grid-cols-[48px_1fr_130px_120px_minmax(70px,auto)]'
+          : 'grid-cols-[1fr_130px_120px_minmax(70px,auto)]'
+      } ${stateClass}`}
     >
       <div
-        className="absolute inset-y-0 left-0 bg-white/[0.02]"
+        className="pointer-events-none absolute inset-y-0 left-0 bg-overlay/[0.02]"
         style={{ width: `${barWidth}%` }}
       />
-      <div className="relative flex items-center justify-between gap-3 px-3 py-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          {rank != null && (
-            <span className="w-5 shrink-0 text-right font-mono text-[12px] tabular-nums text-on-surface-variant/50">
-              {rank}
-            </span>
-          )}
+      {rank != null && (
+        <span
+          className={`relative font-headline text-[15px] font-extrabold tabular-nums ${
+            isBest ? 'text-gold' : 'text-fg-4'
+          }`}
+        >
+          #{rank}
+        </span>
+      )}
 
-          {(() => {
-            const hasChangedItems = changedItems.length > 0 || enchantGemItems.length > 0;
+      <div className="relative flex min-w-0 flex-wrap items-center gap-2">
+        {(() => {
+          const hasChangedItems = changedItems.length > 0 || enchantGemItems.length > 0;
 
-            if (isEquipped) {
-              return (
-                <div className="flex items-center gap-2">
-                  <span className="text-[14px] text-muted">{t('gear.currentlyEquipped')}</span>
-                  {talentBadge}
-                </div>
-              );
-            }
-
-            if (!hasChangedItems && (hasTalentBuild || hasFolioBuild)) {
-              return talentBadge;
-            }
-
+          if (isEquipped) {
             return (
-              <div className="flex min-w-0 flex-wrap items-center gap-1">
-                {displayItems.map((item, index) => (
-                  <ItemTag
-                    key={index}
-                    item={item}
-                    info={item.item_id > 0 ? itemInfoMap[item.item_id] : undefined}
-                    enchant={item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined}
-                    sourceInfo={item.source_item_id ? itemInfoMap[item.source_item_id] : undefined}
-                    gems={appliedGems(item, gemInfoMap)}
-                  />
-                ))}
-                {enchantGemItems.map((item, index) => (
-                  <span
-                    key={`eg-${index}`}
-                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[13px] font-medium ${
-                      item.type === 'enchant'
-                        ? 'bg-emerald-500/10 text-emerald-300'
-                        : gemBadgeClass(item.name)
-                    }`}
-                  >
-                    {item.name || (item.type === 'gem' ? 'Gem' : 'Enchant')}
-                  </span>
-                ))}
+              <>
+                <Pill>{t('gear.currentlyEquipped')}</Pill>
                 {talentBadge}
-              </div>
+              </>
             );
-          })()}
+          }
 
-          {isBest && (
-            <span className="shrink-0 rounded bg-gold/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-gold">
-              {t('gear.best')}
-            </span>
-          )}
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <span
-            className={`flex items-center gap-1.5 font-headline font-mono text-[15px] tabular-nums ${
-              result.delta > 0
-                ? 'text-emerald-400'
-                : result.delta < 0
-                  ? 'text-red-400'
-                  : 'text-muted'
-            }`}
+          if (!hasChangedItems && (hasTalentBuild || hasFolioBuild)) {
+            return talentBadge;
+          }
+
+          return (
+            <>
+              {displayItems.map((item, index) => (
+                <ItemTag
+                  key={index}
+                  item={item}
+                  info={item.item_id > 0 ? itemInfoMap[item.item_id] : undefined}
+                  enchant={item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined}
+                  sourceInfo={item.source_item_id ? itemInfoMap[item.source_item_id] : undefined}
+                  gems={appliedGems(item, gemInfoMap)}
+                />
+              ))}
+              {enchantGemItems.map((item, index) => (
+                <span
+                  key={`eg-${index}`}
+                  className={`inline-flex h-6 items-center gap-1 rounded-[5px] px-[9px] text-[12.5px] font-semibold ${
+                    item.type === 'enchant' ? 'bg-ench/10 text-ench' : gemBadgeClass(item.name)
+                  }`}
+                >
+                  {item.name || (item.type === 'gem' ? 'Gem' : 'Enchant')}
+                </span>
+              ))}
+              {talentBadge}
+            </>
+          );
+        })()}
+
+        {isBest && <Pill variant="gold">{t('gear.best')}</Pill>}
+      </div>
+
+      <div
+        className={`relative text-right font-headline text-sm font-extrabold tabular-nums ${deltaTone}`}
+      >
+        {result.delta > 0
+          ? `+${Math.round(result.delta).toLocaleString()}`
+          : result.delta < 0
+            ? Math.round(result.delta).toLocaleString()
+            : '—'}
+        {baseDps > 0 && (
+          <small className={`block font-sans text-[11.5px] font-semibold ${deltaSubTone}`}>
+            {result.delta > 0 ? '+' : ''}
+            {deltaPct.toFixed(2)}%
+          </small>
+        )}
+      </div>
+
+      <div className="relative flex items-center justify-end gap-1.5 font-headline text-[15px] font-extrabold tabular-nums">
+        {Math.round(result.dps).toLocaleString()}
+        {result.precision_pct != null && (
+          <PrecisionDot pct={result.precision_pct} targetError={targetError} />
+        )}
+      </div>
+
+      <div className="relative flex items-center justify-end gap-1">
+        {onCompare && !isEquipped && (
+          <Button
+            variant="text"
+            onClick={(e: MouseEvent) => {
+              e.stopPropagation();
+              onCompare(result.name);
+            }}
+            title={t('gear.compareRowTitle')}
+            className={isCompareTarget ? '!text-info' : 'hover:!text-info'}
           >
-            <span>
-              {result.delta > 0
-                ? `+${Math.round(result.delta).toLocaleString()}`
-                : result.delta < 0
-                  ? Math.round(result.delta).toLocaleString()
-                  : '--'}
-            </span>
-            {result.delta !== 0 && baseDps > 0 && (
-              <span className="text-xs opacity-70">
-                ({result.delta > 0 ? '+' : ''}
-                {((result.delta / baseDps) * 100).toFixed(1)}%)
-              </span>
-            )}
-          </span>
-          <span className="flex w-20 items-center justify-end gap-1.5">
-            <span className="font-mono text-sm tabular-nums text-on-surface">
-              {Math.round(result.dps).toLocaleString()}
-            </span>
-            {result.precision_pct != null && (
-              <PrecisionDot pct={result.precision_pct} targetError={targetError} />
-            )}
-          </span>
-          {onCompare && !isEquipped && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCompare(result.name);
-              }}
-              title={t('gear.compareRowTitle')}
-              className={`rounded border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider transition-colors ${
-                isCompareTarget
-                  ? 'border-sky-500/40 bg-sky-500/15 text-sky-300'
-                  : 'border-outline-variant/20 bg-surface-container-high/60 text-on-surface-variant hover:bg-sky-500/10 hover:text-sky-300'
-              }`}
-            >
-              {t('gear.compareVs')}
-            </button>
-          )}
-          {showVerifyButton && (
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (!sourceJobId || comboId == null || verifying) return;
-                setVerifying(true);
-                try {
-                  const newId = await simRow(sourceJobId, comboId);
-                  router.push(`/sim/${newId}`);
-                } catch {
-                  setVerifying(false);
-                }
-              }}
-              disabled={verifying}
-              title={t('gear.verifyRowTitle')}
-              className="rounded border border-outline-variant/20 bg-surface-container-high/60 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:bg-primary-container/30 hover:text-primary disabled:opacity-50"
-            >
-              {verifying ? '…' : 'Sim'}
-            </button>
-          )}
-        </div>
+            {t('gear.compareVs')}
+          </Button>
+        )}
+        {showVerifyButton && (
+          <Button
+            variant="text"
+            onClick={async (e: MouseEvent) => {
+              e.stopPropagation();
+              if (!sourceJobId || comboId == null || verifying) return;
+              setVerifying(true);
+              try {
+                const newId = await simRow(sourceJobId, comboId);
+                router.push(`/sim/${newId}`);
+              } catch {
+                setVerifying(false);
+              }
+            }}
+            disabled={verifying}
+            title={t('gear.verifyRowTitle')}
+          >
+            {verifying ? '…' : 'Sim'}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -352,7 +348,7 @@ function ItemTag({
   const { t, locale } = useLanguage();
   useItemNames();
 
-  const qualityColor = info ? QUALITY_COLORS[info.quality] || '#fff' : '#fff';
+  const qualityColor = info ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
   const name = localizedItemName(
     item.item_id,
     info?.name || item.name || `Item ${item.item_id}`,
@@ -368,16 +364,19 @@ function ItemTag({
       ? localizedItemName(item.source_item_id, sourceInfo?.name || '', locale)
       : '';
 
+  const href = item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined;
+
   return (
     <div
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
-        item.is_kept ? 'opacity-40' : 'bg-white/[0.04]'
+      className={`inline-flex min-w-0 items-center gap-[9px] rounded-[7px] border border-line/[0.06] bg-surface-container-high py-1 pl-1 pr-3 ${
+        item.is_kept ? 'opacity-40' : ''
       }`}
     >
       <a
-        href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
+        href={href}
         data-wowhead={wowheadData}
-        className="block h-4 w-4 shrink-0 overflow-hidden rounded-sm"
+        className="relative block h-[22px] w-[22px] shrink-0 overflow-hidden rounded-[4px] border"
+        style={{ borderColor: qualityColor }}
         target="_blank"
         rel="noopener noreferrer"
         onClick={(event) => event.preventDefault()}
@@ -386,90 +385,100 @@ function ItemTag({
         <img
           {...iconProps(icon)}
           alt=""
-          width={16}
-          height={16}
+          width={22}
+          height={22}
           className="h-full w-full"
           loading="lazy"
         />
+        <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
       </a>
-      <a
-        href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
-        data-wowhead={wowheadData}
-        className="max-w-[240px] truncate text-[13px] font-medium no-underline"
-        style={{ color: qualityColor }}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(event) => {
-          event.preventDefault();
-        }}
-      >
-        {name}
-      </a>
-      <span className="text-[11px] text-muted">({slotName})</span>
-      {item.is_void_forge && (
-        <span className="shrink-0 rounded bg-purple-500/15 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-purple-300">
-          {t('loot.voidforged')}
-        </span>
-      )}
-      {item.is_catalyst && (
-        <span
-          title={sourceName ? t('gear.catalystFrom', { name: sourceName }) : undefined}
-          className="inline-flex shrink-0 items-center gap-1 rounded bg-sky-500/15 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-sky-300"
+      <div className="min-w-0">
+        <a
+          href={href}
+          data-wowhead={wowheadData}
+          className="block max-w-[240px] truncate text-[13px] font-semibold no-underline"
+          style={{ color: qualityColor }}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => {
+            event.preventDefault();
+          }}
         >
-          {t('loot.catalyst')}
-          {sourceName && (
-            <span className="max-w-[170px] truncate font-medium normal-case tracking-normal text-sky-300/70">
-              {sourceName}
+          {name}
+        </a>
+        <div className="flex flex-wrap items-center gap-x-1 text-[11.5px] text-outline">
+          <span>
+            {slotName}
+            {item.ilevel > 0 && ` · ${item.ilevel}`}
+          </span>
+          {item.is_void_forge && (
+            <Pill variant="epic" size="sm" className="shrink-0">
+              {t('loot.voidforged')}
+            </Pill>
+          )}
+          {item.is_catalyst && (
+            <span
+              title={sourceName ? t('gear.catalystFrom', { name: sourceName }) : undefined}
+              className="inline-flex shrink-0"
+            >
+              <Pill variant="info" size="sm">
+                {t('loot.catalyst')}
+                {sourceName && (
+                  <span className="max-w-[170px] truncate font-sans font-medium normal-case tracking-normal text-info/70">
+                    {sourceName}
+                  </span>
+                )}
+              </Pill>
             </span>
           )}
-        </span>
-      )}
-      {gems?.map((gem, index) => (
-        <span
-          key={`${gem.gem_id}-${index}`}
-          title={localizedGemName(gem, locale)}
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm ring-1 ring-white/15"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            {...iconProps(gem.icon)}
-            alt=""
-            width={16}
-            height={16}
-            className="h-full w-full"
-            loading="lazy"
-          />
-        </span>
-      ))}
-      {item.upgrade_levels ? (
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-          +{item.upgrade_levels}
-        </span>
-      ) : item.origin === 'vault' ? (
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-amber-400">
-          V
-        </span>
-      ) : item.origin === 'loot' ? (
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-sky-400">
-          L
-        </span>
-      ) : null}
-      {enchant?.name && (
-        <span
-          className="max-w-[140px] truncate text-[11px] text-emerald-400/70"
-          title={localizedEnchantName(enchant, locale)}
-        >
-          {localizedEnchantName(enchant, locale)}
-        </span>
-      )}
-      {item.embellishment && (
-        <span
-          className="max-w-[140px] truncate text-[11px] text-purple-400/80"
-          title={item.embellishment.name}
-        >
-          {item.embellishment.name}
-        </span>
-      )}
+          {gems?.map((gem, index) => (
+            <span
+              key={`${gem.gem_id}-${index}`}
+              title={localizedGemName(gem, locale)}
+              className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm ring-1 ring-line/15"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                {...iconProps(gem.icon)}
+                alt=""
+                width={16}
+                height={16}
+                className="h-full w-full"
+                loading="lazy"
+              />
+            </span>
+          ))}
+          {item.upgrade_levels ? (
+            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-positive">
+              +{item.upgrade_levels}
+            </span>
+          ) : item.origin === 'vault' ? (
+            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-warning">
+              V
+            </span>
+          ) : item.origin === 'loot' ? (
+            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-info">
+              L
+            </span>
+          ) : null}
+          {enchant?.name && (
+            <span
+              className="max-w-[140px] truncate text-ench"
+              title={localizedEnchantName(enchant, locale)}
+            >
+              · {localizedEnchantName(enchant, locale)}
+            </span>
+          )}
+          {item.embellishment && (
+            <span
+              className="max-w-[140px] truncate text-quality-epic/80"
+              title={item.embellishment.name}
+            >
+              · {item.embellishment.name}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

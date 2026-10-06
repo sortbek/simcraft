@@ -3,7 +3,7 @@ import type { JobOverviewSummary } from '../../lib/api';
 import { specDisplayName } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
 import { JobActionButtons } from './JobActionButtons';
-import { SIM_TYPE_LABELS, StatusDot, timeAgo } from './shared';
+import { SIM_TYPE_LABELS, StatusDot, TD, timeAgo } from './shared';
 
 interface ActiveRowProps {
   job: JobOverviewSummary;
@@ -25,48 +25,42 @@ function ActiveRow({ job, busy, onPause, onResume, onCancel }: ActiveRowProps) {
         if (e.key === 'Enter') navigate();
       }}
       tabIndex={0}
-      className="cursor-pointer border-b border-outline-variant/5 transition-colors hover:bg-surface-container-high/50 focus:bg-surface-container-high/30 focus:outline-none"
+      className="group cursor-pointer focus:outline-none"
     >
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2" title={job.error_message ?? undefined}>
+      <td className={TD}>
+        <div className="flex items-center gap-3" title={job.error_message ?? undefined}>
           <StatusDot status={job.status} />
-          <span className="text-[13px] capitalize text-on-surface">{job.status}</span>
+          <span className="text-sm font-bold capitalize text-on-surface">{job.status}</span>
         </div>
         {job.status === 'failed' && job.error_message && (
-          <div className="mt-0.5 max-w-xs truncate text-[11px] text-red-400/70">
+          <div className="mt-0.5 max-w-xs truncate text-[12px] text-negative/70">
             {job.error_message}
           </div>
         )}
       </td>
-      <td className="px-4 py-3 text-[13px] text-on-surface-variant">
+      <td className={`${TD} text-[13px] text-on-surface-variant`}>
         {SIM_TYPE_LABELS[job.sim_type] ?? job.sim_type}
       </td>
-      <td className="px-4 py-3 text-[13px] text-on-surface">
+      <td className={`${TD} text-[13px] text-on-surface`}>
         {job.player_name ?? '—'}
         {job.player_class && (
-          <span className="ml-1.5 text-on-surface-variant/60">
-            ({specDisplayName(job.player_class)})
-          </span>
+          <span className="ml-1.5 text-outline">({specDisplayName(job.player_class)})</span>
         )}
       </td>
-      <td className="px-4 py-3 text-[13px] text-on-surface-variant">
+      <td className={`${TD} text-[13px] text-on-surface-variant`}>
         <div className="flex items-center gap-2">
-          <div className="h-1 w-20 overflow-hidden rounded-full bg-surface-container-highest">
+          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-container-highest">
             <div
-              className="h-full bg-primary transition-all"
+              className="h-full bg-gradient-to-r from-gold-dark to-gold-fill transition-all"
               style={{ width: `${job.progress_pct}%` }}
             />
           </div>
           <span className="font-mono text-[12px] tabular-nums">{job.progress_pct}%</span>
-          {job.progress_stage && (
-            <span className="ml-1 text-on-surface-variant/60">· {job.progress_stage}</span>
-          )}
+          {job.progress_stage && <span className="ml-1 text-outline">· {job.progress_stage}</span>}
         </div>
       </td>
-      <td className="px-4 py-3 text-[13px] text-on-surface-variant/60">
-        {timeAgo(job.created_at, t)}
-      </td>
-      <td className="px-4 py-3 text-right">
+      <td className={`${TD} text-[13px] text-outline`}>{timeAgo(job.created_at, t)}</td>
+      <td className={`${TD} text-right`}>
         <JobActionButtons
           job={job}
           busy={busy}
@@ -90,23 +84,21 @@ interface Props {
 export function ActiveView({ jobs, busy, onPause, onResume, onCancel }: Props) {
   const { t } = useLanguage();
   if (jobs.length === 0) {
-    return (
-      <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-12 text-center text-on-surface-variant/60">
-        {t('sims.noActiveSims')}
-      </div>
-    );
+    return <div className="card p-12 text-center text-outline">{t('sims.noActiveSims')}</div>;
   }
   return (
-    <div className="overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-low">
-      <table className="w-full">
-        <thead className="border-b border-outline-variant/10 text-left text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/60">
+    <div className="card overflow-hidden">
+      <table className="w-full border-collapse">
+        <thead className="text-left">
           <tr>
-            <th className="px-4 py-3">{t('sims.colStatus')}</th>
-            <th className="px-4 py-3">{t('sims.colType')}</th>
-            <th className="px-4 py-3">{t('sims.colCharacter')}</th>
-            <th className="px-4 py-3">{t('sims.colProgress')}</th>
-            <th className="px-4 py-3">{t('sims.colStarted')}</th>
-            <th className="px-4 py-3 text-right">{t('sims.colActions')}</th>
+            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colStatus')}</th>
+            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colType')}</th>
+            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colCharacter')}</th>
+            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colProgress')}</th>
+            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colStarted')}</th>
+            <th className="lbl h-11 border-b border-line/[0.06] px-6 text-right">
+              {t('sims.colActions')}
+            </th>
           </tr>
         </thead>
         <tbody>

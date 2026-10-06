@@ -14,6 +14,8 @@ pub mod profileset_generator;
 pub mod result_parser;
 pub mod roster;
 pub mod server;
+pub mod share;
+pub mod simc_directives;
 pub mod simc_runner;
 pub mod simc_string;
 pub mod talent_normalize;

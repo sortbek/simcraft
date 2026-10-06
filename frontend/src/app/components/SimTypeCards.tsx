@@ -107,7 +107,7 @@ export default function SimTypeCards() {
                 <div className="min-w-0">
                   <h2
                     className={`text-sm font-semibold transition-colors ${
-                      isActive ? 'text-gold' : 'text-on-surface group-hover:text-white'
+                      isActive ? 'text-gold' : 'text-on-surface-variant group-hover:text-on-surface'
                     }`}
                   >
                     {label}
@@ -131,7 +131,7 @@ export default function SimTypeCards() {
                         className={`flex items-center gap-2.5 px-3.5 py-2.5 transition-colors ${
                           childActive
                             ? 'bg-gold/[0.08] text-gold'
-                            : 'text-on-surface-variant hover:bg-white/[0.04] hover:text-on-surface'
+                            : 'text-on-surface-variant hover:bg-overlay/[0.04] hover:text-on-surface'
                         }`}
                       >
                         <div className="min-w-0">

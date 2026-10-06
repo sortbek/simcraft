@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { VIEWER_BUILD } from '../../lib/featureFlags';
 
 const STORAGE_KEY = 'simhammer_content_scale';
 const DEFAULT_SCALE = 100;
@@ -45,7 +46,7 @@ export default function ContentScaler({ children }: { children: React.ReactNode 
 
   return (
     <main
-      className="mx-auto max-w-screen-2xl origin-top px-8 py-8"
+      className={VIEWER_BUILD ? 'origin-top' : 'mx-auto max-w-screen-2xl origin-top px-8 py-8'}
       style={scale !== 100 ? { zoom: scale / 100 } : undefined}
     >
       {children}
@@ -55,21 +56,10 @@ export default function ContentScaler({ children }: { children: React.ReactNode 
 
 export function ScaleSelector() {
   const { scale, setScale } = useContentScale();
+  const fill = ((scale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 100;
 
   return (
-    <div className="flex items-center gap-2">
-      <svg
-        className="h-3.5 w-3.5 shrink-0 text-on-surface-variant/60"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="7" cy="7" r="5" />
-        <path d="M14 14l-3.5-3.5M7 5v4M5 7h4" />
-      </svg>
+    <div className="flex flex-1 items-center gap-2.5">
       <input
         type="range"
         min={MIN_SCALE}
@@ -77,11 +67,10 @@ export function ScaleSelector() {
         step={STEP}
         value={scale}
         onChange={(e) => setScale(parseInt(e.target.value, 10))}
-        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-outline-variant/20 accent-primary [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+        style={{ '--v': `${fill}%` } as React.CSSProperties}
+        className="range-slim !h-3 min-w-0 flex-1"
       />
-      <span className="w-8 text-right text-[11px] font-medium tabular-nums text-on-surface-variant/60">
-        {scale}%
-      </span>
+      <span className="lbl w-9 text-right tabular-nums text-on-surface-variant">{scale}%</span>
     </div>
   );
 }

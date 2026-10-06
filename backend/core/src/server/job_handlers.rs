@@ -6,6 +6,8 @@ use crate::compute::SimcBinaries;
 use crate::db::{ComboDedupRepo, ComboMetadataRepo, JobRepo, TriageBatchesRepo};
 use crate::log_buffer::LogBuffer;
 use crate::models::{JobStatus, SimcInputMode};
+use crate::share::client::{HttpShareClient, ShareClient};
+use crate::share::service::unshare_job;
 use crate::simc_runner;
 use std::sync::Arc;
 
@@ -110,8 +112,27 @@ pub(super) async fn list_jobs(
     }
 }
 
-pub(super) async fn delete_job(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {
-    let job_id = path.into_inner();
+pub(super) async fn delete_job(
+    path: web::Path<String>,
+    query: web::Query<DeleteJobQuery>,
+    repo: web::Data<JobRepo>,
+) -> HttpResponse {
+    delete_job_with(
+        &HttpShareClient::new(),
+        repo.get_ref(),
+        &path.into_inner(),
+        query.force,
+    )
+    .await
+}
+
+async fn delete_job_with(
+    client: &dyn ShareClient,
+    repo: &JobRepo,
+    job_id: &str,
+    force: bool,
+) -> HttpResponse {
+    let job_id = job_id.to_string();
     let job = match repo.get(&job_id).await {
         Ok(Some(j)) => j,
         Ok(None) => return HttpResponse::NotFound().json(json!({"detail": "Job not found"})),
@@ -125,6 +146,18 @@ pub(super) async fn delete_job(path: web::Path<String>, repo: web::Data<JobRepo>
             return HttpResponse::BadRequest().json(json!({
                 "detail": "Only terminal-state jobs can be deleted. Cancel an active job first."
             }))
+        }
+    }
+    if job.share_id.is_some() && job.share_delete_token.is_some() {
+        if let Err(e) = unshare_job(client, repo, &job_id).await {
+            eprintln!("[{job_id}] Failed to revoke share before delete: {e:?}");
+            // Deleting the row would drop the only token that can take the link down.
+            if !force {
+                return HttpResponse::Conflict().json(json!({
+                    "detail": "The public share link could not be removed",
+                    "share_revoke_failed": true,
+                }));
+            }
         }
     }
     match repo.delete_job(&job_id).await {
@@ -153,10 +186,24 @@ pub(super) async fn get_sim_status(
         _ => job.progress_pct as i32,
     };
 
-    let parsed_result: Option<Value> = job
+    let mut parsed_result: Option<Value> = job
         .result_json
         .as_ref()
         .and_then(|s| serde_json::from_str(s).ok());
+    // Results stored before `setup` existed: rebuild it from the raw SimC output
+    // once and store it, so later loads skip the full-row read.
+    if let Some(result) = parsed_result
+        .as_mut()
+        .filter(|r| matches!(job.status, JobStatus::Done) && r.get("setup").is_none())
+    {
+        if let Ok(Some(full)) = repo.get(&job_id).await {
+            if crate::result_parser::backfill_setup(result, full.raw_json.as_deref()) {
+                if let Err(e) = repo.update_result_json(&job_id, &result.to_string()).await {
+                    eprintln!("[{job_id}] Failed to store the backfilled setup: {e}");
+                }
+            }
+        }
+    }
 
     // `None` means the read failed (transient); `Some(n)` is the real count.
     // Non-simmit jobs never have chunks, so they get `Some(0)` (irrelevant to
@@ -187,6 +234,8 @@ pub(super) async fn get_sim_status(
         "simc_input_mode": job.simc_input_mode.as_str(),
         "pause_requested": job.pause_requested,
         "provider_id": job.provider_id,
+        "share_id": job.share_id,
+        "rerun_of": job.rerun_of,
         "chunk_count": chunk_count.unwrap_or(0), // display 0 on transient error; capability uses the Option
         "effective_capabilities": effective_capabilities(&job.provider_id, chunk_count),
     }))
@@ -203,6 +252,46 @@ pub(super) async fn get_sim_logs(
         "lines": lines,
         "next": next,
     }))
+}
+
+/// Most combos one request may ask for; the live view asks for what it shows.
+const MAX_COMBO_LOOKUP: usize = 40;
+
+/// The changed items behind each named combo, from the metadata written when the
+/// job was spawned, so the live view can show gear while the sim still runs.
+pub(super) async fn get_sim_combos(
+    path: web::Path<String>,
+    query: web::Query<CombosQuery>,
+    repo: web::Data<JobRepo>,
+) -> HttpResponse {
+    let names: Vec<&str> = query
+        .names
+        .split(',')
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .take(MAX_COMBO_LOOKUP)
+        .collect();
+    HttpResponse::Ok().json(combo_items(repo.get_ref(), &path.into_inner(), &names).await)
+}
+
+async fn combo_items(
+    repo: &JobRepo,
+    job_id: &str,
+    names: &[&str],
+) -> serde_json::Map<String, Value> {
+    let mut out = serde_json::Map::new();
+    let Some(pool) = repo.pool() else {
+        return out;
+    };
+    let metadata = ComboMetadataRepo::new(pool.clone());
+    for name in names {
+        if let Ok(Some(row)) = metadata.get_by_name(job_id, name).await {
+            if let Ok(items) = serde_json::from_str::<Value>(&row.metadata_json) {
+                out.insert((*name).to_string(), items);
+            }
+        }
+    }
+    out
 }
 
 pub(super) async fn cancel_sim(path: web::Path<String>, repo: web::Data<JobRepo>) -> HttpResponse {
@@ -594,4 +683,111 @@ pub(super) async fn get_sim_csv(path: web::Path<String>, repo: web::Data<JobRepo
             format!("attachment; filename=\"sim-{}.csv\"", job_id),
         ))
         .body(csv)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::Job;
+    use crate::share::client::{CreatedShare, ShareClient, ShareError};
+    use std::sync::Mutex;
+
+    struct Mock {
+        deletes: Mutex<Vec<(String, String)>>,
+        result: Result<(), ShareError>,
+    }
+
+    #[async_trait::async_trait]
+    impl ShareClient for Mock {
+        async fn create(&self, _: &Value) -> Result<CreatedShare, ShareError> {
+            unreachable!()
+        }
+        async fn delete(&self, id: &str, token: &str) -> Result<(), ShareError> {
+            self.deletes.lock().unwrap().push((id.into(), token.into()));
+            self.result.clone()
+        }
+    }
+
+    async fn shared_done_job(repo: &JobRepo) -> String {
+        let mut job = Job::new_with_provider(
+            "in".into(),
+            "quick".into(),
+            1000,
+            "Patchwerk".into(),
+            0.1,
+            "local".into(),
+        );
+        job.status = JobStatus::Done;
+        job.share_id = Some("K3Fq9xTz2a".into());
+        job.share_delete_token = Some("tok".into());
+        repo.insert(&job).await.unwrap();
+        job.id
+    }
+
+    #[tokio::test]
+    async fn combo_items_returns_the_stored_gear_by_combo_name() {
+        sqlx::any::install_default_drivers();
+        let db = crate::db::Database::connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let repo = JobRepo::new(db.pool.clone());
+        let job = Job::new_with_provider(
+            "in".into(),
+            "top_gear".into(),
+            1000,
+            "Patchwerk".into(),
+            0.1,
+            "local".into(),
+        );
+        repo.insert(&job).await.unwrap();
+        let neck = r#"[{"slot":"neck","item_id":268265,"name":"Aqirbane Reliquary"}]"#;
+        crate::jobs::combo_metadata::write_combo_metadata_table_raw(
+            &repo,
+            &job.id,
+            &[
+                ("Combo 2".into(), "[]".into()),
+                ("Combo 3".into(), neck.into()),
+            ],
+            &[],
+        )
+        .await;
+        let got = combo_items(&repo, &job.id, &["Combo 3", "Combo 99"]).await;
+        assert_eq!(got.len(), 1);
+        assert_eq!(got["Combo 3"][0]["item_id"], 268265);
+    }
+
+    #[tokio::test]
+    async fn delete_revokes_the_remote_share() {
+        let repo = JobRepo::new_memory();
+        let id = shared_done_job(&repo).await;
+        let mock = Mock {
+            deletes: Mutex::new(vec![]),
+            result: Ok(()),
+        };
+        let r = delete_job_with(&mock, &repo, &id, false).await;
+        assert!(r.status().is_success());
+        assert_eq!(
+            mock.deletes.lock().unwrap()[0],
+            ("K3Fq9xTz2a".to_string(), "tok".to_string())
+        );
+        assert!(repo.get(&id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn delete_keeps_the_job_when_the_share_cannot_be_revoked() {
+        let repo = JobRepo::new_memory();
+        let id = shared_done_job(&repo).await;
+        let mock = Mock {
+            deletes: Mutex::new(vec![]),
+            result: Err(ShareError::Unreachable("down".into())),
+        };
+        let r = delete_job_with(&mock, &repo, &id, false).await;
+        assert_eq!(r.status(), actix_web::http::StatusCode::CONFLICT);
+        let kept = repo.get(&id).await.unwrap().unwrap();
+        assert_eq!(kept.share_delete_token.as_deref(), Some("tok"));
+
+        let r = delete_job_with(&mock, &repo, &id, true).await;
+        assert!(r.status().is_success());
+        assert!(repo.get(&id).await.unwrap().is_none());
+    }
 }

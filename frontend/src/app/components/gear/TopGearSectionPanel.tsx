@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import ClearButton from '../ui/ClearButton';
 import InfoIcon from '../ui/InfoIcon';
+import Pill from '../ui/Pill';
 
 interface TopGearSectionPanelProps {
   /** Already-translated section name. */
@@ -55,20 +56,19 @@ export default function TopGearSectionPanel({
           aria-expanded={open}
           className="group flex min-w-0 flex-1 items-center gap-2.5 text-left"
         >
-          <span className="shrink-0 font-headline text-[13px] font-bold uppercase tracking-[0.2em] text-on-surface-variant transition-colors group-hover:text-on-surface">
+          <span className="h-card shrink-0 transition-colors group-hover:text-on-surface">
             {label}
           </span>
-          <span
-            className={`min-w-[1.5rem] shrink-0 rounded px-1 py-px text-center text-[11px] font-bold tabular-nums transition-colors ${
-              count > 0 ? 'bg-gold/15 text-gold' : 'bg-surface-container-highest text-muted'
-            }`}
+          <Pill
+            variant={count > 0 ? 'gold' : 'neutral'}
+            className={`min-w-[1.5rem] shrink-0 justify-center tabular-nums ${count > 0 ? '' : 'text-outline'}`}
           >
             {count}
-          </span>
+          </Pill>
           {tooltip && <InfoIcon tooltip={tooltip} />}
-          <span className="h-px flex-1 bg-outline-variant/20" />
+          <span className="h-px flex-1 bg-overlay/[0.06]" />
           <svg
-            className={`h-3.5 w-3.5 shrink-0 text-on-surface-variant/40 transition-transform duration-200 group-hover:text-on-surface-variant ${
+            className={`h-3.5 w-3.5 shrink-0 text-outline transition-transform duration-200 group-hover:text-on-surface-variant ${
               open ? 'rotate-180' : ''
             }`}
             viewBox="0 0 16 16"

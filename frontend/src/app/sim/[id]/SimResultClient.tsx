@@ -1,15 +1,13 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollWhileVisible } from '../../lib/usePollWhileVisible';
-import DpsHeroCard from '../../components/results/DpsHeroCard';
-import GearOverview from '../../components/gear/GearOverview';
-import ResultsChart from '../../components/results/ResultsChart';
+import SimResultView from '../../components/results/SimResultView';
 import SimStatus from '../../components/results/SimStatus';
-import StatWeightsTable from '../../components/results/StatWeightsTable';
-import TalentTree from '../../components/talents/TalentTree';
-import TopGearResults from '../../components/gear/TopGearResults';
+import ShareButton from '../../components/share/ShareButton';
+import Button, { buttonClass } from '../../components/ui/Button';
+import ShareComparisonStrip from '../../components/share/ShareComparisonStrip';
 
 import {
   API_URL,
@@ -19,7 +17,6 @@ import {
   type SimInputPreview,
 } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
-import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
 import { useProviderCaps, useProviderMeta } from '../../lib/providers';
 import {
   getScenarioSiblings,
@@ -27,13 +24,9 @@ import {
   type ScenarioSibling,
 } from '../../lib/scenario-siblings';
 import { getTopGearState } from '../../lib/topgear-state';
+import { EMPTY_LIVE_SIM, reduceSimcLog, type LiveSim } from '../../lib/simcLog';
 import { ROUTES } from '../../lib/routes';
 import { isGearComparisonResult, type SimResult } from '../../lib/simResultTypes';
-import {
-  collectEnchantIds,
-  collectGemIds,
-  collectItemQueries,
-} from '../../components/gear/gearOverviewUtils';
 
 interface JobData {
   id: string;
@@ -47,6 +40,8 @@ interface JobData {
   simc_input_mode?: 'inline' | 'streamed';
   pause_requested?: boolean;
   provider_id: string;
+  share_id?: string | null;
+  rerun_of?: string | null;
 }
 
 // Consecutive status-poll failures tolerated before giving up (~2 min at 2s).
@@ -72,6 +67,7 @@ export default function SimResultClient() {
   const [notFound, setNotFound] = useState(false);
   const pollFailuresRef = useRef(0);
   const [logLines, setLogLines] = useState<string[]>([]);
+  const [live, setLive] = useState<LiveSim>(EMPTY_LIVE_SIM);
   const [showLogs, setShowLogs] = useState(true);
   const logCursorRef = useRef(0);
   const [siblings, setSiblings] = useState<ScenarioSibling[] | null>(null);
@@ -79,20 +75,6 @@ export default function SimResultClient() {
   const [inputPreviewError, setInputPreviewError] = useState('');
   const [showInputPreview, setShowInputPreview] = useState(false);
   const inputPreviewFetchedRef = useRef(false);
-
-  // Info maps for the non-TopGear GearOverview. Hooks must be unconditional,
-  // so we derive safe empty inputs when the result is absent or is a TopGear result.
-  const nonTgGear = useMemo(
-    () =>
-      job?.result && !isGearComparisonResult(job.result) ? (job.result.equipped_gear ?? {}) : {},
-    [job?.result]
-  );
-  const goItemQueries = useMemo(() => collectItemQueries(nonTgGear), [nonTgGear]);
-  const goEnchantIds = useMemo(() => collectEnchantIds(nonTgGear), [nonTgGear]);
-  const goGemIds = useMemo(() => collectGemIds(nonTgGear), [nonTgGear]);
-  const goItemInfo = useItemInfo(goItemQueries);
-  const goEnchantInfo = useEnchantInfo(goEnchantIds);
-  const goGemInfo = useGemInfo(goGemIds);
 
   useEffect(() => {
     setSiblings(getScenarioSiblings());
@@ -125,7 +107,7 @@ export default function SimResultClient() {
     [id]
   );
 
-  // Poll logs only when the log console is expanded and the sim is active
+  // Poll logs while the sim is active: the live view is built from them.
   usePollWhileVisible(
     async () => {
       try {
@@ -137,6 +119,7 @@ export default function SimResultClient() {
             const merged = [...prev, ...data.lines];
             return merged.length > 1000 ? merged.slice(-1000) : merged;
           });
+          setLive((prev) => reduceSimcLog(prev, data.lines));
           logCursorRef.current = data.next;
         }
       } catch {
@@ -144,18 +127,19 @@ export default function SimResultClient() {
       }
       return 1000;
     },
-    showLogs &&
-      !!id &&
+    // Local sims feed the live view; others only need logs while the console is open.
+    !!id &&
       id !== '_' &&
       !notFound &&
-      (job?.status === 'pending' || job?.status === 'running'),
-    [showLogs, id, job?.status, notFound]
+      (job?.status === 'pending' || job?.status === 'running') &&
+      (job?.provider_id === 'local' || showLogs),
+    [id, job?.status, job?.provider_id, notFound, showLogs]
   );
 
   // Final flush: the log poll stops on terminal status, so fetch any trailing
   // lines (e.g. a sub-1s Final stage) that arrived after the last poll.
   useEffect(() => {
-    if (!showLogs || !id || id === '_') return;
+    if (!id || id === '_') return;
     if (job?.status !== 'done' && job?.status !== 'failed' && job?.status !== 'cancelled') return;
     const cursor = logCursorRef.current;
     fetch(`${API_URL}/api/sim/${id}/logs?after=${cursor}`)
@@ -166,12 +150,13 @@ export default function SimResultClient() {
           const merged = [...prev, ...data.lines];
           return merged.length > 1000 ? merged.slice(-1000) : merged;
         });
+        setLive((prev) => reduceSimcLog(prev, data.lines));
         logCursorRef.current = data.next;
       })
       .catch(() => {
         /* ignore */
       });
-  }, [showLogs, id, job?.status]);
+  }, [id, job?.status]);
 
   const handleToggleLogs = useCallback(() => setShowLogs((v) => !v), []);
 
@@ -208,24 +193,19 @@ export default function SimResultClient() {
 
   if (notFound) {
     return (
-      <div className="card border-amber-500/20 bg-amber-500/[0.03] p-6 text-center">
-        <p className="mb-1 text-sm font-semibold text-amber-400">{t('simResult.notFoundTitle')}</p>
+      <div className="card border-warning/20 bg-warning/[0.03] p-6 text-center">
+        <p className="mb-1 text-sm font-semibold text-warning">{t('simResult.notFoundTitle')}</p>
         <p className="mb-4 text-sm text-on-surface-variant/60">{t('simResult.notFoundBody')}</p>
-        <a
-          href={ROUTES.sims}
-          className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
-        >
-          {t('simResult.backToSims')}
-        </a>
+        <Button href={ROUTES.sims}>{t('simResult.backToSims')}</Button>
       </div>
     );
   }
 
   if (fetchError) {
     return (
-      <div className="card border-red-500/20 bg-red-500/[0.03] p-6">
-        <p className="mb-1 text-sm font-semibold text-red-400">{t('common.error')}</p>
-        <p className="text-sm text-red-400/60">{fetchError}</p>
+      <div className="card border-negative/20 bg-negative/[0.03] p-6">
+        <p className="mb-1 text-sm font-semibold text-negative">{t('common.error')}</p>
+        <p className="text-sm text-negative/60">{fetchError}</p>
       </div>
     );
   }
@@ -233,15 +213,15 @@ export default function SimResultClient() {
   if (!job) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-800 border-t-gold" />
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-surface-container-highest border-t-gold" />
       </div>
     );
   }
 
   if (job.status === 'cancelled') {
     return (
-      <div className="card border-amber-500/20 bg-amber-500/[0.03] p-6 text-center">
-        <p className="text-sm font-semibold text-amber-400">{t('results.simulationCancelled')}</p>
+      <div className="card border-warning/20 bg-warning/[0.03] p-6 text-center">
+        <p className="text-sm font-semibold text-warning">{t('results.simulationCancelled')}</p>
       </div>
     );
   }
@@ -249,18 +229,20 @@ export default function SimResultClient() {
   if (job.status === 'failed') {
     return (
       <div className="space-y-3">
-        <div className="card border-red-500/20 bg-red-500/[0.03] p-6">
-          <p className="mb-2 text-sm font-semibold text-red-400">{t('results.simulationFailed')}</p>
-          <p className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-red-400/60">
+        <div className="card border-negative/20 bg-negative/[0.03] p-6">
+          <p className="mb-2 text-sm font-semibold text-negative">
+            {t('results.simulationFailed')}
+          </p>
+          <p className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-negative/60">
             {job.error || t('results.unknownError')}
           </p>
         </div>
-        <div className="flex items-center justify-center text-[10px] uppercase tracking-wider text-on-surface-variant/40">
+        <div className="flex items-center justify-center text-[11px] uppercase tracking-wider text-on-surface-variant/40">
           <a
             href={`${API_URL}/api/sim/${id}/input`}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:text-white"
+            className="transition-colors hover:text-on-surface"
           >
             {t('results.rawInput')}
           </a>
@@ -277,12 +259,10 @@ export default function SimResultClient() {
       <div className="space-y-3">
         {job.status === 'paused' ? (
           <div className="flex flex-col items-center justify-center space-y-6 py-16">
-            <div className="w-72 rounded-xl border border-amber-500/20 bg-amber-500/5 p-6">
+            <div className="w-72 rounded-[10px] border border-warning/20 bg-warning/5 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-bold uppercase tracking-wider text-amber-400">
-                    {t('simResult.paused')}
-                  </p>
+                  <p className="h-card text-warning">{t('simResult.paused')}</p>
                   {job.progress_stage && (
                     <p className="mt-0.5 text-xs text-on-surface-variant">
                       {t('simResult.atStage', { stage: job.progress_stage })}
@@ -290,11 +270,13 @@ export default function SimResultClient() {
                     </p>
                   )}
                 </div>
-                <span className="text-xl font-black text-amber-400">{job.progress}%</span>
+                <span className="font-headline text-xl font-extrabold text-warning">
+                  {job.progress}%
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button
+              <Button
                 onClick={async () => {
                   try {
                     await resumeSim(id);
@@ -302,11 +284,11 @@ export default function SimResultClient() {
                     console.error('Resume failed:', e);
                   }
                 }}
-                className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
               >
                 {t('simResult.resume')}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
                 onClick={async () => {
                   try {
                     await fetch(`${API_URL}/api/sim/${id}/cancel`, { method: 'POST' });
@@ -314,10 +296,9 @@ export default function SimResultClient() {
                     console.error('Cancel failed:', e);
                   }
                 }}
-                className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-400 transition-colors hover:border-red-500/50 hover:bg-red-500/20"
               >
                 {t('common.cancel')}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -336,14 +317,16 @@ export default function SimResultClient() {
             logLines={logLines}
             showLogs={showLogs}
             onToggleLogs={handleToggleLogs}
+            live={live}
+            liveExpected={job.provider_id === 'local'}
           />
         )}
-        <div className="flex items-center justify-center text-[10px] uppercase tracking-wider text-on-surface-variant/40">
+        <div className="flex items-center justify-center text-[11px] uppercase tracking-wider text-on-surface-variant/40">
           <a
             href={`${API_URL}/api/sim/${id}/input`}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:text-white"
+            className="transition-colors hover:text-on-surface"
           >
             {t('results.rawInput')}
           </a>
@@ -353,7 +336,7 @@ export default function SimResultClient() {
   }
 
   if (!job.result) {
-    return <p className="text-sm text-muted">{t('results.noResultData')}</p>;
+    return <p className="text-sm text-outline">{t('results.noResultData')}</p>;
   }
 
   const r = job.result;
@@ -365,21 +348,15 @@ export default function SimResultClient() {
       {siblings && siblings.length > 1 && (
         <div className="card p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="shrink-0 text-[13px] uppercase tracking-wider text-muted">
-              {t('results.scenarios')}
-            </span>
-            <span className="h-4 w-px shrink-0 bg-border" />
+            <span className="lbl shrink-0">{t('results.scenarios')}</span>
+            <span className="h-4 w-px shrink-0 bg-overlay/[0.11]" />
             {siblings.map((s) => {
               const isCurrent = s.id === id;
               return (
                 <a
                   key={s.id}
                   href={`/sim/${s.id}`}
-                  className={`rounded-lg border px-2.5 py-1 text-[14px] font-medium transition-all ${
-                    isCurrent
-                      ? 'border-gold/40 bg-gold/[0.08] text-gold'
-                      : 'bg-surface-2 border-border text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
-                  }`}
+                  className={`chip ${isCurrent ? 'chip-on' : ''}`}
                 >
                   {formatScenarioLabel(s)}
                 </a>
@@ -389,92 +366,49 @@ export default function SimResultClient() {
         </div>
       )}
 
-      {isGearComparisonResult(r) ? (
-        <>
-          <TopGearResults
-            playerName={r.player_name}
-            playerClass={r.player_class}
-            playerRealm={r.realm}
-            playerRegion={r.region}
-            baseDps={r.base_dps}
-            results={r.results}
-            equippedGear={r.equipped_gear}
-            fightLength={r.fight_length}
-            desiredTargets={r.desired_targets}
-            iterations={r.iterations}
-            targetError={r.target_error}
-            elapsedTime={r.total_elapsed_seconds ?? r.elapsed_time_seconds}
-            sourceJobId={typeof id === 'string' ? id : undefined}
-            backLink={
-              hasTopGearState ? (
-                <a
-                  href={ROUTES.topGear}
-                  className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:border-primary/50 hover:bg-primary/20"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    className="h-4 w-4"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  {t('results.backToTopGear')}
-                </a>
-              ) : undefined
-            }
+      {job.rerun_of && <ShareComparisonStrip shareId={job.rerun_of} local={r} />}
+
+      <SimResultView
+        result={r}
+        sourceJobId={id}
+        backLink={
+          hasTopGearState ? (
+            <a href={ROUTES.topGear} className={buttonClass('quiet')}>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-3.5 w-3.5"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              {t('results.backToTopGear')}
+            </a>
+          ) : undefined
+        }
+        actions={
+          <ShareButton
+            jobId={id}
+            result={r}
+            shareId={job.share_id ?? null}
+            onChange={(shareId) => setJob((cur) => (cur ? { ...cur, share_id: shareId } : cur))}
           />
-          {r.talent_string && <TalentTree talentString={r.talent_string} />}
-        </>
-      ) : (
-        <>
-          <DpsHeroCard
-            playerName={r.player_name}
-            playerClass={r.player_class}
-            playerRealm={r.realm}
-            playerRegion={r.region}
-            dps={r.dps}
-            fightLength={r.fight_length}
-            desiredTargets={r.desired_targets}
-            iterations={r.iterations}
-            targetError={r.target_error}
-            elapsedTime={r.total_elapsed_seconds ?? r.elapsed_time_seconds}
-            baseDps={r.base_dps}
-          />
-          {r.equipped_gear && Object.keys(r.equipped_gear).length > 0 ? (
-            <GearOverview
-              gear={r.equipped_gear}
-              characterRenderUrl={
-                r.realm && r.player_name
-                  ? `https://simhammer.com/api/blizzard/character/${r.region || 'eu'}/${encodeURIComponent(r.realm.toLowerCase())}/${encodeURIComponent(r.player_name.toLowerCase())}/media/render`
-                  : null
-              }
-              itemInfoMap={goItemInfo}
-              enchantInfoMap={goEnchantInfo}
-              gemInfoMap={goGemInfo}
-            />
-          ) : null}
-          {r.stat_weights ? <StatWeightsTable statWeights={r.stat_weights} /> : null}
-          {r.talent_string && <TalentTree talentString={r.talent_string} />}
-          <ResultsChart dps={r.dps} abilities={r.abilities ?? []} />
-        </>
-      )}
+        }
+      />
 
       {/* Input preview (lazy-loaded on demand) */}
-      <div className="overflow-hidden rounded-xl border border-outline-variant/10">
+      <div className="card overflow-hidden">
         <button
           onClick={handleToggleInputPreview}
-          className="flex w-full items-center justify-between bg-surface-container-high px-4 py-2 text-left transition-colors hover:bg-surface-container-highest"
+          className="flex w-full items-center justify-between px-6 py-3 text-left transition-colors hover:bg-overlay/[0.015]"
         >
-          <span className="text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
-            SimC Input
-          </span>
+          <span className="lbl">SimC Input</span>
           <svg
-            className={`h-3.5 w-3.5 text-on-surface-variant/40 transition-transform ${showInputPreview ? 'rotate-180' : ''}`}
+            className={`h-3.5 w-3.5 text-outline transition-transform ${showInputPreview ? 'rotate-180' : ''}`}
             viewBox="0 0 16 16"
             fill="none"
             stroke="currentColor"
@@ -486,9 +420,9 @@ export default function SimResultClient() {
           </svg>
         </button>
         {showInputPreview && (
-          <div className="bg-surface-container-low p-4">
+          <div className="border-t border-line/[0.06] bg-surface-container-low p-4">
             {inputPreviewError ? (
-              <p className="text-[13px] text-red-400/70">{inputPreviewError}</p>
+              <p className="text-[13px] text-negative/70">{inputPreviewError}</p>
             ) : !inputPreview ? (
               <p className="text-[13px] text-on-surface-variant/40">{t('common.loading')}</p>
             ) : inputPreview.mode === 'inline' ? (
@@ -498,15 +432,13 @@ export default function SimResultClient() {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant/40">
-                    {t('simResult.baseProfile')}
-                  </p>
+                  <p className="lbl mb-2">{t('simResult.baseProfile')}</p>
                   <pre className="max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all font-mono text-[13px] leading-[1.7] text-on-surface-variant/60">
                     {inputPreview.base_profile}
                   </pre>
                 </div>
                 <div>
-                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant/40">
+                  <p className="lbl mb-2">
                     {t('simResult.profilesetsPreview', {
                       a: inputPreview.preview_profilesets.length,
                       b: inputPreview.survivor_count,
@@ -524,7 +456,7 @@ export default function SimResultClient() {
       </div>
 
       {/* Footer links */}
-      <div className="flex items-center justify-center gap-3 pb-4 text-[10px] uppercase tracking-wider text-on-surface-variant/40">
+      <div className="flex items-center justify-center gap-3 pb-4 text-[11px] uppercase tracking-wider text-on-surface-variant/40">
         {r.simc_version && (
           <>
             {r.simc_git_revision ? (
@@ -532,55 +464,55 @@ export default function SimResultClient() {
                 href={`https://github.com/simulationcraft/simc/commit/${r.simc_git_revision}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="transition-colors hover:text-white"
+                className="transition-colors hover:text-on-surface"
               >
                 {r.simc_version}
               </a>
             ) : (
               <span>{r.simc_version}</span>
             )}
-            <span className="h-3 w-px bg-border" />
+            <span className="h-3 w-px bg-overlay/[0.11]" />
           </>
         )}
         <a
           href={`${API_URL}/api/sim/${id}/raw`}
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-colors hover:text-white"
+          className="transition-colors hover:text-on-surface"
         >
           {t('results.rawJson')}
         </a>
-        <span className="h-3 w-px bg-border" />
+        <span className="h-3 w-px bg-overlay/[0.11]" />
         <a
           href={`${API_URL}/api/sim/${id}/input`}
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-colors hover:text-white"
+          className="transition-colors hover:text-on-surface"
         >
           {t('results.rawInput')}
         </a>
-        <span className="h-3 w-px bg-border" />
+        <span className="h-3 w-px bg-overlay/[0.11]" />
         <a
           href={`${API_URL}/api/sim/${id}/data.csv`}
-          className="transition-colors hover:text-white"
+          className="transition-colors hover:text-on-surface"
         >
           {t('results.csv')}
         </a>
-        <span className="h-3 w-px bg-border" />
+        <span className="h-3 w-px bg-overlay/[0.11]" />
         <a
           href={`${API_URL}/api/sim/${id}/html`}
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-colors hover:text-white"
+          className="transition-colors hover:text-on-surface"
         >
           {t('results.htmlReport')}
         </a>
-        <span className="h-3 w-px bg-border" />
+        <span className="h-3 w-px bg-overlay/[0.11]" />
         <a
           href={`${API_URL}/api/sim/${id}/output.txt`}
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-colors hover:text-white"
+          className="transition-colors hover:text-on-surface"
         >
           {t('results.textOutput')}
         </a>

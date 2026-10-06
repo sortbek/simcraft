@@ -8,7 +8,10 @@ import {
   type InstalledVersions,
   type AvailableUpdate,
 } from '../lib/simcUpdates';
-import SettingsToggle from '../settings/SettingsToggle';
+import Switch from '../components/ui/Switch';
+import CardHeader from '../components/ui/CardHeader';
+import Button from '../components/ui/Button';
+import Pill from '../components/ui/Pill';
 
 function formatVersionTag(tag: string): string {
   return tag.replace(/^(weekly|nightly|source)-/, '');
@@ -139,49 +142,48 @@ export default function AdminLimitsSection() {
   return (
     <>
       {/* SimC Engine — matches desktop SimcEngineSection layout */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="text-primary-fixed-dim flex items-center gap-2">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
-            </svg>
-            <h2 className="text-sm font-bold uppercase tracking-[0.2em]">SimC Engine</h2>
-          </div>
-          <button
-            onClick={handleCheckUpdates}
-            disabled={checking || !!isSource}
-            className="rounded bg-surface-container-highest px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-surface-bright disabled:opacity-50"
-          >
-            {checking ? 'Checking...' : 'Check for Updates'}
-          </button>
-        </div>
+      <div className="card">
+        <CardHeader
+          title={
+            <span className="inline-flex items-center gap-2">
+              <svg className="h-4 w-4 text-gold" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
+              </svg>
+              SimC Engine
+            </span>
+          }
+          right={
+            <Button
+              size="sm"
+              variant="quiet"
+              onClick={handleCheckUpdates}
+              disabled={checking || !!isSource}
+            >
+              {checking ? 'Checking...' : 'Check for Updates'}
+            </Button>
+          }
+        />
 
-        <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
+        <div className="space-y-3 p-6">
           {isSource && sourceTag && (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="rounded-[8px] border border-gold/35 bg-gold/[0.05] p-3">
               <div className="flex items-center gap-2">
                 <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
                 </svg>
                 <p className="text-sm font-semibold text-primary">Built from Source</p>
               </div>
-              <p className="mt-0.5 text-[10px] text-on-surface-variant/70">
+              <p className="mt-0.5 text-[11px] text-on-surface-variant/70">
                 {formatVersionTag(sourceTag)}
               </p>
             </div>
           )}
 
           {/* Column headers */}
-          <div className="flex items-center border-b border-outline-variant/20 px-3 pb-2">
-            <span className="w-12 shrink-0 text-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-              Active
-            </span>
-            <span className="ml-4 flex-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-              Branch / Version
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50">
-              Actions
-            </span>
+          <div className="flex items-center border-b border-line/[0.06] px-3 pb-2">
+            <span className="lbl w-12 shrink-0 text-center">Active</span>
+            <span className="lbl ml-4 flex-1">Branch / Version</span>
+            <span className="lbl">Actions</span>
           </div>
 
           {/* Per-branch rows */}
@@ -195,23 +197,19 @@ export default function AdminLimitsSection() {
               return (
                 <div
                   key={branch}
-                  className="flex items-center justify-between rounded-lg border border-outline-variant/10 bg-surface-container p-3"
+                  className="flex items-center justify-between rounded-[8px] border border-line/[0.06] bg-surface-container-low p-3"
                 >
                   <div className="flex w-12 shrink-0 justify-center">
-                    <SettingsToggle checked={isEnabled} onChange={() => {}} />
+                    <Switch checked={isEnabled} onChange={() => {}} />
                   </div>
 
                   <div className="ml-4 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold capitalize">{branch}</p>
-                      {branch === simc?.default_branch && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">
-                          default
-                        </span>
-                      )}
+                      <p className="text-sm font-semibold capitalize text-on-surface">{branch}</p>
+                      {branch === simc?.default_branch && <Pill variant="gold">default</Pill>}
                       {branch === 'nightly' && (
                         <svg
-                          className="h-3.5 w-3.5 text-error/70"
+                          className="h-3.5 w-3.5 text-negative/70"
                           viewBox="0 0 24 24"
                           fill="currentColor"
                         >
@@ -220,7 +218,7 @@ export default function AdminLimitsSection() {
                       )}
                     </div>
                     {tag ? (
-                      <p className="text-[10px] text-on-surface-variant/70">
+                      <p className="text-[11px] text-on-surface-variant/70">
                         Installed: {formatVersionTag(tag)}
                         {available && (
                           <span className="ml-2 text-primary">
@@ -229,7 +227,7 @@ export default function AdminLimitsSection() {
                         )}
                       </p>
                     ) : (
-                      <p className="text-[10px] text-on-surface-variant/50">
+                      <p className="text-[11px] text-on-surface-variant/50">
                         {isEnabled ? 'Pending download...' : 'Not enabled'}
                       </p>
                     )}
@@ -237,32 +235,23 @@ export default function AdminLimitsSection() {
 
                   <div className="flex gap-2">
                     {available && (
-                      <button
+                      <Button
+                        size="sm"
                         onClick={() => handleInstall(available)}
                         disabled={installing === branch}
-                        className="rounded bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase text-primary transition-all hover:bg-primary/20 disabled:opacity-50"
                       >
                         {installing === branch ? 'Installing...' : 'Update'}
-                      </button>
+                      </Button>
                     )}
                     {tag && (
-                      <button
-                        onClick={() => handleRemove(branch)}
-                        className="rounded px-3 py-1 text-[10px] font-bold uppercase text-error/60 transition-all hover:bg-error/10 hover:text-error"
-                      >
+                      <Button size="sm" variant="danger" onClick={() => handleRemove(branch)}>
                         Remove
-                      </button>
+                      </Button>
                     )}
                     {!available && !tag && isEnabled && installing === branch && (
-                      <span className="rounded bg-tertiary/10 px-3 py-1 text-[10px] font-bold uppercase text-tertiary">
-                        Downloading
-                      </span>
+                      <Pill variant="info">Downloading</Pill>
                     )}
-                    {!isEnabled && !tag && (
-                      <span className="rounded bg-surface-container-highest px-3 py-1 text-[10px] font-bold uppercase text-on-surface-variant/50">
-                        Disabled
-                      </span>
-                    )}
+                    {!isEnabled && !tag && <Pill>Disabled</Pill>}
                   </div>
                 </div>
               );
@@ -270,15 +259,15 @@ export default function AdminLimitsSection() {
           </div>
 
           {isSource && (
-            <p className="text-[10px] text-on-surface-variant/50">
+            <p className="text-[11px] text-on-surface-variant/50">
               Weekly and Nightly branches are disabled while a source build is active.
             </p>
           )}
 
-          {checkError && <p className="pt-1 text-xs text-error">{checkError}</p>}
+          {checkError && <p className="pt-1 text-xs text-negative">{checkError}</p>}
 
           {!isSource && (
-            <p className="pt-1 text-[10px] italic text-on-surface-variant/40">
+            <p className="pt-1 text-[11px] italic text-on-surface-variant/40">
               Branch toggles are controlled by the SIMC_ENABLED_BRANCHES environment variable.
               Updates are downloaded automatically every {env?.simc_check_interval ?? '3600'}s.
             </p>
@@ -287,26 +276,24 @@ export default function AdminLimitsSection() {
       </div>
 
       {/* Server Limits */}
-      <div className="space-y-4">
-        <div className="text-primary-fixed-dim flex items-center gap-2">
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
-          </svg>
-          <h2 className="text-sm font-bold uppercase tracking-[0.2em]">Server Limits</h2>
-          {saved && (
-            <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
-              Saved
+      <div className="card">
+        <CardHeader
+          title={
+            <span className="inline-flex items-center gap-2">
+              <svg className="h-4 w-4 text-gold" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
+              </svg>
+              Server Limits
             </span>
-          )}
-        </div>
+          }
+          right={saved && <Pill variant="gold">Saved</Pill>}
+        />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="flex items-center justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
+        <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+          <div className="flex items-center justify-between rounded-[8px] border border-line/[0.06] bg-surface-container-low p-5">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">
-                Max Combinations
-              </h3>
-              <p className="text-xs text-on-surface-variant">0 = unlimited</p>
+              <h3 className="lbl">Max Combinations</h3>
+              <p className="mt-2 text-xs text-on-surface-variant">0 = unlimited</p>
             </div>
             <input
               type="number"
@@ -321,16 +308,14 @@ export default function AdminLimitsSection() {
                 }
               }}
               onBlur={() => save({ max_combinations: settings.max_combinations })}
-              className="h-10 w-28 rounded-md border-none bg-surface-container-highest px-3 text-right font-bold text-primary [appearance:textfield] focus:ring-1 focus:ring-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="input-field h-10 w-28 py-0 text-right font-bold text-gold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
+          <div className="flex items-center justify-between rounded-[8px] border border-line/[0.06] bg-surface-container-low p-5">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">
-                Max Scenarios
-              </h3>
-              <p className="text-xs text-on-surface-variant">0 = disabled</p>
+              <h3 className="lbl">Max Scenarios</h3>
+              <p className="mt-2 text-xs text-on-surface-variant">0 = disabled</p>
             </div>
             <input
               type="number"
@@ -345,7 +330,7 @@ export default function AdminLimitsSection() {
                 }
               }}
               onBlur={() => save({ max_scenarios: settings.max_scenarios })}
-              className="h-10 w-28 rounded-md border-none bg-surface-container-highest px-3 text-right font-bold text-primary [appearance:textfield] focus:ring-1 focus:ring-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="input-field h-10 w-28 py-0 text-right font-bold text-gold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
         </div>

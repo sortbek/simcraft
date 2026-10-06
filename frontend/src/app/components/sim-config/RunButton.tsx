@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useProviders, useReadyRemoteProviders } from '../../lib/providers';
 import type { ComputeChoice } from '../../lib/useComputeChoice';
 import { useLanguage } from '../../lib/i18n';
+import { buttonClass } from '../ui/Button';
 
 interface RunButtonProps {
   value: ComputeChoice;
@@ -20,8 +21,8 @@ interface RunButtonProps {
   subLabel?: ReactNode;
 }
 
-const GOLD =
-  'flex items-center gap-3 bg-gradient-to-r from-primary to-primary-container px-12 py-4 font-headline text-sm font-black uppercase tracking-widest text-on-primary shadow-[0_4px_20px_rgba(200,153,42,0.3)] transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:hover:scale-100';
+// Mock `.runbtn`: solid gold, 44px tall, square inner joins on the split button.
+const GOLD = buttonClass('solid', 'lg');
 
 export default function RunButton({
   value,
@@ -87,7 +88,7 @@ export default function RunButton({
   // No usable remote → no real choice → plain Run button (collapse rule).
   if (readyRemotes.length === 0) {
     return (
-      <button type="button" onClick={onRun} disabled={runDisabled} className={`${GOLD} rounded-lg`}>
+      <button type="button" onClick={onRun} disabled={runDisabled} className={GOLD}>
         {submitting ? (
           spinner
         ) : (
@@ -131,7 +132,7 @@ export default function RunButton({
         type="button"
         onClick={onRun}
         disabled={runDisabled}
-        className={`${GOLD} rounded-l-lg`}
+        className={`${GOLD} !rounded-r-none`}
       >
         {submitting ? (
           spinner
@@ -157,7 +158,7 @@ export default function RunButton({
         aria-label={t('config.chooseComputeTarget')}
         onClick={() => setOpen((o) => !o)}
         disabled={submitting}
-        className="flex items-center rounded-r-lg border-l border-on-primary/20 bg-primary-container px-3 py-4 text-on-primary transition-all hover:brightness-110 disabled:opacity-50"
+        className={`${buttonClass('solid', 'lg')} !rounded-l-none !border-l-on-primary/25 !px-3`}
       >
         <svg
           className="h-4 w-4"
@@ -175,7 +176,7 @@ export default function RunButton({
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full right-0 mb-2 min-w-[230px] overflow-hidden rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-xl"
+          className="popover absolute bottom-full right-0 mb-2 min-w-[230px] overflow-hidden py-1"
         >
           {options.map((opt) => {
             const reason = reasonFor(opt.id);

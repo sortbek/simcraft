@@ -2,6 +2,7 @@
 
 import { API_URL } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
+import Pill from '../ui/Pill';
 import HeroMetaStat from './HeroMetaStat';
 import {
   FACTION_BGS,
@@ -11,6 +12,23 @@ import {
   getCharacterMediaUrl,
   useFaction,
 } from './dpsHeroUtils';
+
+// Mock `.hero .bg`: base gradient plus a gold glow top-left and a faction tint top-right.
+const HERO_BASE =
+  'linear-gradient(180deg,rgb(var(--c-surface-container-high)),rgb(var(--c-surface-container)))';
+const FACTION_TINT: Record<string, string> = {
+  horde: 'rgb(140 32 24 / var(--hero-tint-a))',
+  alliance: 'rgb(24 56 140 / var(--hero-tint-a))',
+};
+
+function heroGlow(faction: string | null): string {
+  const gold =
+    'radial-gradient(ellipse 40% 60% at 15% 0%,rgb(var(--c-primary-fill) / .07),transparent 70%)';
+  const tint = faction ? FACTION_TINT[faction] : undefined;
+  return tint
+    ? `radial-gradient(ellipse 55% 90% at 82% 30%,${tint},transparent 70%),${gold}`
+    : gold;
+}
 
 interface DpsHeroCardProps {
   playerName: string;
@@ -26,6 +44,8 @@ interface DpsHeroCardProps {
   baseDps?: number;
   children?: React.ReactNode;
   topAction?: React.ReactNode;
+  /** Sits in the empty space right of the DPS number (below it on narrow screens). */
+  aside?: React.ReactNode;
 }
 
 export default function DpsHeroCard({
@@ -42,6 +62,7 @@ export default function DpsHeroCard({
   baseDps,
   children,
   topAction,
+  aside,
 }: DpsHeroCardProps) {
   const { t } = useLanguage();
   const dpsDelta = baseDps != null && baseDps > 0 ? dps - baseDps : null;
@@ -58,31 +79,28 @@ export default function DpsHeroCard({
   const renderUrl = getCharacterMediaUrl(playerRealm, playerName, 'render', playerRegion);
 
   return (
-    <section className="relative overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-low shadow-2xl">
+    <section
+      className="relative overflow-hidden rounded-[10px] border border-line/[0.06] [box-shadow:var(--shadow-card)]"
+      style={{ background: HERO_BASE }}
+    >
       <div className="absolute inset-0 z-0">
         {insetUrl && (
           <img
             src={insetUrl}
             alt=""
-            className="h-full w-full object-cover opacity-30 grayscale"
+            className="h-full w-full object-cover opacity-[var(--hero-art-o)] grayscale"
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).style.display = 'none';
             }}
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-surface-container via-surface-container/80 to-transparent" />
       </div>
 
-      {faction && (faction === 'horde' || faction === 'alliance') && (
-        <div
-          className={`pointer-events-none absolute inset-0 z-0 ${
-            faction === 'horde'
-              ? 'bg-gradient-to-br from-red-950/50 to-transparent'
-              : 'bg-gradient-to-br from-blue-950/50 to-transparent'
-          }`}
-          style={{ opacity: 0.4 }}
-        />
-      )}
+      <div
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{ background: heroGlow(faction) }}
+      />
       {faction && FACTION_BGS[faction] && (
         <img
           src={`${API_URL}${FACTION_BGS[faction]}`}
@@ -103,40 +121,40 @@ export default function DpsHeroCard({
           }}
         />
       )}
-      {topAction && <div className="absolute right-4 top-4 z-20">{topAction}</div>}
+      {topAction && <div className="absolute right-6 top-6 z-20 flex gap-2">{topAction}</div>}
 
-      <div className="relative z-10 flex flex-col items-center gap-12 p-8 md:flex-row">
-        <div className="flex-1 text-center md:text-left">
-          <div className="mb-2 flex items-center gap-3">
-            <h1 className="font-headline text-4xl font-black uppercase tracking-tighter text-on-surface">
-              {playerName}
-              {playerRealm ? `-${playerRealm}` : ''}
-            </h1>
-          </div>
-          <p className="mb-6 font-headline text-sm uppercase tracking-widest text-on-surface-variant">
-            {playerClass}
-          </p>
-          <div className="space-y-1">
-            <div className="flex items-baseline gap-2 font-headline text-7xl font-black tabular-nums tracking-tighter text-primary md:text-8xl">
-              {Math.round(dps).toLocaleString()}
-              <span className="text-2xl font-bold opacity-50">{t('results.dps')}</span>
-            </div>
-            {dpsDelta != null && dpsDeltaPct != null && (
-              <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-                <span className={`font-bold ${dpsDelta >= 0 ? 'text-emerald-400' : 'text-error'}`}>
-                  {dpsDelta >= 0 ? '+' : ''}
-                  {dpsDeltaPct.toFixed(1)}%
-                </span>
-                <span className="opacity-50">{t('results.vsPreviousSim')}</span>
-              </div>
-            )}
-          </div>
-          {children}
+      <div className="relative z-10 px-9 pb-[30px] pt-[34px]">
+        <h1 className="font-headline text-[34px] font-extrabold uppercase leading-none tracking-[-0.01em] text-on-surface">
+          {playerName}
+          {playerRealm ? `-${playerRealm}` : ''}
+        </h1>
+        <p className="mt-2.5 font-headline text-[13px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
+          {playerClass}
+        </p>
+        <div className="mt-[26px] flex items-baseline gap-2.5">
+          <span className="font-headline text-[92px] font-extrabold tabular-nums leading-[0.9] tracking-[-0.03em] text-gold [text-shadow:0_0_60px_rgb(var(--c-primary)/var(--hero-glow-a))]">
+            {Math.round(dps).toLocaleString()}
+          </span>
+          <span className="font-headline text-xl font-extrabold tracking-[0.04em] text-gold-dark">
+            {t('results.dps')}
+          </span>
         </div>
+        {dpsDelta != null && dpsDeltaPct != null && (
+          <div className="mt-3.5">
+            <Pill variant={dpsDelta >= 0 ? 'positive' : 'negative'}>
+              {dpsDelta >= 0 ? '▲' : '▼'} {Math.abs(dpsDeltaPct).toFixed(1)}%{' '}
+              {t('results.vsPreviousSim')}
+            </Pill>
+          </div>
+        )}
+        {children}
+        {aside && (
+          <div className="mt-6 lg:absolute lg:bottom-[30px] lg:right-9 lg:mt-0">{aside}</div>
+        )}
       </div>
 
       {hasMetadata && (
-        <div className="relative z-10 grid grid-cols-2 gap-4 border-t border-outline-variant/10 bg-surface-container-lowest/80 px-8 py-4 backdrop-blur-md md:grid-cols-5">
+        <div className="relative z-10 grid grid-cols-2 border-t border-line/[0.06] bg-[color:var(--hero-meta-bg)] md:grid-cols-5 [&>*+*]:shadow-[inset_1px_0_0_rgb(var(--c-line)/calc(0.06*var(--c-line-k)))]">
           {targetError != null && targetError > 0 && (
             <HeroMetaStat
               label={t('results.error')}
@@ -145,11 +163,7 @@ export default function DpsHeroCard({
             />
           )}
           {fightLength != null && (
-            <HeroMetaStat
-              label={t('results.fightLength')}
-              value={formatDuration(fightLength)}
-              border
-            />
+            <HeroMetaStat label={t('results.fightLength')} value={formatDuration(fightLength)} />
           )}
           {desiredTargets != null && desiredTargets > 0 && (
             <HeroMetaStat
@@ -157,18 +171,13 @@ export default function DpsHeroCard({
               value={
                 desiredTargets === 1 ? '1 (Patchwerk)' : `${desiredTargets} ${t('results.targets')}`
               }
-              border
             />
           )}
           {iterations != null && iterations > 0 && (
-            <HeroMetaStat
-              label={t('results.iterations')}
-              value={iterations.toLocaleString()}
-              border
-            />
+            <HeroMetaStat label={t('results.iterations')} value={iterations.toLocaleString()} />
           )}
           {elapsedTime != null && (
-            <HeroMetaStat label={t('results.elapsed')} value={formatElapsed(elapsedTime)} border />
+            <HeroMetaStat label={t('results.elapsed')} value={formatElapsed(elapsedTime)} />
           )}
         </div>
       )}

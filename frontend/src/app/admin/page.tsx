@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useIsDesktop } from '../lib/useIsDesktop';
+import { useLanguage } from '../lib/i18n';
 import { getAdminToken, clearAdminToken, adminFetch } from '../lib/adminAuth';
 import AdminLogin from './AdminLogin';
 import AdminPanel from './AdminPanel';
+import PageHeader from '../components/ui/PageHeader';
 
 export default function AdminPage() {
+  const { t } = useLanguage();
   const isDesktop = useIsDesktop();
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -46,10 +49,11 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-20">
       <header className="mb-10">
-        <h1 className="font-headline text-3xl font-extrabold uppercase tracking-tight text-primary">
-          Admin
-        </h1>
-        <p className="text-on-surface-variant">Server configuration and SimC engine management.</p>
+        <PageHeader
+          eyebrow={t('nav.app')}
+          title="Admin"
+          subtitle="Server configuration and SimC engine management."
+        />
       </header>
 
       {authed ? (

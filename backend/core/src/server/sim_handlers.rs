@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 
+use super::client_request::{parse_client_request, ClientRequest};
 use super::job_spawn::{validate_batch, validate_eager_branch};
 use super::simc_input::inject_expert_fields;
 use super::types::*;
@@ -23,13 +24,21 @@ use crate::simc_runner;
 
 pub(super) async fn create_sim(
     http_req: HttpRequest,
-    req: web::Json<SimRequest>,
+    body: web::Json<serde_json::Value>,
     repo: web::Data<JobRepo>,
     settings_repo: web::Data<SettingsRepo>,
     simc_bins: web::Data<Arc<SimcBinaries>>,
     log_buffer: web::Data<Arc<LogBuffer>>,
     registry: web::Data<Arc<ProviderRegistry>>,
 ) -> HttpResponse {
+    let ClientRequest {
+        req,
+        raw: client_request,
+        rerun_of,
+    } = match parse_client_request::<SimRequest>(body.into_inner()) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
     let simc_input = if req.raw {
         req.simc_input.clone()
     } else {
@@ -121,6 +130,8 @@ pub(super) async fn create_sim(
         provider_id_str.clone(),
     );
     job.batch_id = req.options.batch_id.clone();
+    job.client_request = Some(client_request);
+    job.rerun_of = rerun_of;
     job.request_json = Some(envelope.to_json_string().unwrap_or_default());
     let job_id = job.id.clone();
     let created_at = job.created_at.clone();

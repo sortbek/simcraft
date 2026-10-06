@@ -13,6 +13,7 @@ import {
   type RosterMember,
 } from '../../lib/rosters';
 import { StatusBadge } from './StatusBadge';
+import Button from '../ui/Button';
 
 function MemberRow({
   member,
@@ -61,54 +62,60 @@ function MemberRow({
   }, [rosterId, member.id, onMembersChange]);
 
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3">
+    <div className="flex min-h-[62px] items-center justify-between gap-4 px-6 py-3 transition-colors hover:bg-overlay/[0.015]">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-on-surface">
+        <div className="truncate text-sm font-bold text-on-surface">
           {member.name}
           {member.item_level > 0 && (
-            <span className="ml-1.5 rounded bg-surface-container-high px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+            <span className="ml-1.5 rounded-[5px] bg-surface-container-high px-1.5 py-0.5 font-headline text-[11px] font-extrabold text-on-surface-variant">
               ilvl {member.item_level}
             </span>
           )}
-          <span className="text-on-surface-variant/60"> - {member.realm}</span>
+          <span className="font-normal text-outline"> - {member.realm}</span>
         </div>
         {(member.class || member.spec) && (
-          <div className="truncate text-[12px] text-on-surface-variant/60">
+          <div className="truncate text-[12px] text-outline">
             {[member.spec, member.class].filter(Boolean).join(' ')}
           </div>
         )}
       </div>
       <StatusBadge status={member.armory_status} />
-      <button
+      <Button
         onClick={handleCopy}
         disabled={!member.source_simc}
         title={copied ? 'Copied!' : 'Copy SimC'}
         aria-label={`Copy SimC for ${member.name}`}
-        className="shrink-0 rounded-md border border-outline-variant/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-30"
+        variant="quiet"
+        size="sm"
+        className="shrink-0"
       >
         {copied ? 'Copied' : 'Copy'}
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={handleQuickSim}
         disabled={!canSim || simming}
         title="Quick sim this player"
         aria-label={`Quick sim ${member.name}`}
-        className="shrink-0 rounded-md border border-outline-variant/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-30"
+        variant="quiet"
+        size="sm"
+        className="shrink-0"
       >
         {simming ? 'Simming…' : 'Quick Sim'}
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={handleRefetch}
         disabled={refetching}
         title="Re-fetch from armory"
         aria-label={`Re-fetch ${member.name} from armory`}
-        className="shrink-0 rounded-md border border-outline-variant/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-30"
+        variant="quiet"
+        size="sm"
+        className="shrink-0"
       >
         {refetching ? '…' : 'Re-fetch'}
-      </button>
+      </Button>
       <button
         onClick={() => onRemove(member.id)}
-        className="shrink-0 text-base text-on-surface-variant/30 transition-colors hover:text-red-400"
+        className="shrink-0 text-base text-fg-4 transition-colors hover:text-negative"
         aria-label={`Remove ${member.name}`}
       >
         &times;
@@ -168,22 +175,16 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <label className="block font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-          Add members
-        </label>
+        <label className="label-text">Add members</label>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={
             'Playername-Realm, one per line, e.g.\nJaina-Tarren Mill\n\n…or paste SimC strings to import gear directly.'
           }
-          className="h-32 w-full resize-y rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2 font-mono text-[13px] leading-relaxed text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
+          className="input-field h-32 resize-y font-mono text-[13px] leading-relaxed"
         />
-        <button
-          onClick={handleFetch}
-          disabled={fetching || !text.trim()}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-headline text-xs font-bold uppercase tracking-wider text-on-primary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <Button variant="solid" onClick={handleFetch} disabled={fetching || !text.trim()}>
           {fetching && (
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle
@@ -206,20 +207,18 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
             : profileCount > 0
               ? `Import ${profileCount} profile${profileCount === 1 ? '' : 's'}`
               : 'Fetch gear from armory'}
-        </button>
+        </Button>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-            Members ({members.length})
-          </div>
-          <button
+          <div className="lbl">Members ({members.length})</div>
+          <Button
+            variant="quiet"
             onClick={handleRefreshAll}
             disabled={members.length === 0 || refreshingAll}
             title="Re-fetch all members from armory"
             aria-label="Refresh all members from armory"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/10 px-3 py-1.5 font-headline text-xs font-bold uppercase tracking-wider text-on-surface-variant transition-colors hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
           >
             {refreshingAll && (
               <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -239,14 +238,14 @@ export default function RosterEditor({ roster }: { roster: Roster }) {
               </svg>
             )}
             {refreshingAll ? 'Refreshing…' : 'Refresh from armory'}
-          </button>
+          </Button>
         </div>
         {members.length === 0 ? (
-          <p className="py-4 text-sm text-on-surface-variant/60">
+          <p className="py-4 text-sm text-outline">
             No members yet. Paste characters above and fetch their gear.
           </p>
         ) : (
-          <div className="divide-y divide-outline-variant/10 overflow-hidden rounded-lg border border-outline-variant/10 bg-surface-container-low">
+          <div className="card divide-y divide-line/[0.06] overflow-hidden">
             {members.map((member) => (
               <MemberRow
                 key={member.id}

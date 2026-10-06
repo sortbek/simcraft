@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import LanguageSelector from './LanguageSelector';
 import { ScaleSelector } from './ContentScaler';
+import ThemeSelector from './ThemeSelector';
 import UpdateChecker from './UpdateChecker';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
@@ -17,7 +18,7 @@ const IPlay = () => (
 );
 const IGear = () => (
   <svg
-    className="h-3.5 w-3.5"
+    className="h-[15px] w-[15px]"
     viewBox="0 0 16 16"
     fill="none"
     stroke="currentColor"
@@ -68,10 +69,10 @@ function NavItem({ href, label, matchPaths, pathname, icon }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`flex items-center gap-2.5 px-6 py-3 font-headline text-xs font-bold uppercase tracking-wider transition-all ${
+      className={`relative flex h-10 items-center gap-2.5 px-[22px] font-headline text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors duration-[120ms] ${
         isActive
-          ? 'border-r-4 border-primary bg-primary-container/10 text-primary'
-          : 'text-on-surface-variant hover:bg-surface hover:text-white'
+          ? 'bg-[image:var(--nav-on-bg)] text-gold [box-shadow:var(--nav-on-shadow)] after:absolute after:bottom-2 after:right-0 after:top-2 after:w-[3px] after:rounded-l-[3px] after:bg-gold-fill'
+          : 'text-on-surface-variant hover:bg-overlay/[0.02] hover:text-on-surface'
       }`}
     >
       {icon}
@@ -80,11 +81,9 @@ function NavItem({ href, label, matchPaths, pathname, icon }: NavItemProps) {
   );
 }
 
-function GroupLabel({ children }: { children: ReactNode }) {
+function GroupLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="select-none px-6 pb-1 pt-4 font-headline text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/35">
-      {children}
-    </div>
+    <div className={`lbl mb-1.5 select-none px-[22px] ${className ?? 'mt-3.5'}`}>{children}</div>
   );
 }
 
@@ -94,12 +93,21 @@ function FooterIcon({ href, label, icon }: { href: string; label: string; icon: 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center justify-center p-2 text-on-surface-variant/60 transition-colors hover:text-primary"
+      className="flex items-center justify-center p-2 text-outline transition-colors hover:text-on-surface"
       title={label}
       aria-label={label}
     >
       {icon}
     </a>
+  );
+}
+
+function FooterRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-[34px] items-center justify-between gap-3 px-[22px]">
+      <span className="lbl shrink-0">{label}</span>
+      <div className="flex min-w-0 flex-1 justify-end">{children}</div>
+    </div>
   );
 }
 
@@ -111,29 +119,25 @@ export default function Sidebar() {
   const isQuickSim = isRouteActive(pathname, [ROUTES.quickSim]);
 
   return (
-    <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-64 flex-col border-r border-outline-variant/20 bg-[#0e0e0e] shadow-[10px_0_30px_rgba(0,0,0,0.5)]">
-      <div className="desktop-drag shrink-0 px-6 pb-8 pt-6">
-        <div className="desktop-no-drag flex items-center gap-2">
-          <span className="font-headline text-xl font-black uppercase tracking-tighter text-primary">
-            SimHammer
-          </span>
-        </div>
+    <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-[248px] flex-col border-r border-line/[0.06] bg-surface-container-lowest">
+      <div className="desktop-drag flex h-16 shrink-0 items-center px-[22px]">
+        <span className="desktop-no-drag font-headline text-[19px] font-extrabold uppercase tracking-[0.02em] text-gold">
+          SimHammer
+        </span>
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto">
-        <div className="px-4 pb-2 pt-0">
-          <Link
-            href={ROUTES.quickSim}
-            className={`flex items-center gap-2.5 px-4 py-3 font-headline text-xs font-bold uppercase tracking-wider transition-all ${
-              isQuickSim
-                ? 'border border-primary bg-primary text-on-primary'
-                : 'border border-primary/30 bg-primary/10 text-primary hover:border-primary/55 hover:bg-primary/[0.18]'
-            }`}
-          >
-            <IPlay />
-            {t('nav.quickSim')}
-          </Link>
-        </div>
+      <nav className="flex-1 overflow-y-auto">
+        <Link
+          href={ROUTES.quickSim}
+          className={`mx-3.5 mb-[18px] mt-1 flex h-[42px] items-center gap-2.5 rounded-[6px] border px-4 font-headline text-xs font-extrabold uppercase tracking-[0.14em] transition-colors duration-150 ${
+            isQuickSim
+              ? 'border-gold-fill bg-gold-fill text-on-primary'
+              : 'border-gold-edge bg-gold-tint text-gold hover:border-gold/55 hover:bg-gold/20'
+          }`}
+        >
+          <IPlay />
+          {t('nav.quickSim')}
+        </Link>
 
         <GroupLabel>{t('nav.simTools')}</GroupLabel>
         <NavItem href={ROUTES.topGear} label={t('nav.topGear')} pathname={pathname} />
@@ -142,7 +146,7 @@ export default function Sidebar() {
         <NavItem href={ROUTES.raidRoster} label={t('nav.raidRoster')} pathname={pathname} />
         <NavItem href={ROUTES.advanced} label={t('nav.advancedSim')} pathname={pathname} />
 
-        <GroupLabel>{t('nav.library')}</GroupLabel>
+        <GroupLabel className="mt-[22px]">{t('nav.library')}</GroupLabel>
         <NavItem href={ROUTES.routesManager} label={t('nav.routes')} pathname={pathname} />
         <NavItem
           href={ROUTES.sims}
@@ -152,19 +156,24 @@ export default function Sidebar() {
         />
       </nav>
 
-      <div className="mt-auto shrink-0 border-t border-outline-variant/20">
+      <div className="mt-auto flex shrink-0 flex-col gap-1 border-t border-line/[0.06] py-2.5">
         {isDesktop && (
-          <NavItem
+          <Link
             href={ROUTES.settings}
-            label={t('common.settings')}
-            pathname={pathname}
-            icon={<IGear />}
-          />
+            className={`flex items-center gap-2.5 px-[22px] py-1.5 font-headline text-xs font-bold uppercase tracking-[0.1em] transition-colors ${
+              isRouteActive(pathname, [ROUTES.settings])
+                ? 'text-gold'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <IGear />
+            {t('common.settings')}
+          </Link>
         )}
 
         <UpdateChecker />
 
-        <div className="flex items-center justify-around border-t border-outline-variant/20 px-4 py-1.5">
+        <div className="flex items-center justify-around px-[22px]">
           <FooterIcon
             href="https://discord.gg/grfTa87Jxa"
             label={t('nav.discord')}
@@ -178,13 +187,16 @@ export default function Sidebar() {
           <FooterIcon href="https://simhammer.com" label={t('nav.website')} icon={<IGlobe />} />
         </div>
 
-        {/* Zoom + language kept here until they migrate to /settings. */}
-        <div className="border-t border-outline-variant/20 px-5 py-2">
+        {/* Zoom, theme + language kept here until they migrate to /settings. */}
+        <FooterRow label={t('layout.zoom')}>
           <ScaleSelector />
-        </div>
-        <div className="border-t border-outline-variant/20 px-4 py-2">
+        </FooterRow>
+        <FooterRow label={t('layout.theme')}>
+          <ThemeSelector />
+        </FooterRow>
+        <FooterRow label={t('layout.language')}>
           <LanguageSelector />
-        </div>
+        </FooterRow>
       </div>
     </aside>
   );

@@ -4,9 +4,13 @@ import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
 import FooterDisclaimer from './components/layout/FooterDisclaimer';
 import { SimProvider } from './components/sim-config/SimContext';
+import { VIEWER_BUILD } from './lib/featureFlags';
 import { LanguageProvider } from './lib/i18n';
 import { ActiveSimsProvider } from './lib/useActiveSims';
 import ContentScaler, { ScaleProvider } from './components/layout/ContentScaler';
+import { ThemeProvider } from './components/layout/ThemeSelector';
+import ViewerGate from './components/layout/ViewerGate';
+import SharedEditBanner from './components/share/SharedEditBanner';
 import './globals.css';
 import packageJson from '../../package.json';
 
@@ -17,11 +21,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      data-theme="forge"
+      suppressHydrationWarning
+      style={VIEWER_BUILD ? { background: 'transparent' } : undefined}
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `if(window.electronAPI)document.documentElement.setAttribute("data-desktop","")`,
+            // The share viewer on simhammer.com is dark-only, so it keeps the default theme.
+            __html: VIEWER_BUILD
+              ? ''
+              : `if(window.electronAPI)document.documentElement.setAttribute("data-desktop","");try{var t=localStorage.getItem("simhammer_theme");if(t==="daylight")t="parchment";if(t!=="forge"&&t!=="parchment")t="forge";localStorage.setItem("simhammer_theme",t);document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","forge")}`,
           }}
         />
         <Script
@@ -30,20 +42,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >{`const whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false };`}</Script>
         <Script src="https://wow.zamimg.com/js/tooltips.js" strategy="afterInteractive" />
       </head>
-      <body className="min-h-screen">
+      <body
+        className="min-h-screen"
+        style={VIEWER_BUILD ? { background: 'transparent' } : undefined}
+      >
         <LanguageProvider>
-          <ScaleProvider>
-            <SimProvider>
-              <ActiveSimsProvider>
-                <Sidebar />
-                <div className="pl-64">
-                  <TopBar />
-                  <ContentScaler>{children}</ContentScaler>
-                  <FooterDisclaimer version={packageJson.version} />
-                </div>
-              </ActiveSimsProvider>
-            </SimProvider>
-          </ScaleProvider>
+          <ThemeProvider>
+            <ScaleProvider>
+              {VIEWER_BUILD ? (
+                <ContentScaler>
+                  <ViewerGate>{children}</ViewerGate>
+                </ContentScaler>
+              ) : (
+                <SimProvider>
+                  <ActiveSimsProvider>
+                    <Sidebar />
+                    <div className="pl-[248px]">
+                      <TopBar />
+                      <SharedEditBanner />
+                      <ContentScaler>{children}</ContentScaler>
+                      <FooterDisclaimer version={packageJson.version} />
+                    </div>
+                  </ActiveSimsProvider>
+                </SimProvider>
+              )}
+            </ScaleProvider>
+          </ThemeProvider>
         </LanguageProvider>
       </body>
     </html>

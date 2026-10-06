@@ -7,6 +7,7 @@ import type { FightScenario } from './types';
 import { storeScenarioSiblings, clearScenarioSiblings } from './scenario-siblings';
 import { useSharedSimPayload } from './useSharedSimPayload';
 import { materializeRoute } from './active-route';
+import { simsFromSharedSetup } from './share/editShared';
 
 interface UseSimSubmitOptions {
   /** API endpoint path, e.g. "/api/sim" */
@@ -77,6 +78,8 @@ export function useSimSubmit({
         ...pagePayload,
         ...sharedSimPayload,
         ...(batchId ? { batch_id: batchId } : {}),
+        // SimC text from a share (loaded or kept): the backend re-checks the finished input.
+        ...(simsFromSharedSetup() ? { untrusted: true } : {}),
       };
 
       // Materialize the active route to SimC now (applying current key level + HP share)

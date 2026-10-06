@@ -11,6 +11,9 @@ import {
   invalidateProviders,
 } from '../lib/providers';
 import { useIsDesktop } from '../lib/useIsDesktop';
+import CardHeader from '../components/ui/CardHeader';
+import Button from '../components/ui/Button';
+import Pill from '../components/ui/Pill';
 
 interface TestResult {
   ok: boolean;
@@ -111,22 +114,16 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
   }
 
   return (
-    <div className="rounded-lg border border-outline-variant/10 bg-surface-container p-3">
+    <div className="rounded-[8px] border border-line/[0.06] bg-surface-container-low p-3">
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold">{displayName}</p>
-            <span
-              className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                ready
-                  ? 'bg-primary/10 text-primary'
-                  : 'bg-outline-variant/10 text-on-surface-variant/70'
-              }`}
-            >
+            <p className="text-sm font-semibold text-on-surface">{displayName}</p>
+            <Pill variant={ready ? 'gold' : 'neutral'}>
               {ready ? t('settings.ready') : t('settings.notConfigured')}
-            </span>
+            </Pill>
           </div>
-          <p className="text-[10px] text-on-surface-variant/70">{providerId}</p>
+          <p className="text-[11px] text-outline">{providerId}</p>
         </div>
       </div>
 
@@ -138,33 +135,23 @@ function ProviderRow({ providerId, displayName }: { providerId: string; displayN
           }
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          className="flex-1 rounded border border-outline-variant/20 bg-surface-container-lowest px-3 py-1.5 text-xs placeholder:text-on-surface-variant/50 focus:border-primary/40 focus:outline-none"
+          className="input-field h-7 min-w-0 flex-1 py-0 text-xs"
         />
-        <button
-          onClick={save}
-          className="rounded bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary transition-all hover:bg-primary/20"
-        >
+        <Button size="sm" onClick={save}>
           {t('common.save')}
-        </button>
-        <button
-          onClick={testConn}
-          disabled={testing}
-          className="rounded bg-surface-container-highest px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-on-surface transition-colors hover:bg-surface-bright disabled:opacity-50"
-        >
+        </Button>
+        <Button size="sm" variant="quiet" onClick={testConn} disabled={testing}>
           {testing ? '...' : t('settings.test')}
-        </button>
+        </Button>
         {stored && (
-          <button
-            onClick={remove}
-            className="rounded px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-error/60 transition-all hover:bg-error/10 hover:text-error"
-          >
+          <Button size="sm" variant="danger" onClick={remove}>
             {t('settings.remove')}
-          </button>
+          </Button>
         )}
       </div>
 
       {test && (
-        <p className={`mt-2 text-[10px] ${test.ok ? 'text-primary' : 'text-error'}`}>
+        <p className={`mt-2 text-[11px] ${test.ok ? 'text-positive' : 'text-negative'}`}>
           {test.ok
             ? t('settings.connectedCredits', { n: test.credits_available ?? '—' })
             : t('settings.testFailed', { detail: test.detail ?? t('settings.unknownError') })}
@@ -180,17 +167,19 @@ export default function ComputeProvidersSection() {
   if (!providers) return null;
   const remote = providers.filter((p) => p.id !== 'local');
   return (
-    <section className="space-y-4">
-      <div className="text-primary-fixed-dim flex items-center gap-2">
-        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
-        </svg>
-        <h2 className="text-sm font-bold uppercase tracking-[0.2em]">
-          {t('settings.computeProviders')}
-        </h2>
-      </div>
+    <section className="card">
+      <CardHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            <svg className="h-4 w-4 text-gold" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
+            </svg>
+            {t('settings.computeProviders')}
+          </span>
+        }
+      />
 
-      <div className="space-y-3 rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
+      <div className="space-y-3 p-6">
         <p className="text-xs text-on-surface-variant">{t('settings.computeProvidersDesc')}</p>
         <div className="space-y-2">
           {remote.map((p) => (

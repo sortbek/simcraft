@@ -30,6 +30,15 @@ export function readStoredPositiveInt(key: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** Read a raw `localStorage` string; `null` if missing or storage is unavailable. */
+export function readStoredString(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 /** Read a string from `sessionStorage`; return `fallback` if missing. */
 export function readSessionString(key: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;

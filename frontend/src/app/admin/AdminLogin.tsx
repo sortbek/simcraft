@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { API_URL } from '../lib/api';
 import { setAdminToken } from '../lib/adminAuth';
+import Button from '../components/ui/Button';
 
 interface AdminLoginProps {
   onSuccess: () => void;
@@ -42,15 +43,10 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
 
   return (
     <div className="flex items-center justify-center pt-32">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-6 rounded-xl border border-outline-variant/10 bg-surface-container-low p-8"
-      >
+      <form onSubmit={handleSubmit} className="card w-full max-w-sm space-y-6 p-8">
         <div>
-          <h2 className="font-headline text-xl font-extrabold uppercase tracking-tight text-on-surface">
-            Admin Login
-          </h2>
-          <p className="mt-1 text-xs text-on-surface-variant">
+          <h2 className="h-card">Admin Login</h2>
+          <p className="mt-2 text-xs text-on-surface-variant">
             Enter the admin password to access server settings.
           </p>
         </div>
@@ -62,19 +58,15 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
             autoFocus
-            className="h-11 w-full rounded-lg border border-outline-variant/20 bg-surface-container-highest px-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="input-field"
           />
         </div>
 
-        {error && <p className="text-xs font-medium text-error">{error}</p>}
+        {error && <p className="text-xs font-medium text-negative">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading || !password}
-          className="h-11 w-full rounded-lg bg-primary font-headline text-sm font-bold uppercase tracking-wider text-on-primary transition-all hover:bg-primary/90 disabled:opacity-50"
-        >
+        <Button type="submit" variant="solid" disabled={loading || !password} className="w-full">
           {loading ? 'Signing in...' : 'Sign In'}
-        </button>
+        </Button>
       </form>
     </div>
   );
