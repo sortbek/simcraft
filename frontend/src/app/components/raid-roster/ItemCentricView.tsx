@@ -130,7 +130,7 @@ export default function ItemCentricView({ items, players, itemInfo }: Props) {
                           <div className="flex flex-wrap items-center gap-1.5">
                             <a
                               href={getWowheadUrl(item.item_id)}
-                              data-wowhead={getWowheadData({ ilevel: item.ilevel })}
+                              data-wowhead={getWowheadData({ ilevel: item.ilevel, is_catalyst: item.is_catalyst, source_item_id: item.source_item_id })}
                               target="_blank"
                               rel="noreferrer"
                               className="text-sm font-bold hover:underline"

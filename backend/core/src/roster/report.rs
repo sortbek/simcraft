@@ -48,6 +48,10 @@ pub struct ItemEntry {
     pub is_void_forge: bool,
     #[serde(default)]
     pub is_catalyst: bool,
+    /// The item a catalysed piece came from: it keeps that item's secondary
+    /// stats, so the tooltip shows the source's (Wowhead `original-item=`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_item_id: Option<u64>,
     pub results: Vec<ItemResult>,
 }
 
@@ -70,6 +74,7 @@ struct ItemAccum {
     ilevel: u64,
     is_void_forge: bool,
     is_catalyst: bool,
+    source_item_id: Option<u64>,
     /// member_id -> (dps, delta) of that member's best combo for this item.
     best: HashMap<String, (f64, f64)>,
     /// first-seen order of items, tracked by the caller (see aggregate_report).
@@ -167,14 +172,16 @@ pub fn aggregate_report(
                 .get("is_catalyst")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
+            // Void Forged rows reuse source_item_id for their own id; only a
+            // catalyst's source is a different item.
+            let source_item_id = item
+                .get("source_item_id")
+                .and_then(|v| v.as_u64())
+                .filter(|&s| is_catalyst && s > 0);
             let uid = if is_void_forge {
                 format!("{item_id}:vf")
             } else if is_catalyst {
-                let source = item
-                    .get("source_item_id")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
-                format!("{item_id}:cat:{source}")
+                format!("{item_id}:cat:{}", source_item_id.unwrap_or(0))
             } else {
                 item_id.to_string()
             };
@@ -202,6 +209,7 @@ pub fn aggregate_report(
                     ilevel: item.get("ilevel").and_then(|v| v.as_u64()).unwrap_or(0),
                     is_void_forge,
                     is_catalyst,
+                    source_item_id,
                     best: HashMap::new(),
                     order,
                 }
@@ -269,6 +277,7 @@ pub fn aggregate_report(
                     ilevel: accum.ilevel,
                     is_void_forge: accum.is_void_forge,
                     is_catalyst: accum.is_catalyst,
+                    source_item_id: accum.source_item_id,
                     results,
                 },
             )
@@ -437,6 +446,36 @@ mod tests {
             .find(|i| !i.is_void_forge && !i.is_catalyst)
             .expect("base row");
         assert_eq!(base.uid, "111");
+    }
+
+    #[test]
+    fn catalyst_row_keeps_its_source_item() {
+        // A catalysed tier piece keeps the source item's secondaries, so the report
+        // must carry the source for the tooltip (Wowhead `original-item=`).
+        let inputs = vec![(
+            member("a", "Alice"),
+            Some(json!({
+                "base_dps": 1000.0,
+                "results": [
+                    {"items":[{"item_id":271495,"slot":"chest","ilevel":315,"name":"Scuteplate","encounter":"Vashnik","is_catalyst":true,"source_item_id":273789}],"dps":1030.0,"delta":30.0}
+                ]
+            })),
+            None,
+        )];
+        let report = aggregate_report("r", 1, "heroic", &inputs);
+        let row = report.items.iter().find(|i| i.is_catalyst).expect("catalyst row");
+        assert_eq!(row.source_item_id, Some(273789));
+        let plain = aggregate_report(
+            "r",
+            1,
+            "heroic",
+            &[(
+                member("a", "Alice"),
+                Some(json!({"base_dps": 1000.0, "results": [{"items":[{"item_id":111,"slot":"head","ilevel":315,"name":"Hood","encounter":"Boss"}],"dps":1010.0,"delta":10.0}]})),
+                None,
+            )],
+        );
+        assert_eq!(plain.items[0].source_item_id, None);
     }
 
     #[test]

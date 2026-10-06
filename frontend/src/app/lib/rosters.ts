@@ -112,6 +112,8 @@ export interface ReportItem {
   ilevel: number;
   is_void_forge?: boolean;
   is_catalyst?: boolean;
+  /** Catalyst rows: the item it came from, whose secondary stats it keeps. */
+  source_item_id?: number;
   results: ReportItemResult[];
 }
 

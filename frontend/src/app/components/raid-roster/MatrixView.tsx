@@ -52,7 +52,7 @@ export default function MatrixView({ items, players, lookup, itemInfo }: Props) 
           <div className="flex w-56 items-center gap-2 px-2 py-1">
             <a
               href={getWowheadUrl(item.item_id)}
-              data-wowhead={getWowheadData({ ilevel: item.ilevel })}
+              data-wowhead={getWowheadData({ ilevel: item.ilevel, is_catalyst: item.is_catalyst, source_item_id: item.source_item_id })}
               target="_blank"
               rel="noreferrer"
               className="flex min-w-0 items-center gap-2 hover:underline"
