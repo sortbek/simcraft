@@ -40,6 +40,12 @@ function cacheKey(item_id: number, bonus_ids?: number[]): string {
 /** @deprecated import `QUALITY_HEX` from `lib/qualityColors` instead. */
 export const QUALITY_COLORS = QUALITY_HEX;
 
+export function chunk<T>(list: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
 /**
  * Shared effect skeleton for the three batch-info hooks.
  * - `depKey` drives the effect dependency array.
@@ -48,9 +54,11 @@ export const QUALITY_COLORS = QUALITY_HEX;
  * - `fetchMissing` POSTs `toFetch`, populates the module cache, and resolves
  *   the new entries; takes a `cancelled()` guard.
  * - `setState` is the hook's own dispatcher (generic so each keeps its Record type).
+ * - `maxBatch` is the endpoint's per-request cap; larger sets go out in chunks.
  */
 function useBatchEffect<TItem, TFetch>(
   depKey: string,
+  maxBatch: number,
   prepare: () => { cached: Record<number, TItem>; toFetch: TFetch[] },
   fetchMissing: (
     toFetch: TFetch[],
@@ -71,8 +79,13 @@ function useBatchEffect<TItem, TFetch>(
 
     (async () => {
       try {
-        const batch = await fetchMissing(toFetch, () => cancelled);
+        const parts = await Promise.all(
+          chunk(toFetch, maxBatch).map((part) =>
+            fetchMissing(part, () => cancelled).catch(() => ({}))
+          )
+        );
         if (cancelled) return;
+        const batch = Object.assign({}, ...parts);
         if (Object.keys(batch).length > 0) setState((prev) => ({ ...prev, ...batch }));
       } catch {
         // Silently fail
@@ -95,6 +108,7 @@ export function useItemInfo(queries: ItemQuery[]): Record<number, ItemInfo> {
 
   useBatchEffect<ItemInfo, ItemQuery>(
     depKey,
+    100,
     () => {
       const unique = new Map<string, ItemQuery>();
       for (const q of queries) {
@@ -160,6 +174,7 @@ export function useEnchantInfo(enchantIds: number[]): Record<number, EnchantInfo
 
   useBatchEffect<EnchantInfo, number>(
     depKey,
+    200,
     () => {
       const unique = new Set(enchantIds.filter((id) => id > 0));
       const cached: Record<number, EnchantInfo> = {};
@@ -215,6 +230,7 @@ export function useGemInfo(gemIds: number[]): Record<number, GemInfo> {
 
   useBatchEffect<GemInfo, number>(
     depKey,
+    200,
     () => {
       const unique = new Set(gemIds.filter((id) => id > 0));
       const cached: Record<number, GemInfo> = {};

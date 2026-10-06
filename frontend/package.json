@@ -18,7 +18,8 @@
     "test:omnium": "node --test scripts/test-omnium.cjs",
     "test:simc": "node --test scripts/test-simc-validation.cjs",
     "test:share": "node --test scripts/test-share.cjs",
-    "test:simclog": "node --test scripts/test-simc-log.cjs"
+    "test:simclog": "node --test scripts/test-simc-log.cjs",
+    "test:iteminfo": "node --test scripts/test-item-info.cjs"
   },
   "dependencies": {
     "next": "^15.5.14",
