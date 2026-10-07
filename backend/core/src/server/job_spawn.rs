@@ -630,7 +630,14 @@ mod tests {
         };
 
         let (job_id, _created_at) = insert_and_spawn_profileset_job(
-            submission, &options, None, provider, &avail, &repo, &log_buffer, false,
+            submission,
+            &options,
+            None,
+            provider,
+            &avail,
+            &repo,
+            &log_buffer,
+            false,
         )
         .await
         .unwrap();

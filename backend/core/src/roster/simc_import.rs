@@ -136,7 +136,9 @@ mod tests {
     #[test]
     fn a_block_keeps_its_own_header_and_not_the_next_characters() {
         let got = split_simc_profiles(&sample());
-        assert!(got[0].simc.starts_with("# Duskryth - Devastation - EU/Silvermoon"));
+        assert!(got[0]
+            .simc
+            .starts_with("# Duskryth - Devastation - EU/Silvermoon"));
         assert!(!got[0].simc.contains("Sørtbek"));
         assert!(got[1].simc.starts_with("# Sørtbek - unknown - EU/Draenor"));
     }
@@ -154,9 +156,14 @@ mod tests {
         );
         let got = split_simc_profiles(paste);
         assert_eq!(got.len(), 2);
-        assert!(got[0].simc.contains("id=222222"), "vault item belongs to Jaina");
+        assert!(
+            got[0].simc.contains("id=222222"),
+            "vault item belongs to Jaina"
+        );
         assert!(!got[1].simc.contains("id=222222"));
-        assert!(got[1].simc.starts_with("# Thrall - Enhancement - EU/Draenor"));
+        assert!(got[1]
+            .simc
+            .starts_with("# Thrall - Enhancement - EU/Draenor"));
     }
 
     #[test]
@@ -164,9 +171,13 @@ mod tests {
         // `Ann` is a prefix of `Annabelle`, and a bag line can start with a slot
         // name. Neither is the character's header, so neither joins the block.
         let prefix = "# Annabelle - Frost - EU/Draenor\nmage=\"Ann\"\nserver=draenor\n";
-        assert!(split_simc_profiles(prefix)[0].simc.starts_with("mage=\"Ann\""));
+        assert!(split_simc_profiles(prefix)[0]
+            .simc
+            .starts_with("mage=\"Ann\""));
 
         let bag = "# head=,id=222222\nhunter=\"head\"\nserver=draenor\n";
-        assert!(split_simc_profiles(bag)[0].simc.starts_with("hunter=\"head\""));
+        assert!(split_simc_profiles(bag)[0]
+            .simc
+            .starts_with("hunter=\"head\""));
     }
 }
