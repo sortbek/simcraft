@@ -463,7 +463,11 @@ mod tests {
             None,
         )];
         let report = aggregate_report("r", 1, "heroic", &inputs);
-        let row = report.items.iter().find(|i| i.is_catalyst).expect("catalyst row");
+        let row = report
+            .items
+            .iter()
+            .find(|i| i.is_catalyst)
+            .expect("catalyst row");
         assert_eq!(row.source_item_id, Some(273789));
         let plain = aggregate_report(
             "r",
@@ -471,7 +475,9 @@ mod tests {
             "heroic",
             &[(
                 member("a", "Alice"),
-                Some(json!({"base_dps": 1000.0, "results": [{"items":[{"item_id":111,"slot":"head","ilevel":315,"name":"Hood","encounter":"Boss"}],"dps":1010.0,"delta":10.0}]})),
+                Some(
+                    json!({"base_dps": 1000.0, "results": [{"items":[{"item_id":111,"slot":"head","ilevel":315,"name":"Hood","encounter":"Boss"}],"dps":1010.0,"delta":10.0}]}),
+                ),
                 None,
             )],
         );

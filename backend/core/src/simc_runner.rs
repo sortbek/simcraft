@@ -89,6 +89,11 @@ fn set_process_affinity(pid: u32, threads: u32) {
     }
 }
 
+#[cfg(unix)]
+extern "C" {
+    fn setpriority(which: i32, who: u32, prio: i32) -> i32;
+}
+
 const SIMC_TIMEOUT_SECS: u64 = 600;
 
 /// Stream both newline-terminated output and carriage-return progress frames.
@@ -137,15 +142,24 @@ fn max_threads() -> u32 {
 }
 
 /// Resolve the thread count from the API options.
-/// A value of 0 (or absent) means use the local-friendly default: reserve a
-/// couple of logical CPUs for the desktop app/backend. Explicit thread counts
-/// are still honored up to the machine limit.
+/// A value of 0 (or absent) means auto: the desktop app reserves a couple of
+/// logical CPUs to stay responsive; servers use every core, since SimC runs at
+/// low priority and yields to request handling. `SIMC_THREADS` caps both.
 fn resolve_threads(options: &Value) -> u32 {
     let requested = options.get("threads").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-    if requested == 0 {
-        max_threads().saturating_sub(2).max(1)
-    } else {
-        requested.min(max_threads()).max(1)
+    let cap = std::env::var("SIMC_THREADS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .filter(|&n| n > 0);
+    thread_count(requested, max_threads(), cap, cfg!(feature = "desktop"))
+}
+
+fn thread_count(requested: u32, machine: u32, cap: Option<u32>, desktop: bool) -> u32 {
+    let limit = cap.map_or(machine, |c| c.min(machine)).max(1);
+    match requested {
+        0 if desktop => machine.saturating_sub(2).clamp(1, limit),
+        0 => limit,
+        n => n.min(limit),
     }
 }
 
@@ -879,6 +893,15 @@ async fn run_simc_subprocess(
     {
         // CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS
         cmd.creation_flags(0x08000000 | 0x00004000);
+    }
+    #[cfg(unix)]
+    unsafe {
+        // Unix counterpart of BELOW_NORMAL_PRIORITY_CLASS: nice 19, set before exec
+        // so every SimC thread inherits it and only gets otherwise idle CPU time.
+        cmd.pre_exec(|| {
+            setpriority(0, 0, 19);
+            Ok(())
+        });
     }
 
     // Only pass output format and threads as CLI args — everything else is in the input file
@@ -1829,6 +1852,22 @@ mod tests {
 
     fn keep_set(names: &[&str]) -> HashSet<String> {
         names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn thread_count_auto_uses_all_cores_on_servers() {
+        assert_eq!(thread_count(0, 4, None, false), 4);
+        assert_eq!(thread_count(0, 4, None, true), 2);
+        assert_eq!(thread_count(0, 2, None, true), 1);
+    }
+
+    #[test]
+    fn thread_count_cap_bounds_auto_and_explicit_requests() {
+        assert_eq!(thread_count(0, 8, Some(3), false), 3);
+        assert_eq!(thread_count(6, 8, Some(3), false), 3);
+        assert_eq!(thread_count(0, 4, Some(16), false), 4);
+        assert_eq!(thread_count(2, 8, None, false), 2);
+        assert_eq!(thread_count(99, 8, None, true), 8);
     }
 
     #[test]

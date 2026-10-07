@@ -83,6 +83,7 @@ docker compose -f docker-compose.dev.yml up --build
 | `SIMC_ENABLED_BRANCHES` | `weekly` | Comma-separated SimC branches to install and expose, e.g. `weekly,nightly` |
 | `SIMC_CHECK_INTERVAL` | `3600` | Seconds between automatic SimC update checks |
 | `SIMC_PATH` | `/usr/local/bin/simc` | Path to SimulationCraft binary |
+| `SIMC_THREADS` | _(all cores)_ | Max threads per sim. SimC runs at low priority, so the default rarely needs lowering |
 | `DATA_DIR` | `./resources/data` | Path to game data JSON files |
 | `DATABASE_URL` | `simhammer.db` | SQLite path or `postgres://` URL |
 | `DB_BACKEND` | _(auto)_ | Force `sqlite` or `postgres` (normally detected from `DATABASE_URL` scheme) |
