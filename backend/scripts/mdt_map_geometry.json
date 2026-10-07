@@ -1,5 +1,5 @@
 {
-  "_comment": "Per-UiMap travel geometry for the SimC DungeonRoute delay estimate, derived from Blizzard DBC and keyed by MDT mapId (MDT.mapInfo[idx].mapID). Per-axis world-yard scale: yardsPerUnitX = extentX / 840, yardsPerUnitY = extentY / 560, where the dungeon floor fills MDT's 840x560 base canvas and the UiMapAssignment world bounds give extentX/extentY. For a 1.5:1 floor the two axes are equal (the values below, migrated from the former single yardsPerUnit); non-1.5 floors keep distinct X/Y. 560 (Maisara Caverns) and 559 (Nexus Point Xenas) are calibrated from their floor UiMaps (2501, whose parent 2437 is the Zul'Aman zone; and 2556) — their MDT mapIDs resolve to parent/zone UiMaps, which is why these two were blank before. timerSeconds = MapChallengeMode.CriteriaCount_0 (the +1 par timer). Regenerate from DBC when the season/dungeon set changes.",
+  "_comment": "Per-UiMap travel geometry for the SimC DungeonRoute delay estimate, derived from Blizzard DBC and keyed by MDT mapId (MDT.mapInfo[idx].mapID). Per-axis world-yard scale: yardsPerUnitX = extentX / 840, yardsPerUnitY = extentY / 560, where the dungeon floor fills MDT's 840x560 base canvas and the UiMapAssignment world bounds give extentX/extentY. For a 1.5:1 floor the two axes are equal (the values below, migrated from the former single yardsPerUnit); non-1.5 floors keep distinct X/Y. 560 (Maisara Caverns) and 559 (Nexus Point Xenas) are calibrated from their floor UiMaps (2501, whose parent 2437 is the Zul'Aman zone; and 2556) — their MDT mapIDs resolve to parent/zone UiMaps, which is why these two were blank before. timerSeconds = MapChallengeMode.CriteriaCount_0 (the +1 par timer). Regenerate from DBC when the season/dungeon set changes. Midnight Season 2 entries (587 Murder Row, 586 Den of Nalorakk, 584 The Blinding Vale, 585 Voidscar Arena, 588 Altar of Fangs, 399 Ruby Life Pools, 250 Temple of Sethraliss, 249 Kings' Rest) carry the timer only: MDT's mapID is the MapChallengeMode ID, not a UiMap, and MDT draws one custom image per dungeon, so no single floor UiMap gives its scale; their travel delays use the default yards-per-unit.",
   "161": { "yardsPerUnitX": 0.738, "yardsPerUnitY": 0.738, "timerSeconds": 1680 },
   "239": { "yardsPerUnitX": 0.952, "yardsPerUnitY": 0.952, "timerSeconds": 2040 },
   "402": { "yardsPerUnitX": 0.670, "yardsPerUnitY": 0.670, "timerSeconds": 1860 },
@@ -7,5 +7,13 @@
   "557": { "yardsPerUnitX": 1.131, "yardsPerUnitY": 1.131, "timerSeconds": 1980 },
   "558": { "yardsPerUnitX": 0.670, "yardsPerUnitY": 0.670, "timerSeconds": 2040 },
   "559": { "yardsPerUnitX": 1.161, "yardsPerUnitY": 1.161, "timerSeconds": 1800 },
-  "560": { "yardsPerUnitX": 1.967, "yardsPerUnitY": 1.968, "timerSeconds": 1980 }
+  "560": { "yardsPerUnitX": 1.967, "yardsPerUnitY": 1.968, "timerSeconds": 1980 },
+  "587": { "timerSeconds": 2040 },
+  "586": { "timerSeconds": 1920 },
+  "584": { "timerSeconds": 1800 },
+  "585": { "timerSeconds": 1800 },
+  "588": { "timerSeconds": 1800 },
+  "399": { "timerSeconds": 1680 },
+  "250": { "timerSeconds": 1920 },
+  "249": { "timerSeconds": 1980 }
 }

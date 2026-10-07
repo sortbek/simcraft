@@ -184,6 +184,17 @@ mod tests {
         assert_eq!(first.enemies[0].clone_indices.len(), 1);
     }
 
+    #[test]
+    fn mdt2_season_route_converts_with_shipped_data() {
+        let db = DungeonDb::from_json(include_str!("../../../resources/data/mdt_dungeons.json"))
+            .unwrap();
+        let out = convert(EXAMPLE_MDT2, &db, &ConvertOptions::default()).unwrap();
+        assert_eq!(out.pull_count, 12);
+        assert_eq!(out.unresolved, 0);
+        assert!(out.simc.contains("fight_style=DungeonRoute"));
+        assert!(out.simc.contains("max_time=1800"));
+    }
+
     fn load_db() -> DungeonDb {
         // Committed fixture (the runtime mdt_dungeons.json lives under the
         // gitignored resources/data and is produced by the extraction script).
