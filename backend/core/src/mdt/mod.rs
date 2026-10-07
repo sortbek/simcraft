@@ -4,10 +4,12 @@
 //!   strip leading "!" -> DecodeForPrint -> raw DEFLATE inflate
 //!   -> AceSerializer deserialize -> typed [`MdtRoute`]
 //!
-//! Only modern (`!`-prefixed) strings are supported; the legacy WeakAuras-B64 +
-//! LibCompress format is intentionally not implemented.
+//! MDT 6.2+ exports `!~MDT2~` strings instead: base64 -> raw DEFLATE -> CBOR,
+//! decoded into the same table shape. Only `!`-prefixed strings are supported;
+//! the legacy WeakAuras-B64 + LibCompress format is intentionally not implemented.
 
 mod ace;
+mod cbor;
 pub mod enemy_db;
 mod generate;
 mod health_scaling;
@@ -19,6 +21,7 @@ pub use enemy_db::DungeonDb;
 pub use generate::{pull_shape, MdtSimc, ShapePull};
 pub use model::{MdtPull, MdtPullEnemy, MdtRoute};
 
+use base64::Engine;
 use std::io::Read;
 
 /// Decode an MDT export string into a typed route.
@@ -27,6 +30,14 @@ pub fn decode(import: &str) -> Result<MdtRoute, String> {
     let body = trimmed
         .strip_prefix('!')
         .ok_or("not a modern MDT string (expected leading '!')")?;
+
+    if let Some(b64) = body.strip_prefix("~MDT2~") {
+        let compressed = base64::engine::general_purpose::STANDARD
+            .decode(b64.split_whitespace().collect::<String>())
+            .map_err(|e| format!("MDT2 base64 decode failed: {e}"))?;
+        let value = cbor::deserialize(&inflate_raw(&compressed)?)?;
+        return model::parse_route(&value);
+    }
 
     let compressed = print_decode::decode_for_print(body);
     let serialized = inflate_raw(&compressed)?;
@@ -156,6 +167,21 @@ mod tests {
         let enemy_idxs: Vec<i64> = first.enemies.iter().map(|e| e.enemy_idx).collect();
         assert_eq!(enemy_idxs, vec![1, 13, 14]);
         assert_eq!(first.enemies[0].clone_indices.len(), 2);
+    }
+
+    // MDT2 export: "!~MDT2~" + base64 of raw DEFLATE of CBOR (WoW's C_EncodingUtil).
+    const EXAMPLE_MDT2: &str = "!~MDT2~VZJNTxNBGMeZl52d7muhNPEIH8CGpVrskUBBKLEoauLJtN2ZsjrdNfuCxROzbYmJfgqsoBc/ndydJdDUwx42z+/3/OefmZv9qPeB9dNkfLUd3m7701aj8ay2tffYa3i1LXDbOXpz8npNdJN0rRclyfoD5W1s1p4oaqtea4LbozvqUybEmjdH6pt3yKbXrD2Fi0hj/dAPOA/6mUjP4e5nxj4utc66ImO/XvazOGZhupuFAxaFB/7o0ewgYUKdMIjCi/b9+FitAfspY8MgHCy144CnHc4TliYXrSIi+X4NJCBTADVC9W8AIqwRnZYs25DAHJeXV1r9SETxHud1xvlPICEZI1zSc7Nqfq2sVk3Ldtx7piCabAYkIrlp6RPH/U+vM6VjktuOnldWjRyiuddU5pUjwZzmvTqbwcuy40KALAlQDtBCSjGcaFgnloRI4oWQJruBY9sy3cIxTEuiag7gsvoWdM5naFIcvCSBPb0rPV/RLJK1SzVU5amE9sQwFxoW+ozkZdeerFSWy8Y8vOsV8dcgJ5qdr1apxBUJyguVCvOYhWx4vp0kwSAcqutJrsFUp5Tq6DfAiGJiYJNY1MYOcQH5AzTVHmOgYUIoKhETW8QmDnZxmdArSDE1JlT51ljt6Nxf+UnWE+yMCbCbslHaYSJIv2Tx+65Iu/F7b2foBz9e8Jix00j4h1EQMv/v84d/cNBjgywQ6rGAnSzw2xuvTt+Kd+lo1N7/Bw==";
+
+    #[test]
+    fn decodes_mdt2_string() {
+        let route = decode(EXAMPLE_MDT2).expect("decode MDT2 string");
+        assert_eq!(route.dungeon_idx, 164);
+        assert_eq!(route.keystone_level, 2);
+        assert_eq!(route.pulls.len(), 12);
+        // Pull 1 is {1: [1], 6: [2, 5, 6, 8, 7], ...}: CBOR arrays become 1-based tables.
+        let first = &route.pulls[0];
+        assert_eq!(first.enemies[0].enemy_idx, 1);
+        assert_eq!(first.enemies[0].clone_indices.len(), 1);
     }
 
     fn load_db() -> DungeonDb {
