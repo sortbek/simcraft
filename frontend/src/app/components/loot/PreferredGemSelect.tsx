@@ -34,11 +34,13 @@ export default function PreferredGemSelect({ value, onChange, gems }: PreferredG
   const { t } = useLanguage();
   const options = [
     { value: null as number | null, label: t('dropFinder.preferredGemAuto') },
-    ...gems.map((gem) => ({
-      value: gem.id as number | null,
-      label: gem.itemName ?? gem.displayName,
-      sublabel: gem.stats?.map(statLabel).join(', '),
-    })),
+    ...gems
+      .filter((gem) => gem.itemId)
+      .map((gem) => ({
+        value: gem.itemId as number | null,
+        label: gem.itemName ?? gem.displayName,
+        sublabel: gem.stats?.map(statLabel).join(', '),
+      })),
   ];
   return <Select value={value} options={options} onChange={onChange} />;
 }

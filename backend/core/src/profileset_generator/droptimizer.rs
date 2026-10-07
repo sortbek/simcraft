@@ -169,7 +169,7 @@ pub(super) fn generate_droptimizer_input_with(
     // the equipped item in that slot does not already cover.
     let best_gem = options
         .preferred_gem_id
-        .filter(|&id| id > 0)
+        .filter(|&id| crate::item_db::get_gem_info(id).is_some())
         .or_else(|| most_used_gem(&equipped_gear, &legacy_gem_re));
 
     let mut combo_idx = 2usize;
@@ -1670,6 +1670,29 @@ finger2=,id=102,gem_id=2222\n"; // 2222 is most-used (x2)
             "neck",
         );
         assert_eq!(covered, vec![240983]);
+    }
+
+    /// Older pickers saved the gem's enchantment id (8149) instead of its item id;
+    /// SimC rejects that, so it falls back like no preference at all.
+    #[test]
+    fn a_preference_that_is_not_a_gem_item_falls_back_to_the_worn_gem() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "mage=test\nspec=frost\nneck=,id=100,gem_id=240983\n";
+        let gems = gems_of(
+            &generate_droptimizer_input_with(
+                profile,
+                &[drop(268265, 2, vec![])],
+                None,
+                &HashMap::new(),
+                DropRunOptions {
+                    preferred_gem_id: Some(8149),
+                    add_vault_socket: false,
+                },
+            )
+            .0,
+            "neck",
+        );
+        assert_eq!(gems, vec![240983, 240983]);
     }
 
     /// "All eligible items will be simmed as if they have a socket" — a floor of
