@@ -8,7 +8,7 @@
 //! gear set has no off_hand (two-hand main_hand case).
 
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::types::class_data::GEAR_SLOTS;
 
@@ -79,7 +79,8 @@ pub(super) fn emit_base_actor(
 /// applied). `talent_spec_name`: spec derived from `talent_string`; a `spec=`
 /// line is emitted only when `Some(s)` and `s != base_actor_spec`.
 /// `omnium_string`: folio override, emitted only when non-empty (the base actor
-/// already carries the exported folio).
+/// already carries the exported folio). `consumables`: slot -> value overriding
+/// the base actor's consumables.
 pub(super) fn emit_profileset(
     name: &str,
     slot_simc: &HashMap<String, String>,
@@ -87,6 +88,7 @@ pub(super) fn emit_profileset(
     talent_spec_name: Option<&str>,
     base_actor_spec: &str,
     omnium_string: &str,
+    consumables: &BTreeMap<String, String>,
 ) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     lines.push(format!("### {}", name));
@@ -112,6 +114,13 @@ pub(super) fn emit_profileset(
         lines.push(format!(
             "profileset.\"{}\"+=omnium_talents={}",
             name, omnium_string
+        ));
+    }
+    for (slot, value) in consumables {
+        lines.push(format!(
+            "profileset.\"{}\"+={}",
+            name,
+            super::consumables::simc_option(slot, value)
         ));
     }
     lines.push(String::new());

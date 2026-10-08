@@ -177,6 +177,16 @@ test('comboKey ignores kept items and item order', () => {
   assert.notEqual(comboKey(a, 'talA'), comboKey(a, 'talB'));
 });
 
+test('comboKey separates consumable mixes and keeps old keys unchanged', () => {
+  const items = [{ slot: 'head', item_id: 1, is_kept: false }];
+  assert.equal(comboKey(items, '', '', {}), comboKey(items));
+  assert.notEqual(comboKey(items, '', '', { flask: 'a' }), comboKey(items, '', '', { flask: 'b' }));
+  assert.equal(
+    comboKey(items, '', '', { food: 'f', flask: 'a' }),
+    comboKey(items, '', '', { flask: 'a', food: 'f' })
+  );
+});
+
 test('single-actor comparison flags big gaps only', () => {
   const shared = {
     player_name: 'T',

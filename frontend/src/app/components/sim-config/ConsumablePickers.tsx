@@ -9,8 +9,10 @@ import { apiUrl, fetchJsonOr } from '../../lib/api';
 import { iconProps } from '../../lib/useItemInfo';
 import { useDismiss } from '../../lib/useDismiss';
 import { TABS_TRACK, tabClass } from '../ui/ToggleButtonGroup';
+import { baseOf } from '../../lib/consumableOptions';
+import { useConsumableDefaults } from '../../lib/useConsumableDefaults';
 
-interface ConsumableEntry {
+export interface ConsumableEntry {
   value: string;
   shortName: string;
   name: string;
@@ -21,7 +23,7 @@ interface ConsumableEntry {
   effects?: { stat?: string }[];
 }
 
-interface ConsumablesApiResponse {
+export interface ConsumablesApiResponse {
   flasks: ConsumableEntry[];
   potions: ConsumableEntry[];
   foods: ConsumableEntry[];
@@ -30,7 +32,7 @@ interface ConsumablesApiResponse {
 }
 
 /** One consumable across its crafting qualities ("_1" / "_2" suffixes). */
-interface ConsumableGroup {
+export interface ConsumableGroup {
   base: string;
   name: string;
   icon: string;
@@ -43,7 +45,7 @@ interface ConsumableGroup {
 // Current expansion for Midnight
 const CURRENT_EXPANSION = 11;
 
-const SLOT_SOURCES: { key: string; field: keyof ConsumablesApiResponse }[] = [
+export const SLOT_SOURCES: { key: string; field: keyof ConsumablesApiResponse }[] = [
   { key: 'flask', field: 'flasks' },
   { key: 'food', field: 'foods' },
   { key: 'potion', field: 'potions' },
@@ -51,11 +53,10 @@ const SLOT_SOURCES: { key: string; field: keyof ConsumablesApiResponse }[] = [
   { key: 'weapon_rune', field: 'weapon_runes' },
 ];
 
-const baseOf = (value: string) => value.replace(/_\d+$/, '');
 const statLabel = (stat: string) =>
   stat ? stat.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : '';
 
-function buildGroups(entries: ConsumableEntry[]): ConsumableGroup[] {
+export function buildGroups(entries: ConsumableEntry[]): ConsumableGroup[] {
   const groups = new Map<string, ConsumableGroup>();
   // Current expansion first, so the menu leads with what people actually use.
   const ordered = [
@@ -81,7 +82,7 @@ function buildGroups(entries: ConsumableEntry[]): ConsumableGroup[] {
   return [...groups.values()];
 }
 
-const qualitiesOf = (g: ConsumableGroup) =>
+export const qualitiesOf = (g: ConsumableGroup) =>
   Object.keys(g.variants)
     .map(Number)
     .filter((q) => q > 0)
@@ -112,7 +113,7 @@ function ConsumableIcon({ icon, muted }: { icon?: string; muted?: boolean }) {
 // need the list, and it changes only with the data build.
 let consumablesPromise: Promise<ConsumablesApiResponse | null> | undefined;
 
-function useConsumableData(): ConsumablesApiResponse | null {
+export function useConsumableData(): ConsumablesApiResponse | null {
   const [data, setData] = useState<ConsumablesApiResponse | null>(null);
   useEffect(() => {
     let alive = true;
@@ -131,11 +132,24 @@ function useConsumableData(): ConsumablesApiResponse | null {
   return data;
 }
 
+/** Every consumable by SimC value, for labelling picks outside the pickers. */
+export function useConsumableLookup(): Map<string, ConsumableEntry> {
+  const data = useConsumableData();
+  return useMemo(() => {
+    const map = new Map<string, ConsumableEntry>();
+    if (data) {
+      for (const { field } of SLOT_SOURCES) for (const e of data[field] ?? []) map.set(e.value, e);
+    }
+    return map;
+  }, [data]);
+}
+
 /** One small icon per consumable slot, for the collapsed Sim settings summary:
  *  the chosen item's icon, a dashed box for Auto, a dim box for None. */
 export function ConsumableIconStrip() {
   const { consumables } = useSimContext();
   const apiData = useConsumableData();
+  const defaults = useConsumableDefaults();
   const iconByValue = useMemo(() => {
     const map = new Map<string, string>();
     if (apiData) {
@@ -150,7 +164,9 @@ export function ConsumableIconStrip() {
     <span className="flex items-center gap-[3px]">
       {SLOT_SOURCES.map(({ key }) => {
         const value = consumables[key] || '';
-        const icon = value && value !== 'disabled' ? iconByValue.get(value) : undefined;
+        // Auto shows what SimC will pick, once known.
+        const shown = value || defaults?.[key] || '';
+        const icon = shown && shown !== 'disabled' ? iconByValue.get(shown) : undefined;
         return icon ? (
           <img
             key={key}
@@ -177,11 +193,14 @@ function ConsumableSlot({
   slot,
   groups,
   value,
+  autoValue,
   onChange,
 }: {
   slot: string;
   groups: ConsumableGroup[];
   value: string;
+  /** What Auto resolves to for this character, when known. */
+  autoValue?: string;
   onChange: (value: string) => void;
 }) {
   const { t } = useLanguage();
@@ -203,8 +222,12 @@ function ConsumableSlot({
     return g.variants[qs.includes(selectedQuality) ? selectedQuality : qs[qs.length - 1]];
   };
 
+  const autoGroup = autoValue ? groups.find((g) => g.base === baseOf(autoValue)) : undefined;
+  const autoName = autoValue === 'disabled' ? t('simSettings.none') : autoGroup?.name;
   const label = !value
-    ? t('simSettings.auto')
+    ? autoName
+      ? `${t('simSettings.auto')} · ${autoName}`
+      : t('simSettings.auto')
     : value === 'disabled'
       ? t('simSettings.none')
       : selected
@@ -223,7 +246,10 @@ function ConsumableSlot({
           open ? 'border-gold-edge' : 'border-line/[0.06] hover:border-line/[0.16]'
         }`}
       >
-        <ConsumableIcon icon={selected?.icon} muted={value === 'disabled'} />
+        <ConsumableIcon
+          icon={value ? selected?.icon : autoGroup?.icon}
+          muted={(value || autoValue) === 'disabled'}
+        />
         <span className="flex min-w-0 flex-col gap-[5px]">
           <span className="lbl flex items-center gap-1.5">
             {CONSUMABLE_LABELS[slot]}
@@ -274,7 +300,16 @@ function ConsumableSlot({
             </div>
           )}
           {[
-            { v: '', name: t('simSettings.auto'), hint: t('simSettings.autoHint') },
+            {
+              v: '',
+              name: t('simSettings.auto'),
+              hint:
+                autoValue === 'disabled'
+                  ? t('simSettings.autoResolvedNone')
+                  : autoGroup
+                    ? t('simSettings.autoResolved', { name: autoGroup.name })
+                    : t('simSettings.autoHint'),
+            },
             { v: 'disabled', name: t('simSettings.none'), hint: t('simSettings.noneHint') },
           ].map((opt) => (
             <button
@@ -288,7 +323,10 @@ function ConsumableSlot({
                 value === opt.v ? 'bg-gold/[0.08]' : 'hover:bg-surface-container-highest'
               }`}
             >
-              <ConsumableIcon muted={opt.v === 'disabled'} />
+              <ConsumableIcon
+                icon={opt.v ? undefined : autoGroup?.icon}
+                muted={opt.v === 'disabled'}
+              />
               <span className="min-w-0">
                 <span className="block text-[13px] font-semibold text-on-surface">{opt.name}</span>
                 <span className="block text-[11.5px] text-outline">{opt.hint}</span>
@@ -334,6 +372,7 @@ function ConsumableSlot({
 export default function ConsumablePickers() {
   const { consumables, setConsumables } = useSimContext();
   const apiData = useConsumableData();
+  const defaults = useConsumableDefaults();
 
   const groups = useMemo(
     () =>
@@ -354,6 +393,7 @@ export default function ConsumablePickers() {
           slot={key}
           groups={groups[key]}
           value={consumables[key] || ''}
+          autoValue={defaults?.[key]}
           onChange={(v) => setConsumables({ ...consumables, [key]: v })}
         />
       ))}

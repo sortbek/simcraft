@@ -1,9 +1,11 @@
 use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::types::*;
 use crate::addon_parser;
+use crate::compute::SimcBinaries;
 use crate::game_data;
 use crate::gear_resolver;
 use crate::item_db;
@@ -191,6 +193,75 @@ pub(super) async fn list_consumables() -> HttpResponse {
     HttpResponse::Ok()
         .insert_header(("Cache-Control", "public, max-age=3600"))
         .json(result)
+}
+
+#[derive(serde::Deserialize)]
+pub(super) struct ConsumableDefaultsRequest {
+    simc_input: String,
+    /// The selected talent build and its spec, as a sim sends them: a build of
+    /// another spec changes every default, and a few weapon oils hang on talents.
+    #[serde(default)]
+    talents: String,
+    #[serde(default)]
+    spec_override: String,
+}
+
+/// The consumables SimC uses for this character when a slot is left on Auto
+/// (its spec defaults), as slot -> SimC value. Read from a tiny run with the
+/// same base-actor setup as a real sim, so it can't drift from what sims use.
+pub(super) async fn consumable_defaults(
+    req: web::Json<ConsumableDefaultsRequest>,
+    simc_bins: web::Data<Arc<SimcBinaries>>,
+) -> HttpResponse {
+    let simc_path = match simc_bins.resolve("") {
+        Ok(path) => path,
+        Err(e) => return HttpResponse::ServiceUnavailable().json(json!({ "detail": e })),
+    };
+    // The cheapest run SimC allows; it only has to set the actor up. The input
+    // is the user's own export, but this runs unasked, so it gets the shared-sim
+    // directive check.
+    let options = json!({
+        "iterations": 100,
+        "target_error": 5.0,
+        "max_time": 10,
+        "threads": 1,
+        "untrusted": true,
+    });
+    let job_id = format!("consumable_defaults_{}", uuid::Uuid::new_v4());
+    let input = super::handler_prep::preprocess_simc_input(
+        &req.simc_input,
+        &req.talents,
+        &req.spec_override,
+        "",
+    );
+    let output =
+        match crate::simc_runner::run_simc(&simc_path, &job_id, &input, &options, |_| {}, None)
+            .await
+        {
+            Ok(output) => output,
+            Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
+        };
+    let sim = output.json.get("sim").cloned().unwrap_or(Value::Null);
+    let setup = sim
+        .get("players")
+        .and_then(|p| p.get(0))
+        .and_then(|player| crate::result_parser::extract_setup(&sim, player));
+    let defaults: serde_json::Map<String, Value> = setup
+        .as_ref()
+        .and_then(|s| s.get("consumables"))
+        .and_then(|c| c.as_object())
+        .map(|c| {
+            c.iter()
+                .map(|(slot, entry)| {
+                    (
+                        slot.clone(),
+                        entry.get("value").cloned().unwrap_or(Value::Null),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    HttpResponse::Ok().json(json!({ "defaults": defaults }))
 }
 
 pub(super) async fn get_max_upgrade_ilevels(body: web::Json<Vec<Value>>) -> HttpResponse {

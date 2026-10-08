@@ -27,6 +27,7 @@ export const RAID_BUFF_LIST = [
   { key: 'skyfury', label: 'Skyfury', icon: 'achievement_raidprimalist_windelemental' },
   { key: 'hunters_mark', label: "Hunter's Mark", icon: 'ability_hunter_markedfordeath' },
   { key: 'bleeding', label: 'Bleeding', icon: 'ability_gouge' },
+  { key: 'power_infusion', label: 'Power Infusion', icon: 'spell_holy_powerinfusion' },
 ] as const;
 
 /** Raid-wide effects SimC reports but the config doesn't offer as a toggle. */
@@ -53,6 +54,8 @@ export const DEFAULT_RAID_BUFFS: Record<string, boolean> = {
   mark_of_the_wild: true,
   hunters_mark: true,
   bleeding: true,
+  // A single-target external from a Priest, not a raid-wide buff: off unless asked for.
+  power_infusion: false,
 };
 
 export const DEFAULT_EXPANSION_OPTIONS: Record<string, boolean> = {

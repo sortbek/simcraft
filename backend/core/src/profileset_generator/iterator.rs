@@ -5,7 +5,7 @@
 //! Cursor axis layout: `[gear per varying slot][enchant per axis][gem combo][profile variant]`.
 
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use super::gem_combos::GemCombo;
@@ -99,6 +99,8 @@ struct Eval {
     folio_name: String,
     /// `omnium_talents=` value to override, empty when it matches the base actor.
     omnium_override: String,
+    /// Consumables overriding the base actor's, empty for the baseline mix.
+    consumables: BTreeMap<String, String>,
 }
 
 /// Each gear slot's simc value with its enchant and gem overrides applied.
@@ -442,7 +444,7 @@ impl ProfilesetIterator {
             return None;
         }
 
-        // ── 7. Resolve profile variant (talent build × folio) ────────────────
+        // ── 7. Resolve profile variant (talent build × folio × consumables) ──
         let variant_idx = cursor[cursor.len() - 1];
         let variant = self
             .cfg
@@ -452,6 +454,7 @@ impl ProfilesetIterator {
             .unwrap_or_default();
         let (talent_name, talent_string) = (variant.name, variant.talent_string);
         let folio_name = variant.folio_name;
+        let consumables = variant.consumables;
         // The base actor already carries the exported folio; only a different
         // one needs an override line.
         let omnium_override = if super::simc::same_folio(&variant.omnium_string, &self.base_omnium)
@@ -486,7 +489,8 @@ impl ProfilesetIterator {
             && effective_enchants_map.is_empty()
             && gems_match_equipped
             && (talent_string.is_empty() || variant_idx == 0)
-            && omnium_override.is_empty();
+            && omnium_override.is_empty()
+            && consumables.is_empty();
 
         let eval = Eval {
             gear_set,
@@ -499,6 +503,7 @@ impl ProfilesetIterator {
             talent_string,
             folio_name,
             omnium_override,
+            consumables,
         };
         Some((eval, reproduces_base))
     }
@@ -515,6 +520,7 @@ impl ProfilesetIterator {
             talent_string,
             folio_name,
             omnium_override,
+            consumables,
         } = self.evaluate(&self.cursor)?;
 
         // ── 8. Identity key ──────────────────────────────────────────────────
@@ -525,6 +531,7 @@ impl ProfilesetIterator {
             effective_gems: &eff_gems,
             talent_string: &talent_string,
             omnium_string: &omnium_override,
+            consumables: &consumables,
         });
 
         // ── 9. Format simc lines + build metadata ───────────────────────────
@@ -548,6 +555,7 @@ impl ProfilesetIterator {
             talent_spec_name,
             &self.cfg.spec,
             &omnium_override,
+            &consumables,
         )
         .join("\n");
 
@@ -627,7 +635,7 @@ impl ProfilesetIterator {
         //   D gear swap (!is_baseline): build_combo_metadata, paired + non-paired swapped items + enchant/gem/talent + off_hand synthetic.
         let include_off_hand_synthetic = !gear_set.contains_key("off_hand");
 
-        let meta_items: Vec<serde_json::Value> = if is_baseline && variant_idx == 0 {
+        let mut meta_items: Vec<serde_json::Value> = if is_baseline && variant_idx == 0 {
             if effective_enchants_map.is_empty() {
                 // Case A: gem-only baseline. Tagged like every other path, or a
                 // gem change on equipped gear is the one row in a folio run that
@@ -779,6 +787,24 @@ impl ProfilesetIterator {
                 include_off_hand_synthetic,
             )
         };
+
+        // Tagged only when the mix changes something: the baseline mix is the
+        // base actor's own consumables.
+        if !consumables.is_empty() {
+            let tag = serde_json::json!(consumables);
+            for item in &mut meta_items {
+                item["consumables"] = tag.clone();
+            }
+            let only_synthetic = meta_items
+                .iter()
+                .all(|it| it.get("origin").and_then(|o| o.as_str()) == Some("system"));
+            if only_synthetic {
+                meta_items.insert(
+                    0,
+                    serde_json::json!({ "consumables": tag, "is_kept": true }),
+                );
+            }
+        }
 
         let metadata = serde_json::json!(meta_items);
 

@@ -143,15 +143,17 @@ pub(super) async fn cloud_estimate_top_gear(
         max_colors: req.max_colors,
     };
 
-    let combos = match profileset_generator::count_top_gear_combos_with_variants(
-        &base_profile,
-        &items_by_slot,
-        &req.selected_items,
-        max_combinations,
-        &variants,
-        catalyst_charges,
-        &gem_opts,
-    ) {
+    let combos = match variants.and_then(|variants| {
+        profileset_generator::count_top_gear_combos_with_variants(
+            &base_profile,
+            &items_by_slot,
+            &req.selected_items,
+            max_combinations,
+            &variants,
+            catalyst_charges,
+            &gem_opts,
+        )
+    }) {
         Ok(n) => n as u64,
         Err(e) => {
             return HttpResponse::Ok().json(json!({

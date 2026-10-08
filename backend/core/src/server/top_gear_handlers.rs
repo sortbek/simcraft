@@ -21,6 +21,7 @@ use crate::game_data;
 use crate::gear_resolver;
 use crate::log_buffer::LogBuffer;
 use crate::profileset_generator;
+use crate::profileset_generator::consumables;
 use crate::profileset_generator::triage::TRIAGE_THRESHOLD;
 
 fn normalized_talent_builds(talent_builds: &[TalentBuild]) -> Vec<(String, String)> {
@@ -41,17 +42,22 @@ fn normalized_talent_builds(talent_builds: &[TalentBuild]) -> Vec<(String, Strin
 }
 
 /// The request's profile-variant axis: normalized talent builds crossed with
-/// the folio combinations the user selected.
-pub(super) fn request_variants(req: &TopGearRequest) -> Vec<profileset_generator::ProfileVariant> {
+/// the folio combinations and the consumable mixes the user selected. Err for
+/// a consumable that isn't in the game data.
+pub(super) fn request_variants(
+    req: &TopGearRequest,
+) -> Result<Vec<profileset_generator::ProfileVariant>, String> {
     let folio_builds: Vec<(String, String)> = req
         .omnium_builds
         .iter()
         .map(|ob| (ob.name.clone(), ob.omnium_string.clone()))
         .collect();
-    profileset_generator::variants_from(
+    let variants = profileset_generator::variants_from(
         &normalized_talent_builds(&req.talent_builds),
         &folio_builds,
-    )
+    );
+    let mixes = consumables::consumable_sets(&req.options.consumables, &req.consumable_options)?;
+    Ok(consumables::with_consumable_sets(variants, &mixes))
 }
 
 /// The run's base profile and items, with any chosen replacement already
@@ -133,7 +139,10 @@ pub(super) async fn create_top_gear_sim(
         gear_resolver::generate_void_forge_alternatives(&mut resolved.slots);
     }
     let (base_profile, items_by_slot) = build_items_by_slot(&req, &resolved);
-    let variants = request_variants(&req);
+    let variants = match request_variants(&req) {
+        Ok(v) => v,
+        Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
+    };
     let max_combinations = capped_max_combinations(req.max_combinations);
     let socketed_ids = socketed_item_ids(&resolved);
     let gem_opts = profileset_generator::GemEnchantOptions {
@@ -344,7 +353,10 @@ pub(super) async fn get_top_gear_combo_count(req: web::Json<TopGearRequest>) -> 
         gear_resolver::generate_void_forge_alternatives(&mut resolved.slots);
     }
     let (base_profile, items_by_slot) = build_items_by_slot(&req, &resolved);
-    let variants = request_variants(&req);
+    let variants = match request_variants(&req) {
+        Ok(v) => v,
+        Err(e) => return HttpResponse::Ok().json(json!({ "combo_count": 0, "error": e })),
+    };
     let max_combinations = capped_max_combinations(req.max_combinations);
     let socketed_item_ids = socketed_item_ids(&resolved);
     let gem_opts = profileset_generator::GemEnchantOptions {

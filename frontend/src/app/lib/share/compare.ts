@@ -25,7 +25,12 @@ const flagged = (a: number, b: number, errA?: number, errB?: number) =>
 const gemIdsOf = (it: ResultItem): number[] =>
   (it.gem_ids?.length ? it.gem_ids : it.gem_id ? [it.gem_id] : []).filter((g) => g > 0);
 
-export function comboKey(items: ResultItem[], talentBuild?: string, folioBuild?: string): string {
+export function comboKey(
+  items: ResultItem[],
+  talentBuild?: string,
+  folioBuild?: string,
+  consumables?: Record<string, string>
+): string {
   const parts = items
     .filter((it) => !it.is_kept)
     .map((it) =>
@@ -39,7 +44,17 @@ export function comboKey(items: ResultItem[], talentBuild?: string, folioBuild?:
       ].join('/')
     )
     .sort();
-  return [...parts, `t=${talentBuild ?? ''}`, `f=${folioBuild ?? ''}`].join('|');
+  const mix = Object.entries(consumables ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([slot, value]) => `${slot}:${value}`)
+    .join(',');
+  // Appended only when set, so keys of results without consumables are unchanged.
+  return [
+    ...parts,
+    `t=${talentBuild ?? ''}`,
+    `f=${folioBuild ?? ''}`,
+    ...(mix ? [`c=${mix}`] : []),
+  ].join('|');
 }
 
 export function compareResults(shared: SimResult, local: SimResult, limit = 5): Comparison {
@@ -56,13 +71,13 @@ export function compareResults(shared: SimResult, local: SimResult, limit = 5): 
     };
   }
   const localByKey = new Map(
-    local.results.map((r) => [comboKey(r.items, r.talent_build, r.folio_build), r])
+    local.results.map((r) => [comboKey(r.items, r.talent_build, r.folio_build, r.consumables), r])
   );
   const rows = [...shared.results]
     .sort((a, b) => b.dps - a.dps)
     .slice(0, limit)
     .map((r) => {
-      const match = localByKey.get(comboKey(r.items, r.talent_build, r.folio_build));
+      const match = localByKey.get(comboKey(r.items, r.talent_build, r.folio_build, r.consumables));
       const sharedGainPct = round1(gain(r.dps, shared.base_dps));
       const localGainPct = match ? round1(gain(match.dps, local.base_dps)) : null;
       const label =

@@ -78,7 +78,7 @@ export default function SimResultView({
         elapsedTime={result.total_elapsed_seconds ?? result.elapsed_time_seconds}
         sourceJobId={typeof sourceJobId === 'string' ? sourceJobId : undefined}
         backLink={headerActions}
-        heroAside={result.setup ? <SimSetup setup={result.setup} /> : undefined}
+        setup={result.setup ?? undefined}
       />
       {canShowTalents(result.talent_string) && <TalentTree talentString={result.talent_string} />}
     </>

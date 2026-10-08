@@ -3,7 +3,19 @@ import { useSimContext } from '../components/sim-config/SimContext';
 import { primaryOmniumOverride } from '../components/omnium/omniumSelection';
 import { decodeHeader } from './talentDecode';
 import { SPEC_ID_TO_NAME } from './types';
+import { DEFAULT_RAID_BUFFS } from './sim-config-defaults';
 import { useOmniumTree } from './useOmniumTree';
+
+/** The spec a talent string belongs to, so the backend can override `spec=`
+ *  when a build of another spec is selected. Empty when it can't be decoded. */
+export function specOverrideOf(talentString: string): string {
+  if (!talentString) return '';
+  try {
+    return SPEC_ID_TO_NAME[decodeHeader(talentString).specId] ?? '';
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Single source of truth for SimContext-derived options shared by the real
@@ -45,16 +57,7 @@ export function useSharedSimPayload(): Record<string, unknown> {
     [omniumTree, folioSelections, simcInput]
   );
 
-  // Derive spec from talent string so the backend can override spec= in SimC input
-  const specOverride = useMemo(() => {
-    if (!selectedTalent) return '';
-    try {
-      const { specId } = decodeHeader(selectedTalent);
-      return SPEC_ID_TO_NAME[specId] ?? '';
-    } catch {
-      return '';
-    }
-  }, [selectedTalent]);
+  const specOverride = useMemo(() => specOverrideOf(selectedTalent), [selectedTalent]);
 
   return useMemo(
     () => ({
@@ -73,8 +76,8 @@ export function useSharedSimPayload(): Record<string, unknown> {
       ...(simcFooter ? { simc_footer: simcFooter } : {}),
       ...(parallelProfilesets ? {} : { parallel_profilesets: false }),
       triage_max_batch_profilesets: triageMaxBatchProfilesets,
-      // Raid buffs: only send overrides for disabled buffs
-      ...(Object.values(raidBuffs).some((v) => !v)
+      // Raid buffs: sent only when they differ from the defaults
+      ...(Object.entries(raidBuffs).some(([k, v]) => v !== (DEFAULT_RAID_BUFFS[k] ?? true))
         ? {
             raid_buffs: Object.fromEntries(
               Object.entries(raidBuffs).map(([k, v]) => [k, v ? 1 : 0])

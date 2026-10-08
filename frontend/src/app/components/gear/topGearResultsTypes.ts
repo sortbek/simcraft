@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { GearItem } from './gearOverviewTypes';
+import type { SimSetup } from '../../lib/simResultTypes';
 
 export interface ResultItem extends GearItem {
   encounter?: string;
@@ -19,6 +20,8 @@ export interface TopGearResult {
   talent_spec?: string;
   /** Omnium Folio combination this combo ran, when the folio varied. */
   folio_build?: string;
+  /** Consumable slot -> SimC value this combo used instead of the Sim settings one. */
+  consumables?: Record<string, string>;
   delta: number;
   /** 95% CI half-width as % of mean DPS; combos pruned at rougher stages carry that stage's looser precision. */
   precision_pct?: number;
@@ -38,8 +41,8 @@ export interface TopGearResultsProps {
   targetError?: number;
   elapsedTime?: number;
   backLink?: ReactNode;
-  /** Hero card corner content (the sim setup). */
-  heroAside?: ReactNode;
+  /** Consumables and raid buffs the base actor ran with, for the hero's corner. */
+  setup?: SimSetup;
   /** Source job id — enables the per-row "Sim" verify button. Omit on historical/imported views where re-running isn't applicable. */
   sourceJobId?: string;
 }

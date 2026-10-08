@@ -88,6 +88,51 @@ struct NodeSelection {
     choice_index: i32,
 }
 
+/// SimC's token for a talent name: "Rite of Adjuration" -> `rite_of_adjuration`.
+fn simc_token(name: &str) -> String {
+    let mut out = String::new();
+    for ch in name.chars().filter(|c| *c != '\'') {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+        } else if !out.ends_with('_') {
+            out.push('_');
+        }
+    }
+    out.trim_matches('_').to_string()
+}
+
+/// The talents a WoW talent string selects, as SimC tokens (what `talent.x`
+/// expressions name). For a choice node only the picked entry counts. None
+/// when the string doesn't decode against a known tree.
+pub fn selected_talent_tokens(talent_str: &str) -> Option<std::collections::HashSet<String>> {
+    let decoded = decode(talent_str.trim())?;
+    let mut tokens = std::collections::HashSet::new();
+    for key in ["classNodes", "specNodes", "heroNodes"] {
+        for node in decoded
+            .tree
+            .get(key)
+            .and_then(|v| v.as_array())
+            .into_iter()
+            .flatten()
+        {
+            let id = node.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+            let Some(selection) = decoded.selections.get(&id) else {
+                continue;
+            };
+            let entries = node.get("entries").and_then(|v| v.as_array());
+            let entry = entries.and_then(|e| e.get(selection.choice_index.max(0) as usize));
+            let name = entry
+                .and_then(|e| e.get("name"))
+                .or_else(|| node.get("name"))
+                .and_then(|v| v.as_str());
+            if let Some(name) = name {
+                tokens.insert(simc_token(name));
+            }
+        }
+    }
+    Some(tokens)
+}
+
 /// Normalize all `talents=` lines in a simc input string.
 pub fn normalize_simc_talents(simc_input: &str) -> String {
     let re = Regex::new(r"(?m)^((?:profileset\.[^\n]*\+?=)?talents=)(.+)$").unwrap();
@@ -102,7 +147,21 @@ pub fn normalize_simc_talents(simc_input: &str) -> String {
     .to_string()
 }
 
-fn normalize_talent_string(talent_str: &str) -> Option<String> {
+/// A talent string decoded against its class's trees.
+struct Decoded {
+    version: u64,
+    spec_id: u64,
+    hash_lo: u64,
+    hash_hi: u64,
+    tree: &'static serde_json::Value,
+    full_node_order: Vec<u64>,
+    node_max_ranks: std::collections::HashMap<u64, u64>,
+    node_is_free: std::collections::HashMap<u64, bool>,
+    node_is_choice: std::collections::HashMap<u64, bool>,
+    selections: std::collections::HashMap<u64, NodeSelection>,
+}
+
+fn decode(talent_str: &str) -> Option<Decoded> {
     let bits = to_bits(talent_str);
     if bits.len() < 152 {
         return None; // too short for header
@@ -238,6 +297,34 @@ fn normalize_talent_string(talent_str: &str) -> Option<String> {
         );
     }
 
+    Some(Decoded {
+        version,
+        spec_id,
+        hash_lo,
+        hash_hi,
+        tree,
+        full_node_order,
+        node_max_ranks,
+        node_is_free,
+        node_is_choice,
+        selections,
+    })
+}
+
+fn normalize_talent_string(talent_str: &str) -> Option<String> {
+    let Decoded {
+        version,
+        spec_id,
+        hash_lo,
+        hash_hi,
+        tree,
+        full_node_order,
+        node_max_ranks,
+        node_is_free,
+        node_is_choice,
+        mut selections,
+    } = decode(talent_str)?;
+
     // Auto-grant freeNode talents (only from this spec's tree, not siblings)
     let mut changed = false;
     for key in &["classNodes", "specNodes", "heroNodes"] {
@@ -357,6 +444,13 @@ mod tests {
         // Frost mage (spec id 64) export captured from the live armory endpoint.
         let code = "CAEAMhlVtghLZL4RZzExaQoBYZGGLzMzsgZmYmZGzMzMziZmZmZMzsMTDLDAwMDWmZaDAAWAAAA2AYbZMjZwsxMmZsAAAwMbzMYGGDAA";
         assert_eq!(spec_id_from_loadout(code), Some(64));
+    }
+
+    #[test]
+    fn talent_names_become_simc_tokens() {
+        assert_eq!(simc_token("Rite of Adjuration"), "rite_of_adjuration");
+        assert_eq!(simc_token("Light's Guidance"), "lights_guidance");
+        assert_eq!(simc_token("Flametongue Weapon"), "flametongue_weapon");
     }
 
     #[test]

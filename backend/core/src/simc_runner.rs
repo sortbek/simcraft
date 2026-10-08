@@ -680,6 +680,17 @@ pub fn build_full_simc_input(b: &SimcInputBuild) -> String {
         base_actor_lines.push(format!("{}={}", key, if enabled { "1" } else { "0" }));
     }
 
+    // Power Infusion is a Priest's external, not a sim-wide override: a pool the
+    // spec's APL invokes it from (`invoke_external_buff`), on its 2 min cooldown.
+    // Off unless asked for, as Raidbots does.
+    let power_infusion = raid_buffs
+        .and_then(|b| b.get("power_infusion"))
+        .and_then(|v| v.as_u64())
+        .is_some_and(|v| v != 0);
+    if power_infusion {
+        base_actor_lines.push("external_buffs.pool=power_infusion:120".to_string());
+    }
+
     // Rotation Mode (Assisted Combat / One Button)
     match rotation_mode {
         RotationMode::AssistedCombat => {
@@ -1829,6 +1840,38 @@ mod name_line_tests {
             false,
         ));
         assert_eq!(crate::simc_directives::first_unsafe_line(&input), None);
+    }
+
+    #[test]
+    fn power_infusion_adds_an_external_buff_pool_only_when_on() {
+        let build = |raid_buffs: Value| {
+            build_full_simc_input(&SimcInputBuild::new(
+                "hunter=Test
+spec=beast_mastery
+head=,id=1
+",
+                &serde_json::json!({ "raid_buffs": raid_buffs }),
+                "Patchwerk",
+                0.1,
+                1000,
+                1,
+                300,
+                false,
+                true,
+                false,
+            ))
+        };
+        let line = "external_buffs.pool=power_infusion:120";
+        assert!(build(serde_json::json!({ "power_infusion": 1 })).contains(line));
+        assert!(!build(serde_json::json!({ "power_infusion": 0 })).contains(line));
+        assert!(
+            !build(serde_json::json!({})).contains(line),
+            "off unless asked for"
+        );
+        assert!(
+            !build(serde_json::json!({ "power_infusion": 1 })).contains("override.power_infusion"),
+            "it is no sim-wide override"
+        );
     }
 
     /// Written unquoted, a name with whitespace would split into extra SimC tokens.

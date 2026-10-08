@@ -6,6 +6,7 @@ import { useLanguage } from '../../lib/i18n';
 import { CONSUMABLE_LABELS, EXTRA_RAID_BUFFS, RAID_BUFF_LIST } from '../../lib/sim-config-defaults';
 import type { SetupConsumable, SimSetup } from '../../lib/simResultTypes';
 import { getWowheadUrl, iconProps } from '../../lib/useItemInfo';
+import { useConsumableLookup } from '../sim-config/ConsumablePickers';
 
 const CONSUMABLE_ORDER = ['flask', 'food', 'potion', 'augmentation', 'weapon_rune'];
 
@@ -32,14 +33,26 @@ function Tip({ text }: { text: string }) {
   );
 }
 
-function ConsumableIcon({ label, entry }: { label: string; entry: SetupConsumable | null }) {
+function ConsumableIcon({
+  label,
+  entry,
+  swapped = false,
+}: {
+  label: string;
+  entry: SetupConsumable | null;
+  /** Changed by the shown result rather than the base actor's own. */
+  swapped?: boolean;
+}) {
   const { t } = useLanguage();
-  const full = entry ? (entry.name ?? prettify(entry.value)) : t('results.setupNone');
+  const name = entry ? (entry.name ?? prettify(entry.value)) : t('results.setupNone');
+  const full = swapped ? t('results.setupSwappedItem', { name }) : name;
   const icon = entry ? (
     <img
       {...iconProps(entry.icon)}
       alt={full}
-      className="h-[30px] w-[30px] rounded-[6px] border border-line/[0.11]"
+      className={`h-[30px] w-[30px] rounded-[6px] border ${
+        swapped ? 'border-gold ring-2 ring-gold/40' : 'border-line/[0.11]'
+      }`}
     />
   ) : (
     <span className="block h-[30px] w-[30px] rounded-[6px] border border-dashed border-line/[0.11]" />
@@ -82,9 +95,33 @@ function BuffIcon({ buffKey, on }: { buffKey: string; on: boolean }) {
   );
 }
 
-/** Consumables and raid buffs the sim actually ran with, for the hero's corner. */
-export default function SimSetup({ setup }: { setup: SimSetup }) {
+/** Consumables and raid buffs the sim actually ran with, for the hero's corner.
+ *  `swapped` (slot -> SimC value) shows a Top Gear result's consumable swaps in
+ *  place of the base actor's, marked so they read as that result's changes. */
+export default function SimSetup({
+  setup,
+  swapped,
+}: {
+  setup: SimSetup;
+  swapped?: Record<string, string>;
+}) {
   const { t } = useLanguage();
+  const lookup = useConsumableLookup();
+  const consumableFor = (key: string): SetupConsumable | null => {
+    const value = swapped?.[key];
+    if (!value) return setup.consumables[key] ?? null;
+    const known = lookup.get(value);
+    return known
+      ? {
+          value,
+          name: known.name,
+          icon: known.icon,
+          item_id: known.itemId,
+          quality: known.craftingQuality,
+        }
+      : { value };
+  };
+  const anySwapped = !!swapped && Object.keys(swapped).length > 0;
   const known: string[] = RAID_BUFF_LIST.map((b) => b.key).filter((k) => k in setup.raid_buffs);
   const extra = Object.keys(setup.raid_buffs).filter((k) => !known.includes(k));
   const buffs = [...known, ...extra];
@@ -92,13 +129,21 @@ export default function SimSetup({ setup }: { setup: SimSetup }) {
   return (
     <div className="grid gap-3.5 lg:justify-items-end lg:text-right">
       <div>
-        <span className="lbl block">{t('config.consumables')}</span>
+        <span className="lbl block">
+          {t('config.consumables')}
+          {anySwapped && (
+            <span className="ml-2 normal-case tracking-normal text-gold">
+              {t('results.setupSwapped')}
+            </span>
+          )}
+        </span>
         <div className="mt-2 flex flex-wrap items-center gap-[7px] lg:justify-end">
           {CONSUMABLE_ORDER.map((key) => (
             <ConsumableIcon
               key={key}
               label={CONSUMABLE_LABELS[key]}
-              entry={setup.consumables[key] ?? null}
+              entry={consumableFor(key)}
+              swapped={!!swapped?.[key]}
             />
           ))}
         </div>

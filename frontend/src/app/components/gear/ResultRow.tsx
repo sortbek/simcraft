@@ -21,6 +21,7 @@ import type { ResultItem, TopGearResult } from './topGearResultsTypes';
 import { appliedGems, gemBadgeClass } from './topGearResultsUtils';
 import Button from '../ui/Button';
 import Pill from '../ui/Pill';
+import { useConsumableLookup } from '../sim-config/ConsumablePickers';
 
 /** Numeric combo id from a "Combo N" name; null for other shapes (e.g. "Currently Equipped"). */
 function comboIdFromName(name: string): number | null {
@@ -154,6 +155,7 @@ export const ResultRow = memo(function ResultRow({
     enchantGemItems.length === 0;
   const hasTalentBuild = !!result.talent_build;
   const hasFolioBuild = !!result.folio_build;
+  const hasConsumables = !!result.consumables && Object.keys(result.consumables).length > 0;
   const changedSlots = new Set(changedItems.map((item) => item.slot));
   const showBothRings = changedSlots.has('finger1') || changedSlots.has('finger2');
   const showBothTrinkets = changedSlots.has('trinket1') || changedSlots.has('trinket2');
@@ -173,6 +175,7 @@ export const ResultRow = memo(function ResultRow({
           {result.folio_build}
         </span>
       )}
+      {hasConsumables && <ConsumableBadges consumables={result.consumables!} />}
     </>
   );
 
@@ -234,7 +237,7 @@ export const ResultRow = memo(function ResultRow({
             );
           }
 
-          if (!hasChangedItems && (hasTalentBuild || hasFolioBuild)) {
+          if (!hasChangedItems && (hasTalentBuild || hasFolioBuild || hasConsumables)) {
             return talentBadge;
           }
 
@@ -480,5 +483,31 @@ function ItemTag({
         </div>
       </div>
     </div>
+  );
+}
+
+/** The consumables a combo swapped in for the Sim settings ones. Rendered only
+ *  on rows that changed some, so the lookup isn't subscribed per row. */
+function ConsumableBadges({ consumables }: { consumables: Record<string, string> }) {
+  const lookup = useConsumableLookup();
+  return (
+    <>
+      {Object.entries(consumables).map(([slot, value]) => {
+        const entry = lookup.get(value);
+        return (
+          <span
+            key={slot}
+            title={entry?.name ?? value}
+            className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] bg-overlay/[0.06] px-[7px] text-[12px] font-semibold text-on-surface"
+          >
+            {entry?.icon && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img {...iconProps(entry.icon)} alt="" className="h-4 w-4 rounded-[3px]" />
+            )}
+            {entry?.shortName || entry?.name || value}
+          </span>
+        );
+      })}
+    </>
   );
 }

@@ -529,3 +529,20 @@ test('gem and enchant rows are not mistaken for kept gear', () => {
   const gearSet = buildBestGearSet({}, { items: [gem] });
   assert.equal(gearSet.trinket2, undefined);
 });
+
+const {
+  consumableMixCount,
+  effectiveConsumableOptions,
+} = require('../src/app/lib/consumableOptions.ts');
+
+test('consumable alternatives drop whatever the baseline already uses', () => {
+  const options = { flask: ['flask_a_2', 'flask_b_2'], food: ['food_a'], potion: [] };
+  // The baseline flask in another quality is still the same flask.
+  const effective = effectiveConsumableOptions(options, { flask: 'flask_a_1' });
+  assert.deepEqual(effective, { flask: ['flask_b_2'], food: ['food_a'] });
+});
+
+test('consumable mixes multiply across slots, baseline included', () => {
+  assert.equal(consumableMixCount({}), 1);
+  assert.equal(consumableMixCount({ flask: ['a', 'b'], food: ['c'] }), 6);
+});

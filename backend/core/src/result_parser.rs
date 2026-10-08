@@ -581,6 +581,7 @@ pub fn parse_gear_comparison_result(
             .and_then(|it| it.get("folio_build"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
+        let consumables = items.iter().find_map(|it| it.get("consumables")).cloned();
 
         // 95% CI half-width as a percent of the mean. simc reports the
         // standard error of the mean in `mean_std_dev`; the half-width is
@@ -606,6 +607,9 @@ pub fn parse_gear_comparison_result(
         }
         if !folio_build.is_empty() {
             entry["folio_build"] = json!(folio_build);
+        }
+        if let Some(consumables) = consumables {
+            entry["consumables"] = consumables;
         }
         results.push(entry);
     }
@@ -772,7 +776,95 @@ pub fn backfill_setup(result: &mut Value, raw_json: Option<&str>) -> bool {
 
 /// Consumables, raid buffs and fight shape SimC actually ran with (its own
 /// defaults resolved), so result pages can show them.
-fn extract_setup(sim: &Value, player: &Value) -> Option<Value> {
+/// A weapon oil as applied. SimC reports a spec default's condition verbatim
+/// (`oil,if=!talent.flametongue_weapon`), so it is evaluated against the
+/// actor's talents: None when it fails, the bare oil when it holds or can't be
+/// evaluated.
+fn applied_weapon_oil<'a>(oil: &'a str, talents: &str) -> Option<&'a str> {
+    let Some((oil, condition)) = oil.split_once(",if=") else {
+        return Some(oil);
+    };
+    let selected = crate::talent_normalize::selected_talent_tokens(talents);
+    match selected.and_then(|t| TalentCondition::new(condition, &t).eval()) {
+        Some(false) => None,
+        _ => Some(oil),
+    }
+}
+
+/// Evaluates the small SimC expressions spec defaults gate consumables with:
+/// `talent.x[.enabled]`, `!`, `&`, `|` and parentheses. None for anything else.
+struct TalentCondition<'a> {
+    src: &'a [u8],
+    pos: usize,
+    talents: &'a std::collections::HashSet<String>,
+}
+
+impl<'a> TalentCondition<'a> {
+    fn new(src: &'a str, talents: &'a std::collections::HashSet<String>) -> Self {
+        Self {
+            src: src.as_bytes(),
+            pos: 0,
+            talents,
+        }
+    }
+
+    fn eval(mut self) -> Option<bool> {
+        let value = self.or()?;
+        (self.pos == self.src.len()).then_some(value)
+    }
+
+    fn peek(&self) -> Option<u8> {
+        self.src.get(self.pos).copied()
+    }
+
+    fn or(&mut self) -> Option<bool> {
+        let mut value = self.and()?;
+        while self.peek() == Some(b'|') {
+            self.pos += 1;
+            value |= self.and()?;
+        }
+        Some(value)
+    }
+
+    fn and(&mut self) -> Option<bool> {
+        let mut value = self.unary()?;
+        while self.peek() == Some(b'&') {
+            self.pos += 1;
+            value &= self.unary()?;
+        }
+        Some(value)
+    }
+
+    fn unary(&mut self) -> Option<bool> {
+        match self.peek()? {
+            b'!' => {
+                self.pos += 1;
+                Some(!self.unary()?)
+            }
+            b'(' => {
+                self.pos += 1;
+                let value = self.or()?;
+                (self.peek() == Some(b')')).then(|| self.pos += 1)?;
+                Some(value)
+            }
+            _ => {
+                let start = self.pos;
+                while self
+                    .peek()
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'.')
+                {
+                    self.pos += 1;
+                }
+                let atom = std::str::from_utf8(&self.src[start..self.pos]).ok()?;
+                let name = atom.strip_prefix("talent.")?;
+                let name = name.strip_suffix(".enabled").unwrap_or(name);
+                (!name.contains('.')).then(|| self.talents.contains(name))
+            }
+        }
+    }
+}
+
+pub(crate) fn extract_setup(sim: &Value, player: &Value) -> Option<Value> {
     // SimC token plus display name/icon from the consumable lists, when known.
     let describe = |token: Option<&str>, list: &[Value]| -> Value {
         let Some(token) = token
@@ -801,10 +893,12 @@ fn extract_setup(sim: &Value, player: &Value) -> Option<Value> {
     };
     let token = |key: &str| player.get(key).and_then(|v| v.as_str());
     // `temporary_enchant` is `main_hand:oil[/off_hand:oil]`; the main-hand oil is the rune.
-    let weapon_rune = token("temporary_enchant").and_then(|s| {
-        s.split('/')
-            .find_map(|part| part.strip_prefix("main_hand:"))
-    });
+    let weapon_rune = token("temporary_enchant")
+        .and_then(|s| {
+            s.split('/')
+                .find_map(|part| part.strip_prefix("main_hand:"))
+        })
+        .and_then(|oil| applied_weapon_oil(oil, token("talents").unwrap_or("")));
     let consumables = json!({
         "potion": describe(token("potion"), crate::game_data::list_potions()),
         "flask": describe(token("flask"), crate::game_data::list_flasks()),
@@ -871,6 +965,50 @@ fn round4(v: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn talent_conditions_evaluate_like_simc() {
+        let talents: std::collections::HashSet<String> = [
+            "flametongue_weapon".to_string(),
+            "rite_of_adjuration".to_string(),
+        ]
+        .into();
+        let eval = |c: &str| TalentCondition::new(c, &talents).eval();
+        assert_eq!(eval("!talent.flametongue_weapon"), Some(false));
+        assert_eq!(eval("talent.flametongue_weapon.enabled"), Some(true));
+        assert_eq!(
+            eval("!(talent.rite_of_adjuration.enabled|talent.rite_of_sanctification.enabled)"),
+            Some(false)
+        );
+        assert_eq!(eval("talent.a&!talent.b"), Some(false));
+        assert_eq!(eval("buff.x.up"), None, "anything but talents is unknown");
+        assert_eq!(eval("(talent.a"), None);
+    }
+
+    #[test]
+    fn a_conditional_default_oil_follows_the_talents() {
+        crate::test_support::ensure_game_data_loaded();
+        // SimC's MID2 Elemental profile takes Flametongue Weapon, which skips the oil.
+        let elemental = "CYQAAAAAAAAAAAAAAAAAAAAAAAAAAAzMbbzMmZmZZbZMMjBAAAAsYmNYADY2YCZWAgZbmZGjtFTYmxYxMzMmZWsMjFzMMzyAAGGAzMGGGA";
+        let oil = "thalassian_phoenix_oil_2,if=!talent.flametongue_weapon";
+        assert!(crate::talent_normalize::selected_talent_tokens(elemental)
+            .is_some_and(|t| t.contains("flametongue_weapon")));
+        assert_eq!(applied_weapon_oil(oil, elemental), None);
+        // Hero talents decode too: SimC's MID2 Protection Paladin takes a Rite.
+        let protection = "CIEAAAAAAAAAAAAAAAAAAAAAAsNzYWmZMzYmxyyALzCDDAwAAAAAAg0MDzYmZMzs1GAGYGYGsNAAACwMzyySLzMWsthBghZYMAYmBAzAM2A";
+        let tokens = crate::talent_normalize::selected_talent_tokens(protection).unwrap();
+        assert!(
+            tokens.contains("rite_of_adjuration") || tokens.contains("rite_of_sanctification"),
+            "no Rite among {} talents",
+            tokens.len()
+        );
+        // Undecodable talents keep the oil rather than hiding it.
+        assert_eq!(
+            applied_weapon_oil(oil, ""),
+            Some("thalassian_phoenix_oil_2")
+        );
+        assert_eq!(applied_weapon_oil("plain_oil", ""), Some("plain_oil"));
+    }
 
     fn find_row<'a>(parsed: &'a Value, name: &str) -> &'a Value {
         parsed["results"]

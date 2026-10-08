@@ -20,6 +20,8 @@ export interface TopGearSavedState {
   addedLootItems?: ResolvedItem[];
   /** Slot-group labels opened out of the unchanged strip. */
   promotedGroups?: string[];
+  /** Consumable slot -> alternatives to the Sim settings consumables. */
+  consumableOptions?: Record<string, string[]>;
 }
 
 export function storeTopGearState(state: TopGearSavedState): void {

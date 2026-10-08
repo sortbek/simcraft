@@ -1,6 +1,7 @@
 mod base_profile;
 pub mod checkpoint;
 mod constraints;
+pub mod consumables;
 mod droptimizer;
 mod emit;
 mod estimate;
@@ -31,7 +32,7 @@ pub(crate) use top_gear::build_iterator_config;
 
 use once_cell::sync::Lazy;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::db::MAX_COMBINATIONS;
 
@@ -123,7 +124,8 @@ impl<'a> GemEnchantOptions<'a> {
 }
 
 /// One position on the profile-variant axis: a talent build crossed with a
-/// folio combination. Either half may be empty, meaning "override nothing".
+/// folio combination and a consumable mix. Any part may be empty, meaning
+/// "override nothing".
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct ProfileVariant {
@@ -134,6 +136,9 @@ pub struct ProfileVariant {
     pub folio_name: String,
     /// `<entryId>:<rank>` pairs for `omnium_talents=`.
     pub omnium_string: String,
+    /// Consumable slot -> SimC value overriding the base actor's. Empty means
+    /// the base actor's consumables. Surfaces as the `consumables` metadata tag.
+    pub consumables: BTreeMap<String, String>,
 }
 
 impl ProfileVariant {
@@ -198,6 +203,7 @@ pub fn variants_from(
                         talent_string: ts.clone(),
                         folio_name: fname.clone(),
                         omnium_string: omnium.clone(),
+                        ..Default::default()
                     })
             })
             .collect(),
@@ -2291,6 +2297,76 @@ head=,id=100
             !input.contains("+=omnium_talents=136814:1"),
             "the exported folio needs no override — the base actor carries it:
 {input}"
+        );
+    }
+
+    #[test]
+    fn consumable_mixes_multiply_gear_combos() {
+        ensure_game_data_loaded();
+        let base_profile = "mage=test
+spec=frost
+head=,id=100
+";
+        let equipped = make_item("head", 100, true, ",id=100", vec![], 0, 0);
+        let alt = make_item("head", 200, false, ",id=200", vec![], 0, 0);
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped, alt]);
+        let mut selected = HashMap::new();
+        selected.insert("head".to_string(), vec![uid(200, &[], "bags", "head")]);
+
+        let flask = |n: usize| {
+            crate::item_db::list_flasks()[n]["value"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        let options: HashMap<String, Vec<String>> =
+            [("flask".to_string(), vec![flask(0), flask(1)])].into();
+        let mixes = super::consumables::consumable_sets(&HashMap::new(), &options).unwrap();
+        let variants = super::consumables::with_consumable_sets(Vec::new(), &mixes);
+
+        let (input, count, meta) = generate_top_gear_input_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &variants,
+            None,
+            &GemEnchantOptions::default(),
+        )
+        .unwrap();
+
+        // 2 gear × 3 mixes = 6 positions, minus the base actor itself.
+        assert_eq!(
+            count, 5,
+            "every gear set is simmed with every mix:\n{input}"
+        );
+        for n in 0..2 {
+            assert_eq!(
+                input.matches(&format!("+=flask={}\n", flask(n))).count(),
+                2,
+                "both gear sets get flask {n}:\n{input}"
+            );
+        }
+        let tagged = meta
+            .iter()
+            .filter(|(_, items)| items.iter().any(|it| it.get("consumables").is_some()))
+            .count();
+        assert_eq!(tagged, 4, "only rows with a changed flask carry the tag");
+        let consumable_only = meta
+            .values()
+            .find(|items| {
+                items.iter().any(|it| it.get("consumables").is_some())
+                    && !items
+                        .iter()
+                        .any(|it| it.get("item_id") == Some(&json!(200)))
+            })
+            .expect("equipped gear with a different flask is its own row");
+        assert_eq!(
+            consumable_only[0]["consumables"]["flask"]
+                .as_str()
+                .map(|_| ()),
+            Some(())
         );
     }
 

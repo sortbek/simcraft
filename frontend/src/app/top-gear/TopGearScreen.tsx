@@ -41,6 +41,9 @@ import type { TopGearLocalItem } from './topGearTypes';
 import { useComputeChoice } from '../lib/useComputeChoice';
 import { buildAlternativeKey } from '../components/gear/topGearIdentity';
 import OmniumFolioPicker from '../components/omnium/OmniumFolioPicker';
+import ConsumableAlternatives from '../components/gear/ConsumableAlternatives';
+import { effectiveConsumableOptions, type ConsumableOptions } from '../lib/consumableOptions';
+import { useConsumableDefaults } from '../lib/useConsumableDefaults';
 import {
   extraSelectedCount,
   folioCombos,
@@ -61,10 +64,10 @@ import {
 // count is hours of work. Warn past this line, never block.
 const LARGE_LOCAL_SIM_THRESHOLD = 20_000;
 
-type SectionKey = 'items' | 'enchants' | 'gems' | 'folio';
+type SectionKey = 'items' | 'enchants' | 'gems' | 'folio' | 'consumables';
 
 const TAB_STORAGE_KEY = 'simhammer_topgear_tab';
-const SECTION_KEYS: SectionKey[] = ['items', 'enchants', 'gems', 'folio'];
+const SECTION_KEYS: SectionKey[] = ['items', 'enchants', 'gems', 'folio', 'consumables'];
 // The Add item panel's open state, kept from when it was a collapsible card.
 const ADD_ITEM_OPEN_KEY = 'simhammer_topgear_additem_open';
 
@@ -80,6 +83,7 @@ export default function TopGearScreen() {
     targetCount,
     fightLength,
     unsimmableSpec,
+    consumables,
   } = useSimContext();
   const omniumTree = useOmniumTree();
   // The folio the character was exported with: the picker's starting point, the
@@ -107,6 +111,7 @@ export default function TopGearScreen() {
   const [replaceGems, setReplaceGems] = useState(false);
   const [diamondAlwaysUse, setDiamondAlwaysUse] = useState(false);
   const [maxColors, setMaxColors] = useState(false);
+  const [consumableOptions, setConsumableOptions] = useState<ConsumableOptions>({});
   const [density, setDensity] = useState<GearRowDensity>('compact');
   const [activeSection, setActiveSection] = useState<SectionKey>('items');
   const [addItemOpen, setAddItemOpen] = useState(false);
@@ -163,6 +168,7 @@ export default function TopGearScreen() {
     setGemSelections(new Set(saved.gemSelections));
     setAddedLootItems(saved.addedLootItems ?? []);
     setPromotedGroups(new Set(saved.promotedGroups ?? []));
+    setConsumableOptions(saved.consumableOptions ?? {});
   }, []);
 
   // Restore view preferences after mount (avoids an SSR hydration mismatch).
@@ -404,6 +410,7 @@ export default function TopGearScreen() {
 
   const clearItems = useCallback(() => setSelectedUids({}), []);
   const clearEnchants = useCallback(() => setEnchantSelections({}), []);
+  const clearConsumables = useCallback(() => setConsumableOptions({}), []);
   // Clearing restores the imported folio rather than emptying the rows —
   // an empty folio would strip every rune from the sim.
   const clearFolio = useCallback(
@@ -424,11 +431,12 @@ export default function TopGearScreen() {
     clearEnchants();
     clearGems();
     clearFolio();
+    clearConsumables();
     setLocalItems([]);
     setAddedLootItems([]);
     setPromotedGroups(new Set());
     if (baseResolvedRef.current) setResolved(baseResolvedRef.current);
-  }, [clearItems, clearEnchants, clearGems, clearFolio]);
+  }, [clearItems, clearEnchants, clearGems, clearFolio, clearConsumables]);
 
   const setVoidForge = useCallback((v: boolean) => {
     _setVoidForge(v);
@@ -465,6 +473,32 @@ export default function TopGearScreen() {
   const enchantCount = useMemo(
     () => Object.values(enchantSelections).reduce((sum, ids) => sum + ids.size, 0),
     [enchantSelections]
+  );
+  // The baseline each combo is compared against: the Sim settings picks, with
+  // Auto slots resolved to what SimC will actually use.
+  const consumableDefaults = useConsumableDefaults();
+  const consumableBaseline = useMemo(
+    () => ({
+      ...consumableDefaults,
+      ...Object.fromEntries(Object.entries(consumables).filter(([, value]) => value)),
+    }),
+    [consumableDefaults, consumables]
+  );
+  // Picks the baseline already uses drop out, so changing it never sims a
+  // consumable against itself.
+  const effectiveConsumables = useMemo(
+    () => effectiveConsumableOptions(consumableOptions, consumableBaseline),
+    [consumableOptions, consumableBaseline]
+  );
+  const consumableCount = Object.values(effectiveConsumables).reduce(
+    (sum, values) => sum + values.length,
+    0
+  );
+  const hasConsumableOptions = consumableCount > 0;
+  const onConsumableChange = useCallback(
+    (slot: string, values: string[]) =>
+      setConsumableOptions((previous) => ({ ...previous, [slot]: values })),
+    []
   );
 
   // Which sections exist at all. The structural half is decided here from the
@@ -538,6 +572,15 @@ export default function TopGearScreen() {
         tooltip: t('omnium.sectionTooltip'),
       });
     }
+    list.push({
+      key: 'consumables',
+      label: t('topGear.sectionConsumables'),
+      count: consumableCount,
+      active: activeSection === 'consumables',
+      onSelect: () => selectSection('consumables'),
+      onClear: clearConsumables,
+      tooltip: t('consumables.sectionTooltip'),
+    });
     // A remembered tab that this character doesn't have falls back to Items.
     if (!list.some((section) => section.active)) list[0].active = true;
     return list;
@@ -547,6 +590,7 @@ export default function TopGearScreen() {
     enchantCount,
     gemSelections.size,
     folioExtraCount,
+    consumableCount,
     activeSection,
     showEnchantSection,
     showGemSection,
@@ -556,6 +600,7 @@ export default function TopGearScreen() {
     clearItems,
     clearEnchants,
     clearGems,
+    clearConsumables,
   ]);
   const currentSection = (sections.find((section) => section.active)?.key ?? 'items') as SectionKey;
 
@@ -563,6 +608,7 @@ export default function TopGearScreen() {
     itemCount === 0 &&
     enchantCount === 0 &&
     gemSelections.size === 0 &&
+    consumableCount === 0 &&
     localItems.length === 0 &&
     addedLootItems.length === 0 &&
     promotedGroups.size === 0;
@@ -593,7 +639,14 @@ export default function TopGearScreen() {
     const hasFolioCompare = folioCombinations.length > 1;
     const hasEnchantGem =
       Object.values(enchantSelectionsArray).some((v) => v.length > 0) || gemOptionsArray.length > 0;
-    if (!resolved || (!hasGearSelection && !hasTalentCompare && !hasFolioCompare && !hasEnchantGem))
+    if (
+      !resolved ||
+      (!hasGearSelection &&
+        !hasTalentCompare &&
+        !hasFolioCompare &&
+        !hasEnchantGem &&
+        !hasConsumableOptions)
+    )
       return null;
     return {
       simc_input: submitInput,
@@ -625,6 +678,7 @@ export default function TopGearScreen() {
       replace_gems: replaceGems,
       diamond_always_use: diamondAlwaysUse,
       max_colors: maxColors,
+      ...(hasConsumableOptions ? { consumable_options: effectiveConsumables } : {}),
       ...(voidForge || hasVoidForgeItems ? { void_forge: true } : {}),
     };
   }, [
@@ -645,6 +699,8 @@ export default function TopGearScreen() {
     replaceGems,
     diamondAlwaysUse,
     maxColors,
+    hasConsumableOptions,
+    effectiveConsumables,
     voidForge,
     hasVoidForgeItems,
   ]);
@@ -703,6 +759,7 @@ export default function TopGearScreen() {
       diamond_always_use: diamondAlwaysUse,
       max_colors: maxColors,
       ...(folioCombinations.length > 1 ? { omnium_builds: folioCombinations } : {}),
+      ...(hasConsumableOptions ? { consumable_options: effectiveConsumables } : {}),
       ...(voidForge || hasVoidForgeItems ? { void_forge: true } : {}),
       compute_provider: compute,
     }),
@@ -722,6 +779,8 @@ export default function TopGearScreen() {
       replaceGems,
       diamondAlwaysUse,
       maxColors,
+      hasConsumableOptions,
+      effectiveConsumables,
       voidForge,
       hasVoidForgeItems,
       compute,
@@ -839,6 +898,7 @@ export default function TopGearScreen() {
       maxColors,
       addedLootItems,
       promotedGroups: [...promotedGroups],
+      consumableOptions,
     });
   }, [
     selectedUids,
@@ -855,6 +915,7 @@ export default function TopGearScreen() {
     maxColors,
     addedLootItems,
     promotedGroups,
+    consumableOptions,
   ]);
 
   const { submit, submitting, error, buttonLabel } = useSimSubmit({
@@ -1053,6 +1114,15 @@ export default function TopGearScreen() {
                 />
               </div>
             )}
+
+            <div role="tabpanel" hidden={currentSection !== 'consumables'}>
+              <ConsumableAlternatives
+                options={consumableOptions}
+                baseline={consumableBaseline}
+                onChange={onConsumableChange}
+                density={density}
+              />
+            </div>
           </div>
         </>
       )}

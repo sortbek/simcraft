@@ -1,6 +1,6 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// Inputs for one candidate's identity_key. The key reflects EFFECTIVE
@@ -14,6 +14,8 @@ pub struct IdentityInput<'a> {
     pub talent_string: &'a str,
     /// `omnium_talents=` override, empty when the actor uses the base folio.
     pub omnium_string: &'a str,
+    /// Consumable overrides, empty when the actor uses the base consumables.
+    pub consumables: &'a BTreeMap<String, String>,
 }
 
 /// Compute a stable 32-char hex identity key for the candidate.
@@ -98,6 +100,17 @@ pub fn compute_identity_key(input: &IdentityInput) -> String {
         hasher.update(runes.join("/").as_bytes());
     }
 
+    // Also appended only when set, for the same checkpoint stability.
+    if !input.consumables.is_empty() {
+        hasher.update(b"\nconsumables=");
+        for (slot, value) in input.consumables {
+            hasher.update(slot.as_bytes());
+            hasher.update(b":");
+            hasher.update(value.as_bytes());
+            hasher.update(b";");
+        }
+    }
+
     let digest = hasher.finalize();
     // 16 of 32 digest bytes = 32 hex chars; collision prob < 2^-64 per pair,
     // ample at billion-combo scale.
@@ -167,6 +180,7 @@ mod tests {
             effective_gems: &gems,
             talent_string: "BoG...",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         };
 
         let k1 = compute_identity_key(&input);
@@ -190,6 +204,7 @@ mod tests {
             effective_gems: &no_gems,
             talent_string: "",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         let k2 = compute_identity_key(&IdentityInput {
             spec: "mistweaver",
@@ -198,6 +213,7 @@ mod tests {
             effective_gems: &no_gems,
             talent_string: "",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         assert_ne!(k1, k2);
     }
@@ -224,6 +240,7 @@ mod tests {
             effective_gems: &eff_a,
             talent_string: "",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         let k_b = compute_identity_key(&IdentityInput {
             spec: "mistweaver",
@@ -232,6 +249,7 @@ mod tests {
             effective_gems: &eff_b,
             talent_string: "",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         assert_eq!(
             k_a, k_b,
@@ -252,6 +270,7 @@ mod tests {
             effective_gems: &no_gems,
             talent_string: "BuildA",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         let k2 = compute_identity_key(&IdentityInput {
             spec: "mistweaver",
@@ -260,6 +279,7 @@ mod tests {
             effective_gems: &no_gems,
             talent_string: "BuildB",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         assert_ne!(k1, k2);
     }
@@ -279,6 +299,7 @@ mod tests {
             effective_gems: &no_gems,
             talent_string: "BuildA",
             omnium_string: "136814:1",
+            consumables: &BTreeMap::new(),
         });
         let k2 = compute_identity_key(&IdentityInput {
             spec: "beast_mastery",
@@ -287,8 +308,31 @@ mod tests {
             effective_gems: &no_gems,
             talent_string: "BuildA",
             omnium_string: "136824:1",
+            consumables: &BTreeMap::new(),
         });
         assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn consumable_mixes_hash_to_different_keys() {
+        let gear: HashMap<String, Arc<Value>> = HashMap::new();
+        let no_enchants: HashMap<String, u64> = HashMap::new();
+        let no_gems: HashMap<String, Vec<u64>> = HashMap::new();
+        let key = |consumables: &BTreeMap<String, String>| {
+            compute_identity_key(&IdentityInput {
+                spec: "beast_mastery",
+                gear_set: &gear,
+                effective_enchants: &no_enchants,
+                effective_gems: &no_gems,
+                talent_string: "BuildA",
+                omnium_string: "",
+                consumables,
+            })
+        };
+        let flask = |v: &str| BTreeMap::from([("flask".to_string(), v.to_string())]);
+        assert_ne!(key(&BTreeMap::new()), key(&flask("a")));
+        assert_ne!(key(&flask("a")), key(&flask("b")));
+        assert_eq!(key(&flask("a")), key(&flask("a")));
     }
 
     #[test]
@@ -306,6 +350,7 @@ mod tests {
                 effective_gems: &no_gems,
                 talent_string: "BuildA",
                 omnium_string: omnium,
+                consumables: &BTreeMap::new(),
             })
         };
         assert_eq!(key("136814:1/136818:1"), key("136818:1/136814:1"));
@@ -327,6 +372,7 @@ mod tests {
             effective_gems: &ab,
             talent_string: "",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         let k_ba = compute_identity_key(&IdentityInput {
             spec: "mistweaver",
@@ -335,6 +381,7 @@ mod tests {
             effective_gems: &ba,
             talent_string: "",
             omnium_string: "",
+            consumables: &BTreeMap::new(),
         });
         assert_eq!(k_ab, k_ba);
     }

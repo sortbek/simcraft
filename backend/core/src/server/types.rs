@@ -190,6 +190,10 @@ pub struct TopGearRequest {
     /// on `SimOptions` instead.
     #[serde(default)]
     pub omnium_builds: Vec<OmniumBuild>,
+    /// Consumable slot -> alternatives to the `consumables` baseline. Every mix
+    /// of them is crossed with the gear combos.
+    #[serde(default)]
+    pub consumable_options: HashMap<String, Vec<String>>,
     #[serde(default)]
     pub catalyst: bool,
     #[serde(default)]

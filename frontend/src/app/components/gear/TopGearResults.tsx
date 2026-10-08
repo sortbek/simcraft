@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import DpsHeroCard from '../results/DpsHeroCard';
+import SimSetupView from '../results/SimSetup';
 import Button from '../ui/Button';
 import GearOverview from './GearOverview';
 import TopGearRankings from './TopGearRankings';
@@ -43,7 +44,7 @@ export default function TopGearResults({
   targetError,
   elapsedTime,
   backLink,
-  heroAside,
+  setup,
   sourceJobId,
 }: TopGearResultsProps) {
   const { t } = useLanguage();
@@ -75,6 +76,9 @@ export default function TopGearResults({
   const bestGearSet = useMemo(() => {
     return buildBestGearSet(equippedGear, selectedResult);
   }, [equippedGear, selectedResult]);
+
+  // The row the hero shows; its consumable swaps replace the base actor's.
+  const heroResult = selectedResult && selectedResult.delta > 0 ? selectedResult : null;
 
   const upgradeSlots = useMemo(() => collectUpgradeSlots(selectedResult), [selectedResult]);
   const downgradeSlots = useMemo(() => collectDowngradeSlots(selectedResult), [selectedResult]);
@@ -123,19 +127,19 @@ export default function TopGearResults({
         playerClass={playerClass}
         playerRealm={playerRealm}
         playerRegion={playerRegion}
-        dps={selectedResult && selectedResult.delta > 0 ? selectedResult.dps : baseDps}
+        dps={heroResult ? heroResult.dps : baseDps}
         fightLength={fightLength}
         desiredTargets={desiredTargets}
         iterations={iterations}
         targetError={targetError}
         elapsedTime={elapsedTime}
         topAction={backLink}
-        aside={heroAside}
+        aside={setup && <SimSetupView setup={setup} swapped={heroResult?.consumables} />}
       >
-        {selectedResult && selectedResult.delta > 0 ? (
+        {heroResult ? (
           <div className="mt-3.5 inline-flex items-center gap-1.5 rounded-md bg-positive/10 px-3 py-1.5 text-positive">
             <span className="text-sm font-semibold tabular-nums">
-              +{Math.round(selectedResult.delta).toLocaleString()}
+              +{Math.round(heroResult.delta).toLocaleString()}
             </span>
             <span className="text-xs opacity-60">{t('gear.upgradeText')}</span>
           </div>
