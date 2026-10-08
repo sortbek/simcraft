@@ -789,12 +789,7 @@ pub fn enforce_hard_max_with(
     Some(next_count.min(remaining))
 }
 
-/// Uses module-level constants (production path).
-pub fn global_remaining_for(state: &TriageState) -> usize {
-    global_remaining_for_with(state, GLOBAL_SURVIVOR_TARGET)
-}
-
-/// Parameterized variant used by the calibration harness.
+/// Survivor slots left before the global target is reached.
 pub fn global_remaining_for_with(state: &TriageState, global_survivor_target: usize) -> usize {
     global_survivor_target.saturating_sub(state.survivors_so_far)
 }
@@ -857,25 +852,8 @@ pub struct TriageResumeState {
     pub already_collected_survivors: Vec<i64>,
 }
 
-/// Production entry point. Delegates to `run_triage_with_constants` using
-/// `TriageConstants::default()`, so existing callers are unaffected.
-pub async fn run_triage(
-    iter_cfg: ProfilesetIteratorConfig,
-    inputs: TriageRunInputs<'_>,
-    estimated_total_combos: u64,
-) -> Result<TriageRunOutcome, String> {
-    run_triage_with_constants(
-        iter_cfg,
-        inputs,
-        estimated_total_combos,
-        TriageConstants::default(),
-        None,
-    )
-    .await
-}
-
-/// Full Triage run with explicit constants. Called by `run_triage` (production)
-/// and by the calibration harness (grid search).
+/// Full Triage run with explicit constants. Called by the streamed Top Gear
+/// path (resume.rs) and by the calibration harness (grid search).
 pub async fn run_triage_with_constants(
     iter_cfg: ProfilesetIteratorConfig,
     inputs: TriageRunInputs<'_>,

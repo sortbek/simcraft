@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Checkbox from '../ui/Checkbox';
 import CardHeader from '../ui/CardHeader';
 import { buttonClass } from '../ui/Button';
@@ -12,56 +12,15 @@ import {
   classColorForSpec,
 } from '../../lib/types';
 import type { TalentLoadoutParsed } from '../../lib/types';
-import { decodeHeader, decodeNodes } from '../../lib/talentDecode';
+import { decodeHeader } from '../../lib/talentDecode';
 import { encodeTalentString } from '../../lib/talentEncode';
-import { getPointsSpent, CLASS_POINTS, SPEC_POINTS } from '../../lib/talentRules';
 import { useTalentTree } from '../../lib/useTalentTree';
-import type { TalentTreeData } from '../../lib/useTalentTree';
 import TalentTree from './TalentTree';
-import { getCharacters, getTalentBuilds, type SavedTalentBuild } from '../../lib/saved-characters';
+import { getCharacters, getTalentBuilds } from '../../lib/saved-characters';
 import { useLanguage } from '../../lib/i18n';
 
-/** Check if a talent build has all points allocated. */
 /** Header toggle: gold-edged while on, text-only while off. */
 const toggleBtn = (on: boolean) => buttonClass(on ? 'gold' : 'text');
-
-function getBuildStatus(
-  talentString: string,
-  tree: TalentTreeData | null
-): { complete: boolean; classSpent: number; specSpent: number } | null {
-  if (!tree || !talentString) return null;
-  try {
-    const header = decodeHeader(talentString);
-    const orderedIds = tree.fullNodeOrder;
-    if (!orderedIds) return null;
-    const allNodes = [
-      ...tree.classNodes,
-      ...tree.specNodes,
-      ...tree.heroNodes,
-      ...(tree.subTreeNodes ?? []),
-    ];
-    const localMap = new Map(allNodes.map((n) => [n.id, n.maxRanks ?? 1]));
-    const maxRanks = new Map(
-      orderedIds.map((id) => [id, tree.fullNodeMaxRanks?.[id] ?? localMap.get(id) ?? 1])
-    );
-    const decoded = decodeNodes(header.bits, header.offset, orderedIds, maxRanks);
-    // Auto-grant free nodes for accurate counting
-    for (const node of [...tree.classNodes, ...tree.specNodes, ...tree.heroNodes]) {
-      if (node.freeNode && !decoded.has(node.id)) {
-        decoded.set(node.id, { ranks: node.maxRanks, choiceIndex: -1 });
-      }
-    }
-    const classSpent = getPointsSpent(decoded, tree.classNodes);
-    const specSpent = getPointsSpent(decoded, tree.specNodes);
-    return {
-      complete: classSpent >= CLASS_POINTS && specSpent >= SPEC_POINTS,
-      classSpent,
-      specSpent,
-    };
-  } catch {
-    return null;
-  }
-}
 
 type ViewMode = 'collapsed' | 'view' | 'edit';
 
@@ -69,10 +28,14 @@ export default function TalentPicker({
   defaultView = 'collapsed',
   compact = false,
   hideCompare = false,
+  options,
 }: {
   defaultView?: ViewMode;
   compact?: boolean;
   hideCompare?: boolean;
+  /** Page options shown beside the build picker as one setup bar (Top Gear).
+   *  Each child should be a `SetupCell`. */
+  options?: ReactNode;
 }) {
   const { t } = useLanguage();
   const { simcInput, selectedTalent, setSelectedTalent, talentBuilds, setTalentBuilds } =
@@ -293,74 +256,138 @@ export default function TalentPicker({
     }
   }, [compareMode, setTalentBuilds]);
 
-  if (allLoadouts.length === 0) return null;
+  if (allLoadouts.length === 0) {
+    if (!options) return null;
+    // The page's own options must stay reachable without talents.
+    return (
+      <div className="card overflow-hidden">
+        <div className="setup-bar-wrap">
+          <div className="setup-bar">
+            <div className="setup-cell setup-cell-talents">
+              <span className="lbl">{t('config.talents')}</span>
+              <span className="flex min-h-[34px] items-center text-[13px] text-outline">
+                {t('talent.noBuilds')}
+              </span>
+            </div>
+            {options}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const buildSelect =
+    allLoadouts.length >= 2 ? (
+      <select
+        value={selectedLoadoutIdx}
+        onChange={(e) => {
+          const idx = Number(e.target.value);
+          setSelectedLoadoutIdx(idx);
+          setSelectedTalent(allLoadouts[idx].talentString);
+          if (viewMode === 'edit') setViewMode('view');
+        }}
+        className="sel mr-2 h-[34px] w-auto text-[13px]"
+      >
+        {allLoadouts.map((l, i) => (
+          <option key={`${l.name}-${i}`} value={i}>
+            {l.name}
+            {l.isActive ? ` ${t('talent.equipped')}` : ''}
+          </option>
+        ))}
+      </select>
+    ) : null;
+
+  const actionButtons = (
+    <>
+      {!hideCompare && (
+        <button onClick={() => setCompareMode((v) => !v)} className={toggleBtn(compareMode)}>
+          {t('talent.compare')}
+          {talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
+        </button>
+      )}
+      <button onClick={() => setShowImport((v) => !v)} className={toggleBtn(showImport)}>
+        {t('talent.import')}
+      </button>
+      <button onClick={handleBlankBuild} className={buttonClass('text')}>
+        {t('talent.blank')}
+      </button>
+      {!compareMode && (
+        <button
+          onClick={() => setViewMode((v) => (v === 'edit' ? 'view' : 'edit'))}
+          className={toggleBtn(viewMode === 'edit')}
+        >
+          {viewMode === 'edit' ? t('common.done') : t('talent.edit')}
+        </button>
+      )}
+    </>
+  );
+
+  const toggleView = () => {
+    setViewMode((v) => (v === 'collapsed' ? 'view' : 'collapsed'));
+    setShowImport(false);
+  };
+  const expanded = viewMode !== 'collapsed';
+
+  const talentControls = (
+    <div className="flex items-center gap-1">
+      {buildSelect}
+      {expanded && actionButtons}
+      <button onClick={toggleView} className={buttonClass('text')}>
+        {expanded ? t('common.hide') : t('common.show')}
+      </button>
+    </div>
+  );
 
   return (
     <div className="card overflow-hidden">
       {/* Sections below draw their own top hairline, so the header skips its bottom one. */}
-      <CardHeader
-        className="!border-b-0"
-        title={t('config.talents')}
-        right={
-          <div className="flex items-center gap-1">
-            {allLoadouts.length >= 2 && (
-              <select
-                value={selectedLoadoutIdx}
-                onChange={(e) => {
-                  const idx = Number(e.target.value);
-                  setSelectedLoadoutIdx(idx);
-                  setSelectedTalent(allLoadouts[idx].talentString);
-                  if (viewMode === 'edit') setViewMode('view');
-                }}
-                className="sel mr-2 h-[34px] w-auto text-[13px]"
-              >
-                {allLoadouts.map((l, i) => (
-                  <option key={`${l.name}-${i}`} value={i}>
-                    {l.name}
-                    {l.isActive ? ` ${t('talent.equipped')}` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-            {viewMode !== 'collapsed' && (
-              <>
-                {!hideCompare && (
-                  <button
-                    onClick={() => setCompareMode((v) => !v)}
-                    className={toggleBtn(compareMode)}
-                  >
-                    {t('talent.compare')}
-                    {talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
-                  </button>
+      {options ? (
+        <div className="setup-bar-wrap">
+          <div className="setup-bar">
+            <div className="setup-cell setup-cell-talents">
+              <span className="lbl">{t('config.talents')}</span>
+              {/* The setup bar keeps only the build picker; the build actions
+                  live in a toolbar on the opened tree, where they apply. */}
+              <div className="flex items-center gap-1">
+                {buildSelect ?? (
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-on-surface">
+                    {allLoadouts[0].name}
+                  </span>
                 )}
-                <button onClick={() => setShowImport((v) => !v)} className={toggleBtn(showImport)}>
-                  {t('talent.import')}
-                </button>
-                <button onClick={handleBlankBuild} className={buttonClass('text')}>
-                  {t('talent.blank')}
-                </button>
-                {!compareMode && (
-                  <button
-                    onClick={() => setViewMode((v) => (v === 'edit' ? 'view' : 'edit'))}
-                    className={toggleBtn(viewMode === 'edit')}
+                <button
+                  type="button"
+                  onClick={toggleView}
+                  aria-expanded={expanded}
+                  aria-label={expanded ? t('common.hide') : t('common.show')}
+                  title={expanded ? t('common.hide') : t('common.show')}
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[6px] border border-line/[0.11] text-on-surface-variant transition-colors hover:border-line/20 hover:text-on-surface"
+                >
+                  <svg
+                    className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    {viewMode === 'edit' ? t('common.done') : t('talent.edit')}
-                  </button>
-                )}
-              </>
-            )}
-            <button
-              onClick={() => {
-                setViewMode((v) => (v === 'collapsed' ? 'view' : 'collapsed'));
-                setShowImport(false);
-              }}
-              className={buttonClass('text')}
-            >
-              {viewMode !== 'collapsed' ? t('common.hide') : t('common.show')}
-            </button>
+                    <path d="M4 6l4 4 4-4" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {options}
           </div>
-        }
-      />
+        </div>
+      ) : (
+        <CardHeader className="!border-b-0" title={t('config.talents')} right={talentControls} />
+      )}
+
+      {options && expanded && (
+        <div className="flex flex-wrap items-center gap-1 border-t border-line/[0.06] px-4 py-2">
+          {actionButtons}
+        </div>
+      )}
 
       {/* Import bar */}
       {showImport && viewMode !== 'collapsed' && (
@@ -400,8 +427,6 @@ export default function TalentPicker({
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {allLoadouts.map((l, i) => {
               const checked = compareIndices.has(i);
-              const status = getBuildStatus(l.talentString, tree);
-              // const incomplete = status && !status.complete;
               let loadoutSpecId: number | undefined;
               let loadoutSpecName: string | undefined;
               try {

@@ -61,7 +61,3 @@ export async function getTalentBuilds(characterId: string): Promise<SavedTalentB
     return [];
   }
 }
-
-export async function deleteTalentBuild(id: string): Promise<void> {
-  await apiDelete(`/api/talent-builds/${id}`);
-}

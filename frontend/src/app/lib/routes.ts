@@ -22,11 +22,6 @@ export const ROUTES = {
  *  extra exports (breaks the `next build` page type check). */
 export const MDT_ROUTE_SESSION_KEY = 'simhammer_mdt_route';
 
-/** Result page for a single sim run. */
-export function simResultRoute(id: string): string {
-  return `/sim/${id}`;
-}
-
 /** Prefix used by `matchPaths` to match any `/sim/...` deep link. */
 export const SIM_RESULT_PREFIX = '/sim';
 

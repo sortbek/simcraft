@@ -31,11 +31,7 @@ const config = createAppConfig(app);
 const settingsStore = createSettingsStore(app, config.isDev);
 const windowController = createWindowController(config, ipcMain, shell);
 const backendController = createBackendController(config);
-const clipboardController = createClipboardController(
-  ipcMain,
-  clipboard,
-  windowController.getMainWindow
-);
+const clipboardController = createClipboardController(ipcMain, clipboard);
 const simcController = createSimcController(
   ipcMain,
   config,
@@ -139,7 +135,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  clipboardController.stopPolling();
   backendController.stop();
 });
 

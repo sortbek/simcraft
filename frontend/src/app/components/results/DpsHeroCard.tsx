@@ -76,7 +76,6 @@ export default function DpsHeroCard({
 
   const faction = useFaction(playerRealm, playerName, playerRegion);
   const insetUrl = getCharacterMediaUrl(playerRealm, playerName, 'inset', playerRegion);
-  const renderUrl = getCharacterMediaUrl(playerRealm, playerName, 'render', playerRegion);
 
   return (
     <section

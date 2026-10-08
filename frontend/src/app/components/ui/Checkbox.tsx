@@ -5,6 +5,9 @@ interface CheckboxProps {
   onChange?: () => void;
   /** Render size. */
   size?: 'sm' | 'md';
+  /** `neutral` marks a baseline that is always included (e.g. the equipped item)
+   *  so it reads differently from a pick. */
+  tone?: 'gold' | 'neutral';
   disabled?: boolean;
   /** Accessible label (no visible text). */
   'aria-label'?: string;
@@ -27,6 +30,7 @@ export default function Checkbox({
   checked,
   onChange,
   size = 'md',
+  tone = 'gold',
   disabled = false,
   className,
   ...aria
@@ -35,7 +39,9 @@ export default function Checkbox({
     'rounded-[3px] border',
     checked
       ? cn(
-          'border-gold-fill bg-gold-fill',
+          tone === 'neutral'
+            ? 'border-on-surface-variant bg-on-surface-variant'
+            : 'border-gold-fill bg-gold-fill',
           size === 'sm'
             ? 'shadow-[inset_0_0_0_2px_var(--cb-ring)]'
             : 'shadow-[inset_0_0_0_3px_var(--cb-ring)]'
@@ -45,7 +51,10 @@ export default function Checkbox({
 
   const checkmark = checked ? (
     <svg
-      className={cn(size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3', 'text-on-primary')}
+      className={cn(
+        size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3',
+        tone === 'neutral' ? 'text-surface-container' : 'text-on-primary'
+      )}
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"

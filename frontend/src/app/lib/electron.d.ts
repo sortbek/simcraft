@@ -32,10 +32,7 @@ interface ElectronAPI {
   downloadAndInstall: () => Promise<void>;
   onUpdateAvailable: (callback: (version: string) => void) => () => void;
   onDownloadProgress: (callback: (percent: number) => void) => () => void;
-  startClipboardPolling: (intervalMs: number) => Promise<void>;
-  stopClipboardPolling: () => Promise<void>;
   readClipboard: () => Promise<string>;
-  onClipboardChange: (callback: (text: string) => void) => () => void;
   getSimcStatus: () => Promise<SimcStatus>;
   listSimcVersions: () => Promise<SimcVersionList>;
   checkSimcUpdates: () => Promise<SimcAvailableUpdate[]>;

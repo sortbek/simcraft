@@ -19,13 +19,13 @@
     "test:simc": "node --test scripts/test-simc-validation.cjs",
     "test:share": "node --test scripts/test-share.cjs",
     "test:simclog": "node --test scripts/test-simc-log.cjs",
-    "test:iteminfo": "node --test scripts/test-item-info.cjs"
+    "test:iteminfo": "node --test scripts/test-item-info.cjs",
+    "test:profiles": "node --test scripts/test-profile-sections.cjs"
   },
   "dependencies": {
     "next": "^15.5.14",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^2.15.4"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.14.2",

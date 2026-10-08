@@ -23,11 +23,11 @@ export const GEAR_ROW_METRICS = {
     row: 'gap-2 px-2 py-1',
     icon: 'h-6 w-6',
     name: 'text-[13px]',
-    details: 'text-[11px]',
+    details: 'text-[11.5px] font-medium',
     box: 'h-4 w-4',
     check: 'h-2.5 w-2.5',
     button: 'h-5 w-5',
-    ilevel: 'text-[11px]',
+    ilevel: 'text-[13px]',
   },
   ultra: {
     row: 'gap-1.5 px-1.5 py-0.5',

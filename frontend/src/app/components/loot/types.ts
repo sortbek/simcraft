@@ -1,5 +1,4 @@
 export { specDisplayName as formatSpecName } from '../../lib/types';
-import { QUALITY_TEXT_CLASS } from '../../lib/qualityColors';
 
 export interface Instance {
   id: number;
@@ -76,7 +75,4 @@ export interface DropItemPayload extends DropItem {
   bonus_ids: number[];
 }
 
-/** @deprecated import `QUALITY_TEXT_CLASS` from `lib/qualityColors`. */
-export const QUALITY_COLORS = QUALITY_TEXT_CLASS;
-
-export { dropUid, getTrackInfo, resolveUpgrade, detectClass, detectSpec } from './dropUtils';
+export { dropUid, resolveUpgrade, detectClass, detectSpec } from './dropUtils';

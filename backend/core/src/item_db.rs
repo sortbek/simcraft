@@ -958,8 +958,7 @@ pub fn bonuses() -> &'static HashMap<u64, Value> {
     BONUSES.get().expect("Game data not loaded")
 }
 
-/// Single-bonus lookup; test-only, no production caller.
-#[allow(dead_code)]
+/// Single-bonus lookup.
 pub(crate) fn get_bonus(id: u64) -> Option<&'static Value> {
     BONUSES.get().and_then(|m| m.get(&id))
 }
@@ -1777,13 +1776,6 @@ pub fn list_gems(expansion: u64) -> Vec<Value> {
         })
         .cloned()
         .collect()
-}
-
-/// Check if an item has a squishEra (legacy/timewalking item).
-pub fn has_squish_era(item_id: u64) -> bool {
-    get_raw_item(item_id)
-        .and_then(|item| item.get("squishEra"))
-        .is_some()
 }
 
 /// Apply squish era ilevel conversion for an item. Returns the squished ilevel,

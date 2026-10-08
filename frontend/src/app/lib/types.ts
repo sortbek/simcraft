@@ -1,5 +1,5 @@
 import { CLASS_SPECS } from './classSpecs';
-export { CLASS_SPECS, SPEC_ID_TO_NAME, SPEC_NAME_TO_ID } from './classSpecs';
+export { SPEC_ID_TO_NAME } from './classSpecs';
 // Shared types matching backend API response shapes.
 // These are display-only — no behavior, no business logic.
 

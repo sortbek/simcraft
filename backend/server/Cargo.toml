@@ -9,5 +9,5 @@ desktop = ["simhammer-core/desktop"]
 postgres = ["simhammer-core/postgres"]
 
 [dependencies]
-simhammer-core = { path = "../core", features = ["web"] }
+simhammer-core = { path = "../core" }
 tokio = { version = "1", features = ["full"] }

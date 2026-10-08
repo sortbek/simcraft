@@ -57,12 +57,8 @@ const config: Config = {
         // Windows title-bar close button hover
         'win-close': '#c42b1c',
 
-        // Secondary / Tertiary
-        secondary: { DEFAULT: c('secondary'), container: c('secondary-container') },
-        tertiary: { DEFAULT: c('tertiary'), container: c('tertiary-container') },
-
         // On-primary (dark text on gold surfaces)
-        'on-primary': { DEFAULT: c('on-primary'), container: c('on-primary-container') },
+        'on-primary': c('on-primary'),
         // Ink on saturated non-gold badges (quality, negative)
         'on-badge': c('on-badge'),
 

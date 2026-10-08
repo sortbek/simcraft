@@ -9,6 +9,7 @@ import { useSimSubmit } from '../lib/useSimSubmit';
 import { useComputeChoice, type ComputeChoice } from '../lib/useComputeChoice';
 import LootBrowser from '../components/loot/LootBrowser';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import SimSettingsBlock from '../components/sim-config/SimSettingsBlock';
 import { useLanguage } from '../lib/i18n';
 import type { LootSubmission } from '../components/loot/useLootBrowserModel';
 
@@ -82,6 +83,8 @@ export default function DropFinderContent() {
         title={t('dropFinder.title')}
         subtitle={t('dropFinder.description')}
       />
+
+      <SimSettingsBlock />
 
       <LootBrowser
         footer={(submission) => {

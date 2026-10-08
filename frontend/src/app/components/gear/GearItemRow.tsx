@@ -23,6 +23,9 @@ interface GearItemRowProps {
   details?: DetailPart[];
   /** Item level shown on the right */
   ilevel?: number;
+  /** Colors the item level against what it would replace ('base': same level,
+   *  or the equipped item itself). Unset keeps the original grey. */
+  ilevelTone?: 'base' | 'up' | 'down';
   /** Whether this row has a selectable checkbox */
   selectable?: boolean;
   /** Current checked state (only used when selectable) */
@@ -59,6 +62,7 @@ export default function GearItemRow({
   nameColor,
   details,
   ilevel,
+  ilevelTone,
   selectable,
   checked,
   onToggle,
@@ -86,6 +90,7 @@ export default function GearItemRow({
           onChange={onToggle}
           disabled={disabled}
           size={density === 'comfortable' ? 'md' : 'sm'}
+          tone={equipped ? 'neutral' : 'gold'}
           aria-label={name}
         />
       ) : equipped ? (
@@ -175,7 +180,15 @@ export default function GearItemRow({
       {ilevel != null && ilevel > 0 && (
         <span
           className={cn(
-            'shrink-0 font-headline font-bold tabular-nums text-outline',
+            'shrink-0 font-headline tabular-nums',
+            ilevelTone ? 'font-extrabold' : 'font-bold',
+            ilevelTone === 'up'
+              ? 'text-positive'
+              : ilevelTone === 'down'
+                ? 'text-outline'
+                : ilevelTone === 'base'
+                  ? 'text-on-surface-variant'
+                  : 'text-outline',
             metrics.ilevel
           )}
         >

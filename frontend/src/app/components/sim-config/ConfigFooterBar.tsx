@@ -3,15 +3,13 @@
 import { useSimContext } from './SimContext';
 import { useLanguage } from '../../lib/i18n';
 import RunButton from './RunButton';
-import ProfilePicker from './ProfilePicker';
-import { buttonClass } from '../ui/Button';
+import { OPEN_SIM_SETTINGS_EVENT, useSimSettingsSummary } from './SimSettingsBlock';
+import { isDefaultProfile } from '../../lib/sim-profiles';
 import Switch from '../ui/Switch';
 import type { ComputeChoice } from '../../lib/useComputeChoice';
 import type { ReactNode } from 'react';
 
 interface ConfigFooterBarProps {
-  drawerOpen: boolean;
-  onToggleDrawer: () => void;
   onSubmit: () => void;
   submitting: boolean;
   buttonLabel: string;
@@ -29,8 +27,6 @@ interface ConfigFooterBarProps {
 }
 
 export default function ConfigFooterBar({
-  drawerOpen,
-  onToggleDrawer,
   onSubmit,
   submitting,
   buttonLabel,
@@ -43,33 +39,44 @@ export default function ConfigFooterBar({
   status,
 }: ConfigFooterBarProps) {
   const { t } = useLanguage();
-  const { fightStyle, fightLength, targetCount, statWeights, setStatWeights } = useSimContext();
-  const fightLengthLabel = `${Math.floor(fightLength / 60)}:${String(fightLength % 60).padStart(2, '0')}`;
+  const { statWeights, setStatWeights, activeProfile, profileDirty } = useSimContext();
+  const summary = useSimSettingsSummary();
+  const profileName = activeProfile
+    ? isDefaultProfile(activeProfile)
+      ? t('profiles.default')
+      : activeProfile.name
+    : null;
 
   return (
-    <div className="border-t border-line/[0.06] bg-background/90 backdrop-blur-lg">
+    <div className="config-footer border-t border-line/[0.06] bg-background">
       <div className="mx-auto flex max-w-screen-2xl items-center gap-3.5 px-8 py-3.5">
-        <ProfilePicker />
-        <div className="flex items-center gap-[22px]">
-          <div className="flex flex-col gap-[5px]">
-            <span className="lbl">{t('config.fightStyle')}</span>
-            <b className="font-headline text-[13px] font-extrabold text-on-surface">
-              {fightStyle} · <span className="tabular-nums">{fightLengthLabel}</span>
-            </b>
-          </div>
-          <div className="flex flex-col gap-[5px]">
-            <span className="lbl">{t('results.targets')}</span>
-            <b className="font-headline text-[13px] font-extrabold tabular-nums text-on-surface">
-              {targetCount} {targetCount === 1 ? t('config.boss') : t('config.bosses')}
-            </b>
-          </div>
-        </div>
-
-        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(OPEN_SIM_SETTINGS_EVENT))}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left text-[12.5px] font-semibold text-outline transition-colors hover:text-on-surface-variant"
+        >
+          {profileName && (
+            <span className="flex shrink-0 items-center gap-1.5 font-headline text-[12.5px] font-extrabold text-on-surface">
+              <span className="max-w-[160px] truncate">{profileName}</span>
+              {profileDirty && (
+                <span
+                  title={t('simSettings.unsaved')}
+                  className="inline-block h-1.5 w-1.5 rounded-full bg-gold-fill"
+                />
+              )}
+            </span>
+          )}
+          <span className="config-footer-summary-text min-w-0 truncate">
+            {summary.fight} · {summary.buffs} · {summary.consumables}
+          </span>
+          <span className="shrink-0 font-headline text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-gold">
+            {t('simSettings.edit')}
+          </span>
+        </button>
 
         {showStatWeightsToggle && (
           <label
-            className="lbl flex cursor-pointer select-none items-center gap-2.5"
+            className="lbl flex shrink-0 cursor-pointer select-none items-center gap-2.5"
             title={t('config.statWeightsHint')}
           >
             <Switch
@@ -77,28 +84,11 @@ export default function ConfigFooterBar({
               onChange={setStatWeights}
               className="focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold/55"
             />
-            <span className="text-on-surface-variant">{t('config.statWeights')}</span>
+            <span className="config-footer-hide-sm text-on-surface-variant">
+              {t('config.statWeights')}
+            </span>
           </label>
         )}
-
-        <button
-          type="button"
-          onClick={onToggleDrawer}
-          className={`${buttonClass('quiet')} ${drawerOpen ? '!border-line/20 !text-on-surface' : ''}`}
-        >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="8" cy="8" r="2" />
-            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
-          </svg>
-          {drawerOpen ? t('common.close') : t('common.options')}
-        </button>
 
         {status}
 

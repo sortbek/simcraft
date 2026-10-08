@@ -20,16 +20,6 @@ export const QUALITY_HEX: Record<number, string> = {
   7: q('heirloom'),
 };
 
-/** Tailwind text-color classes (for class-based rendering, e.g. loot table). */
-export const QUALITY_TEXT_CLASS: Record<number, string> = {
-  1: 'text-gray-400',
-  2: 'text-green-400',
-  3: 'text-blue-400',
-  4: 'text-purple-400',
-  5: 'text-orange-400',
-  6: 'text-amber-300',
-};
-
 /** Server-sent quality hex (dark palette), swapped for the themed color where a light theme sets --q-light-N. */
 export function serverQualityColor(quality: number, hex: string): string {
   return `var(--q-light-${quality}, ${hex})`;

@@ -1,13 +1,25 @@
-/** Small "i" badge with a hover tooltip. Shared by the Top Gear option chips and
- *  the gem option switches. Clicks are swallowed so it can sit inside a
- *  clickable row without triggering it. */
+'use client';
+
+import { TOOLTIP_WIDTH, TooltipBubble } from './Tooltip';
+import { useAnchoredPopup } from './useAnchoredPopup';
+
+/** Small "i" badge with a hover tooltip, used by the gem option switches and
+ *  the loot browser. Clicks are swallowed so it can sit inside a clickable row
+ *  without triggering it. */
 export default function InfoIcon({ tooltip }: { tooltip: string }) {
+  const { ref, show, hide, style } = useAnchoredPopup<HTMLSpanElement>(TOOLTIP_WIDTH, 'center');
+
   return (
     <span
+      ref={ref}
       tabIndex={0}
       aria-label={tooltip}
       onClick={(event) => event.stopPropagation()}
-      className="group/tip relative inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full bg-overlay/[0.06] text-outline outline-none transition-colors hover:bg-overlay/[0.11] hover:text-on-surface-variant focus-visible:ring-1 focus-visible:ring-gold/55"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      className="relative inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full bg-overlay/[0.06] text-outline outline-none transition-colors hover:bg-overlay/[0.11] hover:text-on-surface-variant focus-visible:ring-1 focus-visible:ring-gold/55"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -21,9 +33,7 @@ export default function InfoIcon({ tooltip }: { tooltip: string }) {
           clipRule="evenodd"
         />
       </svg>
-      <span className="popover pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-56 -translate-x-1/2 whitespace-normal rounded-[6px] px-3 py-2 text-center text-xs font-normal normal-case tracking-normal text-on-surface opacity-0 transition-opacity group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100">
-        {tooltip}
-      </span>
+      {style && <TooltipBubble text={tooltip} style={style} />}
     </span>
   );
 }

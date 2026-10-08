@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 
-const FIGHT_STYLES = [
+export const FIGHT_STYLES = [
   { value: 'Patchwerk', labelKey: 'fightStyle.patchwerk' },
   { value: 'CastingPatchwerk', labelKey: 'fightStyle.castingPatchwerk' },
   { value: 'HecticAddCleave', labelKey: 'fightStyle.hecticAddCleave' },

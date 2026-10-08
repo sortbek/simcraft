@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { useLanguage } from '../lib/i18n';
-import { API_URL, apiUrl, fetchJsonOr } from '../lib/api';
+import { apiUrl, fetchJsonOr } from '../lib/api';
 import Switch from '../components/ui/Switch';
 import CardHeader from '../components/ui/CardHeader';
 import { TABS_TRACK, tabClass } from '../components/ui/ToggleButtonGroup';

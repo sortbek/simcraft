@@ -81,7 +81,3 @@ export const SPEC_ID_TO_NAME: Record<number, string> = Object.fromEntries(
     .flat()
     .map((spec) => [spec.id, spec.name])
 );
-/** Legacy lookup for callers without class context; ambiguous names retain their existing mapping. */
-export const SPEC_NAME_TO_ID: Record<string, number> = Object.fromEntries(
-  Object.entries(SPEC_ID_TO_NAME).map(([id, name]) => [name, Number(id)])
-);

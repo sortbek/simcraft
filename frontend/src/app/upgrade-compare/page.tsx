@@ -15,6 +15,7 @@ import { QUALITY_COLORS, useItemInfo, type ItemQuery, iconProps } from '../lib/u
 import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import SimSettingsBlock from '../components/sim-config/SimSettingsBlock';
 import { useLanguage } from '../lib/i18n';
 import { localizedItemName, useItemNames, getWowheadUrl } from '../lib/useItemInfo';
 import { useWowheadTooltips } from '../lib/useWowheadTooltips';
@@ -228,6 +229,7 @@ export default function UpgradeComparePage() {
         subtitle={t('page.crestUpgradesSubtitle')}
       />
       <TalentPicker />
+      <SimSettingsBlock />
       {/* Explainer */}
       <div className="card px-6 py-4">
         <p className="text-[15px] leading-relaxed text-on-surface-variant">

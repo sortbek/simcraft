@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,8 +6,8 @@
 
 /* Color themes: RGB channels read by tailwind.config.ts. The page always sets
    data-theme to forge (Dark, default) or parchment (Light). This block holds the
-   dark defaults every theme shares; the :root palette below is the base forge
-   builds on, and Parchment overrides both. */
+   dark defaults every theme shares; the :root palette below is Dark's colors
+   (the Polished mockup palette), and Parchment overrides both. */
 :root,
 [data-theme] {
   color-scheme: dark;
@@ -37,11 +37,6 @@
   --c-warning: 245 165 36;
   --c-ench: 79 209 139;
   --c-gem: 90 180 255;
-  --c-secondary: 223 195 142;
-  --c-secondary-container: 90 70 29;
-  --c-tertiary: 169 199 255;
-  --c-tertiary-container: 117 161 235;
-  --c-on-primary-container: 72 52 0;
   /* Gold split: --c-primary is text/borders; solid fills, tints and selected rows can diverge in light themes */
   --c-primary-fill: var(--c-primary);
   --c-primary-fill-hover: var(--c-gold-light);
@@ -75,24 +70,6 @@
   --c-outline-variant: 110 102 93;
   --c-fg-4: 87 81 74;
   --c-popover: 23 21 19;
-}
-[data-theme='forge'] {
-  --c-background: 13 12 11;
-  --c-surface-container-lowest: 10 9 8;
-  --c-surface-container-low: 19 18 16;
-  --c-surface-container: 24 22 20;
-  --c-surface-container-high: 30 27 24;
-  --c-surface-container-highest: 37 34 25;
-  --c-primary: 200 153 42;
-  --c-primary-container: 154 114 32;
-  --c-gold-light: 217 168 58;
-  --c-on-primary: 26 13 0;
-  --c-on-surface: 240 235 226;
-  --c-on-surface-variant: 169 163 155;
-  --c-outline: 119 114 107;
-  --c-outline-variant: 74 70 64;
-  --c-fg-4: 87 83 77;
-  --c-popover: 30 27 24;
 }
 /* Light theme: warm parchment with real tonal steps; text gold is darker than fill gold for contrast */
 [data-theme='parchment'] {
@@ -223,6 +200,221 @@
   }
   .tog-on::after {
     @apply left-4 bg-gold-fill;
+  }
+}
+
+/* Sim settings block: lays out by its own width, not the viewport's, so it
+   reflows the same next to the sidebar at any window size. Column dividers are
+   inset shadows so wrapped cells never show a stray border. */
+.sim-settings {
+  container-type: inline-size;
+  --sim-line: rgb(var(--c-line) / calc(0.06 * var(--c-line-k)));
+}
+.sim-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-top: 1px solid var(--sim-line);
+}
+.sim-settings-col {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  box-shadow: inset 0 1px 0 var(--sim-line);
+}
+.sim-settings-col:first-child {
+  box-shadow: none;
+}
+.sim-settings-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0.625rem;
+}
+.sim-settings-summary-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 1.125rem;
+  box-shadow: inset 1px 0 0 var(--sim-line);
+}
+.sim-settings-summary-item:first-child {
+  padding-left: 0;
+  box-shadow: none;
+}
+.sim-adv-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem 1.5rem;
+}
+@container (min-width: 700px) {
+  .sim-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sim-settings-cons {
+    box-shadow: inset 1px 0 0 var(--sim-line);
+  }
+  .sim-settings-buffs {
+    grid-column: 1 / -1;
+  }
+}
+@container (min-width: 1080px) {
+  .sim-settings-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.3fr);
+  }
+  .sim-settings-buffs {
+    grid-column: auto;
+    box-shadow: inset 1px 0 0 var(--sim-line);
+  }
+}
+@container (min-width: 640px) {
+  .sim-adv-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sim-adv-wide {
+    grid-column: 1 / -1;
+  }
+}
+@container (min-width: 980px) {
+  .sim-adv-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 560px) {
+  .sim-settings-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  .sim-settings-summary-item {
+    padding: 0;
+    box-shadow: none;
+  }
+  .sim-settings-hide-sm {
+    display: none;
+  }
+  .sim-settings-col {
+    padding: 1.125rem 1rem;
+  }
+}
+
+/* Setup bar (TalentPicker `options`): one row of labelled cells when wide, the
+   build picker on its own row below that, one column when narrow. Cells draw
+   their dividers as inset shadows; the bar is pulled 1px up/left under the
+   card's clipped edge so the first row/column shows none. */
+.setup-bar-wrap {
+  container-type: inline-size;
+  overflow: hidden;
+  --setup-line: rgb(var(--c-line) / calc(0.06 * var(--c-line-k)));
+}
+.setup-bar {
+  display: flex;
+  flex-wrap: wrap;
+  margin: -1px 0 0 -1px;
+}
+.setup-cell {
+  display: flex;
+  min-width: 0;
+  min-height: 76px;
+  /* Zero basis + content minimum: cells share a row as long as each one's
+     switch and text fit, and only then wrap. */
+  flex: 1 1 0;
+  min-width: min-content;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.25rem;
+  box-shadow:
+    inset 1px 0 0 var(--setup-line),
+    inset 0 1px 0 var(--setup-line);
+}
+/* A native select is as wide as its longest option; let the build picker
+   shrink instead of pushing its buttons out of the cell. */
+.setup-cell-talents,
+.setup-cell-talents > div {
+  min-width: 0;
+}
+.setup-cell-talents select {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.setup-cell-talents button {
+  flex-shrink: 0;
+}
+/* Below one-row width the build picker takes its own row and the options share
+   the next one evenly. */
+.setup-cell-talents {
+  flex-basis: 100%;
+}
+@container (min-width: 1060px) {
+  .setup-cell-talents {
+    flex: 1 1 300px;
+  }
+  .setup-cell:not(.setup-cell-talents) {
+    flex: 0 0 auto;
+  }
+}
+
+/* Top Gear toolbar: tabs left, actions right; the quick-select chips share the
+   row when there is room and drop below it when there isn't. */
+.topgear-toolbar {
+  container-type: inline-size;
+}
+.topgear-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+/* No overflow scrolling here: it would clip the tabs' info tooltips. The tab
+   track wraps instead when the toolbar is too narrow. */
+.topgear-toolbar-tabs {
+  order: 1;
+  max-width: 100%;
+}
+.topgear-toolbar-actions {
+  order: 2;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.topgear-toolbar-extra {
+  order: 3;
+  flex-basis: 100%;
+}
+.topgear-toolbar-extra:has(> div:empty) {
+  display: none;
+}
+@container (min-width: 1180px) {
+  .topgear-toolbar-extra {
+    order: 2;
+    flex-basis: auto;
+  }
+  .topgear-toolbar-actions {
+    order: 3;
+  }
+}
+@container (max-width: 620px) {
+  .topgear-toolbar-density {
+    display: none;
+  }
+}
+
+/* Run bar: same idea, so the summary yields before the Run button wraps. */
+.config-footer {
+  container-type: inline-size;
+}
+@container (max-width: 600px) {
+  .config-footer-summary-text {
+    display: none;
+  }
+}
+@container (max-width: 560px) {
+  .config-footer-hide-sm {
+    display: none;
   }
 }
 

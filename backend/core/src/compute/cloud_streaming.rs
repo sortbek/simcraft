@@ -117,9 +117,6 @@ pub struct ChunkRequest {
     pub job_id: String,
     /// `"# Base Actor\n<base>\n<profileset lines>"`.
     pub simc_input: String,
-    /// Used by fake test runners; the production runner submits by `simc_input`
-    /// text, so this is informational on that path.
-    #[allow(dead_code)]
     pub profileset_count: usize,
 }
 

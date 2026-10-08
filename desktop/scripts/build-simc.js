@@ -1,4 +1,4 @@
-const { spawn, execSync } = require("child_process");
+const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -45,43 +45,6 @@ function isBuildToolchainAvailable() {
 
 function sanitizeRef(gitRef) {
   return gitRef.replace(/\//g, "-");
-}
-
-function runCommand(cmd, args, cwd, onProgress) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: process.platform === "win32",
-    });
-
-    let stderr = "";
-
-    proc.stdout.on("data", (data) => {
-      const line = data.toString().trim();
-      if (line && onProgress) onProgress(line);
-    });
-
-    proc.stderr.on("data", (data) => {
-      const line = data.toString().trim();
-      stderr += data.toString();
-      if (line && onProgress) onProgress(line);
-    });
-
-    proc.on("close", (code) => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            `Command "${cmd} ${args.join(" ")}" exited with code ${code}\n${stderr}`
-          )
-        );
-      } else {
-        resolve();
-      }
-    });
-
-    proc.on("error", reject);
-  });
 }
 
 // ── Build ──────────────────────────────────────────────────────

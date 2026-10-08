@@ -15,24 +15,9 @@ const LABEL_KEYS: Record<string, string> = {
   stat_weights: 'simType.statWeights',
 };
 
-const COLOR_CLASSES: Record<string, string> = {
-  quick: 'bg-primary/10 text-primary border-primary/20',
-  stat_weights: 'bg-primary/10 text-primary border-primary/20',
-  top_gear: 'bg-tertiary/10 text-tertiary border-tertiary/20',
-  upgrade_compare: 'bg-tertiary/10 text-tertiary border-tertiary/20',
-  droptimizer: 'bg-secondary/10 text-secondary border-secondary/20',
-};
-
-const DEFAULT_COLOR =
-  'border-outline-variant/10 bg-surface-container-highest text-on-surface-variant';
-
 export function getSimTypeLabel(simType: string, t: Translator): string {
   const key = LABEL_KEYS[simType];
   return key ? t(key) : simType;
-}
-
-export function getSimTypeColorClass(simType: string): string {
-  return COLOR_CLASSES[simType] ?? DEFAULT_COLOR;
 }
 
 /** Sim modes rendering via the gear-comparison result shape (combos ranked vs a

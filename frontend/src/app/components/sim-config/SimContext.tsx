@@ -14,7 +14,6 @@ import { specDisplayName, type FightScenario } from '../../lib/types';
 import type { ActiveRoute } from '../../lib/active-route';
 import { folioSelectionForImport, type OmniumSelection } from '../omnium/omniumSelection';
 import { useOmniumTree } from '../../lib/useOmniumTree';
-import { API_URL } from '../../lib/api';
 import { effectiveSpec, specIsSimmable } from '../../lib/simcDetect';
 import {
   readSessionJson,
@@ -43,6 +42,11 @@ import {
   type SimProfile,
   type SimProfileData,
 } from '../../lib/sim-profiles';
+import {
+  dirtyProfileSections,
+  stableStringify,
+  type ProfileSection,
+} from '../../lib/profile-sections';
 
 export type { RotationMode };
 
@@ -50,19 +54,6 @@ export type { RotationMode };
  *  dirty dot recomputed. Long enough that typing doesn't serialize per keystroke,
  *  short enough that the dot feels immediate. */
 const DRAFT_DEBOUNCE_MS = 400;
-
-/** JSON with object keys sorted recursively, so semantically equal configs
- *  compare equal regardless of key insertion order. */
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
-}
 
 interface SimContextType {
   simcInput: string;
@@ -168,6 +159,8 @@ interface SimContextType {
   setActiveProfile: (p: SimProfile | null) => void;
   /** Whether the shared config has drifted from the active profile's data. */
   profileDirty: boolean;
+  /** Which Sim settings sections drifted; empty whenever `profileDirty` is false. */
+  profileDirtySections: ProfileSection[];
 }
 
 const SimContext = createContext<SimContextType | null>(null);
@@ -621,12 +614,23 @@ export function SimProvider({ children }: { children: ReactNode }) {
     ]
   );
 
+  // The debounced snapshot of the live config that dirty tracking compares
+  // against the active profile (written by the effect further down).
+  const [draftData, setDraftData] = useState<SimProfileData | null>(null);
+  const draftKey = useMemo(() => (draftData ? stableStringify(draftData) : null), [draftData]);
+  // Always the current capture, for code that resumes after an await.
+  const captureRef = useRef(captureProfileData);
+  captureRef.current = captureProfileData;
+
   const applyProfile = useCallback(
     (profile: SimProfile) => {
       // Newer-schema profiles can't be applied faithfully; the picker shows
       // them disabled — this is the seam's backstop.
       if (!isProfileSupported(profile)) return;
       applyConfig(profile.data);
+      // Move the snapshot with the profile. Left to the debounce, it would hold
+      // the previous config for a beat and flash "Unsaved changes".
+      setDraftData(profile.data);
       setActiveProfile(profile);
     },
     [applyConfig, setActiveProfile]
@@ -636,7 +640,11 @@ export function SimProvider({ children }: { children: ReactNode }) {
     // The built-in Default is not a stored row; the drawer disables Save for
     // it, and this is the seam's backstop.
     if (!activeProfile || isDefaultProfile(activeProfile)) return;
-    setActiveProfile(await updateProfile({ ...activeProfile, data: captureProfileData() }));
+    const data = captureProfileData();
+    setActiveProfile(await updateProfile({ ...activeProfile, data }));
+    // Sync the snapshot only if nothing changed while the save was in flight;
+    // otherwise the debounce reports the newer edit as unsaved, as it should.
+    if (stableStringify(captureRef.current()) === stableStringify(data)) setDraftData(data);
   }, [activeProfile, captureProfileData, setActiveProfile]);
 
   // The folio belongs to the imported character, so it is seeded here rather
@@ -656,11 +664,10 @@ export function SimProvider({ children }: { children: ReactNode }) {
   // reverting them (which also cleared the dirty dot, hiding the loss). Debounced:
   // the expert text fields write to state on every keystroke, and this is the one
   // place that serializes the whole config — including multi-KB SimC blobs.
-  const [draftKey, setDraftKey] = useState<string | null>(null);
   useEffect(() => {
     const writeDraft = () => {
       const data = captureProfileData();
-      setDraftKey(stableStringify(data));
+      setDraftData(data);
       try {
         localStorage.setItem('simhammer_profile_draft', JSON.stringify(data));
       } catch {}
@@ -689,6 +696,15 @@ export function SimProvider({ children }: { children: ReactNode }) {
   );
   const profileDirty =
     savedProfileKey !== null && draftKey !== null && draftKey !== savedProfileKey;
+  // Same debounced draft as `profileDirty`, so the section dots and the overall
+  // state can never disagree.
+  const profileDirtySections = useMemo<ProfileSection[]>(
+    () =>
+      profileDirty && activeProfile && draftData
+        ? dirtyProfileSections(activeProfile.data, draftData)
+        : [],
+    [profileDirty, activeProfile, draftData]
+  );
 
   return (
     <SimContext.Provider
@@ -758,6 +774,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         saveActiveProfile,
         setActiveProfile,
         profileDirty,
+        profileDirtySections,
       }}
     >
       {children}

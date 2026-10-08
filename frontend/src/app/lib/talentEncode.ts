@@ -1,7 +1,6 @@
 /** Encode talent selections into a WoW talent export string (base64 bit-packed).
  *  Reverse of talentDecode.ts. */
 
-import { decodeHeader, decodeNodes } from './talentDecode';
 import type { NodeSelection } from './talentDecode';
 import type { TalentNode, TalentTreeData } from './useTalentTree';
 
@@ -97,56 +96,4 @@ export function encodeTalentString(
   }
 
   return writer.toBase64();
-}
-
-/**
- * Decode, auto-grant implicitly-granted free nodes, and re-encode.
- * WoW export strings may omit freeNode talents (auto-granted when their subtree
- * is selected), but SimC requires them present.
- */
-export function normalizeTalentString(talentString: string, tree: TalentTreeData): string {
-  const header = decodeHeader(talentString);
-  const orderedIds = tree.fullNodeOrder;
-  if (!orderedIds) return talentString;
-
-  const allNodes = [
-    ...tree.classNodes,
-    ...tree.specNodes,
-    ...tree.heroNodes,
-    ...(tree.subTreeNodes ?? []),
-  ];
-  const localMap = new Map(allNodes.map((n) => [n.id, n.maxRanks ?? 1]));
-  const maxRanks = new Map(
-    orderedIds.map((id) => [id, tree.fullNodeMaxRanks?.[id] ?? localMap.get(id) ?? 1])
-  );
-
-  const decoded = decodeNodes(header.bits, header.offset, orderedIds, maxRanks);
-
-  // Auto-grant freeNode talents. SimC expects ALL free nodes present — including
-  // hero entry nodes for BOTH subtrees, not just the active one.
-  let changed = false;
-  for (const node of [...tree.classNodes, ...tree.specNodes, ...tree.heroNodes]) {
-    if (node.freeNode && !decoded.has(node.id)) {
-      decoded.set(node.id, { ranks: node.maxRanks, choiceIndex: -1 });
-      changed = true;
-    }
-  }
-
-  // Fix subtree selector nodes: WoW's export may omit them (isSelected=0) or encode
-  // them without the choice bit. Infer the correct choiceIndex from selected hero nodes.
-  for (const stNode of tree.subTreeNodes ?? []) {
-    const sel = decoded.get(stNode.id);
-    if (sel && sel.choiceIndex >= 0) continue; // already correct
-    for (let i = 0; i < stNode.entries.length; i++) {
-      const entry = stNode.entries[i];
-      if (entry.nodes?.some((nid: number) => decoded.has(nid))) {
-        decoded.set(stNode.id, { ranks: 1, choiceIndex: i });
-        changed = true;
-        break;
-      }
-    }
-  }
-
-  if (!changed) return talentString;
-  return encodeTalentString(decoded, tree, header.specId, header.version);
 }

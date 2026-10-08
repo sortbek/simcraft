@@ -112,13 +112,34 @@ export default function TopGearGroupCard({
   t,
 }: TopGearGroupCardProps) {
   const layout = GEAR_DENSITY_LAYOUT[density];
+  const picked = alternatives.filter((item) => isItemSelected(item, group)).length;
+  // An alternative is an upgrade over the item it would replace; for a pair
+  // (rings, trinkets) that is the weaker of the two equipped.
+  const replacedIlevel = equipped.length ? Math.min(...equipped.map((e) => e.ilevel)) : null;
+  const ilevelTone = (ilevel: number) =>
+    replacedIlevel == null || ilevel === replacedIlevel
+      ? ('base' as const)
+      : ilevel > replacedIlevel
+        ? ('up' as const)
+        : ('down' as const);
 
   return (
     <div className={gearCardClass(density)}>
-      <p className={`h-card flex items-center gap-2 ${layout.title}`}>
+      <p className={`h-card flex items-center gap-2 !text-[11px] ${layout.title}`}>
         {title}
-        {alternatives.length > 0 && (
-          <Pill className="tabular-nums text-outline">{alternatives.length}</Pill>
+        {group.slots.length > 1 && alternatives.length > 0 && (
+          <span className="font-sans text-[11.5px] font-medium normal-case tracking-normal text-outline">
+            {t('topGear.pickAnyTwo')}
+          </span>
+        )}
+        {picked > 0 ? (
+          <Pill variant="gold" className="tabular-nums">
+            +{picked}
+          </Pill>
+        ) : (
+          alternatives.length > 0 && (
+            <Pill className="tabular-nums text-outline">{alternatives.length}</Pill>
+          )
         )}
         {onDemote && (
           <button
@@ -151,8 +172,21 @@ export default function TopGearGroupCard({
             icon={item.icon}
             name={localizedItemName(item.item_id, item.name, locale)}
             nameColor={serverQualityColor(item.quality, item.quality_color)}
-            details={itemDetails(item)}
+            details={
+              // Dense rows put details on the name line, where the tag only
+              // gets truncated; the grey tick marks the equipped row there.
+              density === 'ultra'
+                ? itemDetails(item)
+                : [
+                    {
+                      text: t('topGear.equippedTag'),
+                      color: 'font-headline text-[10px] font-extrabold uppercase tracking-[0.12em]',
+                    },
+                    ...itemDetails(item),
+                  ]
+            }
             ilevel={item.ilevel}
+            ilevelTone="base"
             equipped
             selectable
             checked={checked}
@@ -199,6 +233,7 @@ export default function TopGearGroupCard({
           nameColor={serverQualityColor(item.quality, item.quality_color)}
           details={itemDetails(item)}
           ilevel={item.ilevel}
+          ilevelTone={ilevelTone(item.ilevel)}
           selectable
           checked={isItemSelected(item, group)}
           onToggle={() => onToggleItem(item, group)}
@@ -318,17 +353,13 @@ function UpgradeButton({
             ? 'bg-gold/20 text-gold'
             : 'text-outline hover:bg-overlay/[0.06] hover:text-on-surface-variant'
         }`}
-        title={t('gear.addUpgradedCopy')}
+        title={t('gear.itemActions')}
+        aria-label={t('gear.itemActions')}
       >
-        <svg
-          className="h-3.5 w-3.5"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        >
-          <path d="M8 12V4M5 7l3-3 3 3" />
+        <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="3.5" cy="8" r="1.3" />
+          <circle cx="8" cy="8" r="1.3" />
+          <circle cx="12.5" cy="8" r="1.3" />
         </svg>
       </button>
       {isMenuOpen && (

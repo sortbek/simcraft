@@ -5,30 +5,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SeasonConfig {
-    #[serde(default)]
-    pub season: String,
-
-    #[serde(default)]
-    pub raid_difficulties: Vec<DifficultyDef>,
-
-    /// Meta-instance holding this season's raid bosses. Unlike a dungeon pool,
-    /// its `encounters` are boss encounter IDs, not instance IDs.
-    #[serde(default)]
-    pub raid_pool_instance_id: Option<i64>,
-
-    #[serde(default)]
-    pub dungeon_categories: Vec<DungeonCategory>,
-
-    #[serde(default)]
-    pub encounter_overrides: Vec<EncounterOverride>,
-
-    #[serde(default)]
-    pub instance_overrides: Vec<InstanceOverride>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct DifficultyDef {
     pub key: String,
     pub label: String,
@@ -96,25 +72,6 @@ pub struct BonusRollConfig {
     pub dungeon_category: String,
     #[serde(default)]
     pub dungeon_difficulties: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EncounterOverride {
-    pub encounter_id: i64,
-    pub upgrade_level: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InstanceOverride {
-    pub instance_id: i64,
-    #[serde(default)]
-    pub difficulty_key: String,
-    #[serde(default)]
-    pub track: String,
-    #[serde(default)]
-    pub level: u64,
 }
 
 /// API response for GET /api/season-config.

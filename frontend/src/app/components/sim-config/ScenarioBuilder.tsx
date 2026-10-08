@@ -63,7 +63,7 @@ export default function ScenarioBuilder() {
         </div>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col items-start gap-2">
         <button
           type="button"
           onClick={addScenario}

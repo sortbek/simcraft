@@ -35,15 +35,6 @@ use std::collections::{HashMap, HashSet};
 
 use crate::db::MAX_COMBINATIONS;
 
-/// Typed result for every profileset generator. Replaces an ad-hoc tuple +
-/// stringly error pair so handlers stop parsing "(N)" out of error messages
-/// to recover the limit-exceeded count for the UI.
-pub struct GeneratedProfilesets {
-    pub input: String,
-    pub combo_count: usize,
-    pub metadata: HashMap<String, Vec<Value>>,
-}
-
 /// Typed generator failure. Carries enough structured context that callers
 /// don't need to inspect error message text. `Other` is a catch-all for the
 /// older raw-string failure paths inside the per-generator modules that we
@@ -74,9 +65,8 @@ impl GeneratorError {
     }
 }
 
-/// Internal-only legacy type alias, kept while we migrate generator modules
-/// to return `Result<GeneratedProfilesets, GeneratorError>` directly. Public
-/// callers should use the typed entry points below.
+/// Internal result of the per-generator modules: (input, combo count, metadata)
+/// or a stringly error. Public callers should use the typed entry points below.
 type ProfilesetResult = Result<(String, usize, HashMap<String, Vec<Value>>), String>;
 
 /// Try to parse a generator's stringly error into the typed variant. Until

@@ -52,13 +52,3 @@ export function gearStatusFrom(flags: {
   if (flags.voidForge) return 'voidForge';
   return null;
 }
-
-/** Semantic text colors used in result rows. */
-export const STATUS_TEXT = {
-  /** Upgrade / crest cost emphasis. */
-  upgrade: 'text-gold/70',
-  /** Positive delta (DPS gain). */
-  deltaPositive: 'text-positive',
-  /** Negative delta (DPS loss). */
-  deltaNegative: 'text-negative',
-} as const;

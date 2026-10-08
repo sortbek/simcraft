@@ -11,6 +11,7 @@ import { useSimSubmit } from '../lib/useSimSubmit';
 import TalentPicker from '../components/talents/TalentPicker';
 import GearOverview from '../components/gear/GearOverview';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import SimSettingsBlock from '../components/sim-config/SimSettingsBlock';
 import { specDisplayName } from '../lib/types';
 import { API_URL } from '../lib/api';
 import { useResolvedGear, equippedGearItems } from '../lib/useResolvedGear';
@@ -156,6 +157,7 @@ export default function QuickSimPage() {
       )}
 
       <TalentPicker defaultView="view" hideCompare />
+      <SimSettingsBlock />
       {equippedGear && (
         <GearOverview
           gear={equippedGear}

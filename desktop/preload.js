@@ -26,15 +26,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("updater:download-progress", handler);
   },
 
-  // Clipboard monitoring
-  startClipboardPolling: (intervalMs) => ipcRenderer.invoke("clipboard:start-polling", intervalMs),
-  stopClipboardPolling: () => ipcRenderer.invoke("clipboard:stop-polling"),
+  // Clipboard
   readClipboard: () => ipcRenderer.invoke("clipboard:read"),
-  onClipboardChange: (callback) => {
-    const handler = (_event, text) => callback(text);
-    ipcRenderer.on("clipboard:changed", handler);
-    return () => ipcRenderer.removeListener("clipboard:changed", handler);
-  },
 
   // SimC version management
   getSimcStatus: () => ipcRenderer.invoke("simc:status"),

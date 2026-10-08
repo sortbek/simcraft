@@ -7,7 +7,6 @@ import { encodeTalentString } from '../../lib/talentEncode';
 import { line } from '../../lib/themeColors';
 import {
   canSelectNode,
-  canDeselectNode,
   toggleNode,
   decrementNode,
   cycleChoice,
@@ -182,7 +181,7 @@ export default function TalentTree({
     [editable, nodeMap]
   );
 
-  const { t, locale } = useLanguage();
+  const { t } = useLanguage();
 
   useWowheadTooltips([selections]);
 
@@ -403,10 +402,6 @@ function TreeSection({
           const sel = selections.get(node.id);
           const selectable =
             editable && tree && nodeMap ? canSelectNode(node.id, selections, tree, nodeMap) : false;
-          const deselectable =
-            editable && tree && nodeMap
-              ? canDeselectNode(node.id, selections, tree, nodeMap)
-              : false;
 
           return (
             <TalentNodeSvg
@@ -415,7 +410,6 @@ function TreeSection({
               selection={sel}
               editable={editable}
               selectable={selectable}
-              deselectable={deselectable}
               onClick={onNodeClick}
               onRightClick={onNodeRightClick}
               onChoiceCycle={onChoiceCycle}
@@ -432,7 +426,6 @@ function TalentNodeSvg({
   selection,
   editable,
   selectable,
-  deselectable,
   onClick,
   onRightClick,
   onChoiceCycle,
@@ -441,7 +434,6 @@ function TalentNodeSvg({
   selection?: NodeSelection;
   editable?: boolean;
   selectable?: boolean;
-  deselectable?: boolean;
   onClick?: (nodeId: number) => void;
   onRightClick?: (nodeId: number) => void;
   onChoiceCycle?: (nodeId: number) => void;

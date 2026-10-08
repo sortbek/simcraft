@@ -239,7 +239,7 @@ export default function TopBar() {
   return (
     <div
       ref={containerRef}
-      className="desktop-drag sticky top-0 z-50 flex h-16 items-center justify-between gap-2.5 border-b border-line/[0.06] bg-background/85 px-7 backdrop-blur-lg"
+      className="desktop-drag sticky top-0 z-50 flex h-16 items-center justify-between gap-2.5 border-b border-line/[0.06] bg-background px-7"
     >
       <div className="desktop-no-drag relative flex items-center gap-2.5">
         <button
@@ -299,7 +299,7 @@ export default function TopBar() {
             });
             setShowChars(false);
           }}
-          className="flex h-[34px] max-w-[260px] items-center rounded-[6px] border border-line/[0.06] bg-surface-container px-3 transition-colors hover:border-line/[0.11]"
+          className="flex h-[34px] w-[260px] min-w-0 shrink items-center rounded-[6px] border border-line/[0.06] bg-surface-container px-3 transition-colors hover:border-line/[0.11]"
         >
           <span className="truncate font-mono text-xs text-outline">
             {simcInput

@@ -14,7 +14,6 @@ export default function UpdateChecker() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
-  const [simulated, setSimulated] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -71,10 +70,6 @@ export default function UpdateChecker() {
   }, [open]);
 
   async function handleInstall() {
-    if (simulated) {
-      setOpen(false);
-      return;
-    }
     const api = window.electronAPI;
     if (!api) return;
     setInstalling(true);

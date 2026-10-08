@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import TopGearItemSelector from '../components/gear/TopGearItemSelector';
 import AddItemSearch from '../components/gear/AddItemSearch';
@@ -9,12 +9,14 @@ import GemSelector from '../components/gear/GemSelector';
 import TopGearToolbar, { type TopGearSection } from '../components/gear/TopGearToolbar';
 import { GEAR_ROW_DENSITIES, type GearRowDensity } from '../components/gear/gearDensity';
 import TopGearQuickSelectBar from '../components/gear/TopGearQuickSelectBar';
-import TopGearSectionPanel from '../components/gear/TopGearSectionPanel';
 import { ENCHANT_SLOTS } from '../components/gear/itemOptions';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
+import SimSettingsBlock from '../components/sim-config/SimSettingsBlock';
+import SetupCell, { SetupToggle } from '../components/ui/SetupCell';
+import CatalystChargesPicker from '../components/gear/CatalystChargesPicker';
+import { useContentScale } from '../components/layout/ContentScaler';
 import TalentPicker from '../components/talents/TalentPicker';
 import ErrorAlert from '../components/ui/ErrorAlert';
-import InfoIcon from '../components/ui/InfoIcon';
 import PageHeader from '../components/ui/PageHeader';
 import Pill from '../components/ui/Pill';
 import SimcDownloadBanner from '../components/ui/SimcDownloadBanner';
@@ -61,61 +63,12 @@ const LARGE_LOCAL_SIM_THRESHOLD = 20_000;
 
 type SectionKey = 'items' | 'enchants' | 'gems' | 'folio';
 
-// One key for all three, deliberately new: the old per-section keys
-// (simhammer_topgear_{enchants,gems}_open) already hold `false` for anyone who
-// used the page before, which would shadow the open-by-default below.
-const SECTIONS_STORAGE_KEY = 'simhammer_topgear_sections_open';
-
-const DEFAULT_SECTIONS_OPEN: Record<SectionKey, boolean> = {
-  items: true,
-  enchants: true,
-  gems: true,
-  folio: true,
-};
+const TAB_STORAGE_KEY = 'simhammer_topgear_tab';
+const SECTION_KEYS: SectionKey[] = ['items', 'enchants', 'gems', 'folio'];
+// The Add item panel's open state, kept from when it was a collapsible card.
+const ADD_ITEM_OPEN_KEY = 'simhammer_topgear_additem_open';
 
 const DENSITY_STORAGE_KEY = 'simhammer_topgear_density';
-
-/** Compact option chip. The switch itself is an inner button so that anything
- *  else in the chip — the catalyst charges input, the info badge — is a sibling
- *  rather than a descendant: no keystroke can reach the toggle by bubbling, and
- *  no interactive element ends up nested inside a `role="switch"`. */
-function Chip({
-  checked,
-  onChange,
-  label,
-  tooltip,
-  children,
-}: {
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  label: string;
-  tooltip?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <div className={`chip group shrink-0 select-none ${checked ? 'chip-on' : ''}`}>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className="flex min-w-0 items-center gap-2 text-left"
-      >
-        <span className="truncate">{label}</span>
-      </button>
-      {children}
-      {tooltip && (
-        <span
-          className={`shrink-0 transition-opacity ${
-            checked ? 'opacity-90' : 'opacity-40 group-hover:opacity-90'
-          }`}
-        >
-          <InfoIcon tooltip={tooltip} />
-        </span>
-      )}
-    </div>
-  );
-}
 
 export default function TopGearScreen() {
   const {
@@ -155,8 +108,14 @@ export default function TopGearScreen() {
   const [diamondAlwaysUse, setDiamondAlwaysUse] = useState(false);
   const [maxColors, setMaxColors] = useState(false);
   const [density, setDensity] = useState<GearRowDensity>('compact');
-  const [sectionsOpen, setSectionsOpen] =
-    useState<Record<SectionKey, boolean>>(DEFAULT_SECTIONS_OPEN);
+  const [activeSection, setActiveSection] = useState<SectionKey>('items');
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  // Marks where the sticky toolbar sits in the flow. Switching tabs while
+  // scrolled past it lands the new tab at its top, instead of letting the
+  // browser clamp the scroll when the tab is shorter (which jolts the page).
+  const toolbarAnchorRef = useRef<HTMLDivElement>(null);
+  const { scale: contentScale } = useContentScale();
+  const tabScrollPendingRef = useRef(false);
   const [promotedGroups, setPromotedGroups] = useState<Set<string>>(new Set());
   // Reported by the selectors once their fetches land: the structural gates
   // below only know the character has enchantable slots / sockets, not whether
@@ -173,13 +132,6 @@ export default function TopGearScreen() {
   // The untouched resolve response. Reset restores it, which is what undoes the
   // mergeAlternative calls behind added items, upgraded copies and conversions.
   const baseResolvedRef = useRef<ResolveGearResponse | null>(null);
-  const sectionRefs = useRef<Record<SectionKey, HTMLElement | null>>({
-    items: null,
-    enchants: null,
-    gems: null,
-    folio: null,
-  });
-  const pendingScrollRef = useRef<SectionKey | null>(null);
 
   useEffect(() => {
     const saved = getTopGearState();
@@ -219,22 +171,10 @@ export default function TopGearScreen() {
     // index the metric maps with undefined and blank every row class.
     const storedDensity = readStoredJson<GearRowDensity>(DENSITY_STORAGE_KEY, 'compact');
     setDensity(GEAR_ROW_DENSITIES.includes(storedDensity) ? storedDensity : 'compact');
-    // Spread over the defaults so a partial or stale blob can't leave a section
-    // stuck closed with no way to tell why.
-    setSectionsOpen({
-      ...DEFAULT_SECTIONS_OPEN,
-      ...readStoredJson<Partial<Record<SectionKey, boolean>>>(SECTIONS_STORAGE_KEY, {}),
-    });
+    const storedTab = readStoredJson<SectionKey>(TAB_STORAGE_KEY, 'items');
+    setActiveSection(SECTION_KEYS.includes(storedTab) ? storedTab : 'items');
+    setAddItemOpen(readStoredJson<boolean>(ADD_ITEM_OPEN_KEY, false));
   }, []);
-
-  // Runs once the section has actually opened or closed, so the scroll lands on
-  // the final layout instead of racing it.
-  useEffect(() => {
-    const key = pendingScrollRef.current;
-    if (!key) return;
-    pendingScrollRef.current = null;
-    sectionRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [sectionsOpen]);
 
   useEffect(() => {
     // Skipped while Void Forge is hidden — otherwise a user who enabled it
@@ -409,27 +349,44 @@ export default function TopGearScreen() {
     } catch {}
   }, []);
 
-  // Toolbar navigation: scroll only. Expanding and collapsing belongs to the
-  // section's own header, so this never touches open state.
-  const scrollToSection = useCallback((key: SectionKey) => {
-    sectionRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
+  // CSS `top` is in unzoomed px; rects and scroll are in zoomed viewport px.
+  const toolbarStickTop = useCallback(() => {
+    const toolbar = toolbarAnchorRef.current?.nextElementSibling;
+    return toolbar ? ((parseFloat(getComputedStyle(toolbar).top) || 0) * contentScale) / 100 : 0;
+  }, [contentScale]);
 
-  const toggleSection = useCallback(
+  const selectSection = useCallback(
     (key: SectionKey) => {
-      // Computed and persisted outside the updater: React requires updaters to
-      // be pure and invokes them twice under StrictMode.
-      const next = { ...sectionsOpen, [key]: !sectionsOpen[key] };
-      setSectionsOpen(next);
+      const anchor = toolbarAnchorRef.current;
+      tabScrollPendingRef.current =
+        !!anchor && anchor.getBoundingClientRect().top < toolbarStickTop();
+      setActiveSection(key);
       try {
-        localStorage.setItem(SECTIONS_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(key));
       } catch {}
-      // Collapsing shortens the page, and the browser would otherwise clamp the
-      // scroll position to wherever it lands. Land on the section either way.
-      pendingScrollRef.current = key;
     },
-    [sectionsOpen]
+    [toolbarStickTop]
   );
+
+  useLayoutEffect(() => {
+    if (!tabScrollPendingRef.current) return;
+    tabScrollPendingRef.current = false;
+    const anchor = toolbarAnchorRef.current;
+    if (!anchor) return;
+    window.scrollTo({
+      top: anchor.getBoundingClientRect().top + window.scrollY - toolbarStickTop(),
+    });
+  }, [activeSection, toolbarStickTop]);
+
+  const toggleAddItem = useCallback(() => {
+    setAddItemOpen((previous) => {
+      const next = !previous;
+      try {
+        localStorage.setItem(ADD_ITEM_OPEN_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
 
   const promoteGroup = useCallback((label: string) => {
     setPromotedGroups((previous) => new Set(previous).add(label));
@@ -543,8 +500,8 @@ export default function TopGearScreen() {
         key: 'items',
         label: t('topGear.sectionItems'),
         count: itemCount,
-        open: sectionsOpen.items,
-        onNavigate: () => scrollToSection('items'),
+        active: activeSection === 'items',
+        onSelect: () => selectSection('items'),
         onClear: clearItems,
       },
     ];
@@ -553,9 +510,10 @@ export default function TopGearScreen() {
         key: 'enchants',
         label: t('topGear.sectionEnchants'),
         count: enchantCount,
-        open: sectionsOpen.enchants,
-        onNavigate: () => scrollToSection('enchants'),
+        active: activeSection === 'enchants',
+        onSelect: () => selectSection('enchants'),
         onClear: clearEnchants,
+        tooltip: t('enchantGem.selectEnchantsTooltip'),
       });
     }
     if (showGemSection) {
@@ -563,9 +521,10 @@ export default function TopGearScreen() {
         key: 'gems',
         label: t('topGear.sectionGems'),
         count: gemSelections.size,
-        open: sectionsOpen.gems,
-        onNavigate: () => scrollToSection('gems'),
+        active: activeSection === 'gems',
+        onSelect: () => selectSection('gems'),
         onClear: clearGems,
+        tooltip: t('enchantGem.selectGemsTooltip'),
       });
     }
     if (showFolioSection) {
@@ -573,11 +532,14 @@ export default function TopGearScreen() {
         key: 'folio',
         label: t('topGear.sectionFolio'),
         count: folioExtraCount,
-        open: sectionsOpen.folio,
-        onNavigate: () => scrollToSection('folio'),
+        active: activeSection === 'folio',
+        onSelect: () => selectSection('folio'),
         onClear: clearFolio,
+        tooltip: t('omnium.sectionTooltip'),
       });
     }
+    // A remembered tab that this character doesn't have falls back to Items.
+    if (!list.some((section) => section.active)) list[0].active = true;
     return list;
   }, [
     t,
@@ -585,16 +547,17 @@ export default function TopGearScreen() {
     enchantCount,
     gemSelections.size,
     folioExtraCount,
-    sectionsOpen,
+    activeSection,
     showEnchantSection,
     showGemSection,
     showFolioSection,
-    scrollToSection,
+    selectSection,
     clearFolio,
     clearItems,
     clearEnchants,
     clearGems,
   ]);
+  const currentSection = (sections.find((section) => section.active)?.key ?? 'items') as SectionKey;
 
   const nothingToReset =
     itemCount === 0 &&
@@ -937,48 +900,48 @@ export default function TopGearScreen() {
         subtitle={t('page.topGearSubtitle')}
       />
 
-      <TalentPicker />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Chip
-          checked={copyEnchants}
-          onChange={setCopyEnchants}
-          label={t('topGear.copyEnchants')}
-          tooltip={t('topGear.copyEnchantsTooltip')}
-        />
-        <Chip
-          checked={maxUpgrade}
-          onChange={setMaxUpgrade}
-          label={t('topGear.simHighestUpgrade')}
-          tooltip={t('topGear.simHighestUpgradeTooltip')}
-        />
-        {catalystCharges != null && catalystCharges > 0 && (
-          <Chip
-            checked={catalyst}
-            onChange={setCatalyst}
-            label={t('topGear.revivalCatalyst')}
-            tooltip={t('topGear.revivalCatalystTooltip')}
-          >
-            <span onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={0}
-                max={10}
-                value={catalystCharges}
-                onChange={(event) => {
-                  const value = parseInt(event.target.value, 10);
-                  if (!Number.isNaN(value) && value >= 0) setCatalystCharges(value);
-                }}
-                className="w-8 rounded-[4px] border border-line/[0.11] bg-surface-container px-0.5 py-px text-center text-[12.5px] font-bold tabular-nums text-on-surface outline-none focus:border-gold/35"
+      <TalentPicker
+        options={
+          <SetupCell label={t('topGear.options')}>
+            <SetupToggle
+              checked={maxUpgrade}
+              onChange={setMaxUpgrade}
+              text={t('topGear.maxUpgrades')}
+              tooltip={t('topGear.simHighestUpgradeTooltip')}
+            />
+            <SetupToggle
+              checked={copyEnchants}
+              onChange={setCopyEnchants}
+              text={t('topGear.copyEnchants')}
+              tooltip={t('topGear.copyEnchantsTooltip')}
+            />
+            {catalystCharges != null && catalystCharges > 0 && (
+              <SetupToggle
+                checked={catalyst}
+                onChange={setCatalyst}
+                text={t('topGear.catalyst')}
+                tooltip={t('topGear.revivalCatalystTooltip')}
+              >
+                <CatalystChargesPicker
+                  charges={catalystCharges}
+                  active={catalyst}
+                  onChange={setCatalystCharges}
+                />
+              </SetupToggle>
+            )}
+            {VOID_FORGE_ENABLED && (
+              <SetupToggle
+                checked={voidForge}
+                onChange={setVoidForge}
+                text={t('topGear.voidForgeShort')}
+                tooltip={t('topGear.voidForge')}
               />
-              <span className="text-[11.5px] text-outline">{t('topGear.charges')}</span>
-            </span>
-          </Chip>
-        )}
-        {VOID_FORGE_ENABLED && (
-          <Chip checked={voidForge} onChange={setVoidForge} label={t('topGear.voidForge')} />
-        )}
-      </div>
+            )}
+          </SetupCell>
+        }
+      />
+
+      <SimSettingsBlock />
 
       {!resolved ? (
         <p className="py-6 text-center text-sm text-outline">
@@ -986,40 +949,39 @@ export default function TopGearScreen() {
         </p>
       ) : (
         <>
-          <AddItemSearch simcInput={submitInput} onItemsResolved={handleAddedItems} />
-
+          <div ref={toolbarAnchorRef} />
           <TopGearToolbar
             sections={sections}
             density={density}
             onDensityChange={changeDensity}
+            addItemOpen={addItemOpen}
+            onAddItemToggle={toggleAddItem}
             quickSelect={
-              <TopGearQuickSelectBar
-                vaultUids={quickSelectEntries.vaultUids}
-                lootUids={quickSelectEntries.lootUids}
-                catalystUids={quickSelectEntries.catalystUids}
-                selectedUids={selectedUids}
-                onToggleGroup={onToggleQuickGroup}
-                t={t}
-              />
+              currentSection === 'items' && (
+                <TopGearQuickSelectBar
+                  vaultUids={quickSelectEntries.vaultUids}
+                  lootUids={quickSelectEntries.lootUids}
+                  catalystUids={quickSelectEntries.catalystUids}
+                  selectedUids={selectedUids}
+                  onToggleGroup={onToggleQuickGroup}
+                  t={t}
+                />
+              )
             }
             onResetAll={resetAll}
             resetDisabled={nothingToReset}
             t={t}
           />
 
-          <div className="space-y-6">
-            <TopGearSectionPanel
-              label={t('topGear.sectionItems')}
-              count={itemCount}
-              open={sectionsOpen.items}
-              onToggle={() => toggleSection('items')}
-              onClear={clearItems}
-              clearTitle={t('topGear.clearSection', { section: t('topGear.sectionItems') })}
-              clearLabel={t('common.clear')}
-              sectionRef={(el) => {
-                sectionRefs.current.items = el;
-              }}
-            >
+          <AddItemSearch
+            simcInput={submitInput}
+            onItemsResolved={handleAddedItems}
+            open={addItemOpen}
+            onClose={toggleAddItem}
+          />
+
+          <div>
+            <div role="tabpanel" hidden={currentSection !== 'items'}>
               <TopGearItemSelector
                 resolved={resolved}
                 selectedUids={selectedUids}
@@ -1045,22 +1007,10 @@ export default function TopGearScreen() {
                 onPromoteGroup={promoteGroup}
                 onDemoteGroup={demoteGroup}
               />
-            </TopGearSectionPanel>
+            </div>
 
             {showEnchantSection && (
-              <TopGearSectionPanel
-                label={t('topGear.sectionEnchants')}
-                count={enchantCount}
-                tooltip={t('enchantGem.selectEnchantsTooltip')}
-                open={sectionsOpen.enchants}
-                onToggle={() => toggleSection('enchants')}
-                onClear={clearEnchants}
-                clearTitle={t('topGear.clearSection', { section: t('topGear.sectionEnchants') })}
-                clearLabel={t('common.clear')}
-                sectionRef={(el) => {
-                  sectionRefs.current.enchants = el;
-                }}
-              >
+              <div role="tabpanel" hidden={currentSection !== 'enchants'}>
                 <EnchantSelector
                   equippedSlots={equippedSlots}
                   enchantSelections={enchantSelections}
@@ -1070,23 +1020,11 @@ export default function TopGearScreen() {
                   density={density}
                   onEmptyChange={setEnchantsEmpty}
                 />
-              </TopGearSectionPanel>
+              </div>
             )}
 
             {showGemSection && (
-              <TopGearSectionPanel
-                label={t('topGear.sectionGems')}
-                count={gemSelections.size}
-                tooltip={t('enchantGem.selectGemsTooltip')}
-                open={sectionsOpen.gems}
-                onToggle={() => toggleSection('gems')}
-                onClear={clearGems}
-                clearTitle={t('topGear.clearSection', { section: t('topGear.sectionGems') })}
-                clearLabel={t('common.clear')}
-                sectionRef={(el) => {
-                  sectionRefs.current.gems = el;
-                }}
-              >
+              <div role="tabpanel" hidden={currentSection !== 'gems'}>
                 <GemSelector
                   equippedSlots={equippedSlots}
                   gemSelections={gemSelections}
@@ -1103,29 +1041,17 @@ export default function TopGearScreen() {
                   density={density}
                   onEmptyChange={setGemsEmpty}
                 />
-              </TopGearSectionPanel>
+              </div>
             )}
 
             {showFolioSection && (
-              <TopGearSectionPanel
-                label={t('topGear.sectionFolio')}
-                count={folioExtraCount}
-                tooltip={t('omnium.sectionTooltip')}
-                open={sectionsOpen.folio}
-                onToggle={() => toggleSection('folio')}
-                onClear={clearFolio}
-                clearTitle={t('topGear.clearSection', { section: t('topGear.sectionFolio') })}
-                clearLabel={t('common.clear')}
-                sectionRef={(el) => {
-                  sectionRefs.current.folio = el;
-                }}
-              >
+              <div role="tabpanel" hidden={currentSection !== 'folio'}>
                 <OmniumFolioPicker
                   selections={folioSelections}
                   onChange={onFolioChange}
                   density={density}
                 />
-              </TopGearSectionPanel>
+              </div>
             )}
           </div>
         </>
@@ -1155,20 +1081,16 @@ export default function TopGearScreen() {
         }
         status={
           resolved ? (
-            <Pill variant={comboError ? 'negative' : 'neutral'} className="h-[34px] px-3">
-              <span
-                className={`font-headline text-[15px] tabular-nums ${
-                  comboError
-                    ? 'text-negative'
-                    : comboCount > 0
-                      ? 'text-on-surface'
-                      : 'text-on-surface-variant'
+            <div className="flex shrink-0 flex-col items-end gap-1.5 px-1">
+              <span className="lbl config-footer-hide-sm">{t('topGear.combinations')}</span>
+              <b
+                className={`font-headline text-xl font-extrabold tabular-nums leading-none ${
+                  comboError ? 'text-negative' : comboCount > 0 ? 'text-on-surface' : 'text-outline'
                 }`}
               >
                 {comboCount.toLocaleString()}
-              </span>
-              {comboCount === 1 ? 'combo' : 'combos'}
-            </Pill>
+              </b>
+            </div>
           ) : undefined
         }
       />

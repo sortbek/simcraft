@@ -6,7 +6,6 @@ edition = "2021"
 [features]
 default = []
 desktop = ["dep:sysinfo"]
-web = []
 postgres = ["sqlx/postgres"]
 
 [dependencies]
