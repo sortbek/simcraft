@@ -272,13 +272,6 @@ export function useLootBrowserModel(
     configuration: resolveDropConfiguration(entry.item, itemConfiguration),
   }));
   const table = {
-    headerLabel: details.isBonusRoll
-      ? t('loot.bonusRolls')
-      : details.isRaid
-        ? t('loot.allRaids')
-        : (catalog.instances.find((instance) => String(instance.id) === details.source)?.name ??
-          t('loot.allDungeons')),
-    hasEmbellishmentColumn: embellishmentOptions !== undefined,
     embellishmentLimitReached,
     rows: prepared.map(({ item, slot, configuration }) =>
       buildLootItemRow(item, slot, {

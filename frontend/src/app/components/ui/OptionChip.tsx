@@ -1,13 +1,13 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import Tooltip from '../ui/Tooltip';
+import Tooltip from './Tooltip';
 import { cn } from '../../lib/cn';
 
-/** One option chip in the toolbar's tools row, styled like the other toolbar
- *  controls (gold when on). Extras such as the Catalyst charge badge go in
- *  `children`, inside the chip but beside its button rather than nested in it. */
-export function ItemOption({
+/** An on/off option as a chip, styled like the toolbar controls (gold when on).
+ *  Extras such as the Catalyst charge badge go in `children`, inside the chip
+ *  but beside its button rather than nested in it. */
+export default function OptionChip({
   checked,
   onChange,
   text,

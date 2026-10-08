@@ -346,6 +346,46 @@
   }
 }
 
+/* Drop Finder settings: one line with dividers while every field fits, even
+   columns without dividers below that. `--n` is the number of fields. */
+.loot-setup-wrap {
+  container-type: inline-size;
+}
+.loot-setup {
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  row-gap: 16px;
+  padding: 16px 20px;
+}
+.loot-setup-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 20px;
+}
+.loot-setup-cell:first-child {
+  padding-left: 0;
+}
+.loot-setup-cell:last-child {
+  padding-right: 0;
+}
+.loot-setup-cell + .loot-setup-cell {
+  box-shadow: inset 1px 0 0 rgb(var(--c-line) / calc(0.06 * var(--c-line-k)));
+}
+@container (max-width: 860px) {
+  .loot-setup {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    column-gap: 20px;
+  }
+  .loot-setup-cell {
+    padding: 0;
+  }
+  .loot-setup-cell + .loot-setup-cell {
+    box-shadow: none;
+  }
+}
+
 /* Top Gear tools row: the density switch yields first on narrow screens. */
 .topgear-tools {
   container-type: inline-size;

@@ -156,8 +156,8 @@ export default function QuickSimPage() {
         </div>
       )}
 
-      <TalentPicker hideCompare />
       <SimSettingsBlock />
+      <TalentPicker hideCompare />
       {equippedGear && (
         <GearOverview
           gear={equippedGear}

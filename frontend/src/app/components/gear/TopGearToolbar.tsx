@@ -6,6 +6,7 @@ import ClearButton from '../ui/ClearButton';
 import Tooltip from '../ui/Tooltip';
 import Pill from '../ui/Pill';
 import { cn } from '../../lib/cn';
+import DensityToggle from './DensityToggle';
 import type { GearRowDensity } from './gearDensity';
 
 export interface TopGearSection {
@@ -44,37 +45,6 @@ const ICON = {
   strokeLinecap: 'round' as const,
   strokeLinejoin: 'round' as const,
 };
-
-const DENSITIES: { key: GearRowDensity; label: string; icon: ReactNode }[] = [
-  {
-    key: 'comfortable',
-    label: 'topGear.densityLarge',
-    icon: (
-      <svg {...ICON}>
-        <rect x="2.5" y="2.5" width="11" height="4.5" rx="1" />
-        <rect x="2.5" y="9" width="11" height="4.5" rx="1" />
-      </svg>
-    ),
-  },
-  {
-    key: 'compact',
-    label: 'topGear.densityCompact',
-    icon: (
-      <svg {...ICON}>
-        <path d="M2.5 3.5h11M2.5 6.5h11M2.5 9.5h11M2.5 12.5h11" />
-      </svg>
-    ),
-  },
-  {
-    key: 'ultra',
-    label: 'topGear.densityUltra',
-    icon: (
-      <svg {...ICON}>
-        <path d="M2.5 3h11M2.5 5.5h11M2.5 8h11M2.5 10.5h11M2.5 13h11" />
-      </svg>
-    ),
-  },
-];
 
 /** Top Gear's header: underlined section tabs (each with its count and a clear)
  *  and Add item in a sticky bar, then a row with the current tab's options and
@@ -155,26 +125,11 @@ export default function TopGearToolbar({
         {options}
         {quickSelect}
         <span className="flex-1" />
-        <span className="topgear-tools-density inline-flex items-center gap-0.5 rounded-[9px] border border-line/[0.06] p-[3px]">
-          {DENSITIES.map(({ key, label, icon }) => (
-            <Tooltip key={key} text={t(label)}>
-              <button
-                type="button"
-                onClick={() => onDensityChange(key)}
-                aria-pressed={density === key}
-                aria-label={t(label)}
-                className={cn(
-                  'flex h-[26px] w-[30px] items-center justify-center rounded-[6px] transition-colors',
-                  density === key
-                    ? 'bg-[color:var(--tab-on-bg)] text-on-surface [box-shadow:var(--tab-on-shadow)]'
-                    : 'text-outline hover:text-on-surface'
-                )}
-              >
-                {icon}
-              </button>
-            </Tooltip>
-          ))}
-        </span>
+        <DensityToggle
+          className="topgear-tools-density"
+          density={density}
+          onChange={onDensityChange}
+        />
         <Tooltip text={t('topGear.resetAllTooltip')}>
           <button
             type="button"

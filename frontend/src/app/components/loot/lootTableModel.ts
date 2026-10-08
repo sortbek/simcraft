@@ -2,8 +2,6 @@ import type { LootItemRowModel } from './lootItemRowModel';
 import { compareSlots } from './slotOrder';
 export interface LootTableModel {
   rows: LootItemRowModel[];
-  headerLabel: string;
-  hasEmbellishmentColumn: boolean;
   /** Table-level: the player already wears the maximum embellished pieces. */
   embellishmentLimitReached: boolean;
 }

@@ -12,7 +12,7 @@ import TopGearQuickSelectBar from '../components/gear/TopGearQuickSelectBar';
 import { ENCHANT_SLOTS } from '../components/gear/itemOptions';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import SimSettingsBlock from '../components/sim-config/SimSettingsBlock';
-import { ItemOption } from '../components/gear/TopGearItemOptions';
+import OptionChip from '../components/ui/OptionChip';
 import CatalystChargesPicker from '../components/gear/CatalystChargesPicker';
 import { useContentScale } from '../components/layout/ContentScaler';
 import TalentPicker from '../components/talents/TalentPicker';
@@ -967,9 +967,9 @@ export default function TopGearScreen() {
         subtitle={t('page.topGearSubtitle')}
       />
 
-      <TalentPicker />
-
       <SimSettingsBlock />
+
+      <TalentPicker />
 
       {!resolved ? (
         <p className="py-6 text-center text-sm text-outline">
@@ -987,20 +987,20 @@ export default function TopGearScreen() {
             options={
               currentSection === 'items' && (
                 <>
-                  <ItemOption
+                  <OptionChip
                     checked={maxUpgrade}
                     onChange={setMaxUpgrade}
                     text={t('topGear.optMaxUpgrade')}
                     tooltip={t('topGear.simHighestUpgradeTooltip')}
                   />
-                  <ItemOption
+                  <OptionChip
                     checked={copyEnchants}
                     onChange={setCopyEnchants}
                     text={t('topGear.optCopyEnchants')}
                     tooltip={t('topGear.copyEnchantsTooltip')}
                   />
                   {catalystCharges != null && catalystCharges > 0 && (
-                    <ItemOption
+                    <OptionChip
                       checked={catalyst}
                       onChange={setCatalyst}
                       text={t('topGear.optCatalyst')}
@@ -1011,10 +1011,10 @@ export default function TopGearScreen() {
                         active={catalyst}
                         onChange={setCatalystCharges}
                       />
-                    </ItemOption>
+                    </OptionChip>
                   )}
                   {VOID_FORGE_ENABLED && (
-                    <ItemOption
+                    <OptionChip
                       checked={voidForge}
                       onChange={setVoidForge}
                       text={t('topGear.optVoidForge')}

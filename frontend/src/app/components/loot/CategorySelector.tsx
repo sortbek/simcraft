@@ -1,33 +1,97 @@
-import { useMemo } from 'react';
+'use client';
+
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
+import { useDismiss } from '../../lib/useDismiss';
+import { cn } from '../../lib/cn';
 import type { DungeonCategory } from '../../lib/types';
 import { BONUS_ROLL_CATEGORY } from './lootConfiguration';
 
 interface CategoryTab {
   key: string;
   label: string;
-  icon: string;
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  raids: 'M8 1l2 4 4.5.7-3.2 3.1.8 4.5L8 11l-4.1 2.3.8-4.5L1.5 5.7 6 5z',
-  mplus: 'M8 1v14M1 8h14M4 4l8 8M12 4l-8 8',
-  crafted: 'M4 1l4 5 4-5M3 6h10l-1 5H4L3 6zM5 11v3h6v-3',
-  delves: 'M8 1L1 6v4l7 5 7-5V6L8 1zM1 6l7 5 7-5',
-  prey: 'M8 2L3 5v6l5 3 5-3V5L8 2zM8 8V2M8 8l5-3M8 8l-5-3',
-  catalyst: 'M8 1a7 7 0 100 14A7 7 0 008 1zM5 8h6M8 5v6',
-  [BONUS_ROLL_CATEGORY]:
-    'M8 1a7 7 0 100 14A7 7 0 008 1zM5.5 5.5h.01M10.5 5.5h.01M5.5 10.5h.01M10.5 10.5h.01M8 8h.01',
-  'rare-profession': 'M4 1l4 5 4-5M3 6h10l-1 5H4L3 6zM5 11v3h6v-3',
-  'pvp-profession': 'M4 1l4 5 4-5M3 6h10l-1 5H4L3 6zM5 11v3h6v-3',
-};
+type TabGroup = 'crafted' | 'pvp';
 
-const DEFAULT_ICON = 'M2 2h12v12H2zM5 5h6M5 8h6M5 11h3';
+/** Crafted and PvP sources share one tab each, with a menu of their sources. */
+function groupOf(key: string): TabGroup | null {
+  if (key === 'crafted' || key === 'rare-profession') return 'crafted';
+  if (key.startsWith('pvp')) return 'pvp';
+  return null;
+}
 
-function getIcon(key: string): string {
-  if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
-  if (key.startsWith('pvp')) return 'M8 1l2 3h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z';
-  return DEFAULT_ICON;
+const TAB =
+  'relative flex h-12 items-center gap-1.5 whitespace-nowrap font-headline text-[11px] font-extrabold uppercase tracking-[0.12em] transition-colors';
+
+function Underline() {
+  return <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-gold-fill" />;
+}
+
+function GroupTab({
+  label,
+  tabs,
+  category,
+  onChange,
+}: {
+  label: string;
+  tabs: CategoryTab[];
+  category: string;
+  onChange: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(rootRef, open, close);
+  const current = tabs.find((tab) => tab.key === category);
+  return (
+    <span ref={rootRef} className="relative">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={!!current}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(TAB, current ? 'text-on-surface' : 'text-outline hover:text-on-surface')}
+      >
+        {current?.label ?? label}
+        <svg
+          className={cn('h-3 w-3 transition-transform', open && 'rotate-180')}
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+        {current && <Underline />}
+      </button>
+      {open && (
+        <div role="menu" className="popover absolute left-0 top-full z-40 mt-1 min-w-[220px] p-1.5">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onChange(tab.key);
+                close();
+              }}
+              className={cn(
+                'flex w-full rounded-[6px] px-2.5 py-2 text-left text-[13px] font-semibold transition-colors hover:bg-surface-container-highest',
+                tab.key === category ? 'text-gold' : 'text-on-surface-variant hover:text-on-surface'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
 }
 
 interface CategorySelectorProps {
@@ -37,75 +101,63 @@ interface CategorySelectorProps {
   /** Bonus Rolls spans two pools, so it resolves to no single instance. Callers
    *  that run one instance at a time (the roster) leave it off. */
   includeBonusRoll?: boolean;
+  className?: string;
 }
 
+/** Loot sources as underlined tabs; Crafted and PvP sources sit behind one
+ *  tab each, so the row stays short. */
 export default function CategorySelector({
   category,
   onChange,
   dungeonCats,
   includeBonusRoll = false,
+  className,
 }: CategorySelectorProps) {
   const { t } = useLanguage();
   const tabs = useMemo(() => {
-    const result: CategoryTab[] = [
-      { key: 'raids', label: t('loot.raids'), icon: CATEGORY_ICONS.raids },
-    ];
-    if (includeBonusRoll) {
-      result.push({
-        key: BONUS_ROLL_CATEGORY,
-        label: t('loot.bonusRolls'),
-        icon: CATEGORY_ICONS[BONUS_ROLL_CATEGORY],
-      });
-    }
-    for (const dc of dungeonCats) {
-      result.push({ key: dc.cat.key, label: dc.cat.label, icon: getIcon(dc.cat.key) });
-    }
+    const result: CategoryTab[] = [];
+    if (includeBonusRoll) result.push({ key: BONUS_ROLL_CATEGORY, label: t('loot.bonusRolls') });
+    result.push({ key: 'raids', label: t('loot.raids') });
+    for (const dc of dungeonCats) result.push({ key: dc.cat.key, label: dc.cat.label });
     return result;
   }, [dungeonCats, includeBonusRoll, t]);
 
+  const plain = tabs.filter((tab) => !groupOf(tab.key));
+  const crafted = tabs.filter((tab) => groupOf(tab.key) === 'crafted');
+  const pvp = tabs.filter((tab) => groupOf(tab.key) === 'pvp');
+
   return (
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-      {tabs.map((cat) => {
-        const isActive = category === cat.key;
+    <div
+      role="tablist"
+      className={cn('flex flex-wrap items-center gap-x-5 border-b border-line/[0.06]', className)}
+    >
+      {plain.map((tab) => {
+        const active = tab.key === category;
         return (
           <button
-            key={cat.key}
-            onClick={() => onChange(cat.key)}
-            className={`group relative rounded-xl px-4 py-3.5 text-left transition-all duration-200 ${
-              isActive
-                ? 'bg-surface-container shadow-glow'
-                : 'bg-surface-container-low hover:bg-surface-container-high'
-            }`}
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab.key)}
+            className={cn(TAB, active ? 'text-on-surface' : 'text-outline hover:text-on-surface')}
           >
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                  isActive ? 'bg-gold/20' : 'bg-gold/[0.06] group-hover:bg-gold/[0.12]'
-                }`}
-              >
-                <svg
-                  className={`h-4 w-4 transition-colors ${isActive ? 'text-gold' : 'text-gold/50 group-hover:text-gold'}`}
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d={cat.icon} />
-                </svg>
-              </div>
-              <span
-                className={`text-sm font-semibold transition-colors ${
-                  isActive ? 'text-gold' : 'text-on-surface-variant group-hover:text-on-surface'
-                }`}
-              >
-                {cat.label}
-              </span>
-            </div>
+            {tab.label}
+            {active && <Underline />}
           </button>
         );
       })}
+      {crafted.length > 0 && (
+        <GroupTab
+          label={t('loot.groupCrafted')}
+          tabs={crafted}
+          category={category}
+          onChange={onChange}
+        />
+      )}
+      {pvp.length > 0 && (
+        <GroupTab label={t('loot.groupPvp')} tabs={pvp} category={category} onChange={onChange} />
+      )}
     </div>
   );
 }

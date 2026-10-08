@@ -18,6 +18,8 @@ const LootBrowser = require('../src/app/components/loot/LootBrowser.tsx').defaul
 const ItemTable = require('../src/app/components/loot/ItemTable.tsx').default;
 const LootItemRow = require('../src/app/components/loot/LootItemRow.tsx').default;
 const CategorySelector = require('../src/app/components/loot/CategorySelector.tsx').default;
+const LootFor = require('../src/app/components/loot/LootFor.tsx').default;
+const OptionChip = require('../src/app/components/ui/OptionChip.tsx').default;
 const UpgradeSelect = require('../src/app/components/loot/UpgradeSelect.tsx').default;
 const Select = require('../src/app/components/loot/Select.tsx').default;
 const Checkbox = require('../src/app/components/ui/Checkbox.tsx').default;
@@ -202,11 +204,8 @@ test('mounted browser changes categories atomically, resets same-name specs by c
   });
   assert.equal(tree.root.findByType(UpgradeSelect).props.value, 0);
   assert.equal(submission.drop_items[0].ilevel, 100);
-  const fireButton = tree.root
-    .findAllByType('button')
-    .find((button) => button.children.includes('Fire'));
   await act(async () => {
-    fireButton.props.onClick();
+    tree.root.findByType(LootFor).props.onToggle('fire');
     await flush();
   });
   assert.ok(lastDropUrl().includes('spec=frost%2Cfire'));
@@ -494,10 +493,9 @@ test('bonus rolls merge both pools, price each side on its own ladder, and honou
 test('the bonus roll tab is opt-in, so single-instance callers never see it', async () => {
   const labels = (props) => {
     const tree = create(React.createElement(CategorySelector, props));
-    // Tab text sits in a span inside the button, not as a direct child.
     const found = tree.root
-      .findAllByType('span')
-      .flatMap((span) => span.children)
+      .findAll((n) => n.type === 'button' && n.props.role === 'tab')
+      .flatMap((tab) => tab.children)
       .filter((child) => typeof child === 'string');
     tree.unmount();
     return found;
@@ -544,15 +542,15 @@ test('run options ride along with the submission', async () => {
   assert.equal(submission.add_vault_socket, undefined);
 
   const toggle = async (label) => {
-    const node = tree.root.find((n) => n.props && n.props['aria-label'] === label);
-    await act(async () => node.props.onChange());
+    const node = tree.root.find((n) => n.type === OptionChip && n.props.text === label);
+    await act(async () => node.props.onChange(!node.props.checked));
   };
 
-  await toggle('dropFinder.addVaultSocket');
+  await toggle('dropFinder.optVaultSocket');
   assert.equal(submission.add_vault_socket, true);
 
   // The equipped baseline follows whichever rank the run is testing at.
-  await toggle('dropFinder.upgradeEquipped');
+  await toggle('dropFinder.optUpgradeEquipped');
   assert.equal(submission.upgrade_equipped_to, 0, 'Base until a rank is picked');
   await act(async () => tree.root.findByType(UpgradeSelect).props.onChange(6));
   assert.equal(submission.upgrade_equipped_to, 6);
@@ -674,7 +672,7 @@ test('same-named tier rows render their origin so the stat difference is legible
     create(
       React.createElement(LootItemRow, {
         row,
-        hasEmbellishmentColumn: false,
+        showSlot: false,
         embellishmentLimitReached: false,
         onToggle: () => {},
       })
@@ -733,7 +731,7 @@ test('an owned row renders inert, and says why', async () => {
     const tree = create(
       React.createElement(LootItemRow, {
         row: row(owned),
-        hasEmbellishmentColumn: false,
+        showSlot: false,
         embellishmentLimitReached: false,
         onToggle: (uid) => toggled.push(uid),
       })

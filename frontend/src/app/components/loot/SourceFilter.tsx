@@ -4,6 +4,7 @@ import { usePopupDismissal } from './usePopupDismissal';
 import { buttonClass } from '../ui/Button';
 import Pill from '../ui/Pill';
 import type { PoolSource } from './lootSources';
+import { FILTER_LABEL, filterTriggerClass, filterValueClass } from './filterTrigger';
 
 interface SourceFilterProps {
   sources: PoolSource[];
@@ -56,28 +57,21 @@ export default function SourceFilter({
       open={open}
       onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
     >
-      <summary
-        ref={triggerRef}
-        aria-expanded={open}
-        className={`chip cursor-pointer list-none [&::-webkit-details-marker]:hidden ${
-          open || narrowed ? 'chip-on' : ''
-        }`}
-      >
-        <span className="font-semibold">{t('dropFinder.bosses')}</span>
-        <span className={open || narrowed ? 'text-gold' : ''}>{summary}</span>
+      <summary ref={triggerRef} aria-expanded={open} className={filterTriggerClass(narrowed)}>
+        <span className={FILTER_LABEL}>{t('dropFinder.bosses')}</span>
+        <span className={filterValueClass(narrowed)}>{summary}</span>
         {narrowed && (
           <Pill variant="gold">{t('dropFinder.hiddenCount', { count: hiddenCount })}</Pill>
         )}
         <svg
-          className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`}
-          viewBox="0 0 12 12"
+          className={`h-3.5 w-3.5 text-outline transition-transform ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.8"
+          strokeWidth="2"
           strokeLinecap="round"
-          strokeLinejoin="round"
         >
-          <path d="M2.5 4.5L6 8l3.5-3.5" />
+          <path d="M4 6l4 4 4-4" />
         </svg>
       </summary>
       <div className="popover absolute right-0 top-full z-20 mt-2 max-h-[70vh] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto p-4">

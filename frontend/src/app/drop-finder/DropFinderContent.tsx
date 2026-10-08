@@ -52,7 +52,7 @@ function DropFinderFooter({
     ? t('validation.pasteSimcDropFinder')
     : !hasSelection
       ? t('validation.selectItemsDropFinder')
-      : buttonLabel(t('button.findUpgrades', { count }));
+      : buttonLabel(t('button.findUpgrades'));
 
   return (
     <>
@@ -65,6 +65,20 @@ function DropFinderFooter({
         disabled={!hasSelection || !hasCharacter}
         compute={compute}
         onComputeChange={onComputeChange}
+        status={
+          hasCharacter ? (
+            <div className="flex shrink-0 flex-col items-end gap-1.5 px-1">
+              <span className="lbl config-footer-hide-sm">{t('dropFinder.itemsLabel')}</span>
+              <b
+                className={`font-headline text-xl font-extrabold tabular-nums leading-none ${
+                  count > 0 ? 'text-on-surface' : 'text-outline'
+                }`}
+              >
+                {count.toLocaleString()}
+              </b>
+            </div>
+          ) : undefined
+        }
       />
     </>
   );
@@ -76,7 +90,7 @@ export default function DropFinderContent() {
   const [compute, setCompute] = useComputeChoice('droptimizer');
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-6 pb-20">
       {/* Page header */}
       <PageHeader
         eyebrow={t('nav.simTools')}

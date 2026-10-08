@@ -228,8 +228,8 @@ export default function UpgradeComparePage() {
         title={t('nav.crestUpgrades')}
         subtitle={t('page.crestUpgradesSubtitle')}
       />
-      <TalentPicker />
       <SimSettingsBlock />
+      <TalentPicker />
       {/* Explainer */}
       <div className="card px-6 py-4">
         <p className="text-[15px] leading-relaxed text-on-surface-variant">
