@@ -45,6 +45,7 @@ export default function TopGearResults({
   elapsedTime,
   backLink,
   setup,
+  talents,
   sourceJobId,
 }: TopGearResultsProps) {
   const { t } = useLanguage();
@@ -147,6 +148,8 @@ export default function TopGearResults({
           <p className="mt-3.5 text-sm text-on-surface-variant">{t('gear.currentGearOptimal')}</p>
         )}
       </DpsHeroCard>
+
+      {talents}
 
       {hasGearOverview &&
         (isComparing && selectedResult && compareResult ? (

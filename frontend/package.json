@@ -20,7 +20,8 @@
     "test:share": "node --test scripts/test-share.cjs",
     "test:simclog": "node --test scripts/test-simc-log.cjs",
     "test:iteminfo": "node --test scripts/test-item-info.cjs",
-    "test:profiles": "node --test scripts/test-profile-sections.cjs"
+    "test:profiles": "node --test scripts/test-profile-sections.cjs",
+    "test:talents": "node --test scripts/test-talents.cjs"
   },
   "dependencies": {
     "next": "^15.5.14",

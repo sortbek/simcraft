@@ -1,46 +1,43 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import Checkbox from '../ui/Checkbox';
-import CardHeader from '../ui/CardHeader';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buttonClass } from '../ui/Button';
 import { useSimContext } from '../sim-config/SimContext';
-import {
-  parseTalentLoadouts,
-  SPEC_ID_TO_NAME,
-  specDisplayName,
-  classColorForSpec,
-} from '../../lib/types';
+import { parseTalentLoadouts, SPEC_ID_TO_NAME, specDisplayName } from '../../lib/types';
 import type { TalentLoadoutParsed } from '../../lib/types';
 import { decodeHeader } from '../../lib/talentDecode';
 import { encodeTalentString } from '../../lib/talentEncode';
 import { useTalentTree } from '../../lib/useTalentTree';
 import TalentTree from './TalentTree';
+import BuildPicker, {
+  displayName,
+  HeroIcon,
+  type BuildGroup,
+  type BuildOption,
+} from './BuildPicker';
+import TalentChanges from './TalentChanges';
+import { SummaryCells, TreeToggleCell, useTreeOpen } from './TalentSummaryRow';
 import { getCharacters, getTalentBuilds } from '../../lib/saved-characters';
 import { useLanguage } from '../../lib/i18n';
+import { decodeSelections, diffBuilds, summarizeBuild } from '../../lib/talentSummary';
 
 /** Header toggle: gold-edged while on, text-only while off. */
 const toggleBtn = (on: boolean) => buttonClass(on ? 'gold' : 'text');
 
-type ViewMode = 'collapsed' | 'view' | 'edit';
-
+/** The page's talent card: a one-row summary of the chosen build (picker, hero
+ *  tree, choices and capstones, points) with the full tree on demand. */
 export default function TalentPicker({
-  defaultView = 'collapsed',
   compact = false,
   hideCompare = false,
-  options,
 }: {
-  defaultView?: ViewMode;
   compact?: boolean;
   hideCompare?: boolean;
-  /** Page options shown beside the build picker as one setup bar (Top Gear).
-   *  Each child should be a `SetupCell`. */
-  options?: ReactNode;
 }) {
   const { t } = useLanguage();
   const { simcInput, selectedTalent, setSelectedTalent, talentBuilds, setTalentBuilds } =
     useSimContext();
-  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
+  const [treeOpen, setTreeOpen] = useTreeOpen();
+  const [editing, setEditing] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importValue, setImportValue] = useState('');
@@ -127,7 +124,7 @@ export default function TalentPicker({
 
   const tree = useTalentTree(specId);
 
-  // The spec from the active (equipped) talent in the simc input — stable reference for compare badges
+  // The equipped build's spec: the build list and its change counts are read against it.
   const baseSpecId = useMemo(() => {
     const active = addonLoadouts.find((l) => l.isActive);
     if (!active?.talentString) return null;
@@ -201,8 +198,8 @@ export default function TalentPicker({
     addCustomLoadout(name, talentStr);
     setShowImport(false);
     setImportValue('');
-    setViewMode('view');
-  }, [importValue, customLoadouts.length, addCustomLoadout, specId, t]);
+    setTreeOpen(true);
+  }, [importValue, customLoadouts.length, addCustomLoadout, specId, t, setTreeOpen]);
 
   // Start from scratch
   const handleBlankBuild = useCallback(() => {
@@ -210,8 +207,9 @@ export default function TalentPicker({
     const blank = encodeTalentString(new Map(), tree, specId);
     const name = `Custom ${customLoadouts.length + 1}`;
     addCustomLoadout(name, blank);
-    setViewMode('edit');
-  }, [specId, tree, customLoadouts.length, addCustomLoadout]);
+    setEditing(true);
+    setTreeOpen(true);
+  }, [specId, tree, customLoadouts.length, addCustomLoadout, setTreeOpen]);
 
   // Track selected indices for compare mode (avoids duplicate talent string issues)
   const [compareIndices, setCompareIndices] = useState<Set<number>>(new Set());
@@ -256,142 +254,178 @@ export default function TalentPicker({
     }
   }, [compareMode, setTalentBuilds]);
 
-  if (allLoadouts.length === 0) {
-    if (!options) return null;
-    // The page's own options must stay reachable without talents.
+  // The equipped build every other build is measured against.
+  const equippedTalent = addonLoadouts.find((l) => l.isActive)?.talentString ?? '';
+  const baseTree = useTalentTree(baseSpecId);
+  const equippedSel = useMemo(
+    () => (baseTree && equippedTalent ? decodeSelections(equippedTalent, baseTree) : null),
+    [baseTree, equippedTalent]
+  );
+
+  const buildOptions = useMemo<BuildOption[]>(() => {
+    const groupOf = (i: number, isActive: boolean): BuildGroup =>
+      i < addonLoadouts.length
+        ? isActive
+          ? 'active'
+          : 'game'
+        : i < addonLoadouts.length + savedBuilds.length
+          ? 'saved'
+          : 'custom';
+    return allLoadouts.map((l, i) => {
+      const sel = baseTree ? decodeSelections(l.talentString, baseTree) : null;
+      const summary = sel && baseTree ? summarizeBuild(sel, baseTree) : null;
+      let specLabel: string | undefined;
+      if (baseTree && !sel) {
+        try {
+          const name = SPEC_ID_TO_NAME[decodeHeader(l.talentString).specId];
+          specLabel = name ? specDisplayName(name) : undefined;
+        } catch {}
+      }
+      return {
+        index: i,
+        name: l.name,
+        group: groupOf(i, l.isActive),
+        heroName: summary?.heroName,
+        heroIcon: summary?.heroIcon,
+        specLabel,
+        changes:
+          sel && equippedSel && baseTree ? diffBuilds(equippedSel, sel, baseTree).count : null,
+      };
+    });
+  }, [allLoadouts, addonLoadouts.length, savedBuilds.length, baseTree, equippedSel]);
+
+  // The chosen build, read against its own spec's tree.
+  const shownTalent = (editing && selectedTalent) || currentTalent;
+  const currentSel = useMemo(
+    () => (tree && shownTalent ? decodeSelections(shownTalent, tree) : null),
+    [tree, shownTalent]
+  );
+  const summary = useMemo(
+    () => (currentSel && tree ? summarizeBuild(currentSel, tree) : null),
+    [currentSel, tree]
+  );
+  const diff = useMemo(
+    () =>
+      currentSel && equippedSel && baseTree && tree?.specId === baseTree.specId
+        ? diffBuilds(equippedSel, currentSel, tree)
+        : null,
+    [currentSel, equippedSel, baseTree, tree]
+  );
+  const equippedSummary = useMemo(
+    () => (equippedSel && baseTree ? summarizeBuild(equippedSel, baseTree) : null),
+    [equippedSel, baseTree]
+  );
+  const isEquipped = !editing && currentTalent === equippedTalent;
+
+  if (allLoadouts.length === 0) return null;
+
+  const selectBuild = (idx: number) => {
+    setSelectedLoadoutIdx(idx);
+    setSelectedTalent(allLoadouts[idx].talentString);
+    setEditing(false);
+  };
+
+  const compare = hideCompare
+    ? undefined
+    : {
+        on: compareMode,
+        onToggle: (on: boolean) => {
+          setCompareMode(on);
+          // Start from the build in view, so the picker reads as one build checked.
+          if (on) setCompareIndices(new Set([selectedLoadoutIdx]));
+        },
+        checked: compareIndices,
+        onCheck: toggleCompareLoadout,
+      };
+
+  // A hovered build in the picker: what it would change against the equipped one.
+  const renderPreview = (i: number) => {
+    const option = buildOptions[i];
+    const sel = baseTree ? decodeSelections(allLoadouts[i].talentString, baseTree) : null;
+    const preview = sel && baseTree ? summarizeBuild(sel, baseTree) : null;
+    const previewDiff =
+      sel && equippedSel && baseTree ? diffBuilds(equippedSel, sel, baseTree) : null;
     return (
-      <div className="card overflow-hidden">
-        <div className="setup-bar-wrap">
-          <div className="setup-bar">
-            <div className="setup-cell setup-cell-talents">
-              <span className="lbl">{t('config.talents')}</span>
-              <span className="flex min-h-[34px] items-center text-[13px] text-outline">
-                {t('talent.noBuilds')}
-              </span>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2.5">
+          <HeroIcon icon={preview?.heroIcon} className="h-8 w-8" />
+          <div className="min-w-0">
+            <div className="truncate text-[13.5px] font-semibold text-on-surface">
+              {displayName(option.name)}
             </div>
-            {options}
+            <div className="text-[11.5px] text-outline">
+              {option.specLabel ??
+                (preview &&
+                  `${preview.heroName ?? ''} · ${preview.points.class} · ${preview.points.spec} · ${preview.points.hero}`)}
+            </div>
           </div>
         </div>
+        {option.specLabel ? (
+          <p className="text-[12.5px] text-outline">{t('talent.otherSpec')}</p>
+        ) : (
+          <TalentChanges
+            diff={previewDiff}
+            isEquipped={option.group === 'active'}
+            heroFrom={equippedSummary}
+            heroTo={preview}
+            max={14}
+          />
+        )}
       </div>
     );
-  }
-
-  const buildSelect =
-    allLoadouts.length >= 2 ? (
-      <select
-        value={selectedLoadoutIdx}
-        onChange={(e) => {
-          const idx = Number(e.target.value);
-          setSelectedLoadoutIdx(idx);
-          setSelectedTalent(allLoadouts[idx].talentString);
-          if (viewMode === 'edit') setViewMode('view');
-        }}
-        className="sel mr-2 h-[34px] w-auto text-[13px]"
-      >
-        {allLoadouts.map((l, i) => (
-          <option key={`${l.name}-${i}`} value={i}>
-            {l.name}
-            {l.isActive ? ` ${t('talent.equipped')}` : ''}
-          </option>
-        ))}
-      </select>
-    ) : null;
+  };
 
   const actionButtons = (
-    <>
-      {!hideCompare && (
-        <button onClick={() => setCompareMode((v) => !v)} className={toggleBtn(compareMode)}>
-          {t('talent.compare')}
-          {talentBuilds.length > 1 ? ` (${talentBuilds.length})` : ''}
-        </button>
-      )}
+    <div className="flex flex-wrap items-center gap-1">
       <button onClick={() => setShowImport((v) => !v)} className={toggleBtn(showImport)}>
         {t('talent.import')}
       </button>
       <button onClick={handleBlankBuild} className={buttonClass('text')}>
-        {t('talent.blank')}
+        {t('talent.new')}
       </button>
-      {!compareMode && (
-        <button
-          onClick={() => setViewMode((v) => (v === 'edit' ? 'view' : 'edit'))}
-          className={toggleBtn(viewMode === 'edit')}
-        >
-          {viewMode === 'edit' ? t('common.done') : t('talent.edit')}
-        </button>
-      )}
-    </>
-  );
-
-  const toggleView = () => {
-    setViewMode((v) => (v === 'collapsed' ? 'view' : 'collapsed'));
-    setShowImport(false);
-  };
-  const expanded = viewMode !== 'collapsed';
-
-  const talentControls = (
-    <div className="flex items-center gap-1">
-      {buildSelect}
-      {expanded && actionButtons}
-      <button onClick={toggleView} className={buttonClass('text')}>
-        {expanded ? t('common.hide') : t('common.show')}
+      <button onClick={() => setEditing((v) => !v)} className={toggleBtn(editing)}>
+        {editing ? t('common.done') : t('talent.edit')}
       </button>
     </div>
   );
 
   return (
-    <div className="card overflow-hidden">
-      {/* Sections below draw their own top hairline, so the header skips its bottom one. */}
-      {options ? (
-        <div className="setup-bar-wrap">
-          <div className="setup-bar">
-            <div className="setup-cell setup-cell-talents">
-              <span className="lbl">{t('config.talents')}</span>
-              {/* The setup bar keeps only the build picker; the build actions
-                  live in a toolbar on the opened tree, where they apply. */}
-              <div className="flex items-center gap-1">
-                {buildSelect ?? (
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-on-surface">
-                    {allLoadouts[0].name}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={toggleView}
-                  aria-expanded={expanded}
-                  aria-label={expanded ? t('common.hide') : t('common.show')}
-                  title={expanded ? t('common.hide') : t('common.show')}
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[6px] border border-line/[0.11] text-on-surface-variant transition-colors hover:border-line/20 hover:text-on-surface"
-                >
-                  <svg
-                    className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M4 6l4 4 4-4" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            {options}
-          </div>
+    <div className="card">
+      <div className="talent-summary">
+        <div className="talent-summary-cell talent-summary-picker">
+          <span className="lbl">{t('config.talents')}</span>
+          <BuildPicker
+            options={buildOptions}
+            selected={selectedLoadoutIdx}
+            onSelect={selectBuild}
+            compare={compare}
+            renderPreview={renderPreview}
+          />
         </div>
-      ) : (
-        <CardHeader className="!border-b-0" title={t('config.talents')} right={talentControls} />
-      )}
+        {summary && <SummaryCells summary={summary} />}
+        <TreeToggleCell
+          open={treeOpen}
+          onToggle={() => {
+            setTreeOpen(!treeOpen);
+            if (treeOpen) setShowImport(false);
+          }}
+        />
+      </div>
 
-      {options && expanded && (
-        <div className="flex flex-wrap items-center gap-1 border-t border-line/[0.06] px-4 py-2">
+      {treeOpen && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line/[0.06] px-[18px] py-2.5">
+          <TalentChanges
+            diff={isEquipped ? null : diff}
+            isEquipped={isEquipped}
+            heroFrom={equippedSummary}
+            heroTo={summary}
+          />
           {actionButtons}
         </div>
       )}
 
-      {/* Import bar */}
-      {showImport && viewMode !== 'collapsed' && (
-        <div className="border-t border-line/[0.06] px-4 py-3">
+      {showImport && treeOpen && (
+        <div className="border-t border-line/[0.06] px-[18px] py-3">
           <div className="flex gap-2">
             <input
               type="text"
@@ -413,84 +447,21 @@ export default function TalentPicker({
         </div>
       )}
 
-      {/* Compare mode — talent tree card grid */}
-      {compareMode && viewMode !== 'collapsed' && (
-        <div className="border-t border-line/[0.06] px-4 py-3">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="lbl">{t('talent.selectBuildsCompare')}</p>
-            {talentBuilds.length > 1 && (
-              <p className="text-[12px] text-gold/70">
-                {t('talent.buildsGearCombos', { count: talentBuilds.length })}
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {allLoadouts.map((l, i) => {
-              const checked = compareIndices.has(i);
-              let loadoutSpecId: number | undefined;
-              let loadoutSpecName: string | undefined;
-              try {
-                loadoutSpecId = decodeHeader(l.talentString).specId;
-                loadoutSpecName = SPEC_ID_TO_NAME[loadoutSpecId];
-              } catch {
-                /* ignore */
-              }
-              return (
-                <button
-                  key={`${l.name}-${i}`}
-                  onClick={() => toggleCompareLoadout(i)}
-                  className={`group relative overflow-hidden rounded-lg border p-2 text-left transition-all ${
-                    checked
-                      ? 'border-gold/40 bg-gold/[0.04]'
-                      : 'border-transparent bg-surface-container-low hover:bg-surface-container-high'
-                  }`}
-                >
-                  {/* Spec label (only when different from base spec) */}
-                  {loadoutSpecName && baseSpecId != null && loadoutSpecId !== baseSpecId && (
-                    <div
-                      className="absolute left-1.5 top-1.5 z-10 rounded px-1.5 py-px text-[11px] font-bold"
-                      style={{
-                        color: classColorForSpec(loadoutSpecName) ?? '#c4b5fd',
-                        backgroundColor: `${classColorForSpec(loadoutSpecName) ?? '#8b5cf6'}20`,
-                      }}
-                    >
-                      {specDisplayName(loadoutSpecName)}
-                    </div>
-                  )}
-                  {/* Mini tree preview */}
-                  <div className="pointer-events-none h-24">
-                    <TalentTree talentString={l.talentString} mini />
-                  </div>
-                  {/* Label + checkbox */}
-                  <div className="mt-1.5 flex items-center gap-1.5">
-                    <Checkbox checked={checked} size="sm" aria-label={l.name} />
-                    <span
-                      className={`truncate text-[12px] font-medium ${checked ? 'text-on-surface' : 'text-on-surface-variant/60'}`}
-                    >
-                      {l.name}
-                      {l.isActive ? ` ${t('talent.equippedShort')}` : ''}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Tree content */}
-      {viewMode !== 'collapsed' && !compareMode && (
+      {treeOpen && (
         <div
           className={`border-t border-line/[0.06] p-4 ${compact ? 'max-h-[280px] overflow-auto' : ''}`}
         >
-          {viewMode === 'view' && currentTalent && (
-            <TalentTree talentString={currentTalent} bare vertical={compact} />
+          {!editing && currentTalent && (
+            <TalentTree
+              talentString={currentTalent}
+              vertical={compact}
+              baseTalentString={isEquipped ? undefined : equippedTalent}
+            />
           )}
-          {viewMode === 'edit' && specId && (
+          {editing && specId && (
             <TalentTree
               talentString={selectedTalent || currentTalent}
               editable
-              bare
               vertical={compact}
               specId={specId}
               onTalentStringChange={handleEditorChange}

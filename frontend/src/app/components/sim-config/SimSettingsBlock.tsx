@@ -15,6 +15,7 @@ import { FIGHT_STYLES } from './FightStyleSelector';
 import ProfileMenu, { useProfileActions, type ProfileMenuMode } from './ProfileMenu';
 import RaidBuffToggles from './RaidBuffToggles';
 import { COLUMN_TITLE, formatFightLength } from './settingsUi';
+import { scrollRoot } from '../../lib/scrollRoot';
 
 const OPEN_KEY = 'simhammer_sim_settings_open';
 /** Dispatched by the footer's "Edit settings" to open and reveal the block. */
@@ -118,7 +119,7 @@ export default function SimSettingsBlock() {
     if (before == null || !el) return;
     const restore = () => {
       const delta = el.getBoundingClientRect().top - before;
-      if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+      if (Math.abs(delta) > 0.5) scrollRoot().scrollBy(0, delta);
     };
     restore();
     // Scroll anchoring may still adjust after layout; settle once more.

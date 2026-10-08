@@ -12,7 +12,7 @@ import TopGearQuickSelectBar from '../components/gear/TopGearQuickSelectBar';
 import { ENCHANT_SLOTS } from '../components/gear/itemOptions';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import SimSettingsBlock from '../components/sim-config/SimSettingsBlock';
-import SetupCell, { SetupToggle } from '../components/ui/SetupCell';
+import { ItemOption } from '../components/gear/TopGearItemOptions';
 import CatalystChargesPicker from '../components/gear/CatalystChargesPicker';
 import { useContentScale } from '../components/layout/ContentScaler';
 import TalentPicker from '../components/talents/TalentPicker';
@@ -31,6 +31,7 @@ import { useLanguage } from '../lib/i18n';
 import { VOID_FORGE_ENABLED } from '../lib/featureFlags';
 import { clearTopGearState, getTopGearState, storeTopGearState } from '../lib/topgear-state';
 import { readStoredJson } from '../lib/storage';
+import { scrollRoot, scrollViewTop } from '../lib/scrollRoot';
 import {
   appendLocalItems,
   buildSelectedUidsJson,
@@ -365,7 +366,7 @@ export default function TopGearScreen() {
     (key: SectionKey) => {
       const anchor = toolbarAnchorRef.current;
       tabScrollPendingRef.current =
-        !!anchor && anchor.getBoundingClientRect().top < toolbarStickTop();
+        !!anchor && anchor.getBoundingClientRect().top < scrollViewTop() + toolbarStickTop();
       setActiveSection(key);
       try {
         localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(key));
@@ -379,8 +380,13 @@ export default function TopGearScreen() {
     tabScrollPendingRef.current = false;
     const anchor = toolbarAnchorRef.current;
     if (!anchor) return;
-    window.scrollTo({
-      top: anchor.getBoundingClientRect().top + window.scrollY - toolbarStickTop(),
+    const root = scrollRoot();
+    root.scrollTo({
+      top:
+        anchor.getBoundingClientRect().top -
+        scrollViewTop(root) +
+        root.scrollTop -
+        toolbarStickTop(),
     });
   }, [activeSection, toolbarStickTop]);
 
@@ -961,46 +967,7 @@ export default function TopGearScreen() {
         subtitle={t('page.topGearSubtitle')}
       />
 
-      <TalentPicker
-        options={
-          <SetupCell label={t('topGear.options')}>
-            <SetupToggle
-              checked={maxUpgrade}
-              onChange={setMaxUpgrade}
-              text={t('topGear.maxUpgrades')}
-              tooltip={t('topGear.simHighestUpgradeTooltip')}
-            />
-            <SetupToggle
-              checked={copyEnchants}
-              onChange={setCopyEnchants}
-              text={t('topGear.copyEnchants')}
-              tooltip={t('topGear.copyEnchantsTooltip')}
-            />
-            {catalystCharges != null && catalystCharges > 0 && (
-              <SetupToggle
-                checked={catalyst}
-                onChange={setCatalyst}
-                text={t('topGear.catalyst')}
-                tooltip={t('topGear.revivalCatalystTooltip')}
-              >
-                <CatalystChargesPicker
-                  charges={catalystCharges}
-                  active={catalyst}
-                  onChange={setCatalystCharges}
-                />
-              </SetupToggle>
-            )}
-            {VOID_FORGE_ENABLED && (
-              <SetupToggle
-                checked={voidForge}
-                onChange={setVoidForge}
-                text={t('topGear.voidForgeShort')}
-                tooltip={t('topGear.voidForge')}
-              />
-            )}
-          </SetupCell>
-        }
-      />
+      <TalentPicker />
 
       <SimSettingsBlock />
 
@@ -1017,6 +984,46 @@ export default function TopGearScreen() {
             onDensityChange={changeDensity}
             addItemOpen={addItemOpen}
             onAddItemToggle={toggleAddItem}
+            options={
+              currentSection === 'items' && (
+                <>
+                  <ItemOption
+                    checked={maxUpgrade}
+                    onChange={setMaxUpgrade}
+                    text={t('topGear.optMaxUpgrade')}
+                    tooltip={t('topGear.simHighestUpgradeTooltip')}
+                  />
+                  <ItemOption
+                    checked={copyEnchants}
+                    onChange={setCopyEnchants}
+                    text={t('topGear.optCopyEnchants')}
+                    tooltip={t('topGear.copyEnchantsTooltip')}
+                  />
+                  {catalystCharges != null && catalystCharges > 0 && (
+                    <ItemOption
+                      checked={catalyst}
+                      onChange={setCatalyst}
+                      text={t('topGear.optCatalyst')}
+                      tooltip={t('topGear.revivalCatalystTooltip')}
+                    >
+                      <CatalystChargesPicker
+                        charges={catalystCharges}
+                        active={catalyst}
+                        onChange={setCatalystCharges}
+                      />
+                    </ItemOption>
+                  )}
+                  {VOID_FORGE_ENABLED && (
+                    <ItemOption
+                      checked={voidForge}
+                      onChange={setVoidForge}
+                      text={t('topGear.optVoidForge')}
+                      tooltip={t('topGear.voidForge')}
+                    />
+                  )}
+                </>
+              )
+            }
             quickSelect={
               currentSection === 'items' && (
                 <TopGearQuickSelectBar
@@ -1134,7 +1141,8 @@ export default function TopGearScreen() {
         onSubmit={submit}
         submitting={submitting}
         buttonLabel={buttonLabel(t('button.findTopGear'))}
-        disabled={!resolved}
+        // Nothing selected means nothing to sim; the count beside it says so.
+        disabled={!resolved || comboCount === 0}
         compute={compute}
         onComputeChange={setCompute}
         subLabel={creditsSubLabel}

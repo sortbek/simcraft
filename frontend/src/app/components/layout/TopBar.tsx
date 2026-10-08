@@ -239,7 +239,7 @@ export default function TopBar() {
   return (
     <div
       ref={containerRef}
-      className="desktop-drag sticky top-0 z-50 flex h-16 items-center justify-between gap-2.5 border-b border-line/[0.06] bg-background px-7"
+      className="desktop-drag relative z-50 flex h-16 shrink-0 items-center justify-between gap-2.5 border-b border-line/[0.06] bg-background px-7"
     >
       <div className="desktop-no-drag relative flex items-center gap-2.5">
         <button

@@ -1,8 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { decodeHeader, decodeNodes } from '../../lib/talentDecode';
+import { decodeHeader } from '../../lib/talentDecode';
 import type { NodeSelection } from '../../lib/talentDecode';
+import {
+  decodeSelections,
+  diffBuilds,
+  nodeChanges,
+  type NodeChange,
+} from '../../lib/talentSummary';
 import { encodeTalentString } from '../../lib/talentEncode';
 import { line } from '../../lib/themeColors';
 import {
@@ -20,7 +26,6 @@ import type { TalentNode, TalentTreeData } from '../../lib/useTalentTree';
 import { iconHrefProps } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
-import CardHeader from '../ui/CardHeader';
 import Pill from '../ui/Pill';
 
 interface TalentTreeProps {
@@ -28,18 +33,19 @@ interface TalentTreeProps {
   editable?: boolean;
   specId?: number;
   onTalentStringChange?: (s: string) => void;
-  /** Render as a tiny inline preview — no card, no labels, no tooltips */
-  mini?: boolean;
-  /** Skip card wrapper (when rendered inside another card) */
-  bare?: boolean;
   /** Force vertical stacking of the 3 trees */
   vertical?: boolean;
+  /** Mark talents gained, dropped or changed against this build (same spec). */
+  baseTalentString?: string;
 }
 
 // Node dimensions in SVG units (posX/posY use ~600 unit spacing)
-const NODE_SIZE = 260;
-const ICON_SIZE = 210;
-const PADDING = 200;
+const NODE_SIZE = 360;
+const ICON_SIZE = 300;
+const PADDING = 230;
+// Trees draw at a fixed scale, sized to their content: 600 units (one grid
+// step) = 42px.
+const SCALE = 42 / 600;
 
 // SVG colors follow the active theme (globals.css `--c-*`)
 const GOLD = 'rgb(var(--c-primary))';
@@ -47,17 +53,21 @@ const GOLD_EDGE = 'rgb(var(--c-primary-container) / 0.4)';
 const NODE_FILL = 'rgb(var(--c-background))';
 const RANK_DIM = 'rgb(var(--c-outline))';
 const DIM = line(0.15);
-const DIM_ICON = 0.3;
+const DIM_ICON = 0.5;
 const LOCKED_ICON = 0.15;
+const CHANGE_COLOR: Record<NodeChange, string> = {
+  gained: 'rgb(var(--c-positive))',
+  lost: 'rgb(var(--c-negative))',
+  changed: 'rgb(var(--c-info))',
+};
 
 export default function TalentTree({
   talentString,
   editable,
   specId: specIdProp,
   onTalentStringChange,
-  mini,
-  bare,
   vertical,
+  baseTalentString,
 }: TalentTreeProps) {
   // In edit mode, freeze the initial string so prop changes don't re-decode
   const initialTalentRef = useRef(talentString);
@@ -79,37 +89,10 @@ export default function TalentTree({
   const resolvedSpecId = specIdProp ?? header?.specId ?? null;
   const tree = useTalentTree(resolvedSpecId);
 
-  // Decode selections from the stable string. fullNodeOrder/fullNodeMaxRanks
-  // cover ALL specs of the class; without them bit positions misalign because
-  // the decoder can't determine each node's bit width.
-  const decodedFromString = useMemo(() => {
-    if (!header || !tree) return null;
-    const orderedIds = tree.fullNodeOrder;
-    if (!orderedIds) return null;
-
-    // Prefer backend maxRanks (covers all specs); fall back to local nodes
-    const localNodes = [
-      ...tree.classNodes,
-      ...tree.specNodes,
-      ...tree.heroNodes,
-      ...(tree.subTreeNodes ?? []),
-    ];
-    const localMap = new Map(localNodes.map((n) => [n.id, n.maxRanks ?? 1]));
-    const maxRanks = new Map(
-      orderedIds.map((id) => [id, tree.fullNodeMaxRanks?.[id] ?? localMap.get(id) ?? 1])
-    );
-    const decoded = decodeNodes(header.bits, header.offset, orderedIds, maxRanks);
-
-    // Some export strings omit implicit free entry nodes — grant ALL of them
-    // (including both hero subtree entries) to match Raidbots behavior.
-    for (const node of [...tree.classNodes, ...tree.specNodes, ...tree.heroNodes]) {
-      if (node.freeNode && !decoded.has(node.id)) {
-        decoded.set(node.id, { ranks: node.maxRanks, choiceIndex: -1 });
-      }
-    }
-
-    return decoded;
-  }, [header, tree]);
+  const decodedFromString = useMemo(
+    () => (stableTalentString && tree ? decodeSelections(stableTalentString, tree) : null),
+    [stableTalentString, tree]
+  );
 
   // Editable state — initialized from decoded string once
   const [editSelections, setEditSelections] = useState<Map<number, NodeSelection>>(new Map());
@@ -123,6 +106,12 @@ export default function TalentTree({
   }, [editable, decodedFromString]);
 
   const selections = editable ? editSelections : decodedFromString;
+
+  const changes = useMemo(() => {
+    if (!baseTalentString || !tree || !selections) return undefined;
+    const base = decodeSelections(baseTalentString, tree);
+    return base ? nodeChanges(diffBuilds(base, selections, tree)) : undefined;
+  }, [baseTalentString, tree, selections]);
 
   // Node map for rules engine (includes subTreeNodes for encoding)
   const nodeMap = useMemo(() => {
@@ -181,15 +170,12 @@ export default function TalentTree({
     [editable, nodeMap]
   );
 
-  const { t } = useLanguage();
-
   useWowheadTooltips([selections]);
 
   if (!tree || !selections) {
     if (!talentString && !specIdProp) return null;
-    if (mini) return null;
     return (
-      <div className="card flex items-center justify-center p-5">
+      <div className="flex items-center justify-center p-5">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-container-highest border-t-gold" />
       </div>
     );
@@ -211,24 +197,6 @@ export default function TalentTree({
 
   const allNodesArr = [...tree.classNodes, ...tree.specNodes, ...tree.heroNodes];
 
-  if (mini) {
-    return (
-      <div className="flex h-full w-full items-stretch gap-0.5">
-        <div className="min-w-0 flex-[2]">
-          <MiniTreeSvg nodes={tree.classNodes} selections={selections} allNodes={allNodesArr} />
-        </div>
-        {activeHeroNodes.length > 0 && (
-          <div className="h-[45%] min-w-0 flex-1 self-center">
-            <MiniTreeSvg nodes={activeHeroNodes} selections={selections} allNodes={allNodesArr} />
-          </div>
-        )}
-        <div className="min-w-0 flex-[2]">
-          <MiniTreeSvg nodes={tree.specNodes} selections={selections} allNodes={allNodesArr} />
-        </div>
-      </div>
-    );
-  }
-
   const sectionProps = {
     selections,
     allNodes: allNodesArr,
@@ -238,7 +206,7 @@ export default function TalentTree({
     onNodeClick: handleNodeClick,
     onNodeRightClick: handleNodeRightClick,
     onChoiceCycle: handleChoiceCycle,
-    tabbed: !bare,
+    changes,
   };
 
   const sections = (
@@ -249,7 +217,6 @@ export default function TalentTree({
         pointsDisplay={`${classSpent}/${CLASS_POINTS}`}
         {...sectionProps}
       />
-      {bare && <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />}
       <TreeSection
         label={tree.specName}
         nodes={tree.specNodes}
@@ -257,38 +224,22 @@ export default function TalentTree({
         {...sectionProps}
       />
       {activeHeroNodes.length > 0 && (
-        <>
-          {bare && <div className="hidden h-auto w-px bg-outline-variant/10 lg:block" />}
-          <TreeSection
-            label={selectedSubTree?.name ?? 'Hero'}
-            nodes={activeHeroNodes}
-            pointsDisplay={`${heroSpent}`}
-            compact
-            {...sectionProps}
-          />
-        </>
+        <TreeSection
+          label={selectedSubTree?.name ?? 'Hero'}
+          nodes={activeHeroNodes}
+          pointsDisplay={`${heroSpent}`}
+          {...sectionProps}
+        />
       )}
     </>
   );
 
-  if (bare) {
-    return (
-      <div className="space-y-3">
-        <div className={`flex flex-col gap-3 ${vertical ? '' : 'lg:flex-row lg:gap-4'}`}>
-          {sections}
-        </div>
-      </div>
-    );
-  }
-
-  // Card mode (result page): mock `.trees` header row across the three trees.
   return (
-    <section className="card overflow-hidden">
-      <CardHeader title={t('config.talents')} />
-      <div className="flex flex-col lg:flex-row lg:[&>*+*]:shadow-[inset_1px_0_0_rgb(var(--c-line)/calc(0.06*var(--c-line-k)))]">
-        {sections}
-      </div>
-    </section>
+    <div
+      className={`flex flex-col items-center gap-4 ${vertical ? '' : 'lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-0 lg:[&>*+*]:shadow-[inset_1px_0_0_rgb(var(--c-line)/calc(0.06*var(--c-line-k)))]'}`}
+    >
+      {sections}
+    </div>
   );
 }
 
@@ -297,7 +248,6 @@ interface TreeSectionProps {
   nodes: TalentNode[];
   selections: Map<number, NodeSelection>;
   allNodes: TalentNode[];
-  compact?: boolean;
   editable?: boolean;
   tree?: TalentTreeData;
   nodeMap?: Map<number, TalentNode>;
@@ -305,8 +255,7 @@ interface TreeSectionProps {
   onNodeRightClick?: (nodeId: number) => void;
   onChoiceCycle?: (nodeId: number) => void;
   pointsDisplay?: string;
-  /** Result-page card: full-bleed 52px header cell with a count pill. */
-  tabbed?: boolean;
+  changes?: Map<number, NodeChange>;
 }
 
 function TreeSection({
@@ -314,7 +263,6 @@ function TreeSection({
   nodes,
   selections,
   allNodes,
-  compact,
   editable,
   tree,
   nodeMap,
@@ -322,7 +270,7 @@ function TreeSection({
   onNodeRightClick,
   onChoiceCycle,
   pointsDisplay,
-  tabbed,
+  changes,
 }: TreeSectionProps) {
   const nodeById = useMemo(() => new Map(allNodes.map((n) => [n.id, n])), [allNodes]);
 
@@ -348,74 +296,67 @@ function TreeSection({
 
   const sectionNodeIds = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
 
-  return (
-    <div
-      className={compact ? `${tabbed ? 'lg:w-[220px]' : 'w-[180px]'} shrink-0` : 'min-w-0 flex-1'}
-    >
-      {tabbed ? (
-        <div className="h-card flex h-[52px] items-center justify-center gap-2.5 border-b border-line/[0.06]">
-          {label}
-          {pointsDisplay && <Pill className="tabular-nums">{pointsDisplay}</Pill>}
-        </div>
-      ) : (
-        <div className="mb-1 flex items-center justify-center gap-2">
-          <p className="text-center text-[12px] font-medium uppercase tracking-wider text-on-surface-variant/60">
-            {label}
-          </p>
-          {pointsDisplay && (
-            <span className="rounded bg-surface-container-high px-1.5 py-0.5 text-[12px] font-bold tabular-nums text-on-surface-variant/60">
-              {pointsDisplay}
-            </span>
-          )}
-        </div>
+  const treeBody = (
+    <>
+      {nodes.map((node) =>
+        node.next
+          .filter((targetId) => sectionNodeIds.has(targetId))
+          .map((targetId) => {
+            const target = nodeById.get(targetId);
+            if (!target) return null;
+            const sourceSelected = selections.has(node.id);
+            const targetSelected = selections.has(targetId);
+            const active = sourceSelected && targetSelected;
+            return (
+              <line
+                key={`${node.id}-${targetId}`}
+                x1={node.posX}
+                y1={node.posY}
+                x2={target.posX}
+                y2={target.posY}
+                stroke={active ? GOLD : DIM}
+                strokeWidth={active ? 30 : 18}
+                strokeLinecap="round"
+              />
+            );
+          })
       )}
+      {nodes.map((node) => {
+        const sel = selections.get(node.id);
+        const selectable =
+          editable && tree && nodeMap ? canSelectNode(node.id, selections, tree, nodeMap) : false;
+
+        return (
+          <TalentNodeSvg
+            key={node.id}
+            node={node}
+            selection={sel}
+            editable={editable}
+            selectable={selectable}
+            onClick={onNodeClick}
+            onRightClick={onNodeRightClick}
+            onChoiceCycle={onChoiceCycle}
+            change={changes?.get(node.id)}
+          />
+        );
+      })}
+    </>
+  );
+
+  return (
+    <div className="flex min-w-0 shrink-0 flex-col items-center gap-3 px-6">
+      <div className="flex items-center gap-2.5">
+        <span className="h-card">{label}</span>
+        {pointsDisplay && <Pill className="tabular-nums">{pointsDisplay}</Pill>}
+      </div>
       <svg
         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
-        className={`w-full ${compact ? 'max-h-[320px]' : 'max-h-[420px]'} ${tabbed ? 'px-[30px] py-[26px]' : ''}`}
-        preserveAspectRatio="xMidYMid meet"
+        width={vbW * SCALE}
+        height={vbH * SCALE}
+        className="max-w-full"
         onContextMenu={editable ? (e) => e.preventDefault() : undefined}
       >
-        {nodes.map((node) =>
-          node.next
-            .filter((targetId) => sectionNodeIds.has(targetId))
-            .map((targetId) => {
-              const target = nodeById.get(targetId);
-              if (!target) return null;
-              const sourceSelected = selections.has(node.id);
-              const targetSelected = selections.has(targetId);
-              const active = sourceSelected && targetSelected;
-              return (
-                <line
-                  key={`${node.id}-${targetId}`}
-                  x1={node.posX}
-                  y1={node.posY}
-                  x2={target.posX}
-                  y2={target.posY}
-                  stroke={active ? GOLD : DIM}
-                  strokeWidth={active ? 16 : 10}
-                  strokeLinecap="round"
-                />
-              );
-            })
-        )}
-        {nodes.map((node) => {
-          const sel = selections.get(node.id);
-          const selectable =
-            editable && tree && nodeMap ? canSelectNode(node.id, selections, tree, nodeMap) : false;
-
-          return (
-            <TalentNodeSvg
-              key={node.id}
-              node={node}
-              selection={sel}
-              editable={editable}
-              selectable={selectable}
-              onClick={onNodeClick}
-              onRightClick={onNodeRightClick}
-              onChoiceCycle={onChoiceCycle}
-            />
-          );
-        })}
+        {treeBody}
       </svg>
     </div>
   );
@@ -429,6 +370,7 @@ function TalentNodeSvg({
   onClick,
   onRightClick,
   onChoiceCycle,
+  change,
 }: {
   node: TalentNode;
   selection?: NodeSelection;
@@ -437,6 +379,7 @@ function TalentNodeSvg({
   onClick?: (nodeId: number) => void;
   onRightClick?: (nodeId: number) => void;
   onChoiceCycle?: (nodeId: number) => void;
+  change?: NodeChange;
 }) {
   const { locale } = useLanguage();
   const isSelected = !!selection;
@@ -460,10 +403,25 @@ function TalentNodeSvg({
   const half = NODE_SIZE / 2;
   const iconHalf = ICON_SIZE / 2;
 
-  const borderColor = isSelected ? GOLD : editable && selectable ? GOLD_EDGE : line(0.1);
-  const borderWidth = isSelected ? 12 : 6;
+  const borderColor = change
+    ? CHANGE_COLOR[change]
+    : isSelected
+      ? GOLD
+      : editable && selectable
+        ? GOLD_EDGE
+        : line(0.1);
+  const borderWidth = isSelected || change ? 30 : 14;
 
-  const opacity = isSelected ? 1 : editable ? (selectable ? 0.5 : LOCKED_ICON) : DIM_ICON;
+  // A dropped talent stays legible so the change reads at a glance.
+  const opacity = isSelected
+    ? 1
+    : change === 'lost'
+      ? 0.7
+      : editable
+        ? selectable
+          ? 0.5
+          : LOCKED_ICON
+        : DIM_ICON;
 
   const handleClick = () => {
     if (!editable) return;
@@ -530,29 +488,31 @@ function TalentNodeSvg({
           width={ICON_SIZE}
           height={ICON_SIZE}
           clipPath={`url(#clip-${node.id})`}
+          // Untaken talents read as grey, not just faint.
+          style={isSelected || change === 'lost' ? undefined : { filter: 'grayscale(1)' }}
         />
       )}
       {/* Rank badge for multi-rank nodes */}
       {node.maxRanks > 1 && isSelected && selection && (
         <g>
           <rect
-            x={node.posX + half - 90}
-            y={node.posY + half - 75}
-            width={110}
-            height={70}
-            rx={16}
+            x={node.posX + half - 175}
+            y={node.posY + half - 120}
+            width={250}
+            height={160}
+            rx={42}
             fill={NODE_FILL}
             stroke={borderColor}
-            strokeWidth={6}
+            strokeWidth={14}
           />
           <text
-            x={node.posX + half - 35}
-            y={node.posY + half - 28}
+            x={node.posX + half - 50}
+            y={node.posY + half + 6}
             textAnchor="middle"
             fill={selection.ranks >= node.maxRanks ? GOLD : RANK_DIM}
-            fontSize={46}
-            fontFamily="system-ui, sans-serif"
-            fontWeight="bold"
+            fontSize={128}
+            fontFamily="Manrope, system-ui, sans-serif"
+            fontWeight="800"
           >
             {selection.ranks}/{node.maxRanks}
           </text>
@@ -577,107 +537,6 @@ function TalentNodeSvg({
         </foreignObject>
       )}
     </g>
-  );
-}
-
-function MiniTreeSvg({
-  nodes,
-  selections,
-  allNodes,
-}: {
-  nodes: TalentNode[];
-  selections: Map<number, NodeSelection>;
-  allNodes: TalentNode[];
-}) {
-  const nodeById = useMemo(() => new Map(allNodes.map((n) => [n.id, n])), [allNodes]);
-  const sectionIds = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
-
-  if (nodes.length === 0) return null;
-
-  let minX = Infinity,
-    maxX = -Infinity,
-    minY = Infinity,
-    maxY = -Infinity;
-  for (const n of nodes) {
-    minX = Math.min(minX, n.posX);
-    maxX = Math.max(maxX, n.posX);
-    minY = Math.min(minY, n.posY);
-    maxY = Math.max(maxY, n.posY);
-  }
-  const pad = 300;
-  const vbX = minX - pad;
-  const vbY = minY - pad;
-  const vbW = maxX - minX + pad * 2;
-  const vbH = maxY - minY + pad * 2;
-
-  return (
-    <svg
-      viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
-      className="h-full w-full"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      {nodes.map((node) =>
-        node.next
-          .filter((tid) => sectionIds.has(tid))
-          .map((tid) => {
-            const target = nodeById.get(tid);
-            if (!target) return null;
-            const active = selections.has(node.id) && selections.has(tid);
-            return (
-              <line
-                key={`${node.id}-${tid}`}
-                x1={node.posX}
-                y1={node.posY}
-                x2={target.posX}
-                y2={target.posY}
-                stroke={active ? GOLD : line(0.08)}
-                strokeWidth={active ? 40 : 24}
-                strokeLinecap="round"
-              />
-            );
-          })
-      )}
-      {nodes.map((node) => {
-        const selected = selections.has(node.id);
-        const sel = selections.get(node.id);
-        const isChoice = node.type === 'choice' && node.entries.length > 1;
-        let entry = node.entries[0];
-        if (isChoice && sel && sel.choiceIndex >= 0 && sel.choiceIndex < node.entries.length) {
-          entry = node.entries[sel.choiceIndex];
-        }
-        const icon = entry?.icon;
-        const r = 140;
-        return (
-          <g key={node.id} opacity={selected ? 1 : 0.25}>
-            <clipPath id={`mini-clip-${node.id}`}>
-              <circle cx={node.posX} cy={node.posY} r={r} />
-            </clipPath>
-            {icon ? (
-              <image
-                {...iconHrefProps(icon)}
-                x={node.posX - r}
-                y={node.posY - r}
-                width={r * 2}
-                height={r * 2}
-                clipPath={`url(#mini-clip-${node.id})`}
-              />
-            ) : (
-              <circle cx={node.posX} cy={node.posY} r={r} fill={line(0.08)} />
-            )}
-            {selected && (
-              <circle
-                cx={node.posX}
-                cy={node.posY}
-                r={r}
-                fill="none"
-                stroke={GOLD}
-                strokeWidth={20}
-              />
-            )}
-          </g>
-        );
-      })}
-    </svg>
   );
 }
 

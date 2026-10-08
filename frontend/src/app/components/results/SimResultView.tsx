@@ -7,7 +7,7 @@ import GearOverview from '../gear/GearOverview';
 import ResultsChart from './ResultsChart';
 import SimSetup from './SimSetup';
 import StatWeightsTable from './StatWeightsTable';
-import TalentTree from '../talents/TalentTree';
+import TalentBuildCard from '../talents/TalentBuildCard';
 import TopGearResults from '../gear/TopGearResults';
 import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
 import { isGearComparisonResult, type SimResult } from '../../lib/simResultTypes';
@@ -18,7 +18,7 @@ import { cachedTalentTree } from '../../lib/useTalentTree';
 
 // The viewer build has no backend to fetch a talent tree it wasn't shipped with
 // (shares made before lookups existed). Rather than spin forever, just hide the
-// section — normal app behavior (always render, let TalentTree fetch) is unchanged.
+// section — normal app behavior (always render, let the card fetch) is unchanged.
 function canShowTalents(talentString?: string): boolean {
   if (!talentString) return false;
   if (!VIEWER_BUILD) return true;
@@ -61,6 +61,11 @@ export default function SimResultView({
       </div>
     ) : undefined;
 
+  // Above the gear on both layouts.
+  const talents = canShowTalents(result.talent_string) ? (
+    <TalentBuildCard talentString={result.talent_string ?? ''} />
+  ) : null;
+
   return isGearComparisonResult(result) ? (
     <>
       <TopGearResults
@@ -79,8 +84,8 @@ export default function SimResultView({
         sourceJobId={typeof sourceJobId === 'string' ? sourceJobId : undefined}
         backLink={headerActions}
         setup={result.setup ?? undefined}
+        talents={talents}
       />
-      {canShowTalents(result.talent_string) && <TalentTree talentString={result.talent_string} />}
     </>
   ) : (
     <>
@@ -99,6 +104,7 @@ export default function SimResultView({
         topAction={headerActions}
         aside={result.setup ? <SimSetup setup={result.setup} /> : undefined}
       />
+      {talents}
       {result.equipped_gear && Object.keys(result.equipped_gear).length > 0 ? (
         <GearOverview
           gear={result.equipped_gear}
@@ -113,7 +119,6 @@ export default function SimResultView({
         />
       ) : null}
       {result.stat_weights ? <StatWeightsTable statWeights={result.stat_weights} /> : null}
-      {canShowTalents(result.talent_string) && <TalentTree talentString={result.talent_string} />}
       <ResultsChart dps={result.dps} abilities={result.abilities ?? []} />
     </>
   );

@@ -205,16 +205,20 @@ function getActiveSubTreeId(
   tree: TalentTreeData
 ): number | null {
   if (!tree.subTreeNodes) return null;
+  // Both hero trees' free entry nodes are granted, so without a selector pick
+  // the tree with the most talents actually taken.
+  const free = new Set(tree.heroNodes.filter((n) => n.freeNode).map((n) => n.id));
   for (const stNode of tree.subTreeNodes) {
     const sel = selections.get(stNode.id);
     if (sel && sel.choiceIndex >= 0 && sel.choiceIndex < stNode.entries.length) {
       return stNode.entries[sel.choiceIndex].traitSubTreeId;
     }
+    let best: { id: number; taken: number } | null = null;
     for (const entry of stNode.entries) {
-      if (entry.nodes?.some((nid) => selections.has(nid))) {
-        return entry.traitSubTreeId;
-      }
+      const taken = entry.nodes?.filter((nid) => selections.has(nid) && !free.has(nid)).length ?? 0;
+      if (taken > 0 && (!best || taken > best.taken)) best = { id: entry.traitSubTreeId, taken };
     }
+    if (best) return best.id;
   }
   return null;
 }

@@ -7,7 +7,10 @@ import { useAnchoredPopup } from './useAnchoredPopup';
  *  the loot browser. Clicks are swallowed so it can sit inside a clickable row
  *  without triggering it. */
 export default function InfoIcon({ tooltip }: { tooltip: string }) {
-  const { ref, show, hide, style } = useAnchoredPopup<HTMLSpanElement>(TOOLTIP_WIDTH, 'center');
+  const { ref, show, hide, style, center } = useAnchoredPopup<HTMLSpanElement>(
+    TOOLTIP_WIDTH,
+    'center'
+  );
 
   return (
     <span
@@ -33,7 +36,7 @@ export default function InfoIcon({ tooltip }: { tooltip: string }) {
           clipRule="evenodd"
         />
       </svg>
-      {style && <TooltipBubble text={tooltip} style={style} />}
+      {style && <TooltipBubble text={tooltip} style={style} center={center} />}
     </span>
   );
 }

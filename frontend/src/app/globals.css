@@ -300,105 +300,58 @@
   }
 }
 
-/* Setup bar (TalentPicker `options`): one row of labelled cells when wide, the
-   build picker on its own row below that, one column when narrow. Cells draw
-   their dividers as inset shadows; the bar is pulled 1px up/left under the
-   card's clipped edge so the first row/column shows none. */
-.setup-bar-wrap {
+/* Talent summary row: build picker, hero, choices, points, tree toggle. Wraps
+   by its own width; no overflow clip, so the build picker's menu can escape. */
+.talent-summary {
   container-type: inline-size;
-  overflow: hidden;
-  --setup-line: rgb(var(--c-line) / calc(0.06 * var(--c-line-k)));
-}
-.setup-bar {
   display: flex;
   flex-wrap: wrap;
-  margin: -1px 0 0 -1px;
+  align-items: stretch;
+  row-gap: 14px;
+  padding: 14px 18px;
 }
-.setup-cell {
+.talent-summary-cell {
   display: flex;
   min-width: 0;
-  min-height: 76px;
-  /* Zero basis + content minimum: cells share a row as long as each one's
-     switch and text fit, and only then wrap. */
-  flex: 1 1 0;
-  min-width: min-content;
   flex-direction: column;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.875rem 1.25rem;
-  box-shadow:
-    inset 1px 0 0 var(--setup-line),
-    inset 0 1px 0 var(--setup-line);
+  gap: 8px;
+  padding: 0 20px;
 }
-/* A native select is as wide as its longest option; let the build picker
-   shrink instead of pushing its buttons out of the cell. */
-.setup-cell-talents,
-.setup-cell-talents > div {
-  min-width: 0;
+.talent-summary-cell:first-child {
+  padding-left: 0;
 }
-.setup-cell-talents select {
-  min-width: 0;
-  flex: 1 1 auto;
+.talent-summary-picker {
+  flex: 1 1 240px;
+  max-width: 340px;
 }
-.setup-cell-talents button {
-  flex-shrink: 0;
+.talent-summary-highlights {
+  flex: 1 1 200px;
 }
-/* Below one-row width the build picker takes its own row and the options share
-   the next one evenly. */
-.setup-cell-talents {
-  flex-basis: 100%;
+.talent-summary-toggle {
+  margin-left: auto;
+  padding-right: 0;
 }
-@container (min-width: 1060px) {
-  .setup-cell-talents {
-    flex: 1 1 300px;
+@container (min-width: 900px) {
+  .talent-summary-cell + .talent-summary-cell:not(.talent-summary-toggle) {
+    box-shadow: inset 1px 0 0 rgb(var(--c-line) / calc(0.06 * var(--c-line-k)));
   }
-  .setup-cell:not(.setup-cell-talents) {
-    flex: 0 0 auto;
+}
+@container (max-width: 899px) {
+  .talent-summary-picker {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .talent-summary-cell {
+    padding-left: 0;
   }
 }
 
-/* Top Gear toolbar: tabs left, actions right; the quick-select chips share the
-   row when there is room and drop below it when there isn't. */
-.topgear-toolbar {
+/* Top Gear tools row: the density switch yields first on narrow screens. */
+.topgear-tools {
   container-type: inline-size;
 }
-.topgear-toolbar-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-}
-/* No overflow scrolling here: it would clip the tabs' info tooltips. The tab
-   track wraps instead when the toolbar is too narrow. */
-.topgear-toolbar-tabs {
-  order: 1;
-  max-width: 100%;
-}
-.topgear-toolbar-actions {
-  order: 2;
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.topgear-toolbar-extra {
-  order: 3;
-  flex-basis: 100%;
-}
-.topgear-toolbar-extra:has(> div:empty) {
-  display: none;
-}
-@container (min-width: 1180px) {
-  .topgear-toolbar-extra {
-    order: 2;
-    flex-basis: auto;
-  }
-  .topgear-toolbar-actions {
-    order: 3;
-  }
-}
 @container (max-width: 620px) {
-  .topgear-toolbar-density {
+  .topgear-tools-density {
     display: none;
   }
 }

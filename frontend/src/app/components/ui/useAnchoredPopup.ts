@@ -12,7 +12,7 @@ const EDGE = 8;
 export function useAnchoredPopup<T extends HTMLElement>(width: number, align: 'center' | 'end') {
   const { scale } = useContentScale();
   const ref = useRef<T>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; center: number } | null>(null);
 
   const show = useCallback(() => {
     const rect = ref.current?.getBoundingClientRect();
@@ -23,7 +23,11 @@ export function useAnchoredPopup<T extends HTMLElement>(width: number, align: 'c
     const w = width * zoom;
     const ideal = align === 'end' ? rect.right - w : rect.left + rect.width / 2 - w / 2;
     const left = Math.min(Math.max(EDGE, ideal), window.innerWidth - w - EDGE);
-    setPos({ left: left / zoom, top: (rect.bottom + 8) / zoom });
+    setPos({
+      left: left / zoom,
+      top: (rect.bottom + 8) / zoom,
+      center: (rect.left + rect.width / 2) / zoom,
+    });
   }, [scale, width, align]);
   const hide = useCallback(() => setPos(null), []);
 
@@ -39,5 +43,6 @@ export function useAnchoredPopup<T extends HTMLElement>(width: number, align: 'c
     width,
     zoom: scale !== 100 ? scale / 100 : undefined,
   };
-  return { ref, open: pos !== null, show, hide, style };
+  // The anchor's horizontal middle, for popups that size to their content.
+  return { ref, open: pos !== null, show, hide, style, center: pos?.center };
 }

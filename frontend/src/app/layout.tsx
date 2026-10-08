@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
+import AppScroll from './components/layout/AppScroll';
 import FooterDisclaimer from './components/layout/FooterDisclaimer';
 import { SimProvider } from './components/sim-config/SimContext';
 import { VIEWER_BUILD } from './lib/featureFlags';
@@ -57,11 +58,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <SimProvider>
                   <ActiveSimsProvider>
                     <Sidebar />
-                    <div className="pl-[248px]">
+                    <div className="flex h-screen flex-col pl-[248px]">
                       <TopBar />
-                      <SharedEditBanner />
-                      <ContentScaler>{children}</ContentScaler>
-                      <FooterDisclaimer version={packageJson.version} />
+                      <AppScroll>
+                        <SharedEditBanner />
+                        <ContentScaler>{children}</ContentScaler>
+                        <FooterDisclaimer version={packageJson.version} />
+                      </AppScroll>
                     </div>
                   </ActiveSimsProvider>
                 </SimProvider>

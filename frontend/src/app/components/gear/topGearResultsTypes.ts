@@ -43,6 +43,8 @@ export interface TopGearResultsProps {
   backLink?: ReactNode;
   /** Consumables and raid buffs the base actor ran with, for the hero's corner. */
   setup?: SimSetup;
+  /** The run's talents, shown between the hero card and the gear. */
+  talents?: ReactNode;
   /** Source job id — enables the per-row "Sim" verify button. Omit on historical/imported views where re-running isn't applicable. */
   sourceJobId?: string;
 }

@@ -334,7 +334,7 @@ export default function TopGearItemSelector({
   }
 
   return (
-    <div className="space-y-2.5">
+    <div className={`flex flex-col ${GEAR_DENSITY_LAYOUT[density].gap}`}>
       <div
         className={`grid ${GEAR_DENSITY_LAYOUT[density].gap}`}
         style={{ gridTemplateColumns: gearGridColumns(density) }}
