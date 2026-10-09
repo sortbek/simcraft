@@ -384,6 +384,16 @@
   }
 }
 
+/* The character spotlight is a warm glow for dark backgrounds. On parchment
+   it reads as a grey box around the render, so light mode drops the glow and
+   the figure's drop shadow and keeps only the contact shadow at the feet. */
+:root[data-theme='parchment'] .spotlight-glow {
+  display: none;
+}
+:root[data-theme='parchment'] .spotlight-figure {
+  filter: none;
+}
+
 /* Sidebar: full width or a slim icon rail. The root attribute is set before
    first paint (layout.tsx), so the collapsed state never flashes wide. */
 :root {

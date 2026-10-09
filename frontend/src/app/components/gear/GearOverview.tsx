@@ -78,14 +78,14 @@ export default function GearOverview({
         {characterRenderUrl && (render.status === 'trimmed' || render.status === 'full') && (
           // Spotlight: warm key light behind the character, contact shadow at the feet.
           <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[380px] -translate-x-1/2">
-            <div className="absolute -inset-x-[20%] -top-[10%] bottom-0 bg-[radial-gradient(ellipse_42%_55%_at_50%_38%,rgb(var(--c-gold-light)/0.16),rgb(var(--c-gold-light)/0.05)_45%,transparent_70%)]" />
+            <div className="spotlight-glow absolute -inset-x-[20%] -top-[10%] bottom-0 bg-[radial-gradient(ellipse_42%_55%_at_50%_38%,rgb(var(--c-gold-light)/0.16),rgb(var(--c-gold-light)/0.05)_45%,transparent_70%)]" />
             <div className="absolute bottom-[2.5%] left-1/2 h-[34px] w-[220px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.75),transparent_70%)]" />
             {render.status === 'trimmed' ? (
               <img
                 src={render.src}
                 alt=""
                 // Same height for every race; feet on the contact shadow.
-                className="absolute bottom-[4%] left-1/2 h-[88%] w-auto max-w-none [filter:drop-shadow(0_0_1px_rgba(255,230,180,0.35))_drop-shadow(0_20px_30px_rgba(0,0,0,0.6))] [mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
+                className="spotlight-figure absolute bottom-[4%] left-1/2 h-[88%] w-auto max-w-none [filter:drop-shadow(0_0_1px_rgba(255,230,180,0.35))_drop-shadow(0_20px_30px_rgba(0,0,0,0.6))] [mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
                 style={{ transform: `translateX(-${renderCentreShift(render.bounds)}%)` }}
               />
             ) : (
@@ -95,7 +95,7 @@ export default function GearOverview({
                 // No bounds from the API: Blizzard renders stand on a ground line ~82%
                 // down a mostly empty 1600×1200 canvas; scale it so that line sits on
                 // the contact shadow. Tall models fade out at the body's top edge.
-                className="absolute bottom-[-23%] left-1/2 h-[149%] w-auto max-w-none -translate-x-1/2 [filter:drop-shadow(0_0_1px_rgba(255,230,180,0.35))_drop-shadow(0_20px_30px_rgba(0,0,0,0.6))] [mask-image:linear-gradient(to_bottom,transparent_17%,#000_22%,#000_75%,transparent_82%)]"
+                className="spotlight-figure absolute bottom-[-23%] left-1/2 h-[149%] w-auto max-w-none -translate-x-1/2 [filter:drop-shadow(0_0_1px_rgba(255,230,180,0.35))_drop-shadow(0_20px_30px_rgba(0,0,0,0.6))] [mask-image:linear-gradient(to_bottom,transparent_17%,#000_22%,#000_75%,transparent_82%)]"
               />
             )}
           </div>

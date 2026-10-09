@@ -88,14 +88,14 @@ export default function HomeHero({
       )}
 
       <div className="relative min-h-[300px]">
-        <div className="pointer-events-none absolute -inset-x-[25%] -top-[10%] bottom-0 bg-[radial-gradient(ellipse_42%_55%_at_50%_40%,rgb(var(--c-gold-light)/0.16),rgb(var(--c-gold-light)/0.04)_45%,transparent_70%)]" />
+        <div className="spotlight-glow pointer-events-none absolute -inset-x-[25%] -top-[10%] bottom-0 bg-[radial-gradient(ellipse_42%_55%_at_50%_40%,rgb(var(--c-gold-light)/0.16),rgb(var(--c-gold-light)/0.04)_45%,transparent_70%)]" />
         <div className="pointer-events-none absolute bottom-3 left-1/2 h-[30px] w-1/2 -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.7),transparent_70%)]" />
         {render.status === 'trimmed' && (
           <div className="pointer-events-none absolute inset-x-0 bottom-[18px] h-[88%]">
             <img
               src={render.src}
               alt=""
-              className="absolute bottom-0 left-1/2 h-full w-auto max-w-none [filter:drop-shadow(0_18px_24px_rgba(0,0,0,0.55))]"
+              className="spotlight-figure absolute bottom-0 left-1/2 h-full w-auto max-w-none [filter:drop-shadow(0_18px_24px_rgba(0,0,0,0.55))]"
               style={{ transform: `translateX(-${renderCentreShift(render.bounds)}%)` }}
             />
           </div>
