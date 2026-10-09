@@ -4,24 +4,15 @@ import { useRouter } from 'next/navigation';
 import { memo, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { simRow } from '../../lib/api';
-import { SLOT_LABELS, specDisplayName } from '../../lib/types';
-import {
-  QUALITY_COLORS,
-  getWowheadData,
-  getWowheadUrl,
-  localizedEnchantName,
-  localizedGemName,
-  localizedItemName,
-  useItemNames,
-  iconProps,
-} from '../../lib/useItemInfo';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
-import type { ResultItem, TopGearResult } from './topGearResultsTypes';
-import { appliedGems, gemBadgeClass } from './topGearResultsUtils';
-import Button from '../ui/Button';
+import type { TopGearResult } from './topGearResultsTypes';
+import ComboSummary from './ComboSummary';
 import Pill from '../ui/Pill';
-import { useConsumableLookup } from '../sim-config/ConsumablePickers';
+
+/** Square icon button for a row's actions; shown on hover. */
+const ROW_ACTION =
+  'grid h-7 w-7 place-items-center rounded-[6px] border border-line/[0.08] text-outline transition-colors hover:border-line/20 disabled:opacity-50';
 
 /** Numeric combo id from a "Combo N" name; null for other shapes (e.g. "Currently Equipped"). */
 function comboIdFromName(name: string): number | null {
@@ -153,31 +144,9 @@ export const ResultRow = memo(function ResultRow({
   const isEquipped =
     (result.items.length === 0 || result.name.startsWith('Currently Equipped')) &&
     enchantGemItems.length === 0;
-  const hasTalentBuild = !!result.talent_build;
-  const hasFolioBuild = !!result.folio_build;
-  const hasConsumables = !!result.consumables && Object.keys(result.consumables).length > 0;
   const changedSlots = new Set(changedItems.map((item) => item.slot));
   const showBothRings = changedSlots.has('finger1') || changedSlots.has('finger2');
   const showBothTrinkets = changedSlots.has('trinket1') || changedSlots.has('trinket2');
-
-  const talentBadge = (
-    <>
-      {hasTalentBuild && (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded bg-quality-epic/10 px-1.5 py-px text-[11px] font-medium">
-          {result.talent_spec && (
-            <span className="text-quality-epic">{specDisplayName(result.talent_spec)}</span>
-          )}
-          <span className="text-quality-epic/70">{result.talent_build}</span>
-        </span>
-      )}
-      {hasFolioBuild && (
-        <span className="inline-flex shrink-0 items-center rounded bg-info/10 px-1.5 py-px text-[11px] font-medium text-info/80">
-          {result.folio_build}
-        </span>
-      )}
-      {hasConsumables && <ConsumableBadges consumables={result.consumables!} />}
-    </>
-  );
 
   const displayItems = result.items.filter((item) => {
     if (item.type) return false;
@@ -204,10 +173,10 @@ export const ResultRow = memo(function ResultRow({
   return (
     <div
       onClick={() => onSelect?.(result.name)}
-      className={`relative grid cursor-pointer items-center gap-4 border-b border-line/[0.06] px-6 py-3 transition-colors [contain-intrinsic-size:auto_62px] [content-visibility:auto] last:border-b-0 ${
+      className={`group relative grid cursor-pointer items-center gap-4 border-b border-line/[0.06] px-6 py-3 transition-colors [contain-intrinsic-size:auto_62px] [content-visibility:auto] last:border-b-0 ${
         rank != null
-          ? 'grid-cols-[48px_1fr_130px_120px_minmax(70px,auto)]'
-          : 'grid-cols-[1fr_130px_120px_minmax(70px,auto)]'
+          ? 'grid-cols-[48px_minmax(0,1fr)_150px_64px]'
+          : 'grid-cols-[minmax(0,1fr)_150px_64px]'
       } ${stateClass}`}
     >
       <div
@@ -224,93 +193,73 @@ export const ResultRow = memo(function ResultRow({
         </span>
       )}
 
-      <div className="relative flex min-w-0 flex-wrap items-center gap-2">
-        {(() => {
-          const hasChangedItems = changedItems.length > 0 || enchantGemItems.length > 0;
+      <div className="relative min-w-0">
+        <ComboSummary
+          result={result}
+          displayItems={displayItems}
+          changedItems={changedItems}
+          enchantGemItems={enchantGemItems}
+          isEquipped={isEquipped}
+          itemInfoMap={itemInfoMap}
+          gemInfoMap={gemInfoMap}
+          badge={isBest && <Pill variant="gold">{t('gear.best')}</Pill>}
+        />
+      </div>
 
-          if (isEquipped) {
-            return (
-              <>
-                <Pill>{t('gear.currentlyEquipped')}</Pill>
-                {talentBadge}
-              </>
-            );
-          }
-
-          if (!hasChangedItems && (hasTalentBuild || hasFolioBuild || hasConsumables)) {
-            return talentBadge;
-          }
-
-          return (
-            <>
-              {displayItems.map((item, index) => (
-                <ItemTag
-                  key={index}
-                  item={item}
-                  info={item.item_id > 0 ? itemInfoMap[item.item_id] : undefined}
-                  enchant={item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined}
-                  sourceInfo={item.source_item_id ? itemInfoMap[item.source_item_id] : undefined}
-                  gems={appliedGems(item, gemInfoMap)}
-                />
-              ))}
-              {enchantGemItems.map((item, index) => (
-                <span
-                  key={`eg-${index}`}
-                  className={`inline-flex h-6 items-center gap-1 rounded-[5px] px-[9px] text-[12.5px] font-semibold ${
-                    item.type === 'enchant' ? 'bg-ench/10 text-ench' : gemBadgeClass(item.name)
-                  }`}
-                >
-                  {item.name || (item.type === 'gem' ? 'Gem' : 'Enchant')}
-                </span>
-              ))}
-              {talentBadge}
-            </>
-          );
-        })()}
-
-        {isBest && <Pill variant="gold">{t('gear.best')}</Pill>}
+      <div className="relative text-right">
+        <div className="flex items-center justify-end gap-1.5 font-headline text-[15px] font-extrabold tabular-nums">
+          {Math.round(result.dps).toLocaleString()}
+          {result.precision_pct != null && (
+            <PrecisionDot pct={result.precision_pct} targetError={targetError} />
+          )}
+        </div>
+        <div className={`mt-1 text-[11.5px] font-bold tabular-nums ${deltaTone}`}>
+          {result.delta > 0
+            ? `+${Math.round(result.delta).toLocaleString()}`
+            : result.delta < 0
+              ? Math.round(result.delta).toLocaleString()
+              : '—'}
+          {baseDps > 0 && result.delta !== 0 && (
+            <span className={`ml-1.5 font-medium ${deltaSubTone}`}>
+              {result.delta > 0 ? '+' : ''}
+              {deltaPct.toFixed(2)}%
+            </span>
+          )}
+        </div>
       </div>
 
       <div
-        className={`relative text-right font-headline text-sm font-extrabold tabular-nums ${deltaTone}`}
+        className={`relative flex items-center justify-end gap-1 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 ${
+          isCompareTarget ? '' : 'opacity-0'
+        }`}
       >
-        {result.delta > 0
-          ? `+${Math.round(result.delta).toLocaleString()}`
-          : result.delta < 0
-            ? Math.round(result.delta).toLocaleString()
-            : '—'}
-        {baseDps > 0 && (
-          <small className={`block font-sans text-[11.5px] font-semibold ${deltaSubTone}`}>
-            {result.delta > 0 ? '+' : ''}
-            {deltaPct.toFixed(2)}%
-          </small>
-        )}
-      </div>
-
-      <div className="relative flex items-center justify-end gap-1.5 font-headline text-[15px] font-extrabold tabular-nums">
-        {Math.round(result.dps).toLocaleString()}
-        {result.precision_pct != null && (
-          <PrecisionDot pct={result.precision_pct} targetError={targetError} />
-        )}
-      </div>
-
-      <div className="relative flex items-center justify-end gap-1">
         {onCompare && !isEquipped && (
-          <Button
-            variant="text"
+          <button
+            type="button"
             onClick={(e: MouseEvent) => {
               e.stopPropagation();
               onCompare(result.name);
             }}
             title={t('gear.compareRowTitle')}
-            className={isCompareTarget ? '!text-info' : 'hover:!text-info'}
+            aria-label={t('gear.compareRowTitle')}
+            className={`${ROW_ACTION} ${isCompareTarget ? '!border-info/40 !text-info' : 'hover:text-info'}`}
           >
-            {t('gear.compareVs')}
-          </Button>
+            <svg
+              className="h-3.5 w-3.5"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M5 3v10M11 3v10M2 6l3-3 3 3M8 10l3 3 3-3" />
+            </svg>
+          </button>
         )}
         {showVerifyButton && (
-          <Button
-            variant="text"
+          <button
+            type="button"
             onClick={async (e: MouseEvent) => {
               e.stopPropagation();
               if (!sourceJobId || comboId == null || verifying) return;
@@ -324,190 +273,19 @@ export const ResultRow = memo(function ResultRow({
             }}
             disabled={verifying}
             title={t('gear.verifyRowTitle')}
+            aria-label={t('gear.verifyRowTitle')}
+            className={`${ROW_ACTION} hover:text-on-surface`}
           >
-            {verifying ? '…' : 'Sim'}
-          </Button>
+            {verifying ? (
+              '…'
+            ) : (
+              <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5 3l8 5-8 5z" />
+              </svg>
+            )}
+          </button>
         )}
       </div>
     </div>
   );
 });
-
-function ItemTag({
-  item,
-  info,
-  enchant,
-  sourceInfo,
-  gems,
-}: {
-  item: ResultItem;
-  info?: ItemInfo;
-  enchant?: EnchantInfo;
-  /** The drop a catalyst row converts, so the CAT pill can name where it came from. */
-  sourceInfo?: ItemInfo;
-  /** Gems the drop is simmed with, one per socket. */
-  gems?: GemInfo[];
-}) {
-  const { t, locale } = useLanguage();
-  useItemNames();
-
-  const qualityColor = info ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
-  const name = localizedItemName(
-    item.item_id,
-    info?.name || item.name || `Item ${item.item_id}`,
-    locale
-  );
-  const icon = info?.icon || 'inv_misc_questionmark';
-  const wowheadData = item.item_id > 0 ? getWowheadData(item) : undefined;
-  const slotName = SLOT_LABELS[item.slot] || item.slot;
-  // A Void Forged row points `source_item_id` at itself, so only a catalyst has
-  // an origin worth naming.
-  const sourceName =
-    item.is_catalyst && item.source_item_id
-      ? localizedItemName(item.source_item_id, sourceInfo?.name || '', locale)
-      : '';
-
-  const href = item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined;
-
-  return (
-    <div
-      className={`inline-flex min-w-0 items-center gap-[9px] rounded-[7px] border border-line/[0.06] bg-surface-container-high py-1 pl-1 pr-3 ${
-        item.is_kept ? 'opacity-40' : ''
-      }`}
-    >
-      <a
-        href={href}
-        data-wowhead={wowheadData}
-        className="relative block h-[22px] w-[22px] shrink-0 overflow-hidden rounded-[4px] border"
-        style={{ borderColor: qualityColor }}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(event) => event.preventDefault()}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          {...iconProps(icon)}
-          alt=""
-          width={22}
-          height={22}
-          className="h-full w-full"
-          loading="lazy"
-        />
-        <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
-      </a>
-      <div className="min-w-0">
-        <a
-          href={href}
-          data-wowhead={wowheadData}
-          className="block max-w-[240px] truncate text-[13px] font-semibold no-underline"
-          style={{ color: qualityColor }}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(event) => {
-            event.preventDefault();
-          }}
-        >
-          {name}
-        </a>
-        <div className="flex flex-wrap items-center gap-x-1 text-[11.5px] text-outline">
-          <span>
-            {slotName}
-            {item.ilevel > 0 && ` · ${item.ilevel}`}
-          </span>
-          {item.is_void_forge && (
-            <Pill variant="epic" size="sm" className="shrink-0">
-              {t('loot.voidforged')}
-            </Pill>
-          )}
-          {item.is_catalyst && (
-            <span
-              title={sourceName ? t('gear.catalystFrom', { name: sourceName }) : undefined}
-              className="inline-flex shrink-0"
-            >
-              <Pill variant="info" size="sm">
-                {t('loot.catalyst')}
-                {sourceName && (
-                  <span className="max-w-[170px] truncate font-sans font-medium normal-case tracking-normal text-info/70">
-                    {sourceName}
-                  </span>
-                )}
-              </Pill>
-            </span>
-          )}
-          {gems?.map((gem, index) => (
-            <span
-              key={`${gem.gem_id}-${index}`}
-              title={localizedGemName(gem, locale)}
-              className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm ring-1 ring-line/15"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                {...iconProps(gem.icon)}
-                alt=""
-                width={16}
-                height={16}
-                className="h-full w-full"
-                loading="lazy"
-              />
-            </span>
-          ))}
-          {item.upgrade_levels ? (
-            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-positive">
-              +{item.upgrade_levels}
-            </span>
-          ) : item.origin === 'vault' ? (
-            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-warning">
-              V
-            </span>
-          ) : item.origin === 'loot' ? (
-            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-info">
-              L
-            </span>
-          ) : null}
-          {enchant?.name && (
-            <span
-              className="max-w-[140px] truncate text-ench"
-              title={localizedEnchantName(enchant, locale)}
-            >
-              · {localizedEnchantName(enchant, locale)}
-            </span>
-          )}
-          {item.embellishment && (
-            <span
-              className="max-w-[140px] truncate text-quality-epic/80"
-              title={item.embellishment.name}
-            >
-              · {item.embellishment.name}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** The consumables a combo swapped in for the Sim settings ones. Rendered only
- *  on rows that changed some, so the lookup isn't subscribed per row. */
-function ConsumableBadges({ consumables }: { consumables: Record<string, string> }) {
-  const lookup = useConsumableLookup();
-  return (
-    <>
-      {Object.entries(consumables).map(([slot, value]) => {
-        const entry = lookup.get(value);
-        return (
-          <span
-            key={slot}
-            title={entry?.name ?? value}
-            className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] bg-overlay/[0.06] px-[7px] text-[12px] font-semibold text-on-surface"
-          >
-            {entry?.icon && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img {...iconProps(entry.icon)} alt="" className="h-4 w-4 rounded-[3px]" />
-            )}
-            {entry?.shortName || entry?.name || value}
-          </span>
-        );
-      })}
-    </>
-  );
-}
