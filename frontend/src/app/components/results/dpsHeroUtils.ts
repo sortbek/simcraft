@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { blizzardRealmSlug } from '../../lib/character';
 
 export const FACTION_ICONS: Record<string, string> = {
   alliance: '/api/data/static/faction-alliance.png',
@@ -23,7 +24,7 @@ export function useFaction(realm?: string, name?: string, region = 'eu'): string
       try {
         const res = await fetch(
           `https://simhammer.com/api/blizzard/character/${region}/${encodeURIComponent(
-            realm.toLowerCase()
+            blizzardRealmSlug(realm)
           )}/${encodeURIComponent(name.toLowerCase())}/profile`
         );
         if (!res.ok || cancelled) {
@@ -44,21 +45,6 @@ export function useFaction(realm?: string, name?: string, region = 'eu'): string
   }, [realm, name, region]);
 
   return faction;
-}
-
-export function getCharacterMediaUrl(
-  realm: string | undefined,
-  name: string | undefined,
-  type: 'inset' | 'render',
-  region = 'eu'
-): string | null {
-  if (!realm || !name) {
-    return null;
-  }
-
-  return `https://simhammer.com/api/blizzard/character/${region}/${encodeURIComponent(
-    realm.toLowerCase()
-  )}/${encodeURIComponent(name.toLowerCase())}/media/${type}`;
 }
 
 export function formatDuration(seconds: number): string {

@@ -518,7 +518,13 @@ test('a swapped item outranks the kept fallback for the same slot', () => {
 });
 
 test('the fallback never resurrects the off_hand a two-hander empties', () => {
-  const keptOffHand = { slot: 'off_hand', item_id: 444, ilevel: 675, name: 'shield', is_kept: true };
+  const keptOffHand = {
+    slot: 'off_hand',
+    item_id: 444,
+    ilevel: 675,
+    name: 'shield',
+    is_kept: true,
+  };
   const synthetic = { slot: 'off_hand', item_id: 0, ilevel: 0, name: '', origin: 'system' };
   const gearSet = buildBestGearSet({}, { items: [keptOffHand, synthetic] });
   assert.equal(gearSet.off_hand, undefined);
@@ -545,4 +551,40 @@ test('consumable alternatives drop whatever the baseline already uses', () => {
 test('consumable mixes multiply across slots, baseline included', () => {
   assert.equal(consumableMixCount({}), 1);
   assert.equal(consumableMixCount({ flask: ['a', 'b'], food: ['c'] }), 6);
+});
+
+test('character media URLs use the Blizzard realm slug from the SimC server= value', () => {
+  const {
+    getCharacterRenderUrl: renderUrl,
+  } = require('../src/app/components/gear/topGearResultsUtils.ts');
+  const base = 'https://simhammer.com/api/blizzard/character/eu';
+  assert.equal(renderUrl('grim_batol', 'Klysus', 'eu'), `${base}/grim-batol/klysus/media/render`);
+  assert.equal(renderUrl("Mal'Ganis", 'Name', 'eu'), `${base}/malganis/name/media/render`);
+  assert.equal(renderUrl('Argent Dawn', 'Name', 'eu'), `${base}/argent-dawn/name/media/render`);
+});
+
+test('a compacted SimC realm resolves to its Blizzard slug through the realm list', () => {
+  const { resolveRealmSlug } = require('../src/app/lib/realms.ts');
+  const { regions } = require('../src/app/lib/realms.json');
+  assert.equal(resolveRealmSlug('twistingnether', regions), 'twisting-nether');
+  assert.equal(resolveRealmSlug('grim_batol', regions), 'grim-batol');
+  assert.equal(resolveRealmSlug('Draenor', regions), 'draenor');
+  // Unknown realms fall back to the plain conversion rather than vanishing.
+  assert.equal(resolveRealmSlug('Made_Up', regions), 'made-up');
+});
+
+test('trimmed render headers parse into bounds, and the body centre stays centred', () => {
+  const {
+    parseRenderBounds,
+    renderCentreShift,
+  } = require('../src/app/components/gear/useTrimmedRender.ts');
+  const r = parseRenderBounds('363,400,572,574', '1600,1200');
+  assert.deepEqual(r, { x: 363, y: 400, width: 572, height: 574, canvasWidth: 1600 });
+  assert.equal(parseRenderBounds(null, '1600,1200'), null);
+  assert.equal(parseRenderBounds('1,2,3', '1600,1200'), null);
+  assert.equal(parseRenderBounds('0,0,0,10', '1600,1200'), null);
+  // Klysus: canvas centre (800) sits 437px into a 572px-wide crop, so shift left by 76.4%.
+  assert.equal(renderCentreShift(r).toFixed(1), '76.4');
+  // A crop centred on the canvas shifts by exactly half its width.
+  assert.equal(renderCentreShift({ x: 700, y: 0, width: 200, height: 400, canvasWidth: 1600 }), 50);
 });

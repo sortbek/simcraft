@@ -27,7 +27,6 @@
   --c-q-artifact: 230 204 128;
   --c-q-heirloom: 0 204 255;
   /* DpsHeroCard art, faction tint and DPS glow */
-  --hero-art-o: 0.3;
   --hero-tint-a: 0.32;
   --hero-glow-a: 0.18;
   --c-route-boss: 255 207 90;
@@ -133,7 +132,6 @@
   --nav-on-bg: linear-gradient(rgb(248 243 234), rgb(248 243 234));
   --nav-on-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
   --hero-meta-bg: rgb(var(--c-surface-container-high));
-  --hero-art-o: 0.1;
   --hero-tint-a: 0.1;
   --hero-glow-a: 0;
   --c-route-boss: 176 120 0;

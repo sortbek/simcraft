@@ -18,6 +18,7 @@ import { useResolvedGear, equippedGearItems } from '../lib/useResolvedGear';
 import { useLanguage } from '../lib/i18n';
 import { useEnchantInfo, useGemInfo, useItemInfo } from '../lib/useItemInfo';
 import { parseCharacterInfo } from '../lib/character';
+import { useRealmSlug } from '../lib/realms';
 import { useComputeChoice } from '../lib/useComputeChoice';
 import {
   collectEnchantIds,
@@ -73,14 +74,16 @@ export default function QuickSimPage() {
   const goEnchantInfo = useEnchantInfo(goEnchantIds);
   const goGemInfo = useGemInfo(goGemIds);
 
-  const insetUrl =
-    characterInfo?.realm && characterInfo?.name
-      ? `https://simhammer.com/api/blizzard/character/${characterInfo.region}/${encodeURIComponent(characterInfo.realm.toLowerCase())}/${encodeURIComponent(characterInfo.name.toLowerCase())}/media/inset`
+  const realmSlug = useRealmSlug(characterInfo?.realm);
+  // The face icon reads best at thumbnail size.
+  const avatarUrl =
+    realmSlug && characterInfo?.name
+      ? `https://simhammer.com/api/blizzard/character/${characterInfo.region}/${encodeURIComponent(realmSlug)}/${encodeURIComponent(characterInfo.name.toLowerCase())}/media/avatar`
       : null;
 
   const renderUrl =
-    characterInfo?.realm && characterInfo?.name
-      ? `https://simhammer.com/api/blizzard/character/${characterInfo.region}/${encodeURIComponent(characterInfo.realm.toLowerCase())}/${encodeURIComponent(characterInfo.name.toLowerCase())}/media/render`
+    realmSlug && characterInfo?.name
+      ? `https://simhammer.com/api/blizzard/character/${characterInfo.region}/${encodeURIComponent(realmSlug)}/${encodeURIComponent(characterInfo.name.toLowerCase())}/media/render`
       : null;
 
   const buildPayload = useCallback(
@@ -115,9 +118,9 @@ export default function QuickSimPage() {
       {/* Character summary card */}
       {characterInfo && (
         <div className="card flex items-center gap-[18px] px-6 py-5">
-          {insetUrl && (
+          {avatarUrl && (
             <img
-              src={insetUrl}
+              src={avatarUrl}
               alt=""
               className="h-14 w-14 shrink-0 rounded-[10px] border border-line/[0.11] object-cover"
               onError={(e) => {

@@ -1,6 +1,7 @@
 import { toGemIdList, type GemInfo, type ItemQuery } from '../../lib/useItemInfo';
 import type { GearItem } from './GearOverview';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
+import { blizzardRealmSlug } from '../../lib/character';
 
 const GEAR_ORDER_LEFT = ['head', 'neck', 'shoulder', 'back', 'chest', 'wrist'];
 const GEAR_ORDER_RIGHT = [
@@ -327,7 +328,7 @@ export function getCharacterRenderUrl(
   }
 
   return `https://simhammer.com/api/blizzard/character/${playerRegion}/${encodeURIComponent(
-    playerRealm.toLowerCase()
+    blizzardRealmSlug(playerRealm)
   )}/${encodeURIComponent(playerName.toLowerCase())}/media/render`;
 }
 

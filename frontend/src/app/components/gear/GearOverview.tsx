@@ -7,6 +7,7 @@ import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import CardHeader from '../ui/CardHeader';
 import GearSlotRow from './GearSlotRow';
+import { renderCentreShift, useTrimmedRender } from './useTrimmedRender';
 import {
   GEAR_ORDER_BOTTOM,
   GEAR_ORDER_LEFT,
@@ -48,6 +49,7 @@ export default function GearOverview({
     [itemInfoMap, enchantInfoMap, gemInfoMap]
   );
   useWowheadTooltips([wowheadKey]);
+  const render = useTrimmedRender(characterRenderUrl);
 
   if (Object.keys(gear).length === 0) {
     return null;
@@ -55,7 +57,7 @@ export default function GearOverview({
 
   // minmax(0,…): a long gem/enchant line truncates instead of pushing the right column out.
   const gridCols = characterRenderUrl
-    ? 'grid-cols-[minmax(0,1fr)_220px_minmax(0,1fr)]'
+    ? 'grid-cols-[minmax(0,1fr)_clamp(180px,27%,300px)_minmax(0,1fr)]'
     : 'grid-cols-2';
   const avgIlvl = averageItemLevel(gear);
 
@@ -72,16 +74,31 @@ export default function GearOverview({
           )
         }
       />
-      <div className="relative px-6 py-[22px]">
-        {characterRenderUrl && (
-          <img
-            src={characterRenderUrl}
-            alt=""
-            className="pointer-events-none absolute inset-0 mx-auto h-[130%] w-auto -translate-y-[12%] object-contain opacity-30"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
-            }}
-          />
+      <div className="relative overflow-hidden px-6 py-[22px]">
+        {characterRenderUrl && (render.status === 'trimmed' || render.status === 'full') && (
+          // Spotlight: warm key light behind the character, contact shadow at the feet.
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[380px] -translate-x-1/2">
+            <div className="absolute -inset-x-[20%] -top-[10%] bottom-0 bg-[radial-gradient(ellipse_42%_55%_at_50%_38%,rgb(var(--c-gold-light)/0.16),rgb(var(--c-gold-light)/0.05)_45%,transparent_70%)]" />
+            <div className="absolute bottom-[2.5%] left-1/2 h-[34px] w-[220px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.75),transparent_70%)]" />
+            {render.status === 'trimmed' ? (
+              <img
+                src={render.src}
+                alt=""
+                // Same height for every race; feet on the contact shadow.
+                className="absolute bottom-[4%] left-1/2 h-[88%] w-auto max-w-none [filter:drop-shadow(0_0_1px_rgba(255,230,180,0.35))_drop-shadow(0_20px_30px_rgba(0,0,0,0.6))] [mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
+                style={{ transform: `translateX(-${renderCentreShift(render.bounds)}%)` }}
+              />
+            ) : (
+              <img
+                src={characterRenderUrl}
+                alt=""
+                // No bounds from the API: Blizzard renders stand on a ground line ~82%
+                // down a mostly empty 1600×1200 canvas; scale it so that line sits on
+                // the contact shadow. Tall models fade out at the body's top edge.
+                className="absolute bottom-[-23%] left-1/2 h-[149%] w-auto max-w-none -translate-x-1/2 [filter:drop-shadow(0_0_1px_rgba(255,230,180,0.35))_drop-shadow(0_20px_30px_rgba(0,0,0,0.6))] [mask-image:linear-gradient(to_bottom,transparent_17%,#000_22%,#000_75%,transparent_82%)]"
+              />
+            )}
+          </div>
         )}
         <div className={`relative grid items-start gap-2 ${gridCols}`}>
           <div className="flex flex-col gap-1.5">

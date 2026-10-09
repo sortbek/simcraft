@@ -16,6 +16,14 @@ export interface CharacterInfo {
   region: string;
 }
 
+/** SimC writes `server=grim_batol`; Blizzard's API wants `grim-batol` (apostrophes dropped). */
+export function blizzardRealmSlug(realm: string): string {
+  return realm
+    .toLowerCase()
+    .replace(/'/g, '')
+    .replace(/[\s_]+/g, '-');
+}
+
 const NAME_LINE = /^(\w+)="(.+)"$/m;
 const SPEC_LINE = /^spec=(\w+)/m;
 const SERVER_LINE = /^server=(.+)$/m;

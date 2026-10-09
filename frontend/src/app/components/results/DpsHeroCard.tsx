@@ -2,6 +2,7 @@
 
 import { API_URL } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
+import { useRealmSlug } from '../../lib/realms';
 import Pill from '../ui/Pill';
 import HeroMetaStat from './HeroMetaStat';
 import {
@@ -9,7 +10,6 @@ import {
   FACTION_ICONS,
   formatDuration,
   formatElapsed,
-  getCharacterMediaUrl,
   useFaction,
 } from './dpsHeroUtils';
 
@@ -74,8 +74,8 @@ export default function DpsHeroCard({
     (iterations != null && iterations > 0) ||
     elapsedTime != null;
 
-  const faction = useFaction(playerRealm, playerName, playerRegion);
-  const insetUrl = getCharacterMediaUrl(playerRealm, playerName, 'inset', playerRegion);
+  const realmSlug = useRealmSlug(playerRealm);
+  const faction = useFaction(realmSlug, playerName, playerRegion);
 
   return (
     <section
@@ -83,16 +83,6 @@ export default function DpsHeroCard({
       style={{ background: HERO_BASE }}
     >
       <div className="absolute inset-0 z-0">
-        {insetUrl && (
-          <img
-            src={insetUrl}
-            alt=""
-            className="h-full w-full object-cover opacity-[var(--hero-art-o)] grayscale"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        )}
         <div className="absolute inset-0 bg-gradient-to-r from-surface-container via-surface-container/80 to-transparent" />
       </div>
 

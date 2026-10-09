@@ -9,6 +9,7 @@ import TopGearRankings from './TopGearRankings';
 import EncounterSummary from './EncounterSummary';
 import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
+import { useRealmSlug } from '../../lib/realms';
 import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import type { GearItem } from './gearOverviewTypes';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
@@ -119,7 +120,11 @@ export default function TopGearResults({
   useWowheadTooltips([wowheadKey]);
 
   const hasGearOverview = equippedGear && Object.keys(equippedGear).length > 0;
-  const characterRenderUrl = getCharacterRenderUrl(playerRealm, playerName, playerRegion);
+  const characterRenderUrl = getCharacterRenderUrl(
+    useRealmSlug(playerRealm),
+    playerName,
+    playerRegion
+  );
 
   return (
     <div className="space-y-6">
