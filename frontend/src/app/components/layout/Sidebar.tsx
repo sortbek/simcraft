@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import LanguageSelector from './LanguageSelector';
 import { ScaleSelector } from './ContentScaler';
 import ThemeSelector from './ThemeSelector';
@@ -11,6 +11,31 @@ import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
 import { ROUTES, SIM_RESULT_PREFIX, isRouteActive } from '../../lib/routes';
 import packageJson from '../../../../package.json';
+import Tooltip from '../ui/Tooltip';
+import ToolIcon, { type ToolIconName } from '../ui/ToolIcon';
+
+const STORAGE_KEY = 'simhammer_sidebar';
+
+/** Collapsed state lives on <html data-sidebar>, set before paint by layout.tsx;
+ *  this mirrors it for tooltips and the toggle. */
+function useSidebarCollapsed() {
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    setCollapsed(document.documentElement.dataset.sidebar === 'collapsed');
+  }, []);
+  const toggle = useCallback(() => {
+    // The attribute is the source of truth; React only mirrors it.
+    const root = document.documentElement;
+    const next = root.dataset.sidebar !== 'collapsed';
+    if (next) root.dataset.sidebar = 'collapsed';
+    else delete root.dataset.sidebar;
+    try {
+      localStorage.setItem(STORAGE_KEY, next ? 'collapsed' : 'expanded');
+    } catch {}
+    setCollapsed(next);
+  }, []);
+  return { collapsed, toggle };
+}
 
 const IPlay = () => (
   <svg className="h-3 w-3" viewBox="0 0 11 11" fill="none">
@@ -62,29 +87,38 @@ interface NavItemProps {
   label: string;
   matchPaths?: readonly string[];
   pathname: string;
-  icon?: ReactNode;
+  icon: ToolIconName;
+  collapsed: boolean;
 }
 
-function NavItem({ href, label, matchPaths, pathname, icon }: NavItemProps) {
+function NavItem({ href, label, matchPaths, pathname, icon, collapsed }: NavItemProps) {
   const isActive = isRouteActive(pathname, matchPaths ?? [href]);
   return (
-    <Link
-      href={href}
-      className={`relative flex h-10 items-center gap-2.5 px-[22px] font-headline text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors duration-[120ms] ${
-        isActive
-          ? 'bg-[image:var(--nav-on-bg)] text-gold [box-shadow:var(--nav-on-shadow)] after:absolute after:bottom-2 after:right-0 after:top-2 after:w-[3px] after:rounded-l-[3px] after:bg-gold-fill'
-          : 'text-on-surface-variant hover:bg-overlay/[0.02] hover:text-on-surface'
-      }`}
-    >
-      {icon}
-      {label}
-    </Link>
+    <Tooltip text={collapsed ? label : undefined}>
+      <Link
+        href={href}
+        aria-label={label}
+        className={`sb-item relative flex h-10 items-center gap-2.5 px-[22px] font-headline text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors duration-[120ms] ${
+          isActive
+            ? 'bg-[image:var(--nav-on-bg)] text-gold [box-shadow:var(--nav-on-shadow)] after:absolute after:bottom-2 after:right-0 after:top-2 after:w-[3px] after:rounded-l-[3px] after:bg-gold-fill'
+            : 'text-on-surface-variant hover:bg-overlay/[0.02] hover:text-on-surface'
+        }`}
+      >
+        <ToolIcon name={icon} className="h-4 w-4" />
+        <span className="sb-full">{label}</span>
+      </Link>
+    </Tooltip>
   );
 }
 
 function GroupLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`lbl mb-1.5 select-none px-[22px] ${className ?? 'mt-3.5'}`}>{children}</div>
+    <>
+      <div className={`sb-full lbl mb-1.5 select-none px-[22px] ${className ?? 'mt-3.5'}`}>
+        {children}
+      </div>
+      <div className="sb-rail mx-4 my-2.5 h-px bg-line/[0.06]" />
+    </>
   );
 }
 
@@ -118,92 +152,137 @@ export default function Sidebar() {
   const { t } = useLanguage();
 
   const isQuickSim = isRouteActive(pathname, [ROUTES.quickSim]);
+  const { collapsed, toggle } = useSidebarCollapsed();
 
   return (
-    <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-[248px] flex-col border-r border-line/[0.06] bg-surface-container-lowest">
-      <div className="desktop-drag flex h-16 shrink-0 items-center px-[22px]">
+    <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-[var(--sidebar-w)] flex-col overflow-hidden border-r border-line/[0.06] bg-surface-container-lowest transition-[width] duration-200">
+      <div className="sb-item desktop-drag flex h-16 shrink-0 items-center px-[22px]">
         <Link
           href="/"
+          aria-label="SimHammer"
           className="desktop-no-drag font-headline text-[19px] font-extrabold uppercase tracking-[0.02em] text-gold transition-colors hover:text-gold-light"
         >
-          SimHammer
+          <span className="sb-full">SimHammer</span>
+          <span className="sb-rail">S</span>
         </Link>
-        <span className="ml-auto text-[11px] font-semibold tabular-nums text-outline">
+        <span className="sb-full ml-auto text-[11px] font-semibold tabular-nums text-outline">
           v{packageJson.version}
         </span>
       </div>
 
-      <nav className="flex-1 overflow-y-auto">
-        <Link
-          href={ROUTES.quickSim}
-          className={`mx-3.5 mb-[18px] mt-1 flex h-[42px] items-center gap-2.5 rounded-[6px] border px-4 font-headline text-xs font-extrabold uppercase tracking-[0.14em] transition-colors duration-150 ${
-            isQuickSim
-              ? 'border-gold-fill bg-gold-fill text-on-primary'
-              : 'border-gold-edge bg-gold-tint text-gold hover:border-gold/55 hover:bg-gold/20'
-          }`}
-        >
-          <IPlay />
-          {t('nav.quickSim')}
-        </Link>
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden">
+        <Tooltip text={collapsed ? t('nav.quickSim') : undefined}>
+          <Link
+            href={ROUTES.quickSim}
+            aria-label={t('nav.quickSim')}
+            className={`sb-quick mx-3.5 mb-[18px] mt-1 flex h-[42px] items-center gap-2.5 rounded-[6px] border px-4 font-headline text-xs font-extrabold uppercase tracking-[0.14em] transition-colors duration-150 ${
+              isQuickSim
+                ? 'border-gold-fill bg-gold-fill text-on-primary'
+                : 'border-gold-edge bg-gold-tint text-gold hover:border-gold/55 hover:bg-gold/20'
+            }`}
+          >
+            <IPlay />
+            <span className="sb-full">{t('nav.quickSim')}</span>
+          </Link>
+        </Tooltip>
 
         <GroupLabel>{t('nav.simTools')}</GroupLabel>
-        <NavItem href={ROUTES.topGear} label={t('nav.topGear')} pathname={pathname} />
-        <NavItem href={ROUTES.dropFinder} label={t('nav.dropFinder')} pathname={pathname} />
-        <NavItem href={ROUTES.upgradeCompare} label={t('nav.crestUpgrades')} pathname={pathname} />
-        <NavItem href={ROUTES.raidRoster} label={t('nav.raidRoster')} pathname={pathname} />
-        <NavItem href={ROUTES.advanced} label={t('nav.advancedSim')} pathname={pathname} />
+        {(
+          [
+            [ROUTES.topGear, 'nav.topGear', 'top'],
+            [ROUTES.dropFinder, 'nav.dropFinder', 'drop'],
+            [ROUTES.upgradeCompare, 'nav.crestUpgrades', 'crest'],
+            [ROUTES.raidRoster, 'nav.raidRoster', 'roster'],
+            [ROUTES.advanced, 'nav.advancedSim', 'advanced'],
+          ] as const
+        ).map(([href, label, icon]) => (
+          <NavItem
+            key={href}
+            href={href}
+            label={t(label)}
+            icon={icon}
+            pathname={pathname}
+            collapsed={collapsed}
+          />
+        ))}
 
         <GroupLabel className="mt-[22px]">{t('nav.library')}</GroupLabel>
-        <NavItem href={ROUTES.routesManager} label={t('nav.routes')} pathname={pathname} />
+        <NavItem
+          href={ROUTES.routesManager}
+          label={t('nav.routes')}
+          icon="routes"
+          pathname={pathname}
+          collapsed={collapsed}
+        />
         <NavItem
           href={ROUTES.sims}
           label={t('nav.mySims')}
+          icon="sims"
           matchPaths={[ROUTES.sims, SIM_RESULT_PREFIX, ROUTES.history]}
           pathname={pathname}
+          collapsed={collapsed}
         />
       </nav>
 
       <div className="mt-auto flex shrink-0 flex-col gap-1 border-t border-line/[0.06] py-2.5">
         {isDesktop && (
-          <Link
-            href={ROUTES.settings}
-            className={`flex items-center gap-2.5 px-[22px] py-1.5 font-headline text-xs font-bold uppercase tracking-[0.1em] transition-colors ${
-              isRouteActive(pathname, [ROUTES.settings])
-                ? 'text-gold'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <IGear />
-            {t('common.settings')}
-          </Link>
+          <Tooltip text={collapsed ? t('common.settings') : undefined}>
+            <Link
+              href={ROUTES.settings}
+              aria-label={t('common.settings')}
+              className={`sb-item flex items-center gap-2.5 px-[22px] py-1.5 font-headline text-xs font-bold uppercase tracking-[0.1em] transition-colors ${
+                isRouteActive(pathname, [ROUTES.settings])
+                  ? 'text-gold'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <IGear />
+              <span className="sb-full">{t('common.settings')}</span>
+            </Link>
+          </Tooltip>
         )}
 
-        <UpdateChecker />
+        <div className="sb-full flex flex-col gap-1">
+          <UpdateChecker />
 
-        <div className="flex items-center justify-around px-[22px]">
-          <FooterIcon
-            href="https://discord.gg/grfTa87Jxa"
-            label={t('nav.discord')}
-            icon={<IDiscord />}
-          />
-          <FooterIcon
-            href="https://github.com/sortbek/simcraft"
-            label={t('nav.github')}
-            icon={<IGitHub />}
-          />
-          <FooterIcon href="https://simhammer.com" label={t('nav.website')} icon={<IGlobe />} />
+          <div className="flex items-center justify-around px-[22px]">
+            <FooterIcon
+              href="https://discord.gg/grfTa87Jxa"
+              label={t('nav.discord')}
+              icon={<IDiscord />}
+            />
+            <FooterIcon
+              href="https://github.com/sortbek/simcraft"
+              label={t('nav.github')}
+              icon={<IGitHub />}
+            />
+            <FooterIcon href="https://simhammer.com" label={t('nav.website')} icon={<IGlobe />} />
+          </div>
+
+          {/* Zoom, theme + language kept here until they migrate to /settings. */}
+          <FooterRow label={t('layout.zoom')}>
+            <ScaleSelector />
+          </FooterRow>
+          <FooterRow label={t('layout.theme')}>
+            <ThemeSelector />
+          </FooterRow>
+          <FooterRow label={t('layout.language')}>
+            <LanguageSelector />
+          </FooterRow>
         </div>
 
-        {/* Zoom, theme + language kept here until they migrate to /settings. */}
-        <FooterRow label={t('layout.zoom')}>
-          <ScaleSelector />
-        </FooterRow>
-        <FooterRow label={t('layout.theme')}>
-          <ThemeSelector />
-        </FooterRow>
-        <FooterRow label={t('layout.language')}>
-          <LanguageSelector />
-        </FooterRow>
+        <Tooltip text={collapsed ? t('nav.expandSidebar') : undefined}>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            aria-expanded={!collapsed}
+            className="sb-item flex h-9 w-full items-center gap-2.5 px-[22px] text-outline transition-colors hover:text-on-surface"
+          >
+            <ToolIcon name={collapsed ? 'expand' : 'collapse'} className="h-4 w-4" />
+            <span className="sb-full lbl !text-inherit">{t('nav.collapseSidebar')}</span>
+          </button>
+        </Tooltip>
       </div>
     </aside>
   );

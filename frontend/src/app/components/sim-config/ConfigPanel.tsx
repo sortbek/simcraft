@@ -36,7 +36,7 @@ export default function ConfigFooter({
   notice,
 }: ConfigFooterProps) {
   return (
-    <div className="fixed bottom-0 left-[248px] right-0 z-30">
+    <div className="fixed bottom-0 left-[var(--sidebar-w)] right-0 z-30 transition-[left] duration-200">
       {notice}
 
       <ConfigFooterBar

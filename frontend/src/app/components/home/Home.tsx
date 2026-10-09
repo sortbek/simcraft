@@ -17,12 +17,12 @@ import { timeAgo } from '../../sims/_components/shared';
 import CharacterImport from '../layout/CharacterImport';
 import CardHeader from '../ui/CardHeader';
 import HomeHero from './HomeHero';
-import { HomeIcon, type HomeIconName } from './HomeIcons';
+import ToolIcon, { type ToolIconName } from '../ui/ToolIcon';
 import { lastDoneBySimType, quickSimTrend, recentJobs } from './homeModel';
 import { useCharacterJobs, useRecentJobs, useSeasonRotation, zoneBackground } from './useHomeData';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 
-const TOOLS: { simType: string; route: string; question: string; icon: HomeIconName }[] = [
+const TOOLS: { simType: string; route: string; question: string; icon: ToolIconName }[] = [
   { simType: 'quick', route: ROUTES.quickSim, question: 'home.qQuick', icon: 'quick' },
   { simType: 'top_gear', route: ROUTES.topGear, question: 'home.qTopGear', icon: 'top' },
   { simType: 'droptimizer', route: ROUTES.dropFinder, question: 'home.qDrop', icon: 'drop' },
@@ -61,7 +61,7 @@ function QuestionCards({ lastRun }: { lastRun?: Record<string, string> }) {
           className={`${CARD} group flex flex-col p-[18px] transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gold/35`}
         >
           <span className="grid h-[34px] w-[34px] place-items-center rounded-[9px] bg-gold-tint text-gold">
-            <HomeIcon name={tool.icon} />
+            <ToolIcon name={tool.icon} />
           </span>
           <span className="mt-3 font-headline text-base font-bold leading-snug text-on-surface">
             {t(tool.question)}
@@ -70,7 +70,7 @@ function QuestionCards({ lastRun }: { lastRun?: Record<string, string> }) {
           {lastRun && (
             <span className="mt-3.5 flex items-center justify-between border-t border-line/[0.06] pt-3 text-xs text-on-surface-variant">
               {lastRun[tool.simType] ?? t('home.notRunYet')}
-              <HomeIcon
+              <ToolIcon
                 name="arrow"
                 className="h-4 w-4 text-outline transition-colors group-hover:text-gold"
               />

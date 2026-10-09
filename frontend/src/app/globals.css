@@ -384,6 +384,37 @@
   }
 }
 
+/* Sidebar: full width or a slim icon rail. The root attribute is set before
+   first paint (layout.tsx), so the collapsed state never flashes wide. */
+:root {
+  --sidebar-w: 248px;
+}
+:root[data-sidebar='collapsed'] {
+  --sidebar-w: 64px;
+}
+.sb-rail {
+  display: none;
+}
+:root[data-sidebar='collapsed'] .sb-rail {
+  display: flex;
+}
+:root[data-sidebar='collapsed'] .sb-full {
+  display: none;
+}
+:root[data-sidebar='collapsed'] .sb-item {
+  width: var(--sidebar-w);
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+:root[data-sidebar='collapsed'] .sb-quick {
+  width: 42px;
+  margin-left: 11px;
+  margin-right: 11px;
+  justify-content: center;
+  padding: 0;
+}
+
 /* Top Gear tools row: the density switch yields first on narrow screens. */
 .topgear-tools {
   container-type: inline-size;

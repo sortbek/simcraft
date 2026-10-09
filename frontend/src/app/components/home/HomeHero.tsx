@@ -8,7 +8,7 @@ import { specDisplayName } from '../../lib/types';
 import { buttonClass } from '../ui/Button';
 import { renderCentreShift, useTrimmedRender } from '../gear/useTrimmedRender';
 import { trendChange } from './homeModel';
-import { HomeIcon } from './HomeIcons';
+import ToolIcon from '../ui/ToolIcon';
 
 interface HomeHeroProps {
   name: string;
@@ -149,11 +149,11 @@ export default function HomeHero({
 
         <div className="mt-2 flex flex-wrap gap-2.5">
           <Link href={ROUTES.quickSim} className={buttonClass('solid', 'lg')}>
-            <HomeIcon name="quick" className="h-4 w-4" />
+            <ToolIcon name="quick" className="h-4 w-4" />
             {t('home.simAgain')}
           </Link>
           <Link href={ROUTES.topGear} className={buttonClass('gold', 'lg')}>
-            <HomeIcon name="top" className="h-4 w-4" />
+            <ToolIcon name="top" className="h-4 w-4" />
             {t('home.findTopGear')}
           </Link>
         </div>
