@@ -8,16 +8,13 @@ import {
   getCharacters,
   upsertCharacter,
   deleteCharacter,
-  fetchArmoryCharacter,
   type SavedCharacter,
 } from '../../lib/saved-characters';
-import { REGIONS } from '../../lib/regions';
-import { loadRealms, type RealmInfo } from '../../lib/realms';
 import WindowControls from './WindowTitlebar';
+import CharacterImport from './CharacterImport';
 import DesktopAppLink from './DesktopAppLink';
 import ActiveSimsIndicator from './ActiveSimsIndicator';
 import Button from '../ui/Button';
-import { TABS_TRACK, tabClass } from '../ui/ToggleButtonGroup';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
 import { isValidSimcExport, validateChecksum } from '../../lib/simcDetect';
@@ -30,7 +27,6 @@ export default function TopBar() {
   const router = useRouter();
   const pathname = usePathname();
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
   const [showChars, setShowChars] = useState(false);
   const [characters, setCharacters] = useState<SavedCharacter[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
@@ -38,66 +34,6 @@ export default function TopBar() {
   const [shareError, setShareError] = useState('');
   const { simcInput, setSimcInput, unsimmableSpec } = useSimContext();
   const containerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Armory import tab state (the SimC paste box is the other tab)
-  const [importTab, setImportTab] = useState<'simc' | 'armory'>('simc');
-  const [armoryRegion, setArmoryRegion] = useState<string>('eu');
-  const [armoryRealm, setArmoryRealm] = useState(''); // holds the realm slug
-  const [armoryName, setArmoryName] = useState('');
-  const [armoryFetching, setArmoryFetching] = useState(false);
-  const [armoryError, setArmoryError] = useState('');
-  const [realmsByRegion, setRealmsByRegion] = useState<Record<string, RealmInfo[]> | null>(null);
-  const [realmsError, setRealmsError] = useState(false);
-
-  // Lazy-load the realm list the first time the Armory tab is opened.
-  useEffect(() => {
-    if (importTab !== 'armory' || realmsByRegion) return;
-    let cancelled = false;
-    loadRealms()
-      .then((r) => {
-        if (!cancelled) {
-          setRealmsByRegion(r);
-          setRealmsError(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setRealmsError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [importTab, realmsByRegion]);
-
-  const regionRealms = realmsByRegion?.[armoryRegion] ?? [];
-  const canFetch = armoryRealm.trim() !== '' && armoryName.trim() !== '' && !armoryFetching;
-
-  // Shared by both import tabs' footers.
-  const cancelButton = (
-    <Button variant="text" onClick={() => setEditing(false)}>
-      {t('common.cancel')}
-    </Button>
-  );
-
-  const handleArmoryFetch = useCallback(async () => {
-    if (!canFetch) return;
-    setArmoryFetching(true);
-    setArmoryError('');
-    try {
-      const { simc_input } = await fetchArmoryCharacter(
-        armoryRegion,
-        armoryRealm.trim(),
-        armoryName.trim()
-      );
-      // Drop the generated profile into the SimC box for review; Apply persists it.
-      setEditValue(simc_input);
-      setImportTab('simc');
-    } catch (e) {
-      setArmoryError(e instanceof Error ? e.message : 'Armory fetch failed');
-    } finally {
-      setArmoryFetching(false);
-    }
-  }, [canFetch, armoryRegion, armoryRealm, armoryName]);
 
   const characterInfo = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
   const checksumWarning = useMemo(
@@ -137,15 +73,6 @@ export default function TopBar() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [editing, showChars, shareOpen]);
-
-  // Focus textarea when opening editor
-  const wasEditing = useRef(false);
-  useEffect(() => {
-    if (editing && !wasEditing.current && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-    wasEditing.current = editing;
-  }, [editing]);
 
   // Clipboard sync on focus (desktop only, opt-in via Settings)
   const [clipboardSync, setClipboardSync] = useState(() => {
@@ -249,7 +176,6 @@ export default function TopBar() {
               setEditing(false);
             } else {
               setEditing(true);
-              setEditValue(simcInput);
             }
           }}
           className="group flex h-[38px] items-center gap-2.5 rounded-[6px] px-3 transition-colors duration-[120ms] hover:bg-surface-container-high"
@@ -293,10 +219,7 @@ export default function TopBar() {
         {/* Inline SimC preview — click to open full editor below */}
         <button
           onClick={() => {
-            setEditing((v) => {
-              if (!v) setEditValue(simcInput);
-              return !v;
-            });
+            setEditing((v) => !v);
             setShowChars(false);
           }}
           className="flex h-[34px] w-[260px] min-w-0 shrink items-center rounded-[6px] border border-line/[0.06] bg-surface-container px-3 transition-colors hover:border-line/[0.11]"
@@ -461,126 +384,16 @@ export default function TopBar() {
       {/* Expanded import editor — drops below the top bar */}
       {editing && (
         <div className="popover desktop-no-drag absolute left-0 right-0 top-full z-50 rounded-none border-x-0 border-t-0 px-6 py-4">
-          <div className="mx-auto max-w-3xl space-y-3">
-            {/* Import source tabs: paste a SimC string or fetch from the armory */}
-            <div className={TABS_TRACK}>
-              {(['simc', 'armory'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setImportTab(tab)}
-                  aria-pressed={importTab === tab}
-                  className={tabClass(importTab === tab)}
-                >
-                  {tab === 'simc' ? t('layout.importTabSimc') : t('layout.importTabArmory')}
-                </button>
-              ))}
-            </div>
-
-            {importTab === 'simc' ? (
-              <>
-                <textarea
-                  ref={textareaRef}
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setEditing(false);
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      if (editValue.trim()) {
-                        setSimcInput(editValue);
-                        setEditing(false);
-                      }
-                    }
-                  }}
-                  placeholder={t('layout.pasteSimcExportFull')}
-                  className="input-field h-48 resize-y font-mono text-[12px] leading-relaxed"
-                />
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={() => {
-                      setSimcInput(editValue);
-                      setEditing(false);
-                    }}
-                    disabled={!editValue.trim()}
-                  >
-                    {t('common.apply')}
-                  </Button>
-                  {cancelButton}
-                </div>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <select
-                    value={armoryRegion}
-                    onChange={(e) => {
-                      setArmoryRegion(e.target.value);
-                      setArmoryRealm('');
-                    }}
-                    className="sel w-auto text-[13px] uppercase"
-                  >
-                    {REGIONS.map((r) => (
-                      <option key={r} value={r}>
-                        {r.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={armoryRealm}
-                    onChange={(e) => setArmoryRealm(e.target.value)}
-                    disabled={regionRealms.length === 0}
-                    className="sel w-48 text-[13px] disabled:opacity-40"
-                  >
-                    <option value="">
-                      {realmsError
-                        ? t('layout.armoryRealmsUnavailable')
-                        : realmsByRegion
-                          ? t('layout.armorySelectRealm')
-                          : t('layout.armoryRealmsLoading')}
-                    </option>
-                    {regionRealms.map((r) => (
-                      <option key={r.slug} value={r.slug}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={armoryName}
-                    onChange={(e) => setArmoryName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') setEditing(false);
-                      if (e.key === 'Enter') handleArmoryFetch();
-                    }}
-                    placeholder={t('layout.armoryNamePlaceholder')}
-                    className="input-field h-[38px] w-auto flex-1 py-0 text-[13px]"
-                  />
-                </div>
-                {armoryError && <p className="text-[12px] text-negative">{armoryError}</p>}
-                <div className="flex items-center gap-2">
-                  <Button onClick={handleArmoryFetch} disabled={!canFetch}>
-                    {armoryFetching && (
-                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        />
-                      </svg>
-                    )}
-                    {armoryFetching ? t('layout.armoryFetching') : t('layout.armoryFetch')}
-                  </Button>
-                  {cancelButton}
-                </div>
-              </div>
-            )}
+          <div className="mx-auto max-w-3xl">
+            <CharacterImport
+              initialValue={simcInput}
+              autoFocus
+              onApply={(text) => {
+                setSimcInput(text);
+                setEditing(false);
+              }}
+              onCancel={() => setEditing(false)}
+            />
           </div>
         </div>
       )}

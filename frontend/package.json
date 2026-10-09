@@ -21,7 +21,8 @@
     "test:simclog": "node --test scripts/test-simc-log.cjs",
     "test:iteminfo": "node --test scripts/test-item-info.cjs",
     "test:profiles": "node --test scripts/test-profile-sections.cjs",
-    "test:talents": "node --test scripts/test-talents.cjs"
+    "test:talents": "node --test scripts/test-talents.cjs",
+    "test:home": "node --test scripts/test-home.cjs"
   },
   "dependencies": {
     "next": "^15.5.14",

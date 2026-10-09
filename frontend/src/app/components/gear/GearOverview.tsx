@@ -159,7 +159,7 @@ export default function GearOverview({
 
 /** Equipped item level the way the game shows it: 16 slots, a main hand with no
  *  off hand counted twice. Null when nothing has an item level. */
-function averageItemLevel(gear: Record<string, GearItem>): number | null {
+export function averageItemLevel(gear: Record<string, GearItem>): number | null {
   const items = Object.values(gear).filter((g) => g.item_id > 0 && g.ilevel > 0);
   if (items.length === 0) return null;
   const sum = items.reduce((total, g) => total + g.ilevel, 0);

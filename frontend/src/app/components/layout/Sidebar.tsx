@@ -10,6 +10,7 @@ import UpdateChecker from './UpdateChecker';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
 import { ROUTES, SIM_RESULT_PREFIX, isRouteActive } from '../../lib/routes';
+import packageJson from '../../../../package.json';
 
 const IPlay = () => (
   <svg className="h-3 w-3" viewBox="0 0 11 11" fill="none">
@@ -121,8 +122,14 @@ export default function Sidebar() {
   return (
     <aside className="desktop-no-drag fixed left-0 top-0 z-40 flex h-full w-[248px] flex-col border-r border-line/[0.06] bg-surface-container-lowest">
       <div className="desktop-drag flex h-16 shrink-0 items-center px-[22px]">
-        <span className="desktop-no-drag font-headline text-[19px] font-extrabold uppercase tracking-[0.02em] text-gold">
+        <Link
+          href="/"
+          className="desktop-no-drag font-headline text-[19px] font-extrabold uppercase tracking-[0.02em] text-gold transition-colors hover:text-gold-light"
+        >
           SimHammer
+        </Link>
+        <span className="ml-auto text-[11px] font-semibold tabular-nums text-outline">
+          v{packageJson.version}
         </span>
       </div>
 

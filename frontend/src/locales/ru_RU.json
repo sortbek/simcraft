@@ -291,8 +291,6 @@
   "advanced.title": "Прямой ввод SimC",
   "advanced.description": "Вставьте или напишите прямой ввод SimulationCraft. Он будет отправлен напрямую в SimC без обработки.",
   "advanced.placeholder": "Вставьте ваш прямой ввод SimC здесь...\n\nПример:\nwarrior=\"Воин\"\nlevel=80\nrace=human\nspec=fury\n...",
-  "home.selectSimType": "Выбери тип симуляции выше, чтобы начать.",
-  "footer.disclaimer": "SimHammer — это хобби-проект, который держится на кофе, скотче и молитвах богам ГСЧ. Баги — это не фичи, но они могут насимить больше, чем твоя экипировка. Используй на свой страх и риск. Не связан с Blizzard, Raidbots или кем-либо, кто знает, что делает.",
   "button.runSimulation": "Запустить симуляцию",
   "button.findTopGear": "Найти Top Gear",
   "button.findUpgrades": "Найти улучшения",

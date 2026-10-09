@@ -332,6 +332,20 @@ export function getCharacterRenderUrl(
   )}/${encodeURIComponent(playerName.toLowerCase())}/media/render`;
 }
 
+/** Blizzard's small face portrait of a character. */
+export function getCharacterAvatarUrl(
+  playerRealm?: string | null,
+  playerName?: string | null,
+  playerRegion = 'eu'
+): string | null {
+  const render = getCharacterRenderUrl(
+    playerRealm ?? undefined,
+    playerName ?? undefined,
+    playerRegion
+  );
+  return render && render.replace(/\/render$/, '/avatar');
+}
+
 /** What one source (boss, dungeon, vendor) is worth across everything it drops. */
 export interface EncounterSummaryRow {
   encounter: string;

@@ -337,8 +337,6 @@
   "advanced.title": "SimC Raw 데이터 입력",
   "advanced.description": "SimulationCraft raw 데이터를 직접 붙여넣거나 작성합니다. 별도의 가공 없이 SimC로 바로 전달됩니다.",
   "advanced.placeholder": "SimC raw 데이터를 여기에 붙여넣으세요...\n\n예시:\nwarrior=\"Warrior\"\nlevel=80\nrace=human\nspec=fury\n...",
-  "home.selectSimType": "시작하려면 위에서 시뮬레이션 유형을 선택하세요.",
-  "footer.disclaimer": "SimHammer는 커피와 테이프, 그리고 RNG 신을 향한 기도로 유지되는 개인 프로젝트입니다. 버그는 의도된 기능이 아닙니다 — 하지만 당신의 장비보다 높은 심 결과를 낼 수도 있습니다. 사용에 따른 책임은 본인에게 있습니다. Blizzard, Raidbots 또는 제정신인 사람들과는 일절 관계가 없습니다.",
   "button.runSimulation": "시뮬레이션 실행",
   "button.findTopGear": "탑 기어 찾기",
   "button.findUpgrades": "업그레이드 찾기",

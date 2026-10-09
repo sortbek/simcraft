@@ -291,8 +291,6 @@
   "advanced.title": "Entrée SimC brute",
   "advanced.description": "Colle ou écris une entrée SimulationCraft brute. Elle sera envoyée directement à SimC sans aucun traitement.",
   "advanced.placeholder": "Colle ton entrée SimC brute ici...\n\nExemple :\nwarrior=\"Guerrier\"\nlevel=80\nrace=human\nspec=fury\n...",
-  "home.selectSimType": "Sélectionne un type de simulation ci-dessus pour commencer.",
-  "footer.disclaimer": "SimHammer est un projet perso tenu par du café, du scotch et des prières aux dieux du RNG. Les bugs ne sont pas des fonctionnalités — mais ils simulent peut-être mieux que ton équipement. Utilise à tes risques et périls. Non affilié à Blizzard, Raidbots, ni à quiconque sachant ce qu'il fait.",
   "button.runSimulation": "Lancer la simulation",
   "button.findTopGear": "Trouver le Top Gear",
   "button.findUpgrades": "Trouver les améliorations",

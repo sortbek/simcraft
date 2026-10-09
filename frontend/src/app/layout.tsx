@@ -3,7 +3,6 @@ import Script from 'next/script';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
 import AppScroll from './components/layout/AppScroll';
-import FooterDisclaimer from './components/layout/FooterDisclaimer';
 import { SimProvider } from './components/sim-config/SimContext';
 import { VIEWER_BUILD } from './lib/featureFlags';
 import { LanguageProvider } from './lib/i18n';
@@ -13,7 +12,6 @@ import { ThemeProvider } from './components/layout/ThemeSelector';
 import ViewerGate from './components/layout/ViewerGate';
 import SharedEditBanner from './components/share/SharedEditBanner';
 import './globals.css';
-import packageJson from '../../package.json';
 
 export const metadata: Metadata = {
   title: 'SimHammer',
@@ -63,7 +61,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       <AppScroll>
                         <SharedEditBanner />
                         <ContentScaler>{children}</ContentScaler>
-                        <FooterDisclaimer version={packageJson.version} />
                       </AppScroll>
                     </div>
                   </ActiveSimsProvider>

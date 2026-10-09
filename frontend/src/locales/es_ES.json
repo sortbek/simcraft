@@ -291,8 +291,6 @@
   "advanced.title": "Entrada SimC sin procesar",
   "advanced.description": "Pega o escribe entrada de SimulationCraft sin procesar. Se enviará directamente a SimC sin ningún procesamiento.",
   "advanced.placeholder": "Pega tu entrada SimC sin procesar aquí...\n\nEjemplo:\nwarrior=\"Guerrero\"\nlevel=80\nrace=human\nspec=fury\n...",
-  "home.selectSimType": "Selecciona un tipo de simulación arriba para empezar.",
-  "footer.disclaimer": "SimHammer es un proyecto personal sostenido con café, cinta adhesiva y plegarias a los dioses del RNG. Los bugs no son features — pero puede que simen más que tu equipo. Úsalo bajo tu propia responsabilidad. No afiliado con Blizzard, Raidbots ni nadie que sepa lo que hace.",
   "button.runSimulation": "Ejecutar simulación",
   "button.findTopGear": "Buscar mejor equipo",
   "button.findUpgrades": "Buscar mejoras",

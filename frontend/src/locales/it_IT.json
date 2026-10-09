@@ -291,8 +291,6 @@
   "advanced.title": "Input SimC grezzo",
   "advanced.description": "Incolla o scrivi input SimulationCraft grezzo. Verrà inviato direttamente a SimC senza alcuna elaborazione.",
   "advanced.placeholder": "Incolla il tuo input SimC grezzo qui...\n\nEsempio:\nwarrior=\"Guerriero\"\nlevel=80\nrace=human\nspec=fury\n...",
-  "home.selectSimType": "Seleziona un tipo di simulazione sopra per iniziare.",
-  "footer.disclaimer": "SimHammer è un progetto personale tenuto insieme da caffè, nastro adesivo e preghiere agli dei dell'RNG. I bug non sono feature — ma potrebbero simmare meglio del tuo equipaggiamento. Usalo a tuo rischio e pericolo. Non affiliato con Blizzard, Raidbots o chiunque sappia cosa sta facendo.",
   "button.runSimulation": "Avvia Simulazione",
   "button.findTopGear": "Trova Top Gear",
   "button.findUpgrades": "Trova Potenziamenti",
