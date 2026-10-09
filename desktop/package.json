@@ -14,7 +14,7 @@
     "publish": "node scripts/publish.js",
     "build:frontend": "npm run --prefix ../frontend build:desktop && node scripts/copy-frontend.js",
     "build:backend": "node scripts/build-backend.js",
-    "test": "node --test src/main/deeplink.test.js"
+    "test": "node --test src/main/deeplink.test.js src/main/windowBounds.test.js"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"

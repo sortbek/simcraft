@@ -1,13 +1,41 @@
+const fs = require("fs");
 const path = require("path");
-const { BrowserWindow } = require("electron");
+const { app, BrowserWindow, screen } = require("electron");
+const { defaultWindowBounds, restoreWindowBounds } = require("./windowBounds");
+
+// Its own file in userData: the dev settings.json is tracked in the repo.
+const statePath = () => path.join(app.getPath("userData"), "window-state.json");
+
+function loadWindowState() {
+  try {
+    return JSON.parse(fs.readFileSync(statePath(), "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function saveWindowState(win) {
+  try {
+    // Normal bounds are the restored size, even while maximized.
+    const state = { ...win.getNormalBounds(), maximized: win.isMaximized() };
+    fs.writeFileSync(statePath(), JSON.stringify(state));
+  } catch {
+    // Not worth failing a close over.
+  }
+}
 
 function createWindowController(config, ipcMain, shell) {
   let mainWindow = null;
 
   function createWindow() {
+    const saved = loadWindowState();
+    const workAreas = screen.getAllDisplays().map((d) => d.workArea);
+    const bounds =
+      restoreWindowBounds(saved, workAreas) ??
+      defaultWindowBounds(screen.getPrimaryDisplay().workArea);
+
     mainWindow = new BrowserWindow({
-      width: 1200,
-      height: 800,
+      ...bounds,
       frame: false,
       backgroundColor: "#0d0c0b",
       show: false,
@@ -21,8 +49,11 @@ function createWindowController(config, ipcMain, shell) {
     mainWindow.loadURL(config.getFrontendUrl());
 
     mainWindow.once("ready-to-show", () => {
+      if (saved?.maximized) mainWindow.maximize();
       mainWindow.show();
     });
+
+    mainWindow.on("close", () => saveWindowState(mainWindow));
 
     mainWindow.on("maximize", () => {
       mainWindow.webContents.send("window:maximized-changed", true);
