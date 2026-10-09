@@ -2300,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "simhammer-core"
-version = "4.5.3"
+version = "5.0.0"
 dependencies = [
  "actix-cors",
  "actix-files",
@@ -2330,7 +2330,7 @@ dependencies = [
 
 [[package]]
 name = "simhammer-server"
-version = "4.5.3"
+version = "5.0.0"
 dependencies = [
  "simhammer-core",
  "tokio",
