@@ -1,0 +1,63 @@
+name: Tests
+
+# Unit tests that lint.yml does not cover. The Rust suite stays in lint.yml
+# (it needs the full Raidbots dataset); this workflow covers the frontend and
+# desktop suites, which had no CI gate at all, plus the frontend typecheck.
+#
+# Commands here are mirrored by scripts/verify.sh so local and CI cannot drift.
+
+on:
+  pull_request:
+    branches: [master, dev]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # scripts/test-talents.cjs decodes real talent trees, so it reads the one
+      # game-data file it needs. Fetching all 52 would cost minutes for nothing.
+      - name: Fetch talent data
+        working-directory: .
+        run: |
+          mkdir -p backend/resources/data
+          curl -sL --fail -o backend/resources/data/talents.json \
+            https://www.raidbots.com/static/data/live/talents.json
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: node --test scripts/test-*.cjs
+
+      - name: Locale check
+        run: npm run check:locales
+
+  desktop:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No npm ci: these suites require only node:test and local modules.
+      # Installing electron here would add minutes and prove nothing.
+      - name: Unit tests
+        run: node --test src/main/deeplink.test.js src/main/windowBounds.test.js
