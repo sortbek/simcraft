@@ -373,8 +373,12 @@ export default function AddItemSearch({
                     {crafted && (
                       <div className="flex basis-full gap-2">
                         {showStats && (
-                          <div className="min-w-0 flex-1">
-                            <p className="mb-1 text-[11px] text-outline">Stats</p>
+                          <div
+                            role="group"
+                            aria-label={`Stats for ${item.name}`}
+                            className="min-w-0 flex-1"
+                          >
+                            <p className="lbl mb-1.5">Stats</p>
                             <PreferredStatsSelect
                               value={statPicks[item.item_id] ?? DEFAULT_PREFERRED_STATS}
                               onChange={(pair) =>
@@ -385,8 +389,12 @@ export default function AddItemSearch({
                           </div>
                         )}
                         {embellishments.length > 0 && (
-                          <div className="min-w-0 flex-1">
-                            <p className="mb-1 text-[11px] text-outline">Embellishment</p>
+                          <div
+                            role="group"
+                            aria-label={`Embellishment for ${item.name}`}
+                            className="min-w-0 flex-1"
+                          >
+                            <p className="lbl mb-1.5">Embellishment</p>
                             <EmbellishmentSelect
                               value={embellishmentPicks[item.item_id] ?? null}
                               onChange={(id) =>
