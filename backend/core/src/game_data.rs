@@ -894,8 +894,8 @@ mod season_filter_tests {
         ids.sort_unstable();
         assert_eq!(
             ids,
-            vec![1317, 1320],
-            "expected The Tidebound Grotto + The Venomous Abyss"
+            vec![1317, 1320, 1324],
+            "expected The Tidebound Grotto + The Venomous Abyss + The Unbinding of Kith'ix"
         );
     }
 
@@ -962,7 +962,7 @@ mod season_filter_tests {
                 checked += 1;
             }
         }
-        assert_eq!(checked, 9, "expected 9 bosses across this season's raids");
+        assert_eq!(checked, 10, "expected 10 bosses across this season's raids");
     }
 
     /// The flag has to survive into the drop payload, not just the item DB.
