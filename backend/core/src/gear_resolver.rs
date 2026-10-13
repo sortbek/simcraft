@@ -1199,6 +1199,70 @@ mod catalyst_tests {
         let manual = build_modified_item(source, &[], 0);
         assert!(build_catalyst_item(&manual, tier, "head").is_manual);
     }
+
+    /// Mage head slot resolved with catalyst on: `equipped` is the tier head line
+    /// suffix (e.g. `""` or `",redirected_base_stats=251199"`), and 251199 sits in
+    /// the bags. Both share one current-season Veteran+ bonus, so one ilevel.
+    fn mage_tier_head_with_bag_source(equipped_suffix: &str) -> SlotResolution {
+        let class_id = class_data::class_wow_id("mage").expect("mage class id");
+        let tier = item_db::catalyst_tier_item(class_id, 1).expect("mage head tier item");
+        let bonus = veteran_track_bonus_id(item_db::current_season_id())
+            .expect("current season has Veteran+ track bonuses");
+        let profile = format!(
+            "mage=\"Test\"\nlevel=80\nspec=frost\n\n\
+             head=,id={},bonus_id={bonus}{equipped_suffix}\n\
+             # head=,id=251199,bonus_id={bonus}\n",
+            tier.item_id
+        );
+        let parsed = crate::addon_parser::parse_simc_input(&profile);
+        let head = resolve_gear_with_catalyst(&parsed, Some(1))
+            .slots
+            .remove("head")
+            .expect("head slot resolved");
+
+        // Preconditions, so the assertions below can't pass vacuously.
+        let equipped = head.equipped.as_ref().expect("equipped tier head");
+        let source = head
+            .alternatives
+            .iter()
+            .find(|a| !a.is_catalyst && a.item_id == 251199)
+            .expect("bag head 251199 resolved");
+        assert!(source.can_catalyst, "bag head must be catalyst-eligible");
+        assert_eq!(
+            equipped.ilevel, source.ilevel,
+            "tier head and source must share an ilevel"
+        );
+        head
+    }
+
+    #[test]
+    fn same_ilevel_tier_piece_does_not_block_a_conversion() {
+        ensure_game_data_loaded();
+        let head = mage_tier_head_with_bag_source("");
+        assert!(
+            head.alternatives
+                .iter()
+                .any(|a| a.is_catalyst && a.source_item_id == 251199),
+            "a native tier head must not hide a conversion with other secondaries, uids: {:?}",
+            head.alternatives.iter().map(|a| &a.uid).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn owned_catalysed_piece_of_the_same_source_blocks_a_duplicate() {
+        ensure_game_data_loaded();
+        let head = mage_tier_head_with_bag_source(",redirected_base_stats=251199");
+        let equipped = head.equipped.as_ref().expect("equipped tier head");
+        assert_eq!(equipped.source_item_id, 251199);
+        assert!(
+            !head
+                .alternatives
+                .iter()
+                .any(|a| a.is_catalyst && a.source_item_id == 251199),
+            "an owned catalysed copy of 251199 must suppress a duplicate conversion, uids: {:?}",
+            head.alternatives.iter().map(|a| &a.uid).collect::<Vec<_>>()
+        );
+    }
 }
 
 #[cfg(test)]
