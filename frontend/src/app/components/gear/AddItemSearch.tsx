@@ -10,6 +10,7 @@ import Checkbox from '../ui/Checkbox';
 import { detectClass, detectSpec } from '../loot/types';
 import PreferredStatsSelect, { DEFAULT_PREFERRED_STATS } from '../loot/PreferredStatsSelect';
 import EmbellishmentSelect from '../loot/EmbellishmentSelect';
+import { embellishmentOptionsFor } from '../loot/lootItemRowModel';
 import type { ResolvedItem, SeasonConfigResponse } from '../../lib/types';
 import { addItemRequestBody, type IlvlOption, type SearchItem } from './addItemRequest';
 
@@ -70,7 +71,9 @@ export default function AddItemSearch({
   const [statPicks, setStatPicks] = useState<Record<number, [number, number]>>({});
   const [embellishmentPicks, setEmbellishmentPicks] = useState<Record<number, number>>({});
   const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
+  // Load once, on first open: the panel is always mounted, mostly closed.
   useEffect(() => {
+    if (!open || seasonConfig) return;
     let cancelled = false;
     fetchJsonOr<SeasonConfigResponse | null>(apiUrl('/api/season-config'), null).then((cfg) => {
       if (!cancelled) setSeasonConfig(cfg);
@@ -78,7 +81,7 @@ export default function AddItemSearch({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [open, seasonConfig]);
   // Debounced search; an AbortController drops stale responses.
   useEffect(() => {
     const q = query.trim();
@@ -282,8 +285,9 @@ export default function AddItemSearch({
                   options.find((o) => o.ilvl === chosenIlvl[item.item_id]) ?? options[0];
                 const selected = option?.ilvl;
                 const isAdding = adding === item.item_id;
-                const embellishments = (seasonConfig?.crafted_embellishments ?? []).filter((e) =>
-                  e.item_ids.includes(item.item_id)
+                const embellishments = embellishmentOptionsFor(
+                  seasonConfig?.crafted_embellishments ?? [],
+                  item.item_id
                 );
                 const showStats = !!item.accepts_preferred_stats;
                 const crafted = showStats || embellishments.length > 0;

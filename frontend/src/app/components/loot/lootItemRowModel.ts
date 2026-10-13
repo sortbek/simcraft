@@ -44,6 +44,14 @@ export interface LootItemRowContext {
   owned?: boolean;
 }
 
+/** The season embellishments that can be crafted onto `itemId`. */
+export function embellishmentOptionsFor(
+  options: CraftedEmbellishment[],
+  itemId: number
+): CraftedEmbellishment[] {
+  return options.filter((option) => option.item_ids.includes(itemId));
+}
+
 export function buildLootItemRow(
   item: DropItem,
   slot: string,
@@ -53,9 +61,9 @@ export function buildLootItemRow(
   const uid = dropUid(item);
   const selected = context.selected.has(uid);
   const inherits = resolveInherits(item.inventory_type, context.spec, context.equippedGear);
-  const options = context.embellishmentOptions?.filter((option) =>
-    option.item_ids.includes(item.item_id)
-  );
+  const options =
+    context.embellishmentOptions &&
+    embellishmentOptionsFor(context.embellishmentOptions, item.item_id);
   const pick = context.embellishmentPicks?.[item.item_id];
   const pickBonusIds =
     pick === undefined

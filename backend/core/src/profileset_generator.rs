@@ -329,6 +329,32 @@ impl CraftedEmbellishment {
             })
             .ok_or_else(|| "Unsupported embellishment for the current season.".to_string())
     }
+
+    /// Resolve every `embellishment_id` riding `drop_items` and check it can be
+    /// crafted onto its item. Keyed by embellishment id — NOT by item, since two
+    /// items may share a pick. `Err(detail)` is meant for a 400 at the handler.
+    pub fn resolve_picks(drop_items: &[Value]) -> Result<HashMap<u64, Self>, String> {
+        let mut picks: HashMap<u64, Self> = HashMap::new();
+        for item in drop_items {
+            let Some(pick) = item.get("embellishment_id") else {
+                continue;
+            };
+            // A present-but-non-numeric value (or 0) is malformed, not a valid
+            // pick: resolve() rejects both the same way an unlisted id would.
+            let id = pick.as_u64().unwrap_or(0);
+            // resolve(Some(_)) only returns None for a None input, so the
+            // `continue` never fires — but a request must never panic the worker.
+            let Some(embellishment) = Self::resolve(Some(id))? else {
+                continue;
+            };
+            let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+            if !crate::item_db::embellishment_applicable(item_id, id) {
+                return Err("Embellishment cannot be crafted onto this item.".into());
+            }
+            picks.insert(id, embellishment);
+        }
+        Ok(picks)
+    }
 }
 
 pub fn generate_droptimizer_input(

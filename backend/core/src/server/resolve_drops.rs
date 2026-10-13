@@ -52,23 +52,21 @@ pub(super) fn drop_to_raw_item(
     // Crafted gear carries the pair as missive bonus ids; a flexible-stat raid
     // BOE has no missive and needs `crafted_stats=`. Any other item ignores it.
     // item_db is only consulted when a pair was given.
-    let mut extra: Vec<u64> = Vec::new();
+    let mut missives: &[u64] = &[];
     let mut stat_param: Option<[u64; 2]> = None;
-    if let Some(cs) = crafted_stats {
+    if let Some(cs) = &crafted_stats {
         if crate::item_db::is_crafted_item(item_id) {
-            extra.extend_from_slice(&cs.bonus_ids);
+            missives = &cs.bonus_ids;
         } else if crate::item_db::has_flexible_stats(item_id) {
             stat_param = Some(cs.stat_ids);
         }
     }
-    let embellishment = drop
+    let embellishment_ids: &[u64] = drop
         .get("embellishment_id")
         .and_then(|v| v.as_u64())
-        .and_then(|id| embellishments.get(&id));
-    if let Some(e) = embellishment {
-        extra.extend_from_slice(&e.bonus_ids);
-    }
-    for id in extra {
+        .and_then(|id| embellishments.get(&id))
+        .map_or(&[], |e| &e.bonus_ids);
+    for &id in missives.iter().chain(embellishment_ids) {
         if !bonus_ids.contains(&id) {
             bonus_ids.push(id);
         }
@@ -176,27 +174,12 @@ pub(super) async fn resolve_drops(
         Ok(cs) => cs,
         Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
     };
-    let mut embellishments: HashMap<u64, CraftedEmbellishment> = HashMap::new();
-    for drop in &req.drop_items {
-        let Some(pick) = drop.get("embellishment_id") else {
-            continue;
-        };
-        // Non-numeric or 0 is malformed: resolve() rejects it like an unlisted id.
-        let id = pick.as_u64().unwrap_or(0);
-        let embellishment = match CraftedEmbellishment::resolve(Some(id)) {
-            Ok(Some(e)) => e,
-            Ok(None) => continue,
-            Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
-        };
-        let item_id = drop.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-        // Only crafted items are listed, so this also enforces crafted-only.
-        if !crate::item_db::embellishment_applicable(item_id, id) {
-            return HttpResponse::BadRequest().json(json!({
-                "detail": "Embellishment cannot be crafted onto this item."
-            }));
-        }
-        embellishments.insert(id, embellishment);
-    }
+    // Only crafted items are listed as applicable, so this also enforces
+    // crafted-only.
+    let embellishments = match CraftedEmbellishment::resolve_picks(&req.drop_items) {
+        Ok(e) => e,
+        Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
+    };
     let items = resolve_drops_to_items(
         &req.simc_input,
         &req.drop_items,
@@ -284,8 +267,8 @@ mod tests {
     const FLEXIBLE_BOE_NECK: u64 = 271638; // Bound Serpent's Jade Eye, raid BOE
     const FIXED_STAT_NECK: u64 = 268265; // ordinary raid neck, fixed secondaries
 
-    fn haste_mastery() -> CraftedStats {
-        CraftedStats::resolve(Some([36, 49]))
+    fn pair(a: u64, b: u64) -> CraftedStats {
+        CraftedStats::resolve(Some([a, b]))
             .expect("valid pair")
             .expect("pair given")
     }
@@ -316,7 +299,7 @@ mod tests {
     #[test]
     fn crafted_drop_takes_the_pair_as_missive_bonus_ids() {
         ensure_game_data_loaded();
-        let cs = haste_mastery();
+        let cs = pair(36, 49);
         let drops = vec![drop_json(CRAFTED_BOOTS, 8)];
         let items = resolve_drops_to_items(WARRIOR_HEADER, &drops, Some(cs), &HashMap::new());
         assert!(!items.is_empty());
@@ -359,7 +342,7 @@ mod tests {
     #[test]
     fn flexible_boe_takes_the_pair_as_crafted_stats() {
         ensure_game_data_loaded();
-        let cs = haste_mastery();
+        let cs = pair(36, 49);
         let drops = vec![drop_json(FLEXIBLE_BOE_NECK, 2)];
         let items = resolve_drops_to_items(MAGE_HEADER, &drops, Some(cs), &HashMap::new());
         assert!(!items.is_empty());
@@ -393,7 +376,7 @@ mod tests {
         let with_pair = by_slot(resolve_drops_to_items(
             MAGE_HEADER,
             &drops,
-            Some(haste_mastery()),
+            Some(pair(36, 49)),
             &HashMap::new(),
         ));
         let without = by_slot(resolve_drops_to_items(
@@ -409,17 +392,9 @@ mod tests {
     #[test]
     fn same_crafted_item_with_different_pairs_gets_different_uids() {
         ensure_game_data_loaded();
-        let crit_vers = CraftedStats::resolve(Some([32, 40]))
-            .expect("valid pair")
-            .expect("pair given");
         let drops = vec![drop_json(CRAFTED_BOOTS, 8)];
-        let a = resolve_drops_to_items(
-            WARRIOR_HEADER,
-            &drops,
-            Some(haste_mastery()),
-            &HashMap::new(),
-        );
-        let b = resolve_drops_to_items(WARRIOR_HEADER, &drops, Some(crit_vers), &HashMap::new());
+        let a = resolve_drops_to_items(WARRIOR_HEADER, &drops, Some(pair(36, 49)), &HashMap::new());
+        let b = resolve_drops_to_items(WARRIOR_HEADER, &drops, Some(pair(32, 40)), &HashMap::new());
         assert!(!a.is_empty() && !b.is_empty());
         for x in &a {
             assert!(b.iter().all(|y| y.uid != x.uid), "uid collision: {}", x.uid);
