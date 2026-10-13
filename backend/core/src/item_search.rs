@@ -8,10 +8,12 @@
 //!   expansions, filtered to real gear slots and the class's own armor/weapon types.
 //!
 //! Both project results to
-//! `{ item_id, name, icon, inventory_type, quality, ilevel, ilvl_options }`,
+//! `{ item_id, name, icon, inventory_type, quality, ilevel, ilvl_options,
+//! accepts_preferred_stats }`,
 //! exact-id first, then name-prefix, then substring; deduped by item_id.
 //! `ilvl_options` (see [`ilvl_options`]) is the per-item list of levels the
-//! frontend's Add-Item dropdown offers.
+//! frontend's Add-Item dropdown offers. `accepts_preferred_stats` is
+//! [`item_db::accepts_preferred_stats`], DropFinder's stat-pair eligibility.
 
 use std::collections::{HashMap, HashSet};
 
@@ -272,6 +274,7 @@ fn rank_candidates<'a>(
                     .into_iter()
                     .map(|(ilvl, bonus_id)| json!({ "ilvl": ilvl, "bonus_id": bonus_id }))
                     .collect::<Vec<_>>(),
+                "accepts_preferred_stats": item_db::accepts_preferred_stats(id),
             })
         })
         .collect()
@@ -458,6 +461,28 @@ mod tests {
                 .unwrap_or_else(|| panic!("result missing ilvl_options: {}", r));
             assert!(!opts.is_empty(), "every result needs at least one level");
         }
+    }
+
+    #[test]
+    fn search_results_carry_preferred_stats_eligibility() {
+        ensure_game_data_loaded();
+        let results = season_drops("a", Some("hunter"), Some("marksmanship"), "en_US", 5, true);
+        assert!(!results.is_empty());
+        for r in &results {
+            assert!(
+                r.get("accepts_preferred_stats")
+                    .is_some_and(|v| v.is_boolean()),
+                "result missing accepts_preferred_stats: {}",
+                r
+            );
+        }
+        // Spellbreaker's March (237828) is crafted plate boots: eligible.
+        let crafted = season_drops("237828", Some("warrior"), Some("fury"), "en_US", 5, true);
+        let boots = crafted
+            .iter()
+            .find(|r| r["item_id"] == 237828)
+            .expect("crafted boots in season search");
+        assert_eq!(boots["accepts_preferred_stats"], true);
     }
 
     #[test]
