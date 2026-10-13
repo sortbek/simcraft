@@ -1,30 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiUrl, fetchJson, postJson } from '../../lib/api';
+import { apiUrl, fetchJson, fetchJsonOr, postJson } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { qualityBorderColor, qualityHex } from '../../lib/qualityColors';
 import { iconProps } from '../../lib/useItemInfo';
 import CardHeader from '../ui/CardHeader';
 import Checkbox from '../ui/Checkbox';
 import { detectClass, detectSpec } from '../loot/types';
-import type { ResolvedItem } from '../../lib/types';
-
-interface IlvlOption {
-  ilvl: number;
-  bonus_id: number;
-}
-
-interface SearchItem {
-  item_id: number;
-  name: string;
-  icon: string;
-  inventory_type: number;
-  quality: number;
-  ilevel: number;
-  /** Item levels this specific item can exist at, highest first. */
-  ilvl_options: IlvlOption[];
-}
+import PreferredStatsSelect, { DEFAULT_PREFERRED_STATS } from '../loot/PreferredStatsSelect';
+import EmbellishmentSelect from '../loot/EmbellishmentSelect';
+import type { ResolvedItem, SeasonConfigResponse } from '../../lib/types';
+import { addItemRequestBody, type IlvlOption, type SearchItem } from './addItemRequest';
 
 export interface AddItemSearchProps {
   simcInput: string;
@@ -79,6 +66,19 @@ export default function AddItemSearch({
   const [error, setError] = useState<string | null>(null);
   const [seasonalOnly, setSeasonalOnly] = useState(true);
   const [lootSpecOnly, setLootSpecOnly] = useState(true);
+  // Crafted picks per item_id: stat pair (unset = Crit/Haste), embellishment (unset = None).
+  const [statPicks, setStatPicks] = useState<Record<number, [number, number]>>({});
+  const [embellishmentPicks, setEmbellishmentPicks] = useState<Record<number, number>>({});
+  const [seasonConfig, setSeasonConfig] = useState<SeasonConfigResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchJsonOr<SeasonConfigResponse | null>(apiUrl('/api/season-config'), null).then((cfg) => {
+      if (!cancelled) setSeasonConfig(cfg);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Debounced search; an AbortController drops stale responses.
   useEffect(() => {
     const q = query.trim();
@@ -120,19 +120,13 @@ export default function AddItemSearch({
       setError(null);
       setAdding(item.item_id);
       try {
-        const res = await postJson<{ items: ResolvedItem[] }>('/api/top-gear/resolve-drops', {
-          simc_input: simcInput,
-          drop_items: [
-            {
-              item_id: item.item_id,
-              name: item.name,
-              icon: item.icon,
-              inventory_type: item.inventory_type,
-              ilevel: option?.ilvl ?? item.ilevel,
-              bonus_ids: option?.bonus_id ? [option.bonus_id] : [],
-            },
-          ],
-        });
+        const res = await postJson<{ items: ResolvedItem[] }>(
+          '/api/top-gear/resolve-drops',
+          addItemRequestBody(simcInput, item, option, {
+            stats: statPicks[item.item_id] ?? DEFAULT_PREFERRED_STATS,
+            embellishmentId: embellishmentPicks[item.item_id],
+          })
+        );
         onItemsResolved(res.items);
         // Reset the search after a successful add — you rarely need two of the
         // same item, so clearing keeps the next search ready.
@@ -143,7 +137,7 @@ export default function AddItemSearch({
         setAdding(null);
       }
     },
-    [simcInput, onItemsResolved]
+    [simcInput, onItemsResolved, statPicks, embellishmentPicks]
   );
 
   const hasQuery = query.trim().length > 0;
@@ -288,10 +282,15 @@ export default function AddItemSearch({
                   options.find((o) => o.ilvl === chosenIlvl[item.item_id]) ?? options[0];
                 const selected = option?.ilvl;
                 const isAdding = adding === item.item_id;
+                const embellishments = (seasonConfig?.crafted_embellishments ?? []).filter((e) =>
+                  e.item_ids.includes(item.item_id)
+                );
+                const showStats = !!item.accepts_preferred_stats;
+                const crafted = showStats || embellishments.length > 0;
                 return (
                   <div
                     key={item.item_id}
-                    className="group flex items-center gap-3 rounded-[7px] px-2.5 py-[7px] transition-colors duration-[120ms] hover:bg-surface-container-high"
+                    className={`group flex items-center rounded-[7px] px-2.5 py-[7px] transition-colors duration-[120ms] hover:bg-surface-container-high ${crafted ? 'flex-wrap gap-x-3 gap-y-2' : 'gap-3'}`}
                   >
                     <div
                       className="relative h-[38px] w-[38px] shrink-0 overflow-hidden rounded-[5px] border bg-surface-container-highest"
@@ -370,6 +369,40 @@ export default function AddItemSearch({
                         </svg>
                       )}
                     </button>
+                    {/* Crafted picks: a second line spanning the row. */}
+                    {crafted && (
+                      <div className="flex basis-full gap-2">
+                        {showStats && (
+                          <div className="min-w-0 flex-1">
+                            <p className="mb-1 text-[11px] text-outline">Stats</p>
+                            <PreferredStatsSelect
+                              value={statPicks[item.item_id] ?? DEFAULT_PREFERRED_STATS}
+                              onChange={(pair) =>
+                                setStatPicks((prev) => ({ ...prev, [item.item_id]: pair }))
+                              }
+                              statIds={seasonConfig?.crafted_secondary_stats}
+                            />
+                          </div>
+                        )}
+                        {embellishments.length > 0 && (
+                          <div className="min-w-0 flex-1">
+                            <p className="mb-1 text-[11px] text-outline">Embellishment</p>
+                            <EmbellishmentSelect
+                              value={embellishmentPicks[item.item_id] ?? null}
+                              onChange={(id) =>
+                                setEmbellishmentPicks((prev) => {
+                                  const next = { ...prev };
+                                  if (id == null) delete next[item.item_id];
+                                  else next[item.item_id] = id;
+                                  return next;
+                                })
+                              }
+                              options={embellishments}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
