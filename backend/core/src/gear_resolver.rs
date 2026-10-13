@@ -687,8 +687,10 @@ fn mark_catalyst_eligible(slots: &mut HashMap<String, SlotResolution>, wow_class
 /// Generate catalyst alternatives across all slots.
 /// For each slot, checks every item (equipped + bag). If the item is a valid
 /// catalyst source (see `is_catalyst_source`) and a catalyst conversion exists,
-/// creates the catalyst variant unless an identical or higher-ilevel version
-/// already exists in that slot.
+/// creates the catalyst variant unless the slot already holds a piece with the
+/// same tier item_id and the same source_item_id (an owned catalysed copy of that
+/// source) at the same or higher ilevel. A native tier piece (source_item_id 0)
+/// has its own secondaries, so it never blocks a conversion.
 fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, wow_class_id: u64) {
     let slot_keys: Vec<String> = slots.keys().cloned().collect();
 
@@ -714,13 +716,15 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
         }
         sources.extend(slot_res.alternatives.iter().cloned());
 
-        // Collect existing item_ids and their ilevels in this slot for dedup
-        let mut existing: HashMap<u64, u64> = HashMap::new();
+        // Collect existing (item_id, source_item_id) pairs and their ilevels in this slot for dedup
+        let mut existing: HashMap<(u64, u64), u64> = HashMap::new();
         if let Some(ref eq) = slot_res.equipped {
-            existing.insert(eq.item_id, eq.ilevel);
+            existing.insert((eq.item_id, eq.source_item_id), eq.ilevel);
         }
         for alt in &slot_res.alternatives {
-            let entry = existing.entry(alt.item_id).or_insert(0);
+            let entry = existing
+                .entry((alt.item_id, alt.source_item_id))
+                .or_insert(0);
             if alt.ilevel > *entry {
                 *entry = alt.ilevel;
             }
@@ -738,8 +742,11 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
 
             let catalyst_item = build_catalyst_item(source, tier_info, slot_key);
 
-            // Skip if an existing (non-catalyst) item already has this tier item at same+ ilevel
-            if let Some(&existing_ilevel) = existing.get(&catalyst_item.item_id) {
+            // Skip if the slot already owns this tier item with this source's
+            // secondaries (same source_item_id) at same+ ilevel
+            if let Some(&existing_ilevel) =
+                existing.get(&(catalyst_item.item_id, catalyst_item.source_item_id))
+            {
                 if existing_ilevel >= catalyst_item.ilevel {
                     continue;
                 }
