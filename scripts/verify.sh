@@ -21,7 +21,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FAST=0
 sel=""
 
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+# Prints the header comment block, however long it is. The line numbers this
+# used to hard-code leaked 'set -uo pipefail' into --help, and would silently
+# truncate it the next time a usage line was added.
+usage() { awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; }
 
 for a in "$@"; do
   case "$a" in
