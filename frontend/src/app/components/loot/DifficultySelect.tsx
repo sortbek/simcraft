@@ -55,7 +55,9 @@ export default function DifficultySelect({
             <span>{d.label}</span>
             {track && (
               <span className={TRACK_COLORS[track]}>
-                {TRACK_SHORT[track] ?? track} {d.level}/{max}
+                {TRACK_SHORT[track] ?? track}
+                {/* Raid difficulties have no rank of their own: it varies per boss. */}
+                {d.level > 0 && ` ${d.level}/${max}`}
               </span>
             )}
           </span>
