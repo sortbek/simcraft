@@ -253,6 +253,10 @@ pub struct DroptimizerRequest {
 pub struct ResolveDropsRequest {
     pub simc_input: String,
     pub drop_items: Vec<Value>,
+    /// Crafted "Preferred Stats" pair for the added item; applied only to items
+    /// that accept one. Per-drop `embellishment_id` rides inside `drop_items`.
+    #[serde(default)]
+    pub preferred_crafted_stats: Option<[u64; 2]>,
 }
 
 #[derive(Debug, Deserialize)]
