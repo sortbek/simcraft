@@ -1,17 +1,9 @@
 #!/usr/bin/env bash
-# Runs profileset generator unit tests before each commit.
+# Runs the fast gate before each commit: formatting checks and unit tests, no
+# full builds. scripts/verify.sh is the single source of truth for what "green"
+# means; gates whose toolchain is missing are skipped and listed there.
+#
 # Skip with `git commit --no-verify` in an emergency.
 
 set -e
-
-cd "$(git rev-parse --show-toplevel)/backend"
-
-echo "Running backend unit tests..."
-if ! cargo test -p simhammer-core --lib --quiet 2>&1; then
-    echo ""
-    echo "FAIL: backend unit tests failed. Commit aborted."
-    echo "Run 'cd backend && cargo test -p simhammer-core --lib' to debug."
-    exit 1
-fi
-
-echo "OK: tests passed."
+exec bash "$(git rev-parse --show-toplevel)/scripts/verify.sh" --fast

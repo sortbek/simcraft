@@ -79,8 +79,34 @@ All checks run in CI on every PR:
 | cargo fmt | Backend formatting | `cd backend && cargo fmt --all -- --check` |
 | Clippy | Backend linting | `cd backend && cargo clippy --all-targets --all-features -- -D warnings` |
 
-Run all locally before pushing:
+Plus the unit-test suites, in `.github/workflows/test.yml`:
+
+| Tool | Scope | Command |
+|------|-------|---------|
+| tsc | Frontend typecheck | `cd frontend && npx tsc --noEmit` |
+| node:test | Frontend logic (178 tests) | `cd frontend && node --test scripts/test-*.cjs` |
+| node:test | Desktop main process | `cd desktop && npm test` |
+| cargo test | Backend | `cd backend && cargo test --all-features` |
+
+Run everything locally with one command instead of remembering the list:
+
 ```bash
-cd frontend && npx prettier --write "src/**/*.{ts,tsx,css}" && npm run lint
-cd ../backend && cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings
+bash scripts/verify.sh            # every gate this machine can run
+bash scripts/verify.sh --fast     # formatting + unit tests, no full builds
+bash scripts/verify.sh --frontend # one area at a time
 ```
+
+A gate whose toolchain is absent (no local Rust, no `node_modules`, no game
+data) is reported as SKIPPED rather than quietly passing, so you always know
+what CI still has to prove. Auto-fix formatting with
+`cd frontend && npm run format` and `cd backend && cargo fmt --all`.
+
+### Local pre-commit gate
+
+`hooks/pre-commit` runs `scripts/verify.sh --fast`. Activate it once per clone:
+
+```bash
+git config core.hooksPath hooks
+```
+
+Bypass in an emergency with `git commit --no-verify`.

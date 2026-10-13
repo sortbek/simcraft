@@ -62,4 +62,17 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
+## 5. Verify With the Gate
+
+- `bash scripts/verify.sh` is the definition of "green". Never claim a change
+  works without it. It reports SKIPPED gates (no local cargo, missing game
+  data) rather than passing silently, so you always know what CI still has to
+  prove.
+- Work on a branch, never commit to `master`. Never add a
+  `Co-Authored-By: Claude` trailer.
+
+See [docs/development.md](docs/development.md) for the full gate list.
+
+---
+
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
