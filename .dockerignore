@@ -34,6 +34,7 @@ backend/resources/data-full
 backend/resources/data-compact
 backend/resources/data-compacted
 backend/resources/simc
+backend/resources/forever
 backend/resources/frontend
 desktop/resources
 desktop/dist

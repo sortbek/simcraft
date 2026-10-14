@@ -8,6 +8,7 @@ const { createAppConfig } = require("./src/main/config");
 const { PROTOCOL, parseDeepLink, findDeepLinkInArgv } = require("./src/main/deeplink");
 const { createSettingsStore } = require("./src/main/settings");
 const { createSimcController } = require("./src/main/simc");
+const { ensureForever } = require("./scripts/download-forever");
 const { setupAutoUpdater } = require("./src/main/updater");
 const { createWindowController } = require("./src/main/window");
 
@@ -90,8 +91,14 @@ ipcMain.handle("settings:set", (_event, key, value) => {
 
 app.whenReady().then(async () => {
   await clearCacheIfVersionChanged(app);
-  await simcController.ensureReady();
-  await simcController.autoUpdateInstalledVersion();
+  // Forever downloads alongside SimC; it is optional and never blocks startup on failure.
+  await Promise.all([
+    (async () => {
+      await simcController.ensureReady();
+      await simcController.autoUpdateInstalledVersion();
+    })(),
+    ensureForever(config.getForeverDir()),
+  ]);
 
   // Pick a port before spawning. Tries 17384 first; falls back to an
   // OS-chosen ephemeral port if it's held (e.g. by an orphan backend

@@ -32,6 +32,7 @@ function createBackendController(config) {
       ...process.env,
       DATA_DIR: config.getResourcePath("data"),
       SIMC_DIR: config.getSimcDir(),
+      FOREVER_DIR: config.getForeverDir(),
       RUST_BACKTRACE: "1",
       PORT: String(config.BACKEND_PORT),
       BIND_HOST: "127.0.0.1",
