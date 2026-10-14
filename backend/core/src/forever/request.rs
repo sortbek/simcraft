@@ -1,0 +1,133 @@
+//! RaidSimRequest / BulkSimRequest protojson for the `simhammer-forever` CLI. The CLI fills the
+//! spec's defaults (options, buffs, consumables, rotation, target, encounter shape).
+
+use serde_json::{json, Value};
+
+use super::data::ForeverData;
+use super::import::{ExportItem, ForeverCharacter};
+use super::spec;
+
+pub struct SimSettings {
+    pub iterations: u32,
+    pub duration_seconds: f64,
+}
+
+fn item_spec(item: &ExportItem) -> Value {
+    let mut spec = json!({ "id": item.item_id });
+    if item.enchant_id > 0 {
+        spec["enchant"] = json!(item.enchant_id);
+    }
+    spec
+}
+
+fn profession(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "alchemy" => "Alchemy",
+        "blacksmithing" => "Blacksmithing",
+        "enchanting" => "Enchanting",
+        "engineering" => "Engineering",
+        "herbalism" => "Herbalism",
+        "leatherworking" => "Leatherworking",
+        "mining" => "Mining",
+        "skinning" => "Skinning",
+        "tailoring" => "Tailoring",
+        _ => return None,
+    })
+}
+
+pub fn raid_request(
+    ch: &ForeverCharacter,
+    data: &ForeverData,
+    spec_key: &str,
+    talents_string: &str,
+    settings: &SimSettings,
+) -> Value {
+    let mut items = vec![json!({}); 17];
+    for item in &ch.equipped {
+        let Some(known) = data.items.get(&item.item_id) else { continue };
+        if let Some(slot) = spec::engine_slot(&item.slot, known.item_type) {
+            items[slot] = item_spec(item);
+        }
+    }
+    let mut player = json!({
+        "name": ch.name,
+        "race": spec::engine_race(&ch.race).unwrap_or("RaceUnknown"),
+        "class": spec::engine_class(&ch.class).unwrap_or("ClassUnknown"),
+        "equipment": { "items": items },
+        "talentsString": talents_string,
+    });
+    player[spec_key] = json!({});
+    let profs: Vec<&str> = ch.professions.iter().filter_map(|(n, _)| profession(n)).collect();
+    if let Some(p) = profs.first() {
+        player["profession1"] = json!(p);
+    }
+    if let Some(p) = profs.get(1) {
+        player["profession2"] = json!(p);
+    }
+    json!({
+        "raid": { "parties": [{ "players": [player] }] },
+        "encounter": { "duration": settings.duration_seconds },
+        "simOptions": { "iterations": settings.iterations },
+    })
+}
+
+pub fn bulk_request(base: Value, bag_items: &[ExportItem], data: &ForeverData) -> Value {
+    let items: Vec<Value> = bag_items
+        .iter()
+        .filter(|i| data.items.contains_key(&i.item_id))
+        .map(item_spec)
+        .collect();
+    json!({ "baseRequest": base, "bulkSettings": { "items": items } })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::forever::import::parse_export;
+
+    fn sylfrey() -> ForeverCharacter {
+        parse_export(include_str!("testdata/sylfrey.simc")).unwrap()
+    }
+
+    fn settings() -> SimSettings {
+        SimSettings { iterations: 5000, duration_seconds: 180.0 }
+    }
+
+    #[test]
+    fn raid_request_has_player_gear_talents_and_settings() {
+        let req = raid_request(&sylfrey(), crate::forever::test_data(), "protectionPaladin", "-05005133210012", &settings());
+        let p = &req["raid"]["parties"][0]["players"][0];
+        assert_eq!(p["class"], "ClassPaladin");
+        assert_eq!(p["race"], "RaceUndead");
+        assert_eq!(p["talentsString"], "-05005133210012");
+        assert!(p["protectionPaladin"].is_object());
+        assert_eq!(p["equipment"]["items"].as_array().unwrap().len(), 17);
+        assert_eq!(p["equipment"]["items"][14]["id"], 273637);
+        assert_eq!(p["profession1"], "Blacksmithing");
+        assert_eq!(p["profession2"], "Mining");
+        assert_eq!(req["simOptions"]["iterations"], 5000);
+        assert_eq!(req["encounter"]["duration"], 180.0);
+    }
+
+    #[test]
+    fn unknown_items_are_left_out_of_the_gear() {
+        let mut ch = sylfrey();
+        ch.equipped[0].item_id = 999_999;
+        let req = raid_request(&ch, crate::forever::test_data(), "protectionPaladin", "", &settings());
+        let items = req["raid"]["parties"][0]["players"][0]["equipment"]["items"].as_array().unwrap();
+        assert!(items.iter().all(|i| i["id"] != 999_999));
+    }
+
+    #[test]
+    fn bulk_request_wraps_base_and_known_bag_items() {
+        let ch = sylfrey();
+        let base = raid_request(&ch, crate::forever::test_data(), "protectionPaladin", "", &settings());
+        let mut bags = ch.bags.clone();
+        bags.push(ExportItem { slot: "back".into(), item_id: 999_999, enchant_id: 0 });
+        let bulk = bulk_request(base.clone(), &bags, crate::forever::test_data());
+        assert_eq!(bulk["baseRequest"], base);
+        // 6314 (cape) and 267369 (Wolfsbane); the three profession tools and 999999 are not engine items.
+        let ids: Vec<u64> = bulk["bulkSettings"]["items"].as_array().unwrap().iter().map(|i| i["id"].as_u64().unwrap()).collect();
+        assert_eq!(ids, vec![6314, 267369]);
+    }
+}
