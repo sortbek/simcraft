@@ -7,6 +7,7 @@ mod client_request;
 mod cloud_estimate;
 pub(crate) mod cloud_streaming;
 mod droptimizer_handlers;
+mod forever_handlers;
 mod frontend;
 mod game_data_handlers;
 mod handler_prep;
@@ -184,6 +185,7 @@ pub async fn start_server(
     // (Simmit) don't use it — they queue server-side.
     let local_sim_queue = crate::compute::local::new_local_sim_queue();
     let local_queue_data = web::Data::new(local_sim_queue.clone());
+    let forever_engine = web::Data::new(crate::forever::ForeverEngine::from_env());
     let provider_registry =
         web::Data::new(Arc::new(crate::compute::ProviderRegistry::new_default(
             simc_bins.clone(),
@@ -221,6 +223,7 @@ pub async fn start_server(
             .app_data(settings_repo.clone())
             .app_data(provider_registry.clone())
             .app_data(local_queue_data.clone())
+            .app_data(forever_engine.clone())
             .configure(api_routes::configure);
         #[cfg(not(feature = "desktop"))]
         let app = app.app_data(admin_secret.clone());
