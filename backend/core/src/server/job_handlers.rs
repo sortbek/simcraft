@@ -236,6 +236,7 @@ pub(super) async fn get_sim_status(
         "provider_id": job.provider_id,
         "share_id": job.share_id,
         "rerun_of": job.rerun_of,
+        "game": job.game,
         "chunk_count": chunk_count.unwrap_or(0), // display 0 on transient error; capability uses the Option
         "effective_capabilities": effective_capabilities(&job.provider_id, chunk_count),
     }))
