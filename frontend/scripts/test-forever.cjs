@@ -43,3 +43,10 @@ test('bag items group with the slot they fit; unknown bag items and slots withou
     ]
   );
 });
+
+const { talentPointsLabel } = require('../src/app/components/forever/specs.ts');
+
+test('talent points read as tree totals, none when the export had none', () => {
+  assert.equal(talentPointsLabel([0, 23, 0]), '0 / 23 / 0');
+  assert.equal(talentPointsLabel([]), null);
+});

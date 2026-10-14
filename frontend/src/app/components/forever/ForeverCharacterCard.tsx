@@ -3,7 +3,7 @@
 import GearItemRow from '../gear/GearItemRow';
 import { qualityHex } from '../../lib/qualityColors';
 import { useLanguage } from '../../lib/i18n';
-import { SPEC_LABEL_KEYS } from './specs';
+import { SPEC_LABEL_KEYS, talentPointsLabel } from './specs';
 import type { ForeverImport } from './types';
 
 export default function ForeverCharacterCard({
@@ -45,6 +45,10 @@ export default function ForeverCharacterCard({
           </select>
         )}
       </div>
+      <p className="text-sm text-on-surface-variant">
+        <span className="lbl mr-2">{t('forever.talents')}</span>
+        {talentPointsLabel(summary.points_per_tree) ?? t('forever.noTalents')}
+      </p>
       {summary.warnings.length > 0 && (
         <ul className="list-disc space-y-1 pl-5 text-sm text-warning">
           {summary.warnings.map((w) => (

@@ -14,6 +14,8 @@
   "game.forever": "Forever",
   "forever.levelLine": "Level {level} {race} {cls}",
   "forever.spec": "Spec",
+  "forever.talents": "Talents",
+  "forever.noTalents": "None read from the export",
   "forever.spec.balance": "Balance",
   "forever.spec.feralCat": "Feral (Cat)",
   "forever.spec.feralBear": "Feral (Bear)",

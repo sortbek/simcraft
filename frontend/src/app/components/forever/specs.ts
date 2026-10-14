@@ -19,3 +19,8 @@ export function blockedReason(level: number, specKey: string | null): 'level' | 
   if (!specKey || HEALERS.has(specKey)) return 'healer';
   return null;
 }
+
+/** Points per talent tree as the game shows them ("0 / 23 / 0"), or null without talents. */
+export function talentPointsLabel(pointsPerTree: number[]): string | null {
+  return pointsPerTree.length > 0 ? pointsPerTree.join(' / ') : null;
+}
