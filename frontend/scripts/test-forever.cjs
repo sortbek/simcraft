@@ -13,3 +13,33 @@ test('a healer spec is blocked, a picked damage spec is not', () => {
   assert.equal(blockedReason(60, 'retributionPaladin'), null);
   assert.equal(blockedReason(60, 'dpsPriest'), null);
 });
+
+const { groupForTopGear } = require('../src/app/components/forever/topGearGroups.ts');
+const gear = (slot, item_id, known = true) => ({
+  slot,
+  item_id,
+  enchant_id: 0,
+  name: `i${item_id}`,
+  icon: '',
+  quality: 2,
+  ilevel: 10,
+  known,
+});
+
+test('bag items group with the slot they fit; unknown bag items and slots without candidates drop out', () => {
+  const groups = groupForTopGear(
+    [gear('back', 1), gear('finger1', 2), gear('finger2', 3), gear('head', 4)],
+    [gear('back', 10), gear('finger1', 11), gear('main_hand', 12, false)]
+  );
+  assert.deepEqual(
+    groups.map(([key, g]) => [
+      key,
+      g.equipped.map((e) => e.item_id),
+      g.bags.map((b) => [b.gear.item_id, b.index]),
+    ]),
+    [
+      ['back', [1], [[10, 0]]],
+      ['finger', [2, 3], [[11, 1]]],
+    ]
+  );
+});
