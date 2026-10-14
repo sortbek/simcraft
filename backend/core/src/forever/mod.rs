@@ -5,6 +5,7 @@ pub mod detect;
 pub mod import;
 pub mod request;
 pub mod result;
+pub mod runner;
 pub mod spec;
 pub mod talents;
 
