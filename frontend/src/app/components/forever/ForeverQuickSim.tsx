@@ -1,16 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../ui/ErrorAlert';
+import GearOverview from '../gear/GearOverview';
+import type { GearItem } from '../gear/gearOverviewTypes';
+import { formatFightLength } from '../sim-config/settingsUi';
 import { useSimContext } from '../sim-config/SimContext';
 import { useLanguage } from '../../lib/i18n';
 import ForeverCharacterCard from './ForeverCharacterCard';
 import ForeverFooter from './ForeverFooter';
-import ForeverSettingsCard from './ForeverSettingsCard';
+import ForeverSettingsBlock from './ForeverSettingsBlock';
+import ForeverTalentCard from './ForeverTalentCard';
+import ForeverWarnings from './ForeverWarnings';
 import { blockedReason } from './specs';
 import { useForeverImport } from './useForeverImport';
 import { useForeverSettings } from './useForeverSettings';
 import { useForeverSubmit } from './useForeverSubmit';
+
+const NO_INFO = {};
 
 export default function ForeverQuickSim() {
   const { simcInput } = useSimContext();
@@ -20,6 +27,24 @@ export default function ForeverQuickSim() {
   const [specKey, setSpecKey] = useState<string | null>(null);
   useEffect(() => setSpecKey(summary?.spec_key ?? null), [summary?.spec_key]);
   const blocked = summary ? blockedReason(summary.level, specKey) : null;
+
+  const gear = useMemo<Record<string, GearItem>>(
+    () =>
+      Object.fromEntries(
+        (summary?.equipped ?? []).map((g) => [
+          g.slot,
+          {
+            slot: g.slot,
+            item_id: g.item_id,
+            ilevel: g.ilevel,
+            name: g.name,
+            icon: g.icon,
+            quality: g.quality,
+          },
+        ])
+      ),
+    [summary]
+  );
 
   const buildPayload = useCallback(
     () =>
@@ -39,13 +64,31 @@ export default function ForeverQuickSim() {
     error: submitError,
   } = useForeverSubmit('/api/forever/sim', buildPayload);
 
+  const status = blocked
+    ? t(`forever.blocked.${blocked}`)
+    : t('forever.summary', {
+        length: formatFightLength(settings.fightLength),
+        iterations: settings.iterations.toLocaleString(),
+      });
+
   return (
     <>
       {error && <ErrorAlert message={error} />}
       {summary && (
         <>
-          <ForeverSettingsCard {...settings} />
-          <ForeverCharacterCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
+          <ForeverCharacterCard summary={summary} specKey={specKey} />
+          <ForeverWarnings warnings={summary.warnings} />
+          <ForeverSettingsBlock {...settings} />
+          <ForeverTalentCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
+          {summary.equipped.length > 0 && (
+            <GearOverview
+              gear={gear}
+              title={t('gear.equippedGear')}
+              itemInfoMap={NO_INFO}
+              enchantInfoMap={NO_INFO}
+              gemInfoMap={NO_INFO}
+            />
+          )}
         </>
       )}
       <ErrorAlert message={submitError} />
@@ -54,7 +97,7 @@ export default function ForeverQuickSim() {
         submitting={submitting}
         disabled={!summary || !!blocked}
         label={t('button.runSimulation')}
-        status={blocked ? t(`forever.blocked.${blocked}`) : null}
+        status={summary ? status : null}
       />
     </>
   );

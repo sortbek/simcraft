@@ -1,7 +1,9 @@
 //! Client loadout strings (Traits.GenerateImportString, version 2) to the engine's
 //! one-digit-per-talent string.
 
-use super::data::ClassTalents;
+use serde::Serialize;
+
+use super::data::{ClassTalents, TalentLayout};
 
 const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -9,7 +11,48 @@ const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01
 pub struct DecodedTalents {
     pub talents_string: String,
     pub points_per_tree: Vec<u32>,
+    /// Rank per talent, per tree, in the engine's talent-string order.
+    pub ranks: Vec<Vec<u32>>,
     pub unknown_definitions: Vec<u32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TalentView {
+    #[serde(flatten)]
+    pub layout: TalentLayout,
+    pub rank: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TalentTreeView {
+    pub name: String,
+    pub points: u32,
+    pub talents: Vec<TalentView>,
+}
+
+/// The calculator trees with the decoded ranks on them; empty `ranks` (no talents) leaves all at 0.
+pub fn tree_views(class: &ClassTalents, ranks: &[Vec<u32>]) -> Vec<TalentTreeView> {
+    class
+        .trees
+        .iter()
+        .enumerate()
+        .map(|(t, tree)| {
+            let talents: Vec<TalentView> = tree
+                .talents
+                .iter()
+                .enumerate()
+                .map(|(i, layout)| TalentView {
+                    layout: layout.clone(),
+                    rank: ranks.get(t).and_then(|r| r.get(i)).copied().unwrap_or(0),
+                })
+                .collect();
+            TalentTreeView {
+                name: tree.name.clone(),
+                points: talents.iter().map(|t| t.rank).sum(),
+                talents,
+            }
+        })
+        .collect()
 }
 
 struct Bits {
@@ -102,6 +145,7 @@ pub fn decode(loadout: &str, class: &ClassTalents) -> Result<DecodedTalents, Str
     Ok(DecodedTalents {
         talents_string,
         points_per_tree: points.iter().map(|t| t.iter().sum()).collect(),
+        ranks: points,
         unknown_definitions: unknown,
     })
 }
@@ -118,6 +162,39 @@ mod tests {
         assert_eq!(d.talents_string, "-05005133210012");
         assert_eq!(d.points_per_tree, vec![0, 23, 0]);
         assert!(d.unknown_definitions.is_empty());
+    }
+
+    #[test]
+    fn tree_views_put_ranks_on_the_calculator_layout() {
+        let class = &crate::forever::test_data().talents["paladin"];
+        let d = decode(SYLFREY, class).unwrap();
+        let views = tree_views(class, &d.ranks);
+        let names: Vec<&str> = views.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(names, ["Holy", "Protection", "Retribution"]);
+        assert_eq!(
+            views.iter().map(|v| v.points).collect::<Vec<_>>(),
+            [0, 23, 0]
+        );
+        let redoubt = &views[1].talents[1];
+        assert_eq!(
+            (
+                redoubt.layout.name.as_str(),
+                redoubt.rank,
+                redoubt.layout.max_ranks
+            ),
+            ("Redoubt", 5, 5)
+        );
+        assert!(views[0].talents.iter().all(|t| t.rank == 0));
+    }
+
+    #[test]
+    fn tree_views_without_ranks_are_all_zero() {
+        let class = &crate::forever::test_data().talents["paladin"];
+        let views = tree_views(class, &[]);
+        assert_eq!(views.len(), 3);
+        assert!(views
+            .iter()
+            .all(|v| v.points == 0 && v.talents.iter().all(|t| t.rank == 0)));
     }
 
     #[test]

@@ -158,6 +158,7 @@ pub struct ImportSummary {
     pub spec_choices: Vec<String>,
     pub talents_string: String,
     pub points_per_tree: Vec<u32>,
+    pub talent_trees: Vec<talents::TalentTreeView>,
     pub equipped: Vec<GearView>,
     pub bags: Vec<GearView>,
     pub warnings: Vec<String>,
@@ -237,7 +238,7 @@ pub fn summarize(ch: &ForeverCharacter, data: &ForeverData) -> ImportSummary {
             data.version.client_build
         ));
     }
-    let (talents_string, points_per_tree) =
+    let (talents_string, points_per_tree, ranks) =
         match (ch.talents_loadout.as_deref(), data.talents.get(&ch.class)) {
             (Some(loadout), Some(class)) => match talents::decode(loadout, class) {
                 Ok(d) => {
@@ -247,16 +248,16 @@ pub fn summarize(ch: &ForeverCharacter, data: &ForeverData) -> ImportSummary {
                             d.unknown_definitions.len()
                         ));
                     }
-                    (d.talents_string, d.points_per_tree)
+                    (d.talents_string, d.points_per_tree, d.ranks)
                 }
                 Err(e) => {
                     warnings.push(format!("Talents could not be read: {e}"));
-                    (String::new(), Vec::new())
+                    (String::new(), Vec::new(), Vec::new())
                 }
             },
             _ => {
                 warnings.push("No talents in the export".into());
-                (String::new(), Vec::new())
+                (String::new(), Vec::new(), Vec::new())
             }
         };
     let spec_key = spec::derive_spec(&ch.class, &points_per_tree).map(str::to_string);
@@ -275,6 +276,11 @@ pub fn summarize(ch: &ForeverCharacter, data: &ForeverData) -> ImportSummary {
             .collect(),
         talents_string,
         points_per_tree,
+        talent_trees: data
+            .talents
+            .get(&ch.class)
+            .map(|class| talents::tree_views(class, &ranks))
+            .unwrap_or_default(),
         equipped,
         bags,
         warnings,
@@ -360,6 +366,13 @@ mod tests {
     fn level_60_with_dps_talents_can_sim() {
         let s = summarize(&parse_export(&at60()).unwrap(), crate::forever::test_data());
         assert!(s.can_sim, "{:?}", s.blocked_reason);
+    }
+
+    #[test]
+    fn summary_carries_the_talent_trees() {
+        let s = summarize(&parse_export(&at60()).unwrap(), crate::forever::test_data());
+        assert_eq!(s.talent_trees.len(), 3);
+        assert_eq!(s.talent_trees[1].points, 23);
     }
 
     #[test]

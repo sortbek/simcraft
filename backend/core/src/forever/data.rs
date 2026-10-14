@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ForeverItem {
@@ -37,6 +37,29 @@ pub struct ClassTalents {
     pub nodes: Vec<TalentNode>,
     pub talents: HashMap<String, [usize; 2]>,
     pub tree_sizes: Vec<usize>,
+    /// Absent in bundles built before the calculator layout was added.
+    #[serde(default)]
+    pub trees: Vec<TreeLayout>,
+}
+
+/// A calculator tree; its talents are in the engine's talent-string order.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TreeLayout {
+    pub name: String,
+    pub talents: Vec<TalentLayout>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TalentLayout {
+    pub name: String,
+    pub spell_id: u32,
+    pub icon: String,
+    pub row: u8,
+    pub col: u8,
+    pub max_ranks: u8,
+    /// [row, col] of the talent this one needs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prereq: Option<[u8; 2]>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -90,5 +113,12 @@ mod tests {
         assert_eq!(data.items[&273637].name, "Blade of Silverlaine");
         assert_eq!(data.items[&273637].ilvl, 26);
         assert!(data.items[&862].suffix);
+    }
+
+    #[test]
+    fn class_talents_from_an_older_bundle_have_no_trees() {
+        let json = r#"{"tree_id":1,"spec_ids":[2],"nodes":[],"talents":{},"tree_sizes":[]}"#;
+        let class: super::ClassTalents = serde_json::from_str(json).unwrap();
+        assert!(class.trees.is_empty());
     }
 }

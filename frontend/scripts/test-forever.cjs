@@ -50,3 +50,35 @@ test('talent points read as tree totals, none when the export had none', () => {
   assert.equal(talentPointsLabel([0, 23, 0]), '0 / 23 / 0');
   assert.equal(talentPointsLabel([]), null);
 });
+
+const { deepestTalents } = require('../src/app/components/forever/talentTrees.ts');
+const talent = (name, row, col, rank) => ({
+  name,
+  spell_id: 1,
+  icon: '',
+  row,
+  col,
+  max_ranks: 5,
+  rank,
+});
+
+test('deepest talents: per tree with points, its ranked talents in the deepest ranked row, left to right', () => {
+  const trees = [
+    { name: 'Holy', points: 0, talents: [talent('h1', 0, 1, 0)] },
+    {
+      name: 'Protection',
+      points: 8,
+      talents: [
+        talent('p1', 0, 1, 5),
+        talent('p3', 2, 2, 1),
+        talent('p2', 2, 0, 2),
+        talent('p4', 3, 1, 0),
+      ],
+    },
+    { name: 'Retribution', points: 1, talents: [talent('r1', 0, 0, 1)] },
+  ];
+  assert.deepEqual(
+    deepestTalents(trees).map((t) => t.name),
+    ['p2', 'p3', 'r1']
+  );
+});

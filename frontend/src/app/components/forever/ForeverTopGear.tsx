@@ -7,9 +7,10 @@ import { qualityHex } from '../../lib/qualityColors';
 import { SLOT_LABELS } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
 import { useSimContext } from '../sim-config/SimContext';
-import ForeverCharacterCard from './ForeverCharacterCard';
 import ForeverFooter from './ForeverFooter';
-import ForeverSettingsCard from './ForeverSettingsCard';
+import ForeverSettingsBlock from './ForeverSettingsBlock';
+import ForeverTalentCard from './ForeverTalentCard';
+import ForeverWarnings from './ForeverWarnings';
 import { blockedReason } from './specs';
 import { groupForTopGear } from './topGearGroups';
 import { useForeverImport } from './useForeverImport';
@@ -74,8 +75,9 @@ export default function ForeverTopGear() {
       {error && <ErrorAlert message={error} />}
       {summary && (
         <>
-          <ForeverSettingsCard {...settings} />
-          <ForeverCharacterCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
+          <ForeverSettingsBlock {...settings} />
+          <ForeverTalentCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
+          <ForeverWarnings warnings={summary.warnings} />
           {groups.length === 0 ? (
             <p className="card px-6 py-5 text-sm text-outline">{t('forever.noBagItems')}</p>
           ) : (

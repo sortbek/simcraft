@@ -9,6 +9,24 @@ export interface ForeverGear {
   known: boolean;
 }
 
+export interface ForeverTalent {
+  name: string;
+  spell_id: number;
+  icon: string;
+  row: number;
+  col: number;
+  max_ranks: number;
+  /** [row, col] of the talent this one needs. */
+  prereq?: [number, number];
+  rank: number;
+}
+
+export interface ForeverTalentTree {
+  name: string;
+  points: number;
+  talents: ForeverTalent[];
+}
+
 export interface ForeverImport {
   game: 'forever';
   name: string;
@@ -20,6 +38,8 @@ export interface ForeverImport {
   spec_choices: string[];
   talents_string: string;
   points_per_tree: number[];
+  /** Empty with an engine bundle built before the calculator layout. */
+  talent_trees: ForeverTalentTree[];
   equipped: ForeverGear[];
   bags: ForeverGear[];
   warnings: string[];
