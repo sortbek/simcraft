@@ -23,7 +23,7 @@
     "test:profiles": "node --test scripts/test-profile-sections.cjs",
     "test:talents": "node --test scripts/test-talents.cjs",
     "test:home": "node --test scripts/test-home.cjs",
-    "test:game": "node --test scripts/test-game.cjs"
+    "test:game": "node --test scripts/test-game.cjs scripts/test-forever.cjs"
   },
   "dependencies": {
     "next": "^15.5.14",
