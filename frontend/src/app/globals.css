@@ -137,6 +137,28 @@
   --c-route-boss: 176 120 0;
 }
 
+/* WoW Forever accent: the gold tokens, swapped by data-game on <html>. */
+:root[data-game='forever'] {
+  --c-primary: 129 140 248;
+  --c-primary-container: 99 102 241;
+  --c-gold-light: 165 180 252;
+  --c-on-primary: 15 15 40;
+}
+:root[data-game='forever'][data-theme='parchment'] {
+  --c-primary: 67 56 202;
+  --c-primary-container: 79 70 229;
+  --c-primary-fill: 99 102 241;
+  --c-primary-fill-hover: 129 140 248;
+  --c-gold-light: 55 48 163;
+  --c-on-primary: 255 255 255;
+  --gold-tint: rgb(232 234 253);
+  --gold-sel: rgb(238 240 254);
+  --gold-edge: rgb(99 102 241);
+  --cb-ring: rgb(238 240 254);
+  --btn-solid-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 2px 6px rgb(67 56 202 / 0.25);
+  --nav-on-bg: linear-gradient(rgb(238 240 254), rgb(238 240 254));
+}
+
 @layer base {
   html {
     scrollbar-gutter: stable;

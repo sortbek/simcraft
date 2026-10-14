@@ -9,6 +9,7 @@ import ThemeSelector from './ThemeSelector';
 import UpdateChecker from './UpdateChecker';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
+import { useGame } from '../../lib/game';
 import { ROUTES, SIM_RESULT_PREFIX, isRouteActive } from '../../lib/routes';
 import packageJson from '../../../../package.json';
 import Tooltip from '../ui/Tooltip';
@@ -89,10 +90,36 @@ interface NavItemProps {
   pathname: string;
   icon: ToolIconName;
   collapsed: boolean;
+  /** Greyed out with this tooltip (retail-only tools for a WoW Forever character). */
+  disabled?: boolean;
+  disabledLabel?: string;
 }
 
-function NavItem({ href, label, matchPaths, pathname, icon, collapsed }: NavItemProps) {
+function NavItem({
+  href,
+  label,
+  matchPaths,
+  pathname,
+  icon,
+  collapsed,
+  disabled,
+  disabledLabel,
+}: NavItemProps) {
   const isActive = isRouteActive(pathname, matchPaths ?? [href]);
+  if (disabled) {
+    return (
+      <Tooltip text={disabledLabel}>
+        <span
+          aria-disabled="true"
+          aria-label={label}
+          className="sb-item relative flex h-10 cursor-not-allowed items-center gap-2.5 px-[22px] font-headline text-[12.5px] font-bold uppercase tracking-[0.08em] text-on-surface-variant opacity-40"
+        >
+          <ToolIcon name={icon} className="h-4 w-4" />
+          <span className="sb-full">{label}</span>
+        </span>
+      </Tooltip>
+    );
+  }
   return (
     <Tooltip text={collapsed ? label : undefined}>
       <Link
@@ -150,6 +177,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
   const { t } = useLanguage();
+  const game = useGame();
 
   const isQuickSim = isRouteActive(pathname, [ROUTES.quickSim]);
   const { collapsed, toggle } = useSidebarCollapsed();
@@ -162,7 +190,12 @@ export default function Sidebar() {
           aria-label="SimHammer"
           className="desktop-no-drag font-headline text-[19px] font-extrabold uppercase tracking-[0.02em] text-gold transition-colors hover:text-gold-light"
         >
-          <span className="sb-full">SimHammer</span>
+          <span className="sb-full flex flex-col leading-none">
+            <span>SimHammer</span>
+            <span className="mt-1 font-sans text-[10.5px] font-bold tracking-[0.16em] text-gold/80">
+              {t(game === 'forever' ? 'game.forever' : 'game.retail')}
+            </span>
+          </span>
           <span className="sb-rail">S</span>
         </Link>
         <span className="sb-full ml-auto text-[11px] font-semibold tabular-nums text-outline">
@@ -203,6 +236,8 @@ export default function Sidebar() {
             icon={icon}
             pathname={pathname}
             collapsed={collapsed}
+            disabled={game === 'forever' && href !== ROUTES.topGear}
+            disabledLabel={t('nav.retailOnly')}
           />
         ))}
 
@@ -213,6 +248,8 @@ export default function Sidebar() {
           icon="routes"
           pathname={pathname}
           collapsed={collapsed}
+          disabled={game === 'forever'}
+          disabledLabel={t('nav.retailOnly')}
         />
         <NavItem
           href={ROUTES.sims}

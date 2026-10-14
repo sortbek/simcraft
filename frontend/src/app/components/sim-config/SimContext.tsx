@@ -15,6 +15,7 @@ import type { ActiveRoute } from '../../lib/active-route';
 import { folioSelectionForImport, type OmniumSelection } from '../omnium/omniumSelection';
 import { useOmniumTree } from '../../lib/useOmniumTree';
 import { effectiveSpec, specIsSimmable } from '../../lib/simcDetect';
+import { detectGame, GAME_STORAGE_KEY, type Game } from '../../lib/game';
 import {
   readSessionJson,
   readSessionString,
@@ -60,6 +61,8 @@ interface SimContextType {
   setSimcInput: (v: string) => void;
   /** Whether simcInput has enough content to be worth sending to the server. */
   hasInput: boolean;
+  /** Retail or WoW Forever, read from the paste's `# WoW` header. */
+  game: Game;
   /** The class/spec SimC can't sim, or `null`. Reads the EFFECTIVE spec, so a
    *  selected talent loadout that overrides `spec=` is honoured. Gates every
    *  run button; the backend rejects the same profiles with a 400. */
@@ -346,6 +349,15 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasInput = simcInput.trim().length >= 50;
+  const game = useMemo(() => detectGame(simcInput), [simcInput]);
+  useEffect(() => {
+    document.documentElement.dataset.game = game;
+    try {
+      localStorage.setItem(GAME_STORAGE_KEY, game);
+    } catch {
+      // storage blocked: the attribute still follows the paste
+    }
+  }, [game]);
 
   const unsimmableSpec = useMemo(() => {
     const className = simcInput.match(/^(\w+)="/m)?.[1]?.toLowerCase();
@@ -712,6 +724,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         simcInput,
         setSimcInput,
         hasInput,
+        game,
         unsimmableSpec,
         fightStyle,
         setFightStyle,

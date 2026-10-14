@@ -20,6 +20,7 @@ import { useLanguage } from '../../lib/i18n';
 import { isValidSimcExport, validateChecksum } from '../../lib/simcDetect';
 import { parseCharacterInfo } from '../../lib/character';
 import { parseShareInput } from '../../lib/share/link';
+import { detectGame } from '../../lib/game';
 
 export default function TopBar() {
   const isDesktop = useIsDesktop();
@@ -340,6 +341,11 @@ export default function TopBar() {
                       <div className="text-sm font-medium">{char.name}</div>
                       <div className="text-[12px] text-on-surface-variant/50">
                         {specDisplayName(char.spec)} {char.class} &middot; {char.realm}
+                        {detectGame(char.simc_input) === 'forever' && (
+                          <span className="ml-2 rounded-[4px] bg-gold/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-gold">
+                            {t('game.forever')}
+                          </span>
+                        )}
                       </div>
                     </button>
                     <button
