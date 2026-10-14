@@ -44,9 +44,14 @@ function request(url, { follow = true, onProgress } = {}) {
   });
 }
 
+// Only a real release tag: it becomes a folder name and part of an Expand-Archive command.
+const TAG_PATTERN = /^forever-\d{8}-[0-9a-f]+$/;
+
 function tagFromLocation(location) {
   const m = /\/releases\/tag\/([^/?#]+)/.exec(location || "");
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  const tag = decodeURIComponent(m[1]);
+  return TAG_PATTERN.test(tag) ? tag : null;
 }
 
 async function latestTag() {
@@ -105,8 +110,8 @@ async function install(baseDir, tag, onProgress) {
 
 /** Installs or updates the engine. Forever is optional: failures are logged, never thrown. */
 async function ensureForever(baseDir, onProgress) {
-  fs.mkdirSync(baseDir, { recursive: true });
   try {
+    fs.mkdirSync(baseDir, { recursive: true });
     const tag = await latestTag();
     if (tag !== activeTag(baseDir)) {
       console.log(`[forever] installing ${tag}`);

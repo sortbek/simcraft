@@ -113,6 +113,7 @@ ARG TARGETARCH
 RUN set -eu; mkdir -p /out; \
     case "$TARGETARCH" in arm64) ASSET=simhammer-forever-linux-arm64.tar.gz ;; *) ASSET=simhammer-forever-linux-x64.tar.gz ;; esac; \
     TAG=$(curl -fsSI --max-time 20 https://github.com/sortbek/forever-builds/releases/latest | tr -d '\r' | sed -n 's#^[Ll]ocation: .*/releases/tag/\(.*\)$#\1#p') || true; \
+    echo "$TAG" | grep -Eq '^forever-[0-9]{8}-[0-9a-f]+$' || TAG=""; \
     if [ -n "$TAG" ] && mkdir -p "/out/$TAG" \
        && curl -fsSL "https://github.com/sortbek/forever-builds/releases/download/$TAG/$ASSET" | tar -xz -C "/out/$TAG" \
        && chmod 755 "/out/$TAG/simhammer-forever"; then \

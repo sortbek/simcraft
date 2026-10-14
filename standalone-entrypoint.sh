@@ -302,6 +302,8 @@ fetch_forever() {
     esac
     tag=$(curl -fsSI --max-time 20 "https://github.com/$FOREVER_REPO/releases/latest" \
         | tr -d '\r' | sed -n 's#^[Ll]ocation: .*/releases/tag/\(.*\)$#\1#p')
+    # Only a real release tag: it becomes a folder name under FOREVER_DIR.
+    [[ "$tag" =~ ^forever-[0-9]{8}-[0-9a-f]+$ ]] || tag=""
     if [ -z "$tag" ]; then
         echo "==> Forever: no release found, continuing without it"
         return 0
