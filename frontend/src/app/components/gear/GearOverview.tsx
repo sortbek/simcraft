@@ -152,6 +152,22 @@ export default function GearOverview({
             </Fragment>
           ))}
         </div>
+        {/* WoW Forever only: retail gear has no ranged slot. */}
+        {gear.ranged && (
+          <div className="relative mt-1.5 grid gap-2">
+            <GearSlotRow
+              slot="ranged"
+              item={gear.ranged}
+              isUpgrade={upgradeSlots?.has('ranged')}
+              isDowngrade={downgradeSlots?.has('ranged')}
+              isShared={sharedSlots?.has('ranged')}
+              itemInfoMap={itemInfoMap}
+              enchantInfoMap={enchantInfoMap}
+              gemInfoMap={gemInfoMap}
+              align="left"
+            />
+          </div>
+        )}
       </div>
     </section>
   );

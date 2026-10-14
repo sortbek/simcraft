@@ -14,7 +14,7 @@ const GEAR_ORDER_RIGHT = [
   'trinket1',
   'trinket2',
 ];
-const GEAR_ORDER_BOTTOM = ['main_hand', 'off_hand'];
+const GEAR_ORDER_BOTTOM = ['main_hand', 'off_hand', 'ranged'];
 const ALL_SLOTS = [...GEAR_ORDER_LEFT, ...GEAR_ORDER_RIGHT, ...GEAR_ORDER_BOTTOM];
 
 export function gemBadgeClass(name?: string): string {

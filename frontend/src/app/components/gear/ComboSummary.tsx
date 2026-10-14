@@ -61,12 +61,16 @@ function GlyphTile({
 }
 
 function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; locale: string }) {
-  const color = info ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
-  const href = item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined;
+  // WoW Forever items carry their own icon and quality, and have no retail Wowhead page.
+  const own = item.quality !== undefined;
+  const quality = own ? item.quality : info?.quality;
+  const color =
+    quality !== undefined ? QUALITY_COLORS[quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
+  const href = item.item_id > 0 && !own ? getWowheadUrl(item.item_id, locale) : undefined;
   return (
     <a
       href={href}
-      data-wowhead={item.item_id > 0 ? getWowheadData(item) : undefined}
+      data-wowhead={item.item_id > 0 && !own ? getWowheadData(item) : undefined}
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.preventDefault()}
@@ -74,7 +78,7 @@ function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; l
       style={{ borderColor: color }}
     >
       <img
-        {...iconProps(info?.icon || 'inv_misc_questionmark')}
+        {...iconProps((own ? item.icon : info?.icon) || 'inv_misc_questionmark')}
         alt=""
         width={34}
         height={34}
@@ -188,15 +192,20 @@ export default function ComboSummary({
 
   // First line: the first changed item, else the first other change.
   const first = changedItems[0];
-  const firstInfo = first && first.item_id > 0 ? itemInfoMap[first.item_id] : undefined;
+  const firstOwn = first?.quality !== undefined;
+  const firstInfo =
+    first && first.item_id > 0 && !firstOwn ? itemInfoMap[first.item_id] : undefined;
+  const firstQuality = firstOwn ? first.quality : firstInfo?.quality;
   const titleLabel = first ? null : labels[0];
   const otherCount = changedItems.length + labels.length - 1;
   const title = first ? (
     <span
-      style={{ color: firstInfo ? QUALITY_COLORS[firstInfo.quality] : undefined }}
+      style={{ color: firstQuality !== undefined ? QUALITY_COLORS[firstQuality] : undefined }}
       className="truncate"
     >
-      {localizedItemName(first.item_id, firstInfo?.name || first.name || '', locale)}
+      {firstOwn
+        ? first.name
+        : localizedItemName(first.item_id, firstInfo?.name || first.name || '', locale)}
     </span>
   ) : titleLabel ? (
     <span className={cn('truncate', titleLabel.className)}>{titleLabel.text}</span>

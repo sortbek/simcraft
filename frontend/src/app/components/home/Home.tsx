@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useSimContext } from '../sim-config/SimContext';
+import type { Game } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import { parseCharacterInfo } from '../../lib/character';
 import { useRealmSlug } from '../../lib/realms';
@@ -21,6 +22,8 @@ import ToolIcon, { type ToolIconName } from '../ui/ToolIcon';
 import { lastDoneBySimType, quickSimTrend, recentJobs } from './homeModel';
 import { useCharacterJobs, useRecentJobs, useSeasonRotation, zoneBackground } from './useHomeData';
 import { useIsDesktop } from '../../lib/useIsDesktop';
+
+const FOREVER_TOOLS = new Set(['quick', 'top_gear']);
 
 const TOOLS: { simType: string; route: string; question: string; icon: ToolIconName }[] = [
   { simType: 'quick', route: ROUTES.quickSim, question: 'home.qQuick', icon: 'quick' },
@@ -50,11 +53,20 @@ const titleCase = (s: string) => s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) =
 const CARD =
   'rounded-[12px] border border-line/[0.06] bg-surface-container [box-shadow:var(--shadow-card)]';
 
-function QuestionCards({ lastRun }: { lastRun?: Record<string, string> }) {
+function QuestionCards({
+  lastRun,
+  game = 'retail',
+}: {
+  lastRun?: Record<string, string>;
+  game?: Game;
+}) {
   const { t } = useLanguage();
+  // WoW Forever has Quick Sim and Top Gear only.
+  const tools =
+    game === 'forever' ? TOOLS.filter((tool) => FOREVER_TOOLS.has(tool.simType)) : TOOLS;
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-      {TOOLS.map((tool) => (
+      {tools.map((tool) => (
         <Link
           key={tool.simType}
           href={tool.route}
@@ -121,7 +133,7 @@ function Welcome({ backdrop }: { backdrop: string | null }) {
  *  character with its latest numbers and a way into each tool. */
 export default function Home() {
   const { t } = useLanguage();
-  const { simcInput } = useSimContext();
+  const { simcInput, game } = useSimContext();
   const info = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
   const race = useMemo(() => simcInput.match(/^race=(\w+)/m)?.[1] ?? null, [simcInput]);
   const realmSlug = useRealmSlug(info?.realm);
@@ -163,7 +175,9 @@ export default function Home() {
         classColor={CLASS_COLORS[info.className]}
         race={race && titleCase(race)}
         realm={info.realm && titleCase(info.realm)}
-        renderUrl={getCharacterRenderUrl(realmSlug, info.name, info.region)}
+        renderUrl={
+          game === 'forever' ? null : getCharacterRenderUrl(realmSlug, info.name, info.region)
+        }
         backdrop={backdrop}
         dps={last.quick?.dps ?? null}
         itemLevel={gear ? averageItemLevel(gear) : null}
@@ -172,7 +186,7 @@ export default function Home() {
 
       <div>
         <div className="lbl mb-3">{t('home.whatToKnow')}</div>
-        <QuestionCards lastRun={lastRun} />
+        <QuestionCards lastRun={lastRun} game={game} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -191,7 +205,10 @@ export default function Home() {
             </p>
           ) : (
             recent.map((job, i) => {
-              const avatar = getCharacterAvatarUrl(job.realm, job.player_name, job.region ?? 'eu');
+              const avatar =
+                job.game === 'forever'
+                  ? null
+                  : getCharacterAvatarUrl(job.realm, job.player_name, job.region ?? 'eu');
               return (
                 <Link
                   key={job.id}

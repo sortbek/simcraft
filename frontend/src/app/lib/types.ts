@@ -232,6 +232,7 @@ export const SLOT_LABELS: Record<string, string> = {
   trinket2: 'Trinket 2',
   main_hand: 'Main Hand',
   off_hand: 'Off Hand',
+  ranged: 'Ranged',
 };
 
 // ---- Class / Spec Data ----

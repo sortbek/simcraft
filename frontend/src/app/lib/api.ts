@@ -286,6 +286,7 @@ export interface JobOverviewSummary {
   dps: number | null;
   batch_id: string | null;
   provider_id: string;
+  game?: 'retail' | 'forever';
 }
 
 /** Active sims (pending/running/paused) + up to 20 most recent terminal jobs. */
