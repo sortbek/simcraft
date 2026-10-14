@@ -2,6 +2,7 @@
 
 import { useLanguage } from '../../lib/i18n';
 import { COLUMN_TITLE, HELP, formatFightLength } from '../sim-config/settingsUi';
+import { Chevron, useSimSettingsOpen } from '../sim-config/SimSettingsBlock';
 import { TABS_TRACK, tabClass } from '../ui/ToggleButtonGroup';
 import { FIGHT_LENGTHS, ITERATIONS } from './useForeverSettings';
 
@@ -52,38 +53,80 @@ export default function ForeverSettingsBlock({
   setIterations: (v: number) => void;
 }) {
   const { t } = useLanguage();
+  const { open, changeOpen, rootRef, keepTopRef } = useSimSettingsOpen();
+  const summary = [
+    { label: t('simSettings.fight'), value: formatFightLength(fightLength) },
+    { label: t('config.iterations'), value: iterations.toLocaleString() },
+    { label: t('config.consumables'), value: t('simSettings.auto') },
+    { label: t('config.raidBuffs'), value: t('simSettings.auto') },
+  ];
   return (
-    <section aria-label={t('simSettings.title')} className="card sim-settings">
-      <div className="flex min-h-[60px] items-center py-2.5 pl-5 pr-3">
-        <h2 className="h-card">{t('simSettings.title')}</h2>
+    <section
+      ref={rootRef}
+      id="sim-settings"
+      aria-label={t('simSettings.title')}
+      className="card sim-settings scroll-mt-24"
+    >
+      <div className="flex items-start gap-3 rounded-t-[10px] py-2.5 pl-5 pr-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex min-h-10 items-center">
+            <h2 className="h-card">{t('simSettings.title')}</h2>
+          </div>
+          {!open && (
+            <div className="sim-settings-summary">
+              {summary.map((item) => (
+                <div key={item.label} className="sim-settings-summary-item">
+                  <span className="lbl">{item.label}</span>
+                  <b className="truncate font-headline text-[13px] font-extrabold text-on-surface">
+                    {item.value}
+                  </b>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            keepTopRef.current = rootRef.current?.getBoundingClientRect().top ?? null;
+            changeOpen(!open);
+          }}
+          aria-expanded={open}
+          aria-label={open ? t('simSettings.collapse') : t('simSettings.expand')}
+          className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-line/[0.11] text-on-surface-variant transition-colors hover:border-line/20 hover:text-on-surface"
+        >
+          <Chevron up={open} />
+        </button>
       </div>
-      <div className="sim-settings-grid">
-        <div className="sim-settings-col sim-settings-fight">
-          <h3 className={COLUMN_TITLE}>{t('simSettings.fight')}</h3>
-          <Choice
-            label={t('config.fightLength')}
-            value={fightLength}
-            options={FIGHT_LENGTHS}
-            format={formatFightLength}
-            onChange={setFightLength}
-          />
-          <Choice
-            label={t('config.iterations')}
-            value={iterations}
-            options={ITERATIONS}
-            format={(n) => n.toLocaleString()}
-            onChange={setIterations}
-          />
+      {open && (
+        <div className="sim-settings-grid">
+          <div className="sim-settings-col sim-settings-fight">
+            <h3 className={COLUMN_TITLE}>{t('simSettings.fight')}</h3>
+            <Choice
+              label={t('config.fightLength')}
+              value={fightLength}
+              options={FIGHT_LENGTHS}
+              format={formatFightLength}
+              onChange={setFightLength}
+            />
+            <Choice
+              label={t('config.iterations')}
+              value={iterations}
+              options={ITERATIONS}
+              format={(n) => n.toLocaleString()}
+              onChange={setIterations}
+            />
+          </div>
+          <div className="sim-settings-col sim-settings-cons">
+            <h3 className={COLUMN_TITLE}>{t('config.consumables')}</h3>
+            <p className={HELP}>{t('forever.autoConsumables')}</p>
+          </div>
+          <div className="sim-settings-col sim-settings-buffs">
+            <h3 className={COLUMN_TITLE}>{t('config.raidBuffs')}</h3>
+            <p className={HELP}>{t('forever.autoBuffs')}</p>
+          </div>
         </div>
-        <div className="sim-settings-col sim-settings-cons">
-          <h3 className={COLUMN_TITLE}>{t('config.consumables')}</h3>
-          <p className={HELP}>{t('forever.autoConsumables')}</p>
-        </div>
-        <div className="sim-settings-col sim-settings-buffs">
-          <h3 className={COLUMN_TITLE}>{t('config.raidBuffs')}</h3>
-          <p className={HELP}>{t('forever.autoBuffs')}</p>
-        </div>
-      </div>
+      )}
     </section>
   );
 }
