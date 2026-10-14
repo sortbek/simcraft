@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -97,22 +97,33 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
     }
 }
 
-/// Flips the watch to true once the job is cancelled; ends when the run ends.
-fn watch_cancel(
-    repo: JobRepo,
+/// Once a second: writes the latest progress when it moved (one ordered writer, at most one
+/// write a second) and flips the watch to true once the job is cancelled.
+fn watch_job(
+    repo: Arc<JobRepo>,
     id: String,
+    progress: Arc<AtomicU8>,
 ) -> (
     tokio::sync::watch::Receiver<bool>,
     tokio::task::JoinHandle<()>,
 ) {
     let (tx, rx) = tokio::sync::watch::channel(false);
-    let token = CancelToken::new(repo, id);
     let handle = tokio::spawn(async move {
+        let mut written = 0u8;
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
-            if token.is_cancelled().await {
-                let _ = tx.send(true);
-                return;
+            let pct = progress.load(Ordering::Relaxed);
+            if pct > written {
+                written = pct;
+                let _ = repo
+                    .update_progress(&id, pct.max(5), "Simulating", "")
+                    .await;
+            }
+            if let Ok(Some(summary)) = repo.get_status_summary(&id).await {
+                if summary.status == JobStatus::Cancelled {
+                    let _ = tx.send(true);
+                    return;
+                }
             }
         }
     });
@@ -206,9 +217,9 @@ async fn start_job(
         };
         let _ = repo.update_status(&id, JobStatus::Running).await;
         let _ = repo.update_progress(&id, 5, "Simulating", "").await;
-        let (cancel_rx, cancel_watch) = watch_cancel((*repo).clone(), id.clone());
+        let progress = Arc::new(AtomicU8::new(0));
+        let (cancel_rx, job_watch) = watch_job(repo.clone(), id.clone(), progress.clone());
         let (log_id, log_buf) = (id.clone(), logs.clone());
-        let (progress_id, progress_repo) = (id.clone(), repo.clone());
         let outcome = runner::run_cli(
             &engine.binary,
             command,
@@ -216,15 +227,10 @@ async fn start_job(
             &extra,
             cancel_rx,
             move |line| log_buf.push_line(&log_id, line.to_string()),
-            move |pct| {
-                let (r, i) = (progress_repo.clone(), progress_id.clone());
-                tokio::spawn(async move {
-                    let _ = r.update_progress(&i, pct.max(5), "Simulating", "").await;
-                });
-            },
+            move |pct| progress.store(pct, Ordering::Relaxed),
         )
         .await;
-        cancel_watch.abort();
+        job_watch.abort();
         match outcome {
             Ok(raw) => match engine_error(&raw) {
                 Some(e) => {
@@ -279,6 +285,26 @@ mod tests {
     fn input(level: u32) -> String {
         include_str!("../forever/testdata/sylfrey.simc")
             .replace("level=27", &format!("level={level}"))
+    }
+
+    #[tokio::test]
+    async fn watch_job_writes_progress_once_a_second_and_sees_cancel() {
+        let repo = Arc::new(JobRepo::new_memory());
+        let job = Job::new("x".into(), "quick".into(), 100, "Patchwerk".into(), 0.0);
+        repo.insert(&job).await.unwrap();
+        let progress = Arc::new(AtomicU8::new(0));
+        let (mut cancelled, handle) = watch_job(repo.clone(), job.id.clone(), progress.clone());
+        progress.store(42, Ordering::Relaxed);
+        tokio::time::sleep(Duration::from_millis(1300)).await;
+        assert_eq!(repo.get(&job.id).await.unwrap().unwrap().progress_pct, 42);
+        repo.update_status(&job.id, JobStatus::Cancelled)
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(3), cancelled.wait_for(|c| *c))
+            .await
+            .expect("cancel seen within 3 s")
+            .unwrap();
+        handle.abort();
     }
 
     #[test]

@@ -17,6 +17,26 @@ extern "C" {
     fn setpriority(which: i32, who: u32, prio: i32) -> i32;
 }
 
+/// Turns the engine's `progress <done> <total>` lines into whole percents that only move
+/// forward: one update per percent, none when a bulk stage restarts its count.
+#[derive(Default)]
+pub struct ProgressGate {
+    last: u8,
+}
+
+impl ProgressGate {
+    pub fn advance(&mut self, done: u32, total: u32) -> Option<u8> {
+        if total == 0 {
+            return None;
+        }
+        let pct = ((done as u64 * 100) / total as u64).min(99) as u8;
+        (pct > self.last).then(|| {
+            self.last = pct;
+            pct
+        })
+    }
+}
+
 pub fn parse_progress(line: &str) -> Option<(u32, u32)> {
     let mut parts = line.strip_prefix("progress ")?.split_whitespace();
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
@@ -63,11 +83,12 @@ pub async fn run_cli(
     // Owns the child, so dropping this future (timeout, cancel) kills the process.
     let run = async move {
         let mut last_error = String::new();
+        let mut gate = ProgressGate::default();
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if let Some((done, total)) = parse_progress(&line) {
-                if total > 0 {
-                    on_progress(((done as u64 * 100) / total as u64).min(99) as u8);
+                if let Some(pct) = gate.advance(done, total) {
+                    on_progress(pct);
                 }
             } else {
                 if let Some(msg) = line.strip_prefix("error: ") {
@@ -112,6 +133,26 @@ mod tests {
         let (tx, rx) = tokio::sync::watch::channel(false);
         std::mem::forget(tx);
         rx
+    }
+
+    #[test]
+    fn progress_only_moves_forward_once_per_percent() {
+        let mut gate = ProgressGate::default();
+        assert_eq!(gate.advance(1, 1000), None, "0% is not news");
+        assert_eq!(gate.advance(10, 1000), Some(1));
+        assert_eq!(gate.advance(19, 1000), None, "still 1%");
+        assert_eq!(gate.advance(500, 1000), Some(50));
+        assert_eq!(
+            gate.advance(400, 1000),
+            None,
+            "never backwards (a new bulk stage restarts its count)"
+        );
+        assert_eq!(
+            gate.advance(1000, 1000),
+            Some(99),
+            "100% is the result write, not a progress line"
+        );
+        assert_eq!(gate.advance(5, 0), None);
     }
 
     #[test]
