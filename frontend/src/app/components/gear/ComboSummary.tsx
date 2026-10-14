@@ -6,6 +6,7 @@ import { SLOT_LABELS, specDisplayName } from '../../lib/types';
 import {
   QUALITY_COLORS,
   getWowheadData,
+  getForeverWowheadUrl,
   getWowheadUrl,
   iconProps,
   localizedItemName,
@@ -61,12 +62,17 @@ function GlyphTile({
 }
 
 function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; locale: string }) {
-  // WoW Forever items carry their own icon and quality, and have no retail Wowhead page.
+  // WoW Forever items carry their own icon and quality, and link to Wowhead's Forever pages.
   const own = item.quality !== undefined;
   const quality = own ? item.quality : info?.quality;
   const color =
     quality !== undefined ? QUALITY_COLORS[quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
-  const href = item.item_id > 0 && !own ? getWowheadUrl(item.item_id, locale) : undefined;
+  const href =
+    item.item_id > 0
+      ? own
+        ? getForeverWowheadUrl('item', item.item_id, locale)
+        : getWowheadUrl(item.item_id, locale)
+      : undefined;
   return (
     <a
       href={href}

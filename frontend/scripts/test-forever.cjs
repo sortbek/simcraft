@@ -82,3 +82,13 @@ test('deepest talents: per tree with points, its ranked talents in the deepest r
     ['p2', 'p3', 'r1']
   );
 });
+
+const { getForeverWowheadUrl } = require('../src/app/lib/useItemInfo.ts');
+
+test("Forever items and talents link to Wowhead's forever pages, on the locale domain", () => {
+  assert.equal(getForeverWowheadUrl('item', 273637), 'https://www.wowhead.com/forever/item=273637');
+  assert.equal(
+    getForeverWowheadUrl('spell', 20262, 'de_DE'),
+    'https://de.wowhead.com/forever/spell=20262'
+  );
+});

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../ui/ErrorAlert';
 import GearItemRow from '../gear/GearItemRow';
 import { qualityHex } from '../../lib/qualityColors';
+import { getForeverWowheadUrl } from '../../lib/useItemInfo';
 import { SLOT_LABELS } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
 import { useSimContext } from '../sim-config/SimContext';
@@ -21,7 +22,7 @@ const GROUP_LABEL: Record<string, string> = { finger: 'Rings', trinket: 'Trinket
 
 export default function ForeverTopGear() {
   const { simcInput } = useSimContext();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { summary, error } = useForeverImport(simcInput);
   const settings = useForeverSettings();
   const [specKey, setSpecKey] = useState<string | null>(null);
@@ -88,6 +89,7 @@ export default function ForeverTopGear() {
                   {g.equipped.map((e) => (
                     <GearItemRow
                       key={`eq-${e.slot}`}
+                      href={getForeverWowheadUrl('item', e.item_id, locale)}
                       icon={e.icon || 'inv_misc_questionmark'}
                       name={e.name}
                       nameColor={qualityHex(e.quality)}
@@ -98,6 +100,7 @@ export default function ForeverTopGear() {
                   {g.bags.map(({ gear, index }) => (
                     <GearItemRow
                       key={`bag-${index}`}
+                      href={getForeverWowheadUrl('item', gear.item_id, locale)}
                       icon={gear.icon || 'inv_misc_questionmark'}
                       name={gear.name}
                       nameColor={qualityHex(gear.quality)}

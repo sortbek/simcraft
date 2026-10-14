@@ -4,6 +4,7 @@
 import {
   QUALITY_COLORS,
   getWowheadData,
+  getForeverWowheadUrl,
   getWowheadUrl,
   localizedEnchantName,
   localizedGemName,
@@ -76,7 +77,12 @@ export default function GearSlotRow({
     : localizedItemName(item.item_id, info?.name || item.name || `Item ${item.item_id}`, locale);
   const icon = (own ? item.icon : info?.icon) || 'inv_misc_questionmark';
   const wowheadData = item.item_id > 0 && !own ? getWowheadData(item) : undefined;
-  const wowheadUrl = item.item_id > 0 && !own ? getWowheadUrl(item.item_id, locale) : undefined;
+  const wowheadUrl =
+    item.item_id > 0
+      ? own
+        ? getForeverWowheadUrl('item', item.item_id, locale)
+        : getWowheadUrl(item.item_id, locale)
+      : undefined;
   const fadeDir = rtl ? 'to left' : 'to right';
 
   return (

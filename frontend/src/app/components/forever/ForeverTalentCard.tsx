@@ -1,7 +1,8 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { iconProps } from '../../lib/useItemInfo';
+import { getForeverWowheadUrl, iconProps } from '../../lib/useItemInfo';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import { useLanguage } from '../../lib/i18n';
 import { TreeToggleCell, useTreeOpen } from '../talents/TalentSummaryRow';
 import ForeverTalentTrees from './ForeverTalentTrees';
@@ -19,10 +20,11 @@ export default function ForeverTalentCard({
   specKey: string | null;
   onSpecChange: (key: string) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [treeOpen, setTreeOpen] = useTreeOpen();
   const trees = summary.talent_trees ?? [];
   const deepest = deepestTalents(trees);
+  useWowheadTooltips([deepest.length]);
   const specLabel = (key: string) => (SPEC_LABEL_KEYS[key] ? t(SPEC_LABEL_KEYS[key]) : key);
 
   return (
@@ -57,13 +59,20 @@ export default function ForeverTalentCard({
             <span className="lbl">{t('forever.deepestTalents')}</span>
             <span className="flex min-h-[38px] flex-wrap items-center gap-1">
               {deepest.map((d) => (
-                <img
+                <a
                   key={`${d.row}:${d.col}:${d.name}`}
-                  {...iconProps(d.icon)}
-                  alt={d.name}
-                  title={`${d.name} (${d.rank}/${d.max_ranks})`}
-                  className="h-6 w-6 rounded-[6px] border-[1.5px] border-gold-edge object-cover"
-                />
+                  href={getForeverWowheadUrl('spell', d.spell_id, locale)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.preventDefault()}
+                  aria-label={d.name}
+                >
+                  <img
+                    {...iconProps(d.icon)}
+                    alt=""
+                    className="h-6 w-6 rounded-[6px] border-[1.5px] border-gold-edge object-cover"
+                  />
+                </a>
               ))}
             </span>
           </div>

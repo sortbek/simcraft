@@ -2,7 +2,9 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Pill from '../ui/Pill';
-import { iconProps } from '../../lib/useItemInfo';
+import { getForeverWowheadUrl, iconProps } from '../../lib/useItemInfo';
+import { useLanguage } from '../../lib/i18n';
+import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import type { ForeverTalent, ForeverTalentTree } from './types';
 
 const CELL = 42;
@@ -11,13 +13,17 @@ const COLS = 4;
 const at = (n: number) => n * (CELL + GAP);
 const centre = (n: number) => at(n) + CELL / 2;
 
-function Node({ talent }: { talent: ForeverTalent }) {
+function Node({ talent, locale }: { talent: ForeverTalent; locale: string }) {
   const on = talent.rank > 0;
   return (
-    <div
-      className="absolute"
+    <a
+      href={getForeverWowheadUrl('spell', talent.spell_id, locale)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.preventDefault()}
+      aria-label={`${talent.name} (${talent.rank}/${talent.max_ranks})`}
+      className="absolute block"
       style={{ left: at(talent.col), top: at(talent.row), width: CELL, height: CELL }}
-      title={`${talent.name} (${talent.rank}/${talent.max_ranks})`}
     >
       <img
         {...iconProps(talent.icon)}
@@ -35,11 +41,11 @@ function Node({ talent }: { talent: ForeverTalent }) {
       >
         {talent.rank}/{talent.max_ranks}
       </span>
-    </div>
+    </a>
   );
 }
 
-function Tree({ tree }: { tree: ForeverTalentTree }) {
+function Tree({ tree, locale }: { tree: ForeverTalentTree; locale: string }) {
   const rows = Math.max(0, ...tree.talents.map((t) => t.row)) + 1;
   const width = at(COLS) - GAP;
   const height = at(rows) - GAP;
@@ -71,7 +77,7 @@ function Tree({ tree }: { tree: ForeverTalentTree }) {
           )}
         </svg>
         {tree.talents.map((t) => (
-          <Node key={`${t.row}:${t.col}`} talent={t} />
+          <Node key={`${t.row}:${t.col}`} talent={t} locale={locale} />
         ))}
       </div>
     </div>
@@ -80,10 +86,12 @@ function Tree({ tree }: { tree: ForeverTalentTree }) {
 
 /** The three calculator trees side by side, as the retail tree lays out its trees. */
 export default function ForeverTalentTrees({ trees }: { trees: ForeverTalentTree[] }) {
+  const { locale } = useLanguage();
+  useWowheadTooltips([trees]);
   return (
     <div className="flex flex-col items-center gap-6 lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-0 lg:[&>*+*]:shadow-[inset_1px_0_0_rgb(var(--c-line)/calc(0.06*var(--c-line-k)))]">
       {trees.map((tree) => (
-        <Tree key={tree.name} tree={tree} />
+        <Tree key={tree.name} tree={tree} locale={locale} />
       ))}
     </div>
   );
