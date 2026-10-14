@@ -17,8 +17,10 @@ pub fn spec_choices(class: &str) -> &'static [&'static str] {
 }
 
 pub fn is_supported(spec_key: &str) -> bool {
-    !matches!(spec_key, "holyPaladin" | "healerPriest" | "restorationDruid" | "restorationShaman")
-        && !spec_key.is_empty()
+    !matches!(
+        spec_key,
+        "holyPaladin" | "healerPriest" | "restorationDruid" | "restorationShaman"
+    ) && !spec_key.is_empty()
 }
 
 /// The spec of the tree with the most points (first tree on a tie). Healer trees map to the
@@ -143,6 +145,21 @@ pub fn engine_slot(slot: &str, item_type: u8) -> Option<usize> {
 }
 
 pub const SLOT_NAMES: [&str; 17] = [
-    "head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet",
-    "finger1", "finger2", "trinket1", "trinket2", "main_hand", "off_hand", "ranged",
+    "head",
+    "neck",
+    "shoulder",
+    "back",
+    "chest",
+    "wrist",
+    "hands",
+    "waist",
+    "legs",
+    "feet",
+    "finger1",
+    "finger2",
+    "trinket1",
+    "trinket2",
+    "main_hand",
+    "off_hand",
+    "ranged",
 ];

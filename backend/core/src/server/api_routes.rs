@@ -24,9 +24,18 @@ use super::top_gear_handlers;
 use super::upgrade_compare;
 
 pub(super) fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.route("/api/forever/import", web::post().to(forever_handlers::import))
-        .route("/api/forever/sim", web::post().to(forever_handlers::create_sim))
-        .route("/api/forever/top-gear", web::post().to(forever_handlers::create_top_gear));
+    cfg.route(
+        "/api/forever/import",
+        web::post().to(forever_handlers::import),
+    )
+    .route(
+        "/api/forever/sim",
+        web::post().to(forever_handlers::create_sim),
+    )
+    .route(
+        "/api/forever/top-gear",
+        web::post().to(forever_handlers::create_top_gear),
+    );
     cfg.route("/api/sim", web::post().to(sim_handlers::create_sim))
         .route(
             "/api/sim/{id}/sim-row",

@@ -6,16 +6,18 @@ use actix_web::{web, HttpResponse};
 use serde::Deserialize;
 use serde_json::json;
 
+use super::types::SimResponse;
 use crate::cancel::CancelToken;
 use crate::compute::local::{await_local_queue_permit, LocalSimQueue};
 use crate::db::JobRepo;
-use crate::forever::import::{parse_export, summarize, ExportItem, ForeverCharacter, ImportSummary};
+use crate::forever::import::{
+    parse_export, summarize, ExportItem, ForeverCharacter, ImportSummary,
+};
 use crate::forever::request::{bulk_request, raid_request, SimSettings};
 use crate::forever::result::{engine_error, gear_result, quick_result, ResultMeta};
 use crate::forever::{detect_game, runner, spec, ForeverData, ForeverEngine, Game};
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
-use super::types::SimResponse;
 
 type Engine = web::Data<Option<Arc<ForeverEngine>>>;
 
@@ -48,7 +50,11 @@ pub(super) struct Prepared {
     pub spec_key: String,
 }
 
-pub(super) fn prepare(simc_input: &str, spec_key: Option<&str>, data: &ForeverData) -> Result<Prepared, String> {
+pub(super) fn prepare(
+    simc_input: &str,
+    spec_key: Option<&str>,
+    data: &ForeverData,
+) -> Result<Prepared, String> {
     if detect_game(simc_input) != Game::Forever {
         return Err("This is not a WoW Forever export".into());
     }
@@ -63,14 +69,17 @@ pub(super) fn prepare(simc_input: &str, spec_key: Option<&str>, data: &ForeverDa
         return Err(reason);
     }
     let spec_key = spec_key.expect("blocked_reason refuses a missing spec");
-    Ok(Prepared { character, summary, spec_key })
+    Ok(Prepared {
+        character,
+        summary,
+        spec_key,
+    })
 }
 
 fn engine_or_503(engine: &Engine) -> Result<Arc<ForeverEngine>, HttpResponse> {
-    engine
-        .get_ref()
-        .clone()
-        .ok_or_else(|| HttpResponse::ServiceUnavailable().json(json!({ "detail": "Forever engine not installed" })))
+    engine.get_ref().clone().ok_or_else(|| {
+        HttpResponse::ServiceUnavailable().json(json!({ "detail": "Forever engine not installed" }))
+    })
 }
 
 pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> HttpResponse {
@@ -79,7 +88,8 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
         Err(resp) => return resp,
     };
     if detect_game(&body.simc_input) != Game::Forever {
-        return HttpResponse::BadRequest().json(json!({ "detail": "This is not a WoW Forever export" }));
+        return HttpResponse::BadRequest()
+            .json(json!({ "detail": "This is not a WoW Forever export" }));
     }
     match parse_export(&body.simc_input) {
         Ok(ch) => HttpResponse::Ok().json(summarize(&ch, &engine.data)),
@@ -88,7 +98,13 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
 }
 
 /// Flips the watch to true once the job is cancelled; ends when the run ends.
-fn watch_cancel(repo: JobRepo, id: String) -> (tokio::sync::watch::Receiver<bool>, tokio::task::JoinHandle<()>) {
+fn watch_cancel(
+    repo: JobRepo,
+    id: String,
+) -> (
+    tokio::sync::watch::Receiver<bool>,
+    tokio::task::JoinHandle<()>,
+) {
     let (tx, rx) = tokio::sync::watch::channel(false);
     let token = CancelToken::new(repo, id);
     let handle = tokio::spawn(async move {
@@ -123,28 +139,53 @@ async fn start_job(
         iterations: req.iterations.unwrap_or(12_500).clamp(1_000, 50_000),
         duration_seconds: req.max_time.unwrap_or(120.0).clamp(30.0, 900.0),
     };
-    let base = raid_request(&prepared.character, &engine.data, &prepared.spec_key, &prepared.summary.talents_string, &settings);
+    let base = raid_request(
+        &prepared.character,
+        &engine.data,
+        &prepared.spec_key,
+        &prepared.summary.talents_string,
+        &settings,
+    );
     let (command, request, extra) = if sim_type == "top_gear" {
         let bags: Vec<ExportItem> = req
             .bag_items
             .iter()
-            .map(|b| ExportItem { slot: String::new(), item_id: b.item_id, enchant_id: b.enchant_id })
+            .map(|b| ExportItem {
+                slot: String::new(),
+                item_id: b.item_id,
+                enchant_id: b.enchant_id,
+            })
             .collect();
         if bags.is_empty() {
-            return HttpResponse::BadRequest().json(json!({ "detail": "Select at least one item to compare" }));
+            return HttpResponse::BadRequest()
+                .json(json!({ "detail": "Select at least one item to compare" }));
         }
         let max = crate::db::MAX_COMBINATIONS.load(Ordering::Relaxed);
-        ("bulk", bulk_request(base, &bags, &engine.data), vec!["--max-combinations".to_string(), max.to_string()])
+        (
+            "bulk",
+            bulk_request(base, &bags, &engine.data),
+            vec!["--max-combinations".to_string(), max.to_string()],
+        )
     } else {
         ("sim", base, Vec::new())
     };
 
-    let mut job = Job::new(req.simc_input.clone(), sim_type.to_string(), settings.iterations, "Patchwerk".into(), 0.0);
+    let mut job = Job::new(
+        req.simc_input.clone(),
+        sim_type.to_string(),
+        settings.iterations,
+        "Patchwerk".into(),
+        0.0,
+    );
     job.game = "forever".into();
     if let Err(e) = repo.insert(&job).await {
         return HttpResponse::InternalServerError().json(json!({ "detail": e.to_string() }));
     }
-    let response = SimResponse { id: job.id.clone(), status: "pending".into(), created_at: job.created_at.clone() };
+    let response = SimResponse {
+        id: job.id.clone(),
+        status: "pending".into(),
+        created_at: job.created_at.clone(),
+    };
     let meta = ResultMeta {
         player_name: prepared.character.name.clone(),
         spec_key: prepared.spec_key.clone(),
@@ -152,7 +193,12 @@ async fn start_job(
         iterations: settings.iterations,
         engine_commit: engine.data.version.engine_commit.clone(),
     };
-    let (repo, logs, queue, id) = (repo.into_inner(), logs.into_inner(), queue.into_inner(), job.id);
+    let (repo, logs, queue, id) = (
+        repo.into_inner(),
+        logs.into_inner(),
+        queue.into_inner(),
+        job.id,
+    );
     tokio::spawn(async move {
         let token = CancelToken::new((*repo).clone(), id.clone());
         let Ok(_permit) = await_local_queue_permit(&queue, Some(&token)).await else {
@@ -185,9 +231,15 @@ async fn start_job(
                     let _ = repo.set_error(&id, &e).await;
                 }
                 None => {
-                    let result = if command == "bulk" { gear_result(&raw, &engine.data, &meta) } else { quick_result(&raw, &engine.data, &meta) };
+                    let result = if command == "bulk" {
+                        gear_result(&raw, &engine.data, &meta)
+                    } else {
+                        quick_result(&raw, &engine.data, &meta)
+                    };
                     let raw_text = raw.to_string();
-                    let _ = repo.set_result(&id, &result.to_string(), Some(&raw_text)).await;
+                    let _ = repo
+                        .set_result(&id, &result.to_string(), Some(&raw_text))
+                        .await;
                 }
             },
             Err(e) if e == runner::CANCELLED => {}
@@ -225,7 +277,8 @@ mod tests {
     use super::*;
 
     fn input(level: u32) -> String {
-        include_str!("../forever/testdata/sylfrey.simc").replace("level=27", &format!("level={level}"))
+        include_str!("../forever/testdata/sylfrey.simc")
+            .replace("level=27", &format!("level={level}"))
     }
 
     #[test]
@@ -242,19 +295,30 @@ mod tests {
 
     #[test]
     fn explicit_supported_spec_overrides_the_derived_one() {
-        let p = prepare(&input(60), Some("retributionPaladin"), crate::forever::test_data()).unwrap();
+        let p = prepare(
+            &input(60),
+            Some("retributionPaladin"),
+            crate::forever::test_data(),
+        )
+        .unwrap();
         assert_eq!(p.spec_key, "retributionPaladin");
     }
 
     #[test]
     fn healer_spec_is_refused() {
-        let err = prepare(&input(60), Some("holyPaladin"), crate::forever::test_data()).unwrap_err();
+        let err =
+            prepare(&input(60), Some("holyPaladin"), crate::forever::test_data()).unwrap_err();
         assert_eq!(err, "holyPaladin is not a paladin spec");
     }
 
     #[test]
     fn retail_input_is_refused() {
-        let err = prepare("# WoW 12.0.5.66102, TOC 120005\npaladin=\"X\"\n", None, crate::forever::test_data()).unwrap_err();
+        let err = prepare(
+            "# WoW 12.0.5.66102, TOC 120005\npaladin=\"X\"\n",
+            None,
+            crate::forever::test_data(),
+        )
+        .unwrap_err();
         assert_eq!(err, "This is not a WoW Forever export");
     }
 }

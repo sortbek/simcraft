@@ -34,7 +34,9 @@ impl Bits {
         if self.pos + n > self.bits.len() {
             return Err("string is too short".into());
         }
-        let v = (0..n).fold(0u32, |acc, i| acc | (u32::from(self.bits[self.pos + i]) << i));
+        let v = (0..n).fold(0u32, |acc, i| {
+            acc | (u32::from(self.bits[self.pos + i]) << i)
+        });
         self.pos += n;
         Ok(v)
     }

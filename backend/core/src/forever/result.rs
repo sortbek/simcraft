@@ -23,7 +23,11 @@ fn round2(v: f64) -> f64 {
 
 /// 95% confidence half-width, as retail's dps_error.
 fn error95(stdev: f64, n: f64) -> f64 {
-    if n > 0.0 { 1.96 * stdev / n.sqrt() } else { 0.0 }
+    if n > 0.0 {
+        1.96 * stdev / n.sqrt()
+    } else {
+        0.0
+    }
 }
 
 pub fn engine_error(raw: &Value) -> Option<String> {
@@ -36,10 +40,18 @@ pub fn engine_error(raw: &Value) -> Option<String> {
 
 fn action_name(id: &Value, data: &ForeverData) -> String {
     if let Some(spell) = id.get("spellId").and_then(Value::as_u64) {
-        return data.spells.get(&(spell as u32)).cloned().unwrap_or_else(|| format!("Spell {spell}"));
+        return data
+            .spells
+            .get(&(spell as u32))
+            .cloned()
+            .unwrap_or_else(|| format!("Spell {spell}"));
     }
     if let Some(item) = id.get("itemId").and_then(Value::as_u64) {
-        return data.items.get(&(item as u32)).map(|i| i.name.clone()).unwrap_or_else(|| format!("Item {item}"));
+        return data
+            .items
+            .get(&(item as u32))
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| format!("Item {item}"));
     }
     match id.get("otherId").and_then(Value::as_str) {
         Some(other) => other.trim_start_matches("OtherAction").to_string(),
@@ -85,7 +97,10 @@ fn unit_abilities(unit: &Value, unit_dps: f64, data: &ForeverData) -> Vec<Value>
 pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value {
     let unit = &raw["raidMetrics"]["parties"][0]["players"][0];
     let dps = unit["dps"]["avg"].as_f64().unwrap_or(0.0);
-    let n = raw["iterationsDone"].as_f64().filter(|n| *n > 0.0).unwrap_or(meta.iterations as f64);
+    let n = raw["iterationsDone"]
+        .as_f64()
+        .filter(|n| *n > 0.0)
+        .unwrap_or(meta.iterations as f64);
     let err = error95(unit["dps"]["stdev"].as_f64().unwrap_or(0.0), n);
     let pets = unit["pets"].as_array().cloned().unwrap_or_default();
     let pet_dps: f64 = pets.iter().filter_map(|p| p["dps"]["avg"].as_f64()).sum();
@@ -101,8 +116,16 @@ pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value
             }));
         }
     }
-    abilities.sort_by(|a, b| b["portion_dps"].as_f64().unwrap_or(0.0).total_cmp(&a["portion_dps"].as_f64().unwrap_or(0.0)));
-    let fight_length = raw["avgIterationDuration"].as_f64().filter(|d| *d > 0.0).unwrap_or(meta.fight_length);
+    abilities.sort_by(|a, b| {
+        b["portion_dps"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .total_cmp(&a["portion_dps"].as_f64().unwrap_or(0.0))
+    });
+    let fight_length = raw["avgIterationDuration"]
+        .as_f64()
+        .filter(|d| *d > 0.0)
+        .unwrap_or(meta.fight_length);
     json!({
         "player_name": meta.player_name,
         "player_class": spec_label(&meta.spec_key),
@@ -138,7 +161,10 @@ fn gear_entry(slot: usize, spec: &Value, data: &ForeverData, kept: bool) -> Valu
 }
 
 fn item_key(spec: &Value) -> (u64, u64) {
-    (spec["id"].as_u64().unwrap_or(0), spec["enchant"].as_u64().unwrap_or(0))
+    (
+        spec["id"].as_u64().unwrap_or(0),
+        spec["enchant"].as_u64().unwrap_or(0),
+    )
 }
 
 fn gear_items(gear: &Value) -> Vec<Value> {
@@ -146,7 +172,10 @@ fn gear_items(gear: &Value) -> Vec<Value> {
 }
 
 fn metrics_n(metrics: &Value, fallback: u32) -> f64 {
-    metrics["aggregatorData"]["n"].as_f64().filter(|n| *n > 0.0).unwrap_or(fallback as f64)
+    metrics["aggregatorData"]["n"]
+        .as_f64()
+        .filter(|n| *n > 0.0)
+        .unwrap_or(fallback as f64)
 }
 
 fn precision_pct(metrics: &Value, fallback_n: u32) -> f64 {
@@ -154,7 +183,13 @@ fn precision_pct(metrics: &Value, fallback_n: u32) -> f64 {
     if avg <= 0.0 {
         return 0.0;
     }
-    round2(error95(metrics["stdev"].as_f64().unwrap_or(0.0), metrics_n(metrics, fallback_n)) / avg * 100.0)
+    round2(
+        error95(
+            metrics["stdev"].as_f64().unwrap_or(0.0),
+            metrics_n(metrics, fallback_n),
+        ) / avg
+            * 100.0,
+    )
 }
 
 pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value {
@@ -162,11 +197,18 @@ pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value 
     let base_metrics = &baseline["dpsMetrics"];
     let base_dps = base_metrics["avg"].as_f64().unwrap_or(0.0);
     let base_gear = gear_items(&baseline["gear"]);
-    let base_keys: Vec<(u64, u64)> = base_gear.iter().filter(|s| s["id"].as_u64().unwrap_or(0) > 0).map(item_key).collect();
+    let base_keys: Vec<(u64, u64)> = base_gear
+        .iter()
+        .filter(|s| s["id"].as_u64().unwrap_or(0) > 0)
+        .map(item_key)
+        .collect();
     let mut equipped = Map::new();
     for (slot, spec) in base_gear.iter().enumerate().take(SLOT_NAMES.len()) {
         if spec["id"].as_u64().unwrap_or(0) > 0 {
-            equipped.insert(SLOT_NAMES[slot].to_string(), gear_entry(slot, spec, data, true));
+            equipped.insert(
+                SLOT_NAMES[slot].to_string(),
+                gear_entry(slot, spec, data, true),
+            );
         }
     }
     let mut results: Vec<Value> = raw["topResults"]
@@ -183,13 +225,15 @@ pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value 
                 .enumerate()
                 .take(SLOT_NAMES.len())
                 .filter(|(_, spec)| spec["id"].as_u64().unwrap_or(0) > 0)
-                .filter(|(_, spec)| match kept.iter().position(|k| *k == item_key(spec)) {
-                    Some(i) => {
-                        kept.swap_remove(i);
-                        false
-                    }
-                    None => true,
-                })
+                .filter(
+                    |(_, spec)| match kept.iter().position(|k| *k == item_key(spec)) {
+                        Some(i) => {
+                            kept.swap_remove(i);
+                            false
+                        }
+                        None => true,
+                    },
+                )
                 .map(|(slot, spec)| gear_entry(slot, spec, data, false))
                 .collect();
             if changed.is_empty() {
@@ -212,8 +256,16 @@ pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value 
         "delta": 0.0,
         "precision_pct": precision_pct(base_metrics, meta.iterations),
     }));
-    results.sort_by(|a, b| b["dps"].as_f64().unwrap_or(0.0).total_cmp(&a["dps"].as_f64().unwrap_or(0.0)));
-    let base_err = error95(base_metrics["stdev"].as_f64().unwrap_or(0.0), metrics_n(base_metrics, meta.iterations));
+    results.sort_by(|a, b| {
+        b["dps"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .total_cmp(&a["dps"].as_f64().unwrap_or(0.0))
+    });
+    let base_err = error95(
+        base_metrics["stdev"].as_f64().unwrap_or(0.0),
+        metrics_n(base_metrics, meta.iterations),
+    );
     json!({
         "type": "top_gear",
         "result_kind": "gear_comparison",
@@ -253,17 +305,28 @@ mod tests {
         let r = quick_result(&raw, crate::forever::test_data(), &meta());
         let dps = r["dps"].as_f64().unwrap();
         assert!(dps > 0.0);
-        let stdev = raw["raidMetrics"]["parties"][0]["players"][0]["dps"]["stdev"].as_f64().unwrap();
+        let stdev = raw["raidMetrics"]["parties"][0]["players"][0]["dps"]["stdev"]
+            .as_f64()
+            .unwrap();
         let n = raw["iterationsDone"].as_f64().unwrap();
-        assert!((r["dps_error"].as_f64().unwrap() - (1.96 * stdev / n.sqrt() * 10.0).round() / 10.0).abs() < 0.11);
+        assert!(
+            (r["dps_error"].as_f64().unwrap() - (1.96 * stdev / n.sqrt() * 10.0).round() / 10.0)
+                .abs()
+                < 0.11
+        );
         assert_eq!(r["player_name"], "Sylfrey");
         assert_eq!(r["player_class"], "Retribution Paladin");
         assert_eq!(r["engine"], "forever");
         assert!(r["setup"].is_null());
         let abilities = r["abilities"].as_array().unwrap();
-        let total: f64 = abilities.iter().map(|a| a["portion_dps"].as_f64().unwrap()).sum();
+        let total: f64 = abilities
+            .iter()
+            .map(|a| a["portion_dps"].as_f64().unwrap())
+            .sum();
         assert!((total - dps).abs() / dps < 0.01, "abilities sum to dps");
-        assert!(abilities.iter().all(|a| !a["name"].as_str().unwrap().is_empty()));
+        assert!(abilities
+            .iter()
+            .all(|a| !a["name"].as_str().unwrap().is_empty()));
     }
 
     #[test]
@@ -273,12 +336,23 @@ mod tests {
         assert_eq!(r["result_kind"], "gear_comparison");
         assert_eq!(r["type"], "top_gear");
         let results = r["results"].as_array().unwrap();
-        assert!(results.iter().any(|row| row["name"] == "Currently Equipped" && row["delta"] == 0.0));
-        let dps: Vec<f64> = results.iter().map(|row| row["dps"].as_f64().unwrap()).collect();
-        assert!(dps.windows(2).all(|w| w[0] >= w[1]), "sorted by dps: {dps:?}");
+        assert!(results
+            .iter()
+            .any(|row| row["name"] == "Currently Equipped" && row["delta"] == 0.0));
+        let dps: Vec<f64> = results
+            .iter()
+            .map(|row| row["dps"].as_f64().unwrap())
+            .collect();
+        assert!(
+            dps.windows(2).all(|w| w[0] >= w[1]),
+            "sorted by dps: {dps:?}"
+        );
         let base = r["base_dps"].as_f64().unwrap();
         for row in results {
-            assert!((row["delta"].as_f64().unwrap() - (row["dps"].as_f64().unwrap() - base)).abs() < 0.11);
+            assert!(
+                (row["delta"].as_f64().unwrap() - (row["dps"].as_f64().unwrap() - base)).abs()
+                    < 0.11
+            );
             for item in row["items"].as_array().unwrap() {
                 assert!(item["quality"].is_u64() && item["icon"].is_string());
             }
@@ -293,9 +367,22 @@ mod tests {
         let raw: Value = serde_json::from_str(include_str!("testdata/bulk_result.json")).unwrap();
         let r = gear_result(&raw, crate::forever::test_data(), &meta());
         let results = r["results"].as_array().unwrap();
-        assert_eq!(results.iter().filter(|row| row["items"].as_array().unwrap().is_empty()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|row| row["items"].as_array().unwrap().is_empty())
+                .count(),
+            1
+        );
         for row in results {
-            assert!(row["items"].as_array().unwrap().iter().all(|i| i["item_id"] != 22400), "{row}");
+            assert!(
+                row["items"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|i| i["item_id"] != 22400),
+                "{row}"
+            );
             assert_ne!(row["delta"].to_string(), "-0.0");
         }
     }

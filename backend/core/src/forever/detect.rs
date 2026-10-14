@@ -29,8 +29,14 @@ pub fn detect_game(simc_input: &str) -> Game {
     let Some(rest) = wow_header(simc_input) else {
         return Game::Retail;
     };
-    let major = rest.split('.').next().and_then(|m| m.trim().parse::<u32>().ok());
-    let toc = rest.split("TOC").nth(1).and_then(|t| t.trim().parse::<u32>().ok());
+    let major = rest
+        .split('.')
+        .next()
+        .and_then(|m| m.trim().parse::<u32>().ok());
+    let toc = rest
+        .split("TOC")
+        .nth(1)
+        .and_then(|t| t.trim().parse::<u32>().ok());
     if major == Some(1) || toc.is_some_and(|t| t < 20000) {
         Game::Forever
     } else {
@@ -58,7 +64,10 @@ mod tests {
 
     #[test]
     fn retail_header_is_retail() {
-        assert_eq!(detect_game("# SimC Addon 12.1.5-01\n# WoW 12.0.5.66102, TOC 120005\n"), Game::Retail);
+        assert_eq!(
+            detect_game("# SimC Addon 12.1.5-01\n# WoW 12.0.5.66102, TOC 120005\n"),
+            Game::Retail
+        );
     }
 
     #[test]

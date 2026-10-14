@@ -1339,11 +1339,24 @@ mod tests {
         job.game = "forever".into();
         repo.insert(&job).await.unwrap();
         assert_eq!(repo.get(&job.id).await.unwrap().unwrap().game, "forever");
-        assert_eq!(repo.get_status_summary(&job.id).await.unwrap().unwrap().game, "forever");
+        assert_eq!(
+            repo.get_status_summary(&job.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .game,
+            "forever"
+        );
         let active = repo.list_active(10).await.unwrap();
-        assert!(active.iter().any(|j| j.id == job.id && j.game == "forever"), "list_active");
+        assert!(
+            active.iter().any(|j| j.id == job.id && j.game == "forever"),
+            "list_active"
+        );
         let listed = repo.list_jobs(ListJobsFilter::default()).await.unwrap();
-        assert!(listed.iter().any(|j| j.id == job.id && j.game == "forever"), "list_jobs");
+        assert!(
+            listed.iter().any(|j| j.id == job.id && j.game == "forever"),
+            "list_jobs"
+        );
         let retail = Job::new("y".into(), "quick".into(), 100, "Patchwerk".into(), 0.1);
         repo.insert(&retail).await.unwrap();
         assert_eq!(repo.get(&retail.id).await.unwrap().unwrap().game, "retail");

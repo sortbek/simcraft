@@ -27,7 +27,11 @@ impl ForeverEngine {
             Ok(tag) if !tag.trim().is_empty() => dir.join(tag.trim()),
             _ => dir.to_path_buf(),
         };
-        let name = if cfg!(windows) { "simhammer-forever.exe" } else { "simhammer-forever" };
+        let name = if cfg!(windows) {
+            "simhammer-forever.exe"
+        } else {
+            "simhammer-forever"
+        };
         let binary = base.join(name);
         if !binary.is_file() {
             return Err(format!("{} not found", binary.display()));

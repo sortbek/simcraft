@@ -44,7 +44,9 @@ pub fn raid_request(
 ) -> Value {
     let mut items = vec![json!({}); 17];
     for item in &ch.equipped {
-        let Some(known) = data.items.get(&item.item_id) else { continue };
+        let Some(known) = data.items.get(&item.item_id) else {
+            continue;
+        };
         if let Some(slot) = spec::engine_slot(&item.slot, known.item_type) {
             items[slot] = item_spec(item);
         }
@@ -57,7 +59,11 @@ pub fn raid_request(
         "talentsString": talents_string,
     });
     player[spec_key] = json!({});
-    let profs: Vec<&str> = ch.professions.iter().filter_map(|(n, _)| profession(n)).collect();
+    let profs: Vec<&str> = ch
+        .professions
+        .iter()
+        .filter_map(|(n, _)| profession(n))
+        .collect();
     if let Some(p) = profs.first() {
         player["profession1"] = json!(p);
     }
@@ -90,12 +96,21 @@ mod tests {
     }
 
     fn settings() -> SimSettings {
-        SimSettings { iterations: 5000, duration_seconds: 180.0 }
+        SimSettings {
+            iterations: 5000,
+            duration_seconds: 180.0,
+        }
     }
 
     #[test]
     fn raid_request_has_player_gear_talents_and_settings() {
-        let req = raid_request(&sylfrey(), crate::forever::test_data(), "protectionPaladin", "-05005133210012", &settings());
+        let req = raid_request(
+            &sylfrey(),
+            crate::forever::test_data(),
+            "protectionPaladin",
+            "-05005133210012",
+            &settings(),
+        );
         let p = &req["raid"]["parties"][0]["players"][0];
         assert_eq!(p["class"], "ClassPaladin");
         assert_eq!(p["race"], "RaceUndead");
@@ -113,21 +128,44 @@ mod tests {
     fn unknown_items_are_left_out_of_the_gear() {
         let mut ch = sylfrey();
         ch.equipped[0].item_id = 999_999;
-        let req = raid_request(&ch, crate::forever::test_data(), "protectionPaladin", "", &settings());
-        let items = req["raid"]["parties"][0]["players"][0]["equipment"]["items"].as_array().unwrap();
+        let req = raid_request(
+            &ch,
+            crate::forever::test_data(),
+            "protectionPaladin",
+            "",
+            &settings(),
+        );
+        let items = req["raid"]["parties"][0]["players"][0]["equipment"]["items"]
+            .as_array()
+            .unwrap();
         assert!(items.iter().all(|i| i["id"] != 999_999));
     }
 
     #[test]
     fn bulk_request_wraps_base_and_known_bag_items() {
         let ch = sylfrey();
-        let base = raid_request(&ch, crate::forever::test_data(), "protectionPaladin", "", &settings());
+        let base = raid_request(
+            &ch,
+            crate::forever::test_data(),
+            "protectionPaladin",
+            "",
+            &settings(),
+        );
         let mut bags = ch.bags.clone();
-        bags.push(ExportItem { slot: "back".into(), item_id: 999_999, enchant_id: 0 });
+        bags.push(ExportItem {
+            slot: "back".into(),
+            item_id: 999_999,
+            enchant_id: 0,
+        });
         let bulk = bulk_request(base.clone(), &bags, crate::forever::test_data());
         assert_eq!(bulk["baseRequest"], base);
         // 6314 (cape) and 267369 (Wolfsbane); the three profession tools and 999999 are not engine items.
-        let ids: Vec<u64> = bulk["bulkSettings"]["items"].as_array().unwrap().iter().map(|i| i["id"].as_u64().unwrap()).collect();
+        let ids: Vec<u64> = bulk["bulkSettings"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["id"].as_u64().unwrap())
+            .collect();
         assert_eq!(ids, vec![6314, 267369]);
     }
 }

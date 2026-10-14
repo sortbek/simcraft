@@ -32,7 +32,10 @@ pub async fn run_cli(
     on_progress: impl Fn(u8) + Send,
 ) -> Result<Value, String> {
     let dir = tempfile::tempdir().map_err(|e| format!("temp dir: {e}"))?;
-    let (input, output) = (dir.path().join("request.json"), dir.path().join("result.json"));
+    let (input, output) = (
+        dir.path().join("request.json"),
+        dir.path().join("result.json"),
+    );
     std::fs::write(&input, request.to_string()).map_err(|e| format!("write request: {e}"))?;
     let mut cmd = Command::new(binary);
     cmd.arg(command)
@@ -53,7 +56,9 @@ pub async fn run_cli(
             Ok(())
         });
     }
-    let mut child = cmd.spawn().map_err(|e| format!("Forever engine could not start: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Forever engine could not start: {e}"))?;
     let stderr = child.stderr.take().expect("stderr piped");
     // Owns the child, so dropping this future (timeout, cancel) kills the process.
     let run = async move {
@@ -88,9 +93,14 @@ pub async fn run_cli(
     };
     let status = status.map_err(|e| format!("Forever engine: {e}"))?;
     if !status.success() {
-        return Err(if last_error.is_empty() { format!("Forever engine exited with {status}") } else { last_error });
+        return Err(if last_error.is_empty() {
+            format!("Forever engine exited with {status}")
+        } else {
+            last_error
+        });
     }
-    let raw = std::fs::read_to_string(&output).map_err(|e| format!("Forever engine wrote no result: {e}"))?;
+    let raw = std::fs::read_to_string(&output)
+        .map_err(|e| format!("Forever engine wrote no result: {e}"))?;
     serde_json::from_str(&raw).map_err(|e| format!("Forever engine result: {e}"))
 }
 
@@ -113,9 +123,17 @@ mod tests {
 
     #[tokio::test]
     async fn missing_binary_is_an_error() {
-        let err = run_cli(Path::new("does-not-exist-forever"), "sim", &serde_json::json!({}), &[], never_cancelled(), |_| {}, |_| {})
-            .await
-            .unwrap_err();
+        let err = run_cli(
+            Path::new("does-not-exist-forever"),
+            "sim",
+            &serde_json::json!({}),
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap_err();
         assert!(err.contains("could not start"), "{err}");
     }
 
@@ -133,7 +151,17 @@ mod tests {
     async fn engine_error_message_is_returned() {
         let dir = tempfile::tempdir().unwrap();
         let bin = fake_engine(dir.path(), "echo 'error: boom' >&2; exit 1");
-        let err = run_cli(&bin, "sim", &serde_json::json!({}), &[], never_cancelled(), |_| {}, |_| {}).await.unwrap_err();
+        let err = run_cli(
+            &bin,
+            "sim",
+            &serde_json::json!({}),
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err, "boom");
     }
 
