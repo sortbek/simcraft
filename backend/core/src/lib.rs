@@ -2,6 +2,7 @@ pub mod addon_parser;
 pub mod cancel;
 pub mod compute;
 pub mod db;
+pub mod forever;
 pub mod game_data;
 pub mod gear_resolver;
 pub mod item_db;
