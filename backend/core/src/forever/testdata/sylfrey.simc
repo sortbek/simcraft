@@ -1,0 +1,77 @@
+# Sylfrey - 2026-10-14 10:30 - /Classic Beta PvE
+# SimC Addon 12.1.5-01
+# WoW 1.60.1.70374, TOC 16001
+# Requires SimulationCraft 1000-01 or newer
+
+paladin="Sylfrey"
+level=27
+race=undead
+region=
+server=classic_beta_pve
+role=
+professions=blacksmithing=83/mining=104
+spec=unknown
+
+talents=C4cBVQDZr24kTJEclZxwfbGlGBAYmLAjZAAAwMDA
+
+# Primary Talents
+# talents=C4cBVQDZr24kTJEclZxwfbGlGBAYmLAjZAAAwMDA
+
+# Sorcerer Collar (22)
+neck=,id=273457,content_tuning=5249
+# Bronzed Shoulderguards (27)
+shoulder=,id=270024
+# Furs of the Earthen Ring (33)
+back=,id=271719
+# Phantom Armor (27)
+chest=,id=6642,content_tuning=5249
+# Brawler's Harness (1)
+shirt=,id=6125
+# Bandsaw Wristbands (21)
+wrist=,id=273293,content_tuning=5240
+# Crusader's Gloves (20)
+hands=,id=250512
+# Saltscale Girdle (31)
+waist=,id=273023,content_tuning=6874
+# Bonerust Leggings (21)
+legs=,id=271209,content_tuning=5256
+# Raptorclaw Greaves (31)
+feet=,id=273025,content_tuning=6874
+# Seal of Sylvanas (29)
+finger1=,id=6414
+# Silverlaine's Family Seal (26)
+finger2=,id=6321,content_tuning=5249
+# Worgenbane Talisman (26)
+trinket1=,id=273643,content_tuning=5249
+# Satchel of Potions (33)
+trinket2=,id=280766
+# Blade of Silverlaine (26)
+main_hand=,id=273637,content_tuning=5249
+# Seedcloud Buckler (24)
+off_hand=,id=6630,content_tuning=5254
+
+### Gear from Bags
+#
+# Wolfmaster Cape (27)
+# back=,id=6314,content_tuning=5249
+#
+# Blacksmith Hammer (1)
+# main_hand=,id=5956
+#
+# Mining Pick (4)
+# main_hand=,id=2901
+#
+# Wolfsbane (31)
+# main_hand=,id=267369
+#
+# Fishing Pole (1)
+# main_hand=,id=6256
+
+### Additional Character Info
+#
+# character_stats=health:1117/power_type:0/mana:1316/rage:0/focus:0/energy:0/strength:92/agility:47/stamina:99/intellect:65/spirit:60
+# skills=43:135:0:135/44:1:0:135
+#
+# buffs=5232:0/10298:0
+
+# Checksum: 2d2027a2
