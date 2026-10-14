@@ -112,18 +112,18 @@ fn watch_job(
         let mut written = 0u8;
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
+            if let Ok(Some(summary)) = repo.get_status_summary(&id).await {
+                if summary.status == JobStatus::Cancelled {
+                    let _ = tx.send(true);
+                    return;
+                }
+            }
             let pct = progress.load(Ordering::Relaxed);
             if pct > written {
                 written = pct;
                 let _ = repo
                     .update_progress(&id, pct.max(5), "Simulating", "")
                     .await;
-            }
-            if let Ok(Some(summary)) = repo.get_status_summary(&id).await {
-                if summary.status == JobStatus::Cancelled {
-                    let _ = tx.send(true);
-                    return;
-                }
             }
         }
     });
