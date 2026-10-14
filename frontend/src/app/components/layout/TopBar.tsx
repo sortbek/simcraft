@@ -21,6 +21,9 @@ import { isValidSimcExport, validateChecksum } from '../../lib/simcDetect';
 import { parseCharacterInfo } from '../../lib/character';
 import { parseShareInput } from '../../lib/share/link';
 import { detectGame } from '../../lib/game';
+import { SPEC_LABEL_KEYS } from '../forever/specs';
+import { useForeverImport } from '../forever/useForeverImport';
+import { useForeverSpec } from '../forever/useForeverSpec';
 
 export default function TopBar() {
   const isDesktop = useIsDesktop();
@@ -33,10 +36,20 @@ export default function TopBar() {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareText, setShareText] = useState('');
   const [shareError, setShareError] = useState('');
-  const { simcInput, setSimcInput, unsimmableSpec } = useSimContext();
+  const { simcInput, setSimcInput, unsimmableSpec, game } = useSimContext();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const characterInfo = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
+  // Forever exports say spec=unknown; the spec comes from the talents, or the one picked on the page.
+  const { summary: forever } = useForeverImport(game === 'forever' ? simcInput : '');
+  const [foreverSpec] = useForeverSpec(simcInput, forever?.spec_key ?? null);
+  const specLabel = !characterInfo
+    ? ''
+    : game !== 'forever'
+      ? specDisplayName(characterInfo.spec)
+      : foreverSpec && SPEC_LABEL_KEYS[foreverSpec]
+        ? t(SPEC_LABEL_KEYS[foreverSpec])
+        : specDisplayName(characterInfo.className);
   const checksumWarning = useMemo(
     () => simcInput.trim().length > 50 && validateChecksum(simcInput) === 'invalid',
     [simcInput]
@@ -196,9 +209,7 @@ export default function TopBar() {
           {characterInfo ? (
             <span className="font-headline text-sm font-bold text-on-surface">
               {characterInfo.name}
-              <span className="ml-2.5 font-sans font-medium text-outline">
-                {specDisplayName(characterInfo.spec)}
-              </span>
+              <span className="ml-2.5 font-sans font-medium text-outline">{specLabel}</span>
             </span>
           ) : (
             <span className="text-sm font-medium text-outline">{t('layout.noCharacter')}</span>
@@ -340,7 +351,8 @@ export default function TopBar() {
                     >
                       <div className="text-sm font-medium">{char.name}</div>
                       <div className="text-[12px] text-on-surface-variant/50">
-                        {specDisplayName(char.spec)} {char.class} &middot; {char.realm}
+                        {char.spec !== 'unknown' && `${specDisplayName(char.spec)} `}
+                        {char.class} &middot; {char.realm}
                         {detectGame(char.simc_input) === 'forever' && (
                           <span className="ml-2 rounded-[4px] bg-gold/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-gold">
                             {t('game.forever')}

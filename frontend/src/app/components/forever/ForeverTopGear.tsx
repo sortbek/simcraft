@@ -16,6 +16,7 @@ import { blockedReason } from './specs';
 import { groupForTopGear } from './topGearGroups';
 import { useForeverImport } from './useForeverImport';
 import { useForeverSettings } from './useForeverSettings';
+import { useForeverSpec } from './useForeverSpec';
 import { useForeverSubmit } from './useForeverSubmit';
 
 const GROUP_LABEL: Record<string, string> = { finger: 'Rings', trinket: 'Trinkets' };
@@ -25,9 +26,8 @@ export default function ForeverTopGear() {
   const { t, locale } = useLanguage();
   const { summary, error } = useForeverImport(simcInput);
   const settings = useForeverSettings();
-  const [specKey, setSpecKey] = useState<string | null>(null);
+  const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  useEffect(() => setSpecKey(summary?.spec_key ?? null), [summary?.spec_key]);
   useEffect(() => setSelected(new Set()), [simcInput]);
 
   const groups = useMemo(

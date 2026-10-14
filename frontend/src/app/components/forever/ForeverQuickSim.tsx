@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import ErrorAlert from '../ui/ErrorAlert';
 import GearOverview from '../gear/GearOverview';
 import type { GearItem } from '../gear/gearOverviewTypes';
@@ -15,6 +15,7 @@ import ForeverWarnings from './ForeverWarnings';
 import { blockedReason } from './specs';
 import { useForeverImport } from './useForeverImport';
 import { useForeverSettings } from './useForeverSettings';
+import { useForeverSpec } from './useForeverSpec';
 import { useForeverSubmit } from './useForeverSubmit';
 
 const NO_INFO = {};
@@ -24,8 +25,7 @@ export default function ForeverQuickSim() {
   const { t } = useLanguage();
   const { summary, error } = useForeverImport(simcInput);
   const settings = useForeverSettings();
-  const [specKey, setSpecKey] = useState<string | null>(null);
-  useEffect(() => setSpecKey(summary?.spec_key ?? null), [summary?.spec_key]);
+  const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
   const blocked = summary ? blockedReason(summary.level, specKey) : null;
 
   const gear = useMemo<Record<string, GearItem>>(
