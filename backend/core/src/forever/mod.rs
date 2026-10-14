@@ -2,6 +2,7 @@
 
 pub mod data;
 pub mod detect;
+pub mod talents;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
