@@ -178,6 +178,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
   // Profile-captured fields start at the shared defaults, so an untouched config
   // matches a normalized blob exactly (a mismatch reads as a phantom dirty dot).
   const [simcInput, _setSimcInput] = useState('');
+  // False until the paste is read back from sessionStorage (first effect pass).
+  const [pasteRestored, setPasteRestored] = useState(false);
   const [fightStyle, _setFightStyle] = useState(DEFAULT_PROFILE_DATA.fightStyle);
   const [threads, _setThreads] = useState(DEFAULT_PROFILE_DATA.threads);
   const [selectedTalent, setSelectedTalent] = useState('');
@@ -222,6 +224,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [suspendedFight, _setSuspendedFight] = useState<FightSetup | null>(null);
 
   useEffect(() => {
+    setPasteRestored(true);
     try {
       _setSimcInput(readSessionString('simhammer_simc_input', ''));
 
@@ -351,13 +354,15 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const hasInput = simcInput.trim().length >= 50;
   const game = useMemo(() => detectGame(simcInput), [simcInput]);
   useEffect(() => {
+    // Before the restore the paste is still '', which would undo the pre-paint data-game.
+    if (!pasteRestored) return;
     document.documentElement.dataset.game = game;
     try {
       localStorage.setItem(GAME_STORAGE_KEY, game);
     } catch {
       // storage blocked: the attribute still follows the paste
     }
-  }, [game]);
+  }, [game, pasteRestored]);
 
   const unsimmableSpec = useMemo(() => {
     const className = simcInput.match(/^(\w+)="/m)?.[1]?.toLowerCase();
