@@ -72,7 +72,7 @@ function HistoryRow({ job, trailing }: { job: JobOverviewSummary; trailing: Reac
           {SIM_TYPE_LABELS[job.sim_type] || job.sim_type}
         </Pill>
         {job.game === 'forever' && (
-          <span className="ml-1.5 rounded-[4px] bg-[rgb(129_140_248/0.15)] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[rgb(129_140_248)]">
+          <span className="ml-1.5 rounded-[4px] bg-[rgb(29_141_205/0.15)] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[rgb(29_141_205)]">
             {t('game.forever')}
           </span>
         )}
