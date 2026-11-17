@@ -43,6 +43,9 @@ pub(super) struct ForeverSimRequest {
     max_time: Option<f64>,
     #[serde(default)]
     bag_items: Vec<BagItem>,
+    /// Ids of the buffs and debuffs to run with; without it the build's own set runs.
+    buffs: Option<Vec<String>>,
+    consumables: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -98,9 +101,37 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
             .json(json!({ "detail": "This is not a WoW Forever export" }));
     }
     match parse_export(&body.simc_input) {
-        Ok(ch) => HttpResponse::Ok().json(summarize(&ch, &engine.data)),
+        Ok(ch) => {
+            let summary = summarize(&ch, &engine.data);
+            let options = sim_options(&engine, &summary).await;
+            let mut body = serde_json::to_value(&summary).unwrap_or_default();
+            body["sim_options"] = options;
+            HttpResponse::Ok().json(body)
+        }
         Err(e) => HttpResponse::BadRequest().json(json!({ "detail": e })),
     }
+}
+
+/// Per spec the character can sim as: the buffs and debuffs with the build's starting state.
+/// Empty with an engine that has no `options` command; the settings block shows Auto then.
+async fn sim_options(engine: &ForeverEngine, summary: &ImportSummary) -> serde_json::Value {
+    let request = json!({
+        "specKeys": summary.spec_choices,
+        "talentsString": summary.talents_string,
+        "level": summary.level,
+    });
+    let (_keep, never) = tokio::sync::watch::channel(false);
+    runner::run_cli(
+        &engine.binary,
+        "options",
+        &request,
+        &[],
+        never,
+        |_| {},
+        |_| {},
+    )
+    .await
+    .unwrap_or_else(|_| json!({}))
 }
 
 /// Once a second: writes the latest progress when it moved (one ordered writer, at most one
@@ -156,13 +187,20 @@ async fn start_job(
         iterations: req.iterations.unwrap_or(12_500).clamp(1_000, 50_000),
         duration_seconds: req.max_time.unwrap_or(120.0).clamp(30.0, 900.0),
     };
-    let base = raid_request(
+    let mut base = raid_request(
         &prepared.character,
         &engine.data,
         &prepared.spec_key,
         &prepared.summary.talents_string,
         &settings,
     );
+    // The engine runner turns these into the sets its engine reads.
+    if let Some(buffs) = &req.buffs {
+        base["simhammer"]["buffs"] = json!(buffs);
+    }
+    if let Some(consumables) = req.consumables {
+        base["simhammer"]["consumables"] = json!(consumables);
+    }
     let (command, request, extra) = if sim_type == "top_gear" {
         let bags: Vec<ExportItem> = req
             .bag_items

@@ -10,6 +10,7 @@ import { useLanguage } from '../../lib/i18n';
 import { useSimContext } from '../sim-config/SimContext';
 import ForeverFooter from './ForeverFooter';
 import ForeverSettingsBlock from './ForeverSettingsBlock';
+import { useForeverBuffs } from './useForeverBuffs';
 import ForeverTalentCard from './ForeverTalentCard';
 import ForeverWarnings from './ForeverWarnings';
 import { blockedReason } from './specs';
@@ -36,6 +37,7 @@ export default function ForeverTopGear() {
   );
 
   const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
+  const buffs = useForeverBuffs((specKey && summary?.sim_options?.[specKey]) || null);
   const buildPayload = useCallback(
     () =>
       summary && !blocked && selected.size > 0
@@ -44,6 +46,7 @@ export default function ForeverTopGear() {
             spec_key: specKey,
             iterations: settings.iterations,
             max_time: settings.fightLength,
+            ...buffs?.payload,
             bag_items: [...selected].map((i) => ({
               item_id: summary.bags[i].item_id,
               enchant_id: summary.bags[i].enchant_id,
@@ -51,7 +54,16 @@ export default function ForeverTopGear() {
             })),
           }
         : null,
-    [summary, blocked, selected, simcInput, specKey, settings.iterations, settings.fightLength]
+    [
+      summary,
+      blocked,
+      selected,
+      simcInput,
+      specKey,
+      settings.iterations,
+      settings.fightLength,
+      buffs,
+    ]
   );
   const {
     submit,
@@ -77,7 +89,11 @@ export default function ForeverTopGear() {
       {error && <ErrorAlert message={error} />}
       {summary && (
         <>
-          <ForeverSettingsBlock {...settings} />
+          <ForeverSettingsBlock
+            {...settings}
+            buffs={buffs}
+            levelling={(summary?.level ?? 60) < 60}
+          />
           <ForeverTalentCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
           <ForeverWarnings warnings={summary.warnings} />
           {groups.length === 0 ? (

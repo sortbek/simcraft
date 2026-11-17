@@ -10,6 +10,7 @@ import { useLanguage } from '../../lib/i18n';
 import ForeverCharacterCard from './ForeverCharacterCard';
 import ForeverFooter from './ForeverFooter';
 import ForeverSettingsBlock from './ForeverSettingsBlock';
+import { useForeverBuffs } from './useForeverBuffs';
 import ForeverTalentCard from './ForeverTalentCard';
 import ForeverWarnings from './ForeverWarnings';
 import { blockedReason } from './specs';
@@ -27,6 +28,7 @@ export default function ForeverQuickSim() {
   const settings = useForeverSettings();
   const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
   const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
+  const buffs = useForeverBuffs((specKey && summary?.sim_options?.[specKey]) || null);
 
   const gear = useMemo<Record<string, GearItem>>(
     () =>
@@ -54,9 +56,10 @@ export default function ForeverQuickSim() {
             spec_key: specKey,
             iterations: settings.iterations,
             max_time: settings.fightLength,
+            ...buffs?.payload,
           }
         : null,
-    [summary, blocked, simcInput, specKey, settings.iterations, settings.fightLength]
+    [summary, blocked, simcInput, specKey, settings.iterations, settings.fightLength, buffs]
   );
   const {
     submit,
@@ -78,7 +81,11 @@ export default function ForeverQuickSim() {
         <>
           <ForeverCharacterCard summary={summary} specKey={specKey} />
           <ForeverWarnings warnings={summary.warnings} />
-          <ForeverSettingsBlock {...settings} />
+          <ForeverSettingsBlock
+            {...settings}
+            buffs={buffs}
+            levelling={(summary?.level ?? 60) < 60}
+          />
           <ForeverTalentCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
           {summary.equipped.length > 0 && (
             <GearOverview

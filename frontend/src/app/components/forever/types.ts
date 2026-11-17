@@ -47,4 +47,20 @@ export interface ForeverImport {
   warnings: string[];
   can_sim: boolean;
   blocked_reason: string | null;
+  /** Per spec key; empty with an engine that lists no options. */
+  sim_options?: Record<string, ForeverSimOptions>;
+}
+
+export interface ForeverToggle {
+  id: string;
+  group: 'buff' | 'debuff';
+  label: string;
+  /** The build's starting state. */
+  on: boolean;
+}
+
+export interface ForeverSimOptions {
+  build: string;
+  toggles: ForeverToggle[];
+  consumables: boolean;
 }

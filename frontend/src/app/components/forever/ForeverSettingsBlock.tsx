@@ -3,7 +3,9 @@
 import { useLanguage } from '../../lib/i18n';
 import { COLUMN_TITLE, HELP, formatFightLength } from '../sim-config/settingsUi';
 import { Chevron, useSimSettingsOpen } from '../sim-config/SimSettingsBlock';
+import { buttonClass } from '../ui/Button';
 import { TABS_TRACK, tabClass } from '../ui/ToggleButtonGroup';
+import type { ForeverBuffs } from './useForeverBuffs';
 import { FIGHT_LENGTHS, ITERATIONS } from './useForeverSettings';
 
 function Choice({
@@ -39,26 +41,70 @@ function Choice({
   );
 }
 
-/** The retail Sim settings block, cut to what the Forever engine takes: consumables and
- *  buffs come from the spec's preset. */
+function ToggleGroup({
+  label,
+  group,
+  buffs,
+}: {
+  label: string;
+  group: 'buff' | 'debuff';
+  buffs: ForeverBuffs;
+}) {
+  return (
+    <div className="space-y-2">
+      <span className="lbl block">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {buffs.toggles
+          .filter((t) => t.group === group)
+          .map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={buffs.on.has(t.id)}
+              onClick={() => buffs.toggle(t.id)}
+              className={`chip ${buffs.on.has(t.id) ? 'chip-on' : ''}`}
+            >
+              {t.label}
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+/** The retail Sim settings block, cut to what the Forever engine takes. `buffs` is null with an
+ *  engine that lists no options; the build's own set runs then. */
 export default function ForeverSettingsBlock({
   fightLength,
   setFightLength,
   iterations,
   setIterations,
+  buffs,
+  levelling,
 }: {
   fightLength: number;
   setFightLength: (v: number) => void;
   iterations: number;
   setIterations: (v: number) => void;
+  buffs: ForeverBuffs | null;
+  levelling: boolean;
 }) {
   const { t } = useLanguage();
   const { open, changeOpen, rootRef, keepTopRef } = useSimSettingsOpen();
+  const auto = t('simSettings.auto');
   const summary = [
     { label: t('simSettings.fight'), value: formatFightLength(fightLength) },
     { label: t('config.iterations'), value: iterations.toLocaleString() },
-    { label: t('config.consumables'), value: t('simSettings.auto') },
-    { label: t('config.raidBuffs'), value: t('simSettings.auto') },
+    {
+      label: t('config.consumables'),
+      value: buffs ? t(buffs.consumables ? 'forever.on' : 'forever.off') : auto,
+    },
+    {
+      label: t('config.raidBuffs'),
+      value: buffs
+        ? t('simSettings.buffsActive', { on: buffs.on.size, total: buffs.toggles.length })
+        : auto,
+    },
   ];
   return (
     <section
@@ -119,11 +165,68 @@ export default function ForeverSettingsBlock({
           </div>
           <div className="sim-settings-col sim-settings-cons">
             <h3 className={COLUMN_TITLE}>{t('config.consumables')}</h3>
-            <p className={HELP}>{t('forever.autoConsumables')}</p>
+            {buffs && !levelling ? (
+              <>
+                <button
+                  type="button"
+                  aria-pressed={buffs.consumables}
+                  onClick={() => buffs.setConsumables(!buffs.consumables)}
+                  className={`chip ${buffs.consumables ? 'chip-on' : ''}`}
+                >
+                  {t('forever.buildConsumables')}
+                </button>
+                <p className={HELP}>{t('forever.consumablesHelp')}</p>
+              </>
+            ) : (
+              <p className={HELP}>
+                {t(levelling ? 'forever.consumablesLevelling' : 'forever.autoConsumables')}
+              </p>
+            )}
           </div>
           <div className="sim-settings-col sim-settings-buffs">
             <h3 className={COLUMN_TITLE}>{t('config.raidBuffs')}</h3>
-            <p className={HELP}>{t('forever.autoBuffs')}</p>
+            {buffs ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="lbl">
+                    {t('simSettings.buffsActive', {
+                      on: buffs.on.size,
+                      total: buffs.toggles.length,
+                    })}
+                  </span>
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => buffs.setAll(true)}
+                      className={buttonClass('text', 'sm')}
+                    >
+                      {t('simSettings.all')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => buffs.setAll(false)}
+                      className={buttonClass('text', 'sm')}
+                    >
+                      {t('simSettings.none')}
+                    </button>
+                    {!buffs.isDefault && (
+                      <button
+                        type="button"
+                        onClick={buffs.reset}
+                        title={t('forever.resetBuffsHint')}
+                        className={buttonClass('text', 'sm')}
+                      >
+                        {t('common.reset')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <ToggleGroup label={t('forever.buffs')} group="buff" buffs={buffs} />
+                <ToggleGroup label={t('forever.debuffs')} group="debuff" buffs={buffs} />
+              </div>
+            ) : (
+              <p className={HELP}>{t('forever.autoBuffs')}</p>
+            )}
           </div>
         </div>
       )}

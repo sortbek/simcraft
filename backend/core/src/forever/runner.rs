@@ -305,6 +305,50 @@ mod tests {
         .unwrap();
         let gear = gear_result(&raw, &engine.data, &meta);
         assert!(gear["results"].as_array().unwrap().len() >= 2, "{gear}");
+
+        // The settings block's options, and a sim with a chosen set.
+        let options = run_cli(
+            &engine.binary,
+            "options",
+            &serde_json::json!({ "specKeys": ["hunter"], "talentsString": "", "level": 60 }),
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let toggles = options["hunter"]["toggles"].as_array().unwrap();
+        assert!(
+            toggles.iter().any(|t| t["on"] == true) && toggles.iter().any(|t| t["on"] == false)
+        );
+        let mut buffed = raid_request(
+            &ch,
+            &engine.data,
+            "hunter",
+            &summary.talents_string,
+            &settings,
+        );
+        buffed["simhammer"] =
+            serde_json::json!({ "buffs": ["party.trueshotAura", "debuff.huntersMark"] });
+        let raw = run_cli(
+            &engine.binary,
+            "sim",
+            &buffed,
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let with_buffs = raw["raidMetrics"]["parties"][0]["players"][0]["dps"]["avg"]
+            .as_f64()
+            .unwrap();
+        assert!(
+            with_buffs > dps,
+            "Trueshot Aura and Hunter's Mark: {with_buffs} against {dps} solo"
+        );
     }
 
     #[cfg(unix)]
