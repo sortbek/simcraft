@@ -137,19 +137,20 @@
   --c-route-boss: 176 120 0;
 }
 
-/* WoW Forever (after the Forever site): teal fills as its buttons, deep-ocean surfaces. Swapped by data-game on <html>. */
+/* WoW Forever: the Forever site's teal on neutral graphite surfaces. Swapped by data-game on <html>. */
 :root[data-game='forever'][data-theme='forge'] {
-  --c-background: 5 22 32;
-  --c-surface-container-lowest: 3 16 24;
-  --c-surface-container-low: 7 27 38;
-  --c-surface-container: 9 33 46;
-  --c-surface-container-high: 12 41 56;
-  --c-surface-container-highest: 17 52 70;
-  --c-popover: 12 38 52;
-  --c-on-surface-variant: 172 188 196;
-  --c-outline: 112 136 148;
-  --c-outline-variant: 84 106 118;
-  --c-fg-4: 66 86 96;
+  --c-background: 10 11 12;
+  --c-surface-container-lowest: 7 8 9;
+  --c-surface-container-low: 14 15 16;
+  --c-surface-container: 17 18 20;
+  --c-surface-container-high: 22 24 26;
+  --c-surface-container-highest: 31 33 36;
+  --c-popover: 21 23 25;
+  --c-on-surface: 234 236 236;
+  --c-on-surface-variant: 182 187 189;
+  --c-outline: 118 124 128;
+  --c-outline-variant: 100 106 110;
+  --c-fg-4: 80 85 89;
   --c-primary: 64 182 186;
   --c-primary-container: 38 146 150;
   --c-primary-fill: 16 100 104;
