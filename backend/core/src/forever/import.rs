@@ -512,6 +512,15 @@ fn gear_view(item: &ExportItem, data: &ForeverData, warnings: &mut Vec<String>) 
     }
 }
 
+/// The last part of `1.60.1.70938`; builds only count up.
+fn build_number(build: &str) -> u64 {
+    build
+        .rsplit('.')
+        .next()
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or(0)
+}
+
 pub fn summarize(ch: &ForeverCharacter, data: &ForeverData) -> ImportSummary {
     summarize_with(ch, data, None)
 }
@@ -551,10 +560,10 @@ pub fn summarize_with(
     if let Some(build) = ch
         .client_build
         .as_deref()
-        .filter(|b| *b != data.version.client_build)
+        .filter(|b| build_number(b) > build_number(&data.version.client_build))
     {
         warnings.push(format!(
-            "Your game build {build} differs from the sim data ({}); talents may be read wrong until the data is updated",
+            "Your game build {build} is newer than the sim data ({}); talents may be read wrong until the data is updated",
             data.version.client_build
         ));
     }

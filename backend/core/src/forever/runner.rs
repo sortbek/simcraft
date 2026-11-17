@@ -469,6 +469,51 @@ mod tests {
             "MythicSim export at {with_book} dps; their site says 127"
         );
 
+        // A live level 60 warrior: both of its specs sim on the raid defaults, without a sheet.
+        let warrior = crate::forever::import::parse_export_with(
+            include_str!("testdata/warrior60.simc"),
+            &engine.data,
+        )
+        .unwrap();
+        let warrior_summary = crate::forever::import::summarize(&warrior, &engine.data);
+        assert_eq!(warrior_summary.points_per_tree, vec![13, 0, 38]);
+        assert_eq!(
+            warrior_summary.spec_key.as_deref(),
+            Some("protectionWarrior")
+        );
+        assert!(warrior_summary.can_sim && warrior_summary.equipped.iter().all(|g| g.known));
+        assert_eq!(warrior_summary.bags.iter().filter(|g| g.known).count(), 25);
+        for spec in ["protectionWarrior", "dpsWarrior"] {
+            let request = raid_request(
+                &warrior,
+                &engine.data,
+                spec,
+                &warrior_summary.talents_string,
+                &settings,
+            );
+            let player = &request["raid"]["parties"][0]["players"][0];
+            assert!(player.get("characterSheet").is_none() && player.get("level").is_none());
+            assert_eq!(player["equipment"]["items"][4]["randomSuffix"], 12752);
+            let raw = run_cli(
+                &engine.binary,
+                "sim",
+                &request,
+                &[],
+                never_cancelled(),
+                |_| {},
+                |_| {},
+            )
+            .await
+            .unwrap_or_else(|e| panic!("{spec}: {e}"));
+            let dps = raw["raidMetrics"]["parties"][0]["players"][0]["dps"]["avg"]
+                .as_f64()
+                .unwrap();
+            assert!(
+                (200.0..900.0).contains(&dps),
+                "level 60 {spec} at {dps} dps"
+            );
+        }
+
         // A healer sims for healing, and talent builds compare side by side.
         let export = include_str!("testdata/sylfrey.simc").replace("level=27", "level=60");
         let paladin = parse_export(&export).unwrap();

@@ -1,0 +1,169 @@
+# Testwarrior Sixty - 2026-11-17 21:12 - EU/CAMWOW EU5 Realm 6 PvP
+# SimC Addon 12.1.5-04
+# WoW 1.60.1.70938, TOC 16001
+# Requires SimulationCraft 1000-01 or newer
+
+warrior="Testwarrior Sixty"
+level=60
+race=skyborne_horde
+region=eu
+server=camwow_eu5_realm_6_pvp
+role=
+professions=blacksmithing=175/mining=300
+spec=unknown
+
+talents=CMdBLekOoVOj3Zcu3A55irmVtDAAYgZGzMmZMzMjZwAA
+
+# Primary Talents
+# talents=CMdBLekOoVOj3Zcu3A55irmVtDAAYgZGzMmZMzMjZwAA
+# Secondary Talents
+# talents=CMdBLekOoVOj3Zcu3A55irmVtbmZeghxADzMzYMAAwMAD
+
+legacy_talents=136864:1/136867:3
+
+# Fury Visor (52)
+head=,id=20521
+# Evil Eye Pendant (62)
+neck=,id=18381
+# Razorsteel Shoulders (52)
+shoulder=,id=20517
+# Pale Moon Cloak (62)
+back=,id=18734
+# Revenant Chestplate of the Beast (54)
+chest=,id=10128,bonus_id=12752,content_tuning=5238
+# Thendal Warrior's Shirt (1)
+shirt=,id=271669
+# Bracers of Valor (57)
+wrist=,id=16735,content_tuning=5239
+# Razor Gauntlets (59)
+hands=,id=18326,content_tuning=5241
+# Gearforge Girdle (58)
+waist=,id=15709
+# Commander's Leggings of the Champion (62)
+legs=,id=10382,bonus_id=12753,content_tuning=5248
+# Boots of Valor (59)
+feet=,id=16734,enchant_id=904,content_tuning=5248
+# Naglering (59)
+finger1=,id=11669,content_tuning=5238
+# Gordok Nose Ring (60)
+finger2=,id=18464,content_tuning=5241
+# Diamond Flask (52)
+trinket1=,id=20130
+# Smotts' Compass (50)
+trinket2=,id=4130
+# Thrash Blade (53)
+main_hand=,id=17705,enchant_id=803
+# Petrified Bark Shield (61)
+off_hand=,id=18352,content_tuning=5241
+# Heavy Shot
+ammo=,id=2519
+# ammo_count=127
+# Precisely Calibrated Boomstick (48)
+ranged=,id=2100
+
+bag1=,id=10051
+bag2=,id=9587
+bag3=,id=11324
+bag4=,id=3914
+
+### Gear from Bags
+#
+# Mark of Fordring (63)
+# neck=,id=15411,enchant_id=856
+#
+# Cloak of Hermitic Bliss (22)
+# back=,id=273084,content_tuning=5254
+#
+# Mercurial Cloak of the Tiger (59)
+# back=,id=10159,bonus_id=12727,content_tuning=5248
+#
+# Tombstone Breastplate (62)
+# chest=,id=13944,enchant_id=908
+#
+# Bracers of the Eclipse (62)
+# wrist=,id=18375
+#
+# Hyperion Vambraces of the Beast (60)
+# wrist=,id=10391,bonus_id=12752
+#
+# Devilsaur Gauntlets (58)
+# hands=,id=15063,enchant_id=927
+#
+# Devilsaur Leggings (60)
+# legs=,id=15062
+#
+# Imbued Plate Greaves (58)
+# feet=,id=10371,content_tuning=5239
+#
+# Light Plate Boots (52)
+# feet=,id=8082,content_tuning=5239
+#
+# Wildheart Boots (59)
+# feet=,id=16715,content_tuning=5239
+#
+# Windreaver Greaves (61)
+# feet=,id=13967,enchant_id=904,content_tuning=5248
+#
+# Serpentine Loop of the Tiger (55)
+# finger1=,id=11977,bonus_id=12727,content_tuning=4550
+#
+# Selenium Loop of the Tiger (55)
+# finger1=,id=11990,bonus_id=12727,content_tuning=5239
+#
+# Carrot on a Stick (50)
+# trinket1=,id=11122
+#
+# Argent Dawn Commission (1)
+# trinket1=,id=12846
+#
+# Smokey's Lighter (61)
+# trinket1=,id=13171
+#
+# Spectral Essence (60)
+# trinket1=,id=13544
+#
+# Thaelemaches' Talisman (59)
+# trinket1=,id=276337
+#
+# Rune of the Guard Captain (51)
+# trinket1=,id=19120
+#
+# Chained Essence of Eranikus (60)
+# trinket1=,id=10455
+#
+# Golden Banana (50)
+# trinket1=,id=270226
+#
+# Mining Pick (4)
+# main_hand=,id=2901
+#
+# Blacksmith Hammer (1)
+# main_hand=,id=5956
+#
+# Mirah's Song (61)
+# main_hand=,id=15806,enchant_id=803
+
+### Additional Character Info
+#
+# character_stats=health:3809/power_type:1/mana:0/rage:100/focus:0/energy:0/strength:220/agility:131/stamina:230/intellect:29/spirit:59
+# character_stats_base=strength:116/agility:83/stamina:110/intellect:29/spirit:48
+# character_stats_bonus=strength:104/agility:48/stamina:120/intellect:0/spirit:11
+# character_stats_gear=agility:43/block_value:24/crit_rating:21/damage_per_second:62.96/defense_skill_rating:22/dodge_rating:12/hit_rating:23/nature_resistance:10/shadow_resistance:10/spirit:11/stamina:120/strength:104/armor:5459/resistance3:10/resistance5:10
+# attack_power=melee:600:0:0/ranged:302:0:0
+# spell_power=holy:0/fire:0/nature:0/frost:0/shadow:0/arcane:0
+# spell_stats=healing:0/penetration:0
+# regen=health:26.81:0/health_from_spirit:35.75:0/mana:0:0/mana_from_spirit:13.62:0/mana_power:0.00:0.00/rage_power:-12.50:0.00/focus_power:10.00:10.00/energy_power:10.00:10.00
+# crit=melee:8.05/ranged:1.50/spell:1.50
+# hit=melee_rating_bonus:2.30/melee_modifier:0/ranged_rating_bonus:2.30/ranged_modifier:0/spell_rating_bonus:2.30/spell_modifier:0
+# haste=melee:2/ranged:2/ranged_ammo:0/spell:2
+# combat_modifiers=expertise:0/expertise_offhand:0/expertise_ranged:0/armor_penetration:0/mastery:0
+# combat_ratings=crit_melee:21:1.50/crit_ranged:21:1.50/crit_spell:21:1.50/dodge:12:1/hit_melee:23:2.30/hit_ranged:23:2.30/hit_spell:23:2.30
+# defense=armor_base:300/armor_effective:5961/armor:5961/armor_bonus:5661/defense_skill:299/defense_modifier:42/dodge:9.12/parry:11.64/block:11.64/block_value:72
+# resistances=holy:0/fire:8/nature:18/frost:8/shadow:18/arcane:8
+# weapon_damage=mainhand:179.90:237.32:2.65/pos_buff:0/neg_buff:0/percent:0.99/ranged:118.14:164.68:2.65/ranged_pos_buff:0/ranged_neg_buff:0/ranged_percent:0.99
+#
+# skills=26:1:0:1/43:300:0:300/44:88:0:300/45:191:0:300/46:72:0:300/54:171:0:300/55:240:0:300/95:299:42:300/109:300:0:300/113:300:0:300/129:73:0:150/136:1:0:300/160:1:0:300/162:185:0:300/164:175:0:225/172:215:0:300/173:1:0:300/176:178:0:300/185:32:0:75/186:300:0:300/256:1:0:1/257:1:0:1/293:1:0:1/356:20:0:75/413:1:0:1/414:1:0:1/415:1:0:1/433:1:0:1/762:75:0:75/2938:175:0:225/2939:32:0:75/2942:73:0:150/2943:20:0:75/2946:300:0:300
+#
+# buffs=12175:0
+
+# Checksum: aecb817f
