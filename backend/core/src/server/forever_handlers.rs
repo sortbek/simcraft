@@ -158,10 +158,12 @@ fn slim_raw(mut raw: serde_json::Value) -> serde_json::Value {
     if let Some(top) = raw.as_object_mut() {
         top.remove("logs");
     }
-    let unit = &mut raw["raidMetrics"]["parties"][0]["players"][0];
-    for metric in ["dps", "hps", "dtps", "tmi", "threat", "tto"] {
-        if let Some(values) = unit.get_mut(metric).and_then(|m| m.as_object_mut()) {
-            values.remove("allValues");
+    // Bulk and compare results have no raidMetrics; indexing would panic on them.
+    if let Some(unit) = raw.pointer_mut("/raidMetrics/parties/0/players/0") {
+        for metric in ["dps", "hps", "dtps", "tmi", "threat", "tto"] {
+            if let Some(values) = unit.get_mut(metric).and_then(|m| m.as_object_mut()) {
+                values.remove("allValues");
+            }
         }
     }
     raw
@@ -446,6 +448,24 @@ mod tests {
             .expect("cancel seen within 3 s")
             .unwrap();
         handle.abort();
+    }
+
+    #[test]
+    fn slim_raw_drops_fight_values_and_keeps_results_without_raid_metrics() {
+        let quick = json!({
+            "logs": "...",
+            "raidMetrics": {"parties": [{"players": [{"dps": {"avg": 1.0, "allValues": [1.0]}}]}]}
+        });
+        assert_eq!(
+            slim_raw(quick),
+            json!({"raidMetrics": {"parties": [{"players": [{"dps": {"avg": 1.0}}]}]}})
+        );
+        let bulk = json!({"results": [{"unitMetrics": {}}]});
+        assert_eq!(slim_raw(bulk.clone()), bulk);
+        assert_eq!(
+            slim_raw(json!({"raidMetrics": {"parties": []}})),
+            json!({"raidMetrics": {"parties": []}})
+        );
     }
 
     #[test]
