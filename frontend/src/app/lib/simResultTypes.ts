@@ -12,6 +12,28 @@ export interface AbilityBreakdown {
   children?: AbilityBreakdown[];
 }
 
+/** A Forever ability with what the engine counted for it. */
+export interface ForeverAbilityDetail {
+  name: string;
+  /** The pet whose ability it is; empty for the player's own. */
+  owner: string;
+  spell_id?: number | null;
+  icon?: string | null;
+  dps: number;
+  /** Casts a fight. */
+  casts: number;
+  per_cast: number;
+  crit_pct: number;
+  miss_pct: number;
+}
+
+export interface ForeverUptime {
+  name: string;
+  spell_id?: number | null;
+  icon?: string | null;
+  uptime_pct: number;
+}
+
 /** Fields injected post-parse (helpers.rs) + Simmit provider metadata.
  *  Present on both result shapes, all optional. */
 interface InjectedResultFields {
@@ -78,6 +100,24 @@ export interface QuickSimResult extends CommonResultFields {
   base_dps?: number;
   abilities?: AbilityBreakdown[];
   stat_weights?: Record<string, number>;
+  /** Forever only: what its engine reports beyond the breakdown. */
+  dps_min?: number;
+  dps_max?: number;
+  dps_stdev?: number;
+  /** [bucket, fights], lowest bucket first. */
+  dps_hist?: [number, number][];
+  ability_details?: ForeverAbilityDetail[];
+  buffs?: ForeverUptime[];
+  debuffs?: ForeverUptime[];
+  oom_seconds?: number;
+  sim_settings?: {
+    level: number;
+    target_level: number;
+    talents_string: string;
+    /** Chosen toggle ids; null ran the build's own set. */
+    buffs: string[] | null;
+    consumables: boolean | null;
+  } | null;
 }
 
 /** Top Gear / Drop Finder / Upgrade Compare / Enchant-Gem result. */

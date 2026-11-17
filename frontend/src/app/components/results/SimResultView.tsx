@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import DpsHeroCard from './DpsHeroCard';
+import ForeverResultDetails from '../forever/ForeverResultDetails';
 import GearOverview from '../gear/GearOverview';
 import ResultsChart from './ResultsChart';
 import SimSetup from './SimSetup';
@@ -124,6 +125,7 @@ export default function SimResultView({
       ) : null}
       {result.stat_weights ? <StatWeightsTable statWeights={result.stat_weights} /> : null}
       <ResultsChart dps={result.dps} abilities={result.abilities ?? []} />
+      <ForeverResultDetails result={result} />
     </>
   );
 }

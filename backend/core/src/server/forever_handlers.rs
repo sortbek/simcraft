@@ -222,6 +222,10 @@ async fn start_job(
     if let Some(consumables) = req.consumables {
         base["simhammer"]["consumables"] = json!(consumables);
     }
+    let worn_gear = base["raid"]["parties"][0]["players"][0]["equipment"]["items"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     let (command, request, extra) = if sim_type == "top_gear" {
         let bags: Vec<ExportItem> = req
             .bag_items
@@ -285,6 +289,14 @@ async fn start_job(
         fight_length: settings.duration_seconds,
         iterations: settings.iterations,
         engine_commit: engine.data.version.engine_commit.clone(),
+        gear: worn_gear,
+        settings: json!({
+            "level": prepared.character.level,
+            "target_level": if prepared.character.level < 60 { prepared.character.level + 2 } else { 63 },
+            "talents_string": prepared.summary.talents_string,
+            "buffs": req.buffs,
+            "consumables": req.consumables,
+        }),
     };
     let (repo, logs, queue, id) = (
         repo.into_inner(),

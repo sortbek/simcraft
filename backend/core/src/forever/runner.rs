@@ -205,6 +205,8 @@ mod tests {
             fight_length: 120.0,
             iterations: 1000,
             engine_commit: engine.data.version.engine_commit.clone(),
+            gear: Vec::new(),
+            settings: Value::Null,
         };
         let base = raid_request(&ch, &engine.data, "protectionPaladin", "", &settings);
         let worn = base["raid"]["parties"][0]["players"][0]["equipment"]["items"]
@@ -304,6 +306,33 @@ mod tests {
             .map(|r| &r["name"])
             .collect();
         assert!(missing.is_empty(), "rows without an icon: {missing:?}");
+        let shoot = hunter["ability_details"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["name"] == "Shoot")
+            .unwrap();
+        assert!(
+            shoot["casts"].as_f64().unwrap() > 20.0 && shoot["per_cast"].as_f64().unwrap() > 20.0,
+            "{shoot}"
+        );
+        assert!(hunter["ability_details"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["owner"] == "Raptor"));
+        assert!(hunter["dps_min"].as_f64().unwrap() < hunter["dps_max"].as_f64().unwrap());
+        assert!(!hunter["dps_hist"].as_array().unwrap().is_empty());
+        assert!(
+            hunter["debuffs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|d| d["name"] == "Hunter's Mark"),
+            "{}",
+            hunter["debuffs"]
+        );
+        assert!(!hunter["buffs"].as_array().unwrap().is_empty());
         let bulk = bulk_request(base, &ch.bags, &engine.data);
         let raw = run_cli(
             &engine.binary,
@@ -370,6 +399,8 @@ mod tests {
             spec_key: "holyPaladin".into(),
             player_name: meta.player_name.clone(),
             engine_commit: meta.engine_commit.clone(),
+            gear: Vec::new(),
+            settings: Value::Null,
             ..meta
         };
         let healer = raid_request(&paladin, &engine.data, "holyPaladin", "", &settings);

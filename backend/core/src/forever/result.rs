@@ -11,6 +11,10 @@ pub struct ResultMeta {
     pub fight_length: f64,
     pub iterations: u32,
     pub engine_commit: String,
+    /// The worn item specs by engine slot, for the result's gear panel.
+    pub gear: Vec<Value>,
+    /// What the sim ran with (level, talents, chosen buffs), shown on the result page.
+    pub settings: Value,
 }
 
 fn round1(v: f64) -> f64 {
@@ -144,6 +148,129 @@ fn unit_abilities(unit: &Value, unit_dps: f64, metric: &str, data: &ForeverData)
         .collect()
 }
 
+/// What one action did across the whole run, summed over its targets.
+#[derive(Default, Clone)]
+struct ActionTotals {
+    amount: f64,
+    casts: f64,
+    crits: f64,
+    avoided: f64,
+}
+
+fn action_totals(action: &Value, metric: &str) -> ActionTotals {
+    let mut totals = ActionTotals {
+        amount: action_amount(action, metric),
+        ..Default::default()
+    };
+    for target in action["targets"].as_array().into_iter().flatten() {
+        let n = |key: &str| target[key].as_f64().unwrap_or(0.0);
+        totals.casts += n("casts");
+        totals.crits += n("crits") + n("critTicks");
+        totals.avoided += n("misses") + n("dodges") + n("parries");
+    }
+    totals
+}
+
+/// A row per action with its casts a fight, average per cast, crit and miss share; ranks of one
+/// spell merge. `owner` names the pet whose action it is.
+fn unit_details(
+    unit: &Value,
+    owner: &str,
+    metric: &str,
+    fights: f64,
+    seconds: f64,
+    data: &ForeverData,
+) -> Vec<Value> {
+    let mut rows: Vec<(String, Option<Value>, Option<String>, ActionTotals)> = Vec::new();
+    for action in unit["actions"].as_array().into_iter().flatten() {
+        let totals = action_totals(action, metric);
+        if totals.amount <= 0.0 {
+            continue;
+        }
+        let name = action_name(&action["id"], data);
+        match rows.iter_mut().find(|(n, ..)| *n == name) {
+            Some(row) => {
+                row.3.amount += totals.amount;
+                row.3.casts += totals.casts;
+                row.3.crits += totals.crits;
+                row.3.avoided += totals.avoided;
+            }
+            None => rows.push((
+                name,
+                action["id"].get("spellId").cloned(),
+                action_icon(&action["id"], data),
+                totals,
+            )),
+        }
+    }
+    rows.into_iter()
+        .map(|(name, spell_id, icon, t)| {
+            let pct = |part: f64| {
+                if t.casts > 0.0 {
+                    round1(part / t.casts * 100.0)
+                } else {
+                    0.0
+                }
+            };
+            json!({
+                "name": name,
+                "owner": owner,
+                "spell_id": spell_id,
+                "icon": icon,
+                "dps": if seconds > 0.0 { round1(t.amount / seconds) } else { 0.0 },
+                "casts": if fights > 0.0 { round1(t.casts / fights) } else { 0.0 },
+                "per_cast": if t.casts > 0.0 { round1(t.amount / t.casts) } else { 0.0 },
+                "crit_pct": pct(t.crits),
+                "miss_pct": pct(t.avoided),
+            })
+        })
+        .collect()
+}
+
+/// Auras with the share of the fight they were up, longest first; a blip under 1% is left out.
+fn uptimes(auras: &Value, fight_length: f64, data: &ForeverData) -> Vec<Value> {
+    let mut rows: Vec<(String, Value, f64)> = Vec::new();
+    for aura in auras.as_array().into_iter().flatten() {
+        let seconds = aura["uptimeSecondsAvg"].as_f64().unwrap_or(0.0);
+        let pct = if fight_length > 0.0 {
+            (seconds / fight_length * 100.0).min(100.0)
+        } else {
+            0.0
+        };
+        let name = action_name(&aura["id"], data);
+        if pct < 1.0 || name.starts_with("Spell ") || name == "Unknown" {
+            continue;
+        }
+        match rows.iter_mut().find(|(n, ..)| *n == name) {
+            Some(row) => row.2 = row.2.max(pct),
+            None => rows.push((name, aura["id"].clone(), pct)),
+        }
+    }
+    rows.sort_by(|a, b| b.2.total_cmp(&a.2));
+    rows.into_iter()
+        .map(|(name, id, pct)| {
+            json!({
+                "name": name,
+                "spell_id": id.get("spellId"),
+                "icon": action_icon(&id, data),
+                "uptime_pct": round1(pct),
+            })
+        })
+        .collect()
+}
+
+/// The DPS histogram as [bucket, fights], lowest bucket first.
+fn histogram(metrics: &Value) -> Vec<Value> {
+    let mut buckets: Vec<(i64, u64)> = metrics["hist"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| Some((k.parse().ok()?, v.as_u64()?)))
+        .collect();
+    buckets.sort_unstable();
+    buckets.into_iter().map(|(b, n)| json!([b, n])).collect()
+}
+
 pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value {
     let metric = metric_of(&meta.spec_key);
     let unit = &raw["raidMetrics"]["parties"][0]["players"][0];
@@ -178,9 +305,42 @@ pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value
         .as_f64()
         .filter(|d| *d > 0.0)
         .unwrap_or(meta.fight_length);
+    let fights = n;
+    let seconds = fight_length * fights;
+    let mut details = unit_details(unit, "", metric, fights, seconds, data);
+    for pet in &pets {
+        let owner = pet["name"].as_str().unwrap_or("Pet");
+        details.extend(unit_details(pet, owner, metric, fights, seconds, data));
+    }
+    details.sort_by(|a, b| {
+        b["dps"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .total_cmp(&a["dps"].as_f64().unwrap_or(0.0))
+    });
+    let mut equipped = Map::new();
+    for (slot, spec) in meta.gear.iter().enumerate().take(SLOT_NAMES.len()) {
+        if spec["id"].as_u64().unwrap_or(0) > 0 {
+            equipped.insert(
+                SLOT_NAMES[slot].to_string(),
+                gear_entry(slot, spec, data, true),
+            );
+        }
+    }
     json!({
         "player_name": meta.player_name,
         "player_class": spec_label(&meta.spec_key),
+        "target_error": if dps > 0.0 { round2(err / dps * 100.0) } else { 0.0 },
+        "dps_min": round1(unit[metric]["min"].as_f64().unwrap_or(0.0)),
+        "dps_max": round1(unit[metric]["max"].as_f64().unwrap_or(0.0)),
+        "dps_stdev": round1(unit[metric]["stdev"].as_f64().unwrap_or(0.0)),
+        "dps_hist": histogram(&unit[metric]),
+        "ability_details": details,
+        "buffs": uptimes(&unit["auras"], fight_length, data),
+        "debuffs": uptimes(&raw["encounterMetrics"]["targets"][0]["auras"], fight_length, data),
+        "oom_seconds": round1(unit["secondsOomAvg"].as_f64().unwrap_or(0.0)),
+        "equipped_gear": equipped,
+        "sim_settings": meta.settings,
         "dps": round1(dps),
         "dps_error": round1(err),
         "dps_error_pct": if dps > 0.0 { round2(err / dps * 100.0) } else { 0.0 },
@@ -418,6 +578,8 @@ mod tests {
             fight_length: 120.0,
             iterations: 200,
             engine_commit: "e3b44d0".into(),
+            gear: Vec::new(),
+            settings: Value::Null,
         }
     }
 
