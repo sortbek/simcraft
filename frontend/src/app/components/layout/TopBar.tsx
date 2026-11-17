@@ -18,7 +18,7 @@ import Button from '../ui/Button';
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useLanguage } from '../../lib/i18n';
 import { isValidSimcExport, validateChecksum } from '../../lib/simcDetect';
-import { parseCharacterInfo } from '../../lib/character';
+import { exportPreview, parseCharacterInfo } from '../../lib/character';
 import { parseShareInput } from '../../lib/share/link';
 import { detectGame } from '../../lib/game';
 import { SPEC_LABEL_KEYS } from '../forever/specs';
@@ -237,9 +237,7 @@ export default function TopBar() {
           className="flex h-[34px] w-[260px] min-w-0 shrink items-center rounded-[6px] border border-line/[0.06] bg-surface-container px-3 transition-colors hover:border-line/[0.11]"
         >
           <span className="truncate font-mono text-xs text-outline">
-            {simcInput
-              ? simcInput.split('\n')[0].slice(0, 40) + (simcInput.length > 40 ? '...' : '')
-              : t('layout.pasteSimcExport')}
+            {simcInput ? exportPreview(simcInput) : t('layout.pasteSimcExport')}
           </span>
         </button>
 

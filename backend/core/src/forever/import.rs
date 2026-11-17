@@ -191,6 +191,19 @@ fn parse_item(line: &str) -> Option<ExportItem> {
     (item.item_id > 0).then_some(item)
 }
 
+/// A Forever character can have a second name, which the MythicSim addon writes as the realm. A
+/// real realm reads like "camwow eu5 realm 6 pvp": more than one word, or with digits.
+fn mythicsim_name(name: &str, realm: &str) -> String {
+    let (name, realm) = (name.trim(), realm.trim());
+    let second_name = !realm.is_empty()
+        && !realm.contains(|c: char| c.is_whitespace() || c.is_ascii_digit() || c == '_');
+    if second_name {
+        format!("{name} {realm}")
+    } else {
+        name.to_string()
+    }
+}
+
 /// The MythicSim addon's JSON export. Its gear has no slots (see [`place_items`]) and its talents
 /// are already the engine's string; it also carries the spellbook, which the SimC export lacks.
 fn parse_mythicsim(input: &str) -> Result<ForeverCharacter, String> {
@@ -225,7 +238,7 @@ fn parse_mythicsim(input: &str) -> Result<ForeverCharacter, String> {
     }
     let level = export["level"].as_u64().unwrap_or(0) as u32;
     let ch = ForeverCharacter {
-        name: text(&export["name"]),
+        name: mythicsim_name(&text(&export["name"]), &text(&export["realm"])),
         class: token(&export["class"]),
         race,
         level,
@@ -884,8 +897,14 @@ mod tests {
                 ch.race.as_str(),
                 ch.level
             ),
-            ("Sortbek", "hunter", "orc", 29)
+            ("Sortbek Hunter", "hunter", "orc", 29)
         );
+        assert_eq!(
+            mythicsim_name("Sortbek", "camwow_eu5_realm_6_pvp"),
+            "Sortbek"
+        );
+        assert_eq!(mythicsim_name("Sortbek", "Realm 6"), "Sortbek");
+        assert_eq!(mythicsim_name("Sortbek", ""), "Sortbek");
         assert_eq!(
             ch.professions,
             vec![
