@@ -21,6 +21,7 @@ import { useForeverImport } from './useForeverImport';
 import { useForeverSettings } from './useForeverSettings';
 import { useForeverSpec } from './useForeverSpec';
 import { useForeverSubmit } from './useForeverSubmit';
+import { useForeverSd } from './useForeverSd';
 
 const NO_INFO = {};
 
@@ -32,6 +33,7 @@ export default function ForeverQuickSim() {
   const settings = useForeverSettings();
   const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
   const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
+  const [sd] = useForeverSd();
   const buffs = useForeverBuffs((specKey && summary?.sim_options?.[specKey]) || null);
 
   const gear = useMemo<Record<string, GearItem>>(
@@ -144,7 +146,7 @@ export default function ForeverQuickSim() {
               title={t('gear.equippedGear')}
               characterRenderUrl={
                 summary.region
-                  ? getCharacterRenderUrl(FOREVER_REALM, summary.name, summary.region)
+                  ? getCharacterRenderUrl(FOREVER_REALM, summary.name, summary.region, sd)
                   : null
               }
               itemInfoMap={NO_INFO}

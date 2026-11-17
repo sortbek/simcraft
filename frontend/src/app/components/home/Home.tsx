@@ -22,6 +22,7 @@ import ToolIcon, { type ToolIconName } from '../ui/ToolIcon';
 import { lastDoneBySimType, quickSimTrend, recentJobs } from './homeModel';
 import { useCharacterJobs, useRecentJobs, useSeasonRotation, zoneBackground } from './useHomeData';
 import { useIsDesktop } from '../../lib/useIsDesktop';
+import { useForeverSd } from '../forever/useForeverSd';
 
 const FOREVER_TOOLS = new Set(['quick', 'top_gear']);
 
@@ -143,6 +144,7 @@ export default function Home() {
   const { jobs: active } = useActiveSims();
   const recentSource = useRecentJobs(useIsDesktop(), jobs);
   const rotation = useSeasonRotation();
+  const [sd] = useForeverSd();
 
   const backdrop = rotation?.[0] ? zoneBackground(rotation[0].image_url) : null;
   if (!info) return <Welcome backdrop={backdrop} />;
@@ -178,7 +180,8 @@ export default function Home() {
         renderUrl={getCharacterRenderUrl(
           game === 'forever' ? FOREVER_REALM : realmSlug,
           info.name,
-          info.region
+          info.region,
+          sd
         )}
         backdrop={backdrop}
         dps={last.quick?.dps ?? null}
@@ -210,7 +213,8 @@ export default function Home() {
               const avatar = getCharacterAvatarUrl(
                 job.game === 'forever' ? FOREVER_REALM : job.realm,
                 job.player_name,
-                job.region ?? 'eu'
+                job.region ?? 'eu',
+                sd
               );
               return (
                 <Link

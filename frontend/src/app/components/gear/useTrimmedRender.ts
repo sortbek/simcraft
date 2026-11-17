@@ -43,7 +43,7 @@ export function useTrimmedRender(url: string | null | undefined): TrimmedRender 
     (async () => {
       let render: TrimmedRender = { status: 'full' };
       try {
-        const res = await fetch(`${url}?trim=1`);
+        const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}trim=1`);
         const bounds = parseRenderBounds(
           res.headers.get('X-Render-Bounds'),
           res.headers.get('X-Render-Size')

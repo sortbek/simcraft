@@ -2,6 +2,7 @@ import { toGemIdList, type GemInfo, type ItemQuery } from '../../lib/useItemInfo
 import type { GearItem } from './GearOverview';
 import type { GroupMode, ResultItem, TopGearResult } from './topGearResultsTypes';
 import { blizzardRealmSlug } from '../../lib/character';
+import { FOREVER_REALM } from '../../lib/game';
 
 const GEAR_ORDER_LEFT = ['head', 'neck', 'shoulder', 'back', 'chest', 'wrist'];
 const GEAR_ORDER_RIGHT = [
@@ -318,32 +319,41 @@ export function collectGemIds(
   return collectIds(results, equippedGear, toGemIdList);
 }
 
-export function getCharacterRenderUrl(
-  playerRealm?: string,
-  playerName?: string,
-  playerRegion = 'eu'
+function characterMediaUrl(
+  type: 'render' | 'avatar',
+  playerRealm: string | null | undefined,
+  playerName: string | null | undefined,
+  playerRegion: string,
+  sd: boolean
 ): string | null {
   if (!playerRealm || !playerName) {
     return null;
   }
 
+  // Only Forever characters have an SD model.
+  const query = sd && playerRealm === FOREVER_REALM ? '?sd=1' : '';
   return `https://simhammer.com/api/blizzard/character/${playerRegion}/${encodeURIComponent(
     blizzardRealmSlug(playerRealm)
-  )}/${encodeURIComponent(playerName.toLowerCase())}/media/render`;
+  )}/${encodeURIComponent(playerName.toLowerCase())}/media/${type}${query}`;
+}
+
+export function getCharacterRenderUrl(
+  playerRealm?: string,
+  playerName?: string,
+  playerRegion = 'eu',
+  sd = false
+): string | null {
+  return characterMediaUrl('render', playerRealm, playerName, playerRegion, sd);
 }
 
 /** Blizzard's small face portrait of a character. */
 export function getCharacterAvatarUrl(
   playerRealm?: string | null,
   playerName?: string | null,
-  playerRegion = 'eu'
+  playerRegion = 'eu',
+  sd = false
 ): string | null {
-  const render = getCharacterRenderUrl(
-    playerRealm ?? undefined,
-    playerName ?? undefined,
-    playerRegion
-  );
-  return render && render.replace(/\/render$/, '/avatar');
+  return characterMediaUrl('avatar', playerRealm, playerName, playerRegion, sd);
 }
 
 /** What one source (boss, dungeon, vendor) is worth across everything it drops. */

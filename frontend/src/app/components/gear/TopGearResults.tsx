@@ -10,6 +10,7 @@ import EncounterSummary from './EncounterSummary';
 import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useRealmSlug } from '../../lib/realms';
+import { useForeverSd } from '../forever/useForeverSd';
 import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import type { GearItem } from './gearOverviewTypes';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
@@ -124,7 +125,8 @@ export default function TopGearResults({
   const characterRenderUrl = getCharacterRenderUrl(
     useRealmSlug(playerRealm),
     playerName,
-    playerRegion
+    playerRegion,
+    useForeverSd()[0]
   );
 
   return (

@@ -17,6 +17,8 @@ import { VIEWER_BUILD } from '../../lib/featureFlags';
 import { decodeHeader } from '../../lib/talentDecode';
 import { cachedTalentTree } from '../../lib/useTalentTree';
 import { useRealmSlug } from '../../lib/realms';
+import { getCharacterRenderUrl } from '../gear/topGearResultsUtils';
+import { useForeverSd } from '../forever/useForeverSd';
 
 // The viewer build has no backend to fetch a talent tree it wasn't shipped with
 // (shares made before lookups existed). Rather than spin forever, just hide the
@@ -53,6 +55,7 @@ export default function SimResultView({
   const goGemIds = useMemo(() => collectGemIds(nonTgGear), [nonTgGear]);
   const goItemInfo = useItemInfo(goItemQueries);
   const realmSlug = useRealmSlug(result.realm);
+  const [sd] = useForeverSd();
   const goEnchantInfo = useEnchantInfo(goEnchantIds);
   const goGemInfo = useGemInfo(goGemIds);
 
@@ -113,11 +116,12 @@ export default function SimResultView({
       {result.equipped_gear && Object.keys(result.equipped_gear).length > 0 ? (
         <GearOverview
           gear={result.equipped_gear}
-          characterRenderUrl={
-            realmSlug && result.player_name
-              ? `https://simhammer.com/api/blizzard/character/${result.region || 'eu'}/${encodeURIComponent(realmSlug)}/${encodeURIComponent(result.player_name.toLowerCase())}/media/render`
-              : null
-          }
+          characterRenderUrl={getCharacterRenderUrl(
+            realmSlug,
+            result.player_name,
+            result.region || 'eu',
+            sd
+          )}
           itemInfoMap={goItemInfo}
           enchantInfoMap={goEnchantInfo}
           gemInfoMap={goGemInfo}

@@ -563,6 +563,27 @@ test('character media URLs use the Blizzard realm slug from the SimC server= val
   assert.equal(renderUrl('Argent Dawn', 'Name', 'eu'), `${base}/argent-dawn/name/media/render`);
 });
 
+test('only a Forever character asks for its SD model', () => {
+  const {
+    getCharacterRenderUrl: renderUrl,
+    getCharacterAvatarUrl: avatarUrl,
+  } = require('../src/app/components/gear/topGearResultsUtils.ts');
+  const base = 'https://simhammer.com/api/blizzard/character/eu';
+  assert.equal(
+    renderUrl('forever', 'Sortbek Hunter', 'eu', true),
+    `${base}/forever/sortbek%20hunter/media/render?sd=1`
+  );
+  assert.equal(
+    avatarUrl('forever', 'Sortbek Hunter', 'eu', true),
+    `${base}/forever/sortbek%20hunter/media/avatar?sd=1`
+  );
+  assert.equal(
+    avatarUrl('forever', 'Sortbek Hunter', 'eu'),
+    `${base}/forever/sortbek%20hunter/media/avatar`
+  );
+  assert.equal(renderUrl('draenor', 'Name', 'eu', true), `${base}/draenor/name/media/render`);
+});
+
 test('a compacted SimC realm resolves to its Blizzard slug through the realm list', () => {
   const { resolveRealmSlug } = require('../src/app/lib/realms.ts');
   const { regions } = require('../src/app/lib/realms.json');
