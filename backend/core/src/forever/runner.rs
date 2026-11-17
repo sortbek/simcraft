@@ -291,6 +291,19 @@ mod tests {
             "level 29 hunter at {dps} dps"
         );
         assert!(unit["pets"][0]["dps"]["avg"].as_f64().unwrap() > 0.0);
+        assert_eq!(unit["pets"][0]["name"], "Raptor");
+        let hunter = quick_result(&raw, &engine.data, &meta);
+        let rows = hunter["abilities"].as_array().unwrap();
+        let missing: Vec<&Value> = rows
+            .iter()
+            .chain(
+                rows.iter()
+                    .flat_map(|r| r["children"].as_array().into_iter().flatten()),
+            )
+            .filter(|r| !r["icon"].is_string())
+            .map(|r| &r["name"])
+            .collect();
+        assert!(missing.is_empty(), "rows without an icon: {missing:?}");
         let bulk = bulk_request(base, &ch.bags, &engine.data);
         let raw = run_cli(
             &engine.binary,

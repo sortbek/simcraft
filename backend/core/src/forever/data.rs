@@ -73,6 +73,8 @@ pub struct ForeverData {
     pub items: HashMap<u32, ForeverItem>,
     pub enchants: HashMap<u32, String>,
     pub spells: HashMap<u32, String>,
+    /// Icon name or FileDataID per spell; empty with a bundle built before spell icons.
+    pub spell_icons: HashMap<u32, String>,
     pub talents: HashMap<String, ClassTalents>,
 }
 
@@ -80,6 +82,8 @@ pub struct ForeverData {
 struct Named {
     id: u32,
     name: String,
+    #[serde(default)]
+    icon: String,
 }
 
 fn read<T: serde::de::DeserializeOwned>(dir: &Path, name: &str) -> Result<T, String> {
@@ -97,6 +101,11 @@ impl ForeverData {
             version: read(dir, "version.json")?,
             items: items.into_iter().map(|i| (i.id, i)).collect(),
             enchants: enchants.into_iter().map(|e| (e.id, e.name)).collect(),
+            spell_icons: spells
+                .iter()
+                .filter(|s| !s.icon.is_empty())
+                .map(|s| (s.id, s.icon.clone()))
+                .collect(),
             spells: spells.into_iter().map(|s| (s.id, s.name)).collect(),
             talents: read(dir, "talents.json")?,
         })

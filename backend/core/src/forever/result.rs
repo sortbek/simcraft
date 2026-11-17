@@ -59,6 +59,28 @@ fn action_name(id: &Value, data: &ForeverData) -> String {
     }
 }
 
+/// The icon of an action: its spell's or item's, or a stock one for a weapon swing or shot.
+fn action_icon(id: &Value, data: &ForeverData) -> Option<String> {
+    if let Some(spell) = id.get("spellId").and_then(Value::as_u64) {
+        return data.spell_icons.get(&(spell as u32)).cloned();
+    }
+    if let Some(item) = id.get("itemId").and_then(Value::as_u64) {
+        return data
+            .items
+            .get(&(item as u32))
+            .map(|i| i.icon.clone())
+            .filter(|icon| !icon.is_empty());
+    }
+    Some(
+        match id.get("otherId").and_then(Value::as_str)? {
+            "OtherActionShoot" => "ability_marksmanship",
+            "OtherActionAttack" => "ability_meleedamage",
+            _ => return None,
+        }
+        .to_string(),
+    )
+}
+
 /// "hps" for a healer, else "dps": the unit metric and the ability rows follow it.
 fn metric_of(spec_key: &str) -> &'static str {
     if super::spec::is_healer(spec_key) {
@@ -93,21 +115,29 @@ fn unit_abilities(unit: &Value, unit_dps: f64, metric: &str, data: &ForeverData)
     if total <= 0.0 {
         return Vec::new();
     }
-    let mut rows: Vec<(String, Option<Value>, f64)> = Vec::new();
+    let mut rows: Vec<(String, Option<Value>, Option<String>, f64)> = Vec::new();
     for a in actions.iter().filter(|a| action_damage(a) > 0.0) {
         let name = action_name(&a["id"], data);
         let share = unit_dps * action_damage(a) / total;
-        match rows.iter_mut().find(|(n, _, _)| *n == name) {
-            Some(row) => row.2 += share,
-            None => rows.push((name, a["id"].get("spellId").cloned(), share)),
+        match rows.iter_mut().find(|(n, ..)| *n == name) {
+            Some(row) => row.3 += share,
+            None => rows.push((
+                name,
+                a["id"].get("spellId").cloned(),
+                action_icon(&a["id"], data),
+                share,
+            )),
         }
     }
-    rows.sort_by(|a, b| b.2.total_cmp(&a.2));
+    rows.sort_by(|a, b| b.3.total_cmp(&a.3));
     rows.into_iter()
-        .map(|(name, spell_id, dps)| {
+        .map(|(name, spell_id, icon, dps)| {
             let mut row = json!({ "name": name, "portion_dps": round1(dps), "school": "" });
             if let Some(id) = spell_id {
                 row["spell_id"] = id;
+            }
+            if let Some(icon) = icon {
+                row["icon"] = json!(icon);
             }
             row
         })
@@ -131,6 +161,7 @@ pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value
         if pd > 0.0 {
             abilities.push(json!({
                 "name": pet["name"].as_str().unwrap_or("Pet"),
+                "icon": "ability_hunter_beastcall",
                 "portion_dps": round1(pd),
                 "school": "",
                 "children": unit_abilities(pet, pd, metric, data),
