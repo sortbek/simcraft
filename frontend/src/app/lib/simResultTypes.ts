@@ -54,6 +54,8 @@ export interface SimSetup {
 interface CommonResultFields extends InjectedResultFields {
   player_name: string;
   player_class: string;
+  /** "hps" when the numbers are healing per second (Forever healers). */
+  metric?: string;
   dps_error?: number;
   dps_error_pct?: number;
   fight_length: number;

@@ -31,6 +31,8 @@ function heroGlow(faction: string | null): string {
 }
 
 interface DpsHeroCardProps {
+  /** "hps" for a healer's result; the number is then healing per second. */
+  metric?: string;
   playerName: string;
   playerClass: string;
   playerRealm?: string;
@@ -49,6 +51,7 @@ interface DpsHeroCardProps {
 }
 
 export default function DpsHeroCard({
+  metric,
   playerName,
   playerClass,
   playerRealm,
@@ -125,7 +128,7 @@ export default function DpsHeroCard({
             {Math.round(dps).toLocaleString()}
           </span>
           <span className="font-headline text-xl font-extrabold tracking-[0.04em] text-gold-dark">
-            {t('results.dps')}
+            {t(metric === 'hps' ? 'results.hps' : 'results.dps')}
           </span>
         </div>
         {dpsDelta != null && dpsDeltaPct != null && (

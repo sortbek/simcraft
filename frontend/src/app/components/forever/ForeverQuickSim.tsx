@@ -11,6 +11,7 @@ import ForeverCharacterCard from './ForeverCharacterCard';
 import ForeverFooter from './ForeverFooter';
 import ForeverSettingsBlock from './ForeverSettingsBlock';
 import { useForeverBuffs } from './useForeverBuffs';
+import { useForeverTalents } from './useForeverTalents';
 import ForeverTalentCard from './ForeverTalentCard';
 import ForeverWarnings from './ForeverWarnings';
 import { blockedReason } from './specs';
@@ -24,7 +25,8 @@ const NO_INFO = {};
 export default function ForeverQuickSim() {
   const { simcInput } = useSimContext();
   const { t } = useLanguage();
-  const { summary, error } = useForeverImport(simcInput);
+  const talents = useForeverTalents(simcInput);
+  const { summary, error } = useForeverImport(simcInput, talents.edited);
   const settings = useForeverSettings();
   const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
   const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
@@ -57,15 +59,56 @@ export default function ForeverQuickSim() {
             iterations: settings.iterations,
             max_time: settings.fightLength,
             ...buffs?.payload,
+            talents_string: talents.edited ?? undefined,
           }
         : null,
-    [summary, blocked, simcInput, specKey, settings.iterations, settings.fightLength, buffs]
+    [
+      summary,
+      blocked,
+      simcInput,
+      specKey,
+      settings.iterations,
+      settings.fightLength,
+      buffs,
+      talents.edited,
+    ]
   );
   const {
     submit,
     submitting,
     error: submitError,
   } = useForeverSubmit('/api/forever/sim', buildPayload);
+  const buildComparePayload = useCallback(
+    () =>
+      summary && !blocked
+        ? {
+            simc_input: simcInput,
+            spec_key: specKey,
+            iterations: settings.iterations,
+            max_time: settings.fightLength,
+            ...buffs?.payload,
+            builds: [
+              {
+                name: t('forever.exportedTalents'),
+                talents_string: summary.exported_talents_string,
+              },
+              ...talents.builds,
+            ],
+          }
+        : null,
+    [
+      summary,
+      blocked,
+      simcInput,
+      specKey,
+      settings.iterations,
+      settings.fightLength,
+      buffs,
+      talents.builds,
+      t,
+    ]
+  );
+  const compare = useForeverSubmit('/api/forever/talent-compare', buildComparePayload);
 
   const status = blocked
     ? t(`forever.blocked.${blocked}`)
@@ -86,7 +129,13 @@ export default function ForeverQuickSim() {
             buffs={buffs}
             levelling={(summary?.level ?? 60) < 60}
           />
-          <ForeverTalentCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
+          <ForeverTalentCard
+            summary={summary}
+            specKey={specKey}
+            onSpecChange={setSpecKey}
+            talents={talents}
+            compare={compare}
+          />
           {summary.equipped.length > 0 && (
             <GearOverview
               gear={gear}

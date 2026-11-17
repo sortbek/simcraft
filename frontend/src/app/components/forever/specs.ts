@@ -9,19 +9,22 @@ export const SPEC_LABEL_KEYS: Record<string, string> = {
   enhancementShaman: 'forever.spec.enhancement',
   dpsWarrior: 'forever.spec.dpsWarrior',
   protectionWarrior: 'forever.spec.protectionWarrior',
+  restorationDruid: 'forever.spec.restoration',
+  holyPaladin: 'forever.spec.holy',
+  dpsPriest: 'forever.spec.dpsPriest',
+  healerPriest: 'forever.spec.healerPriest',
+  restorationShaman: 'forever.spec.restoration',
 };
-
-const HEALERS = new Set(['holyPaladin', 'healerPriest', 'restorationDruid', 'restorationShaman']);
 
 /** Mirror of the backend's spec::blocked_reason, applied to the spec the user picked. */
 export function blockedReason(
   level: number,
   hasSheet: boolean,
   specKey: string | null
-): 'levelMin' | 'level' | 'healer' | null {
+): 'levelMin' | 'level' | 'noSpec' | null {
   if (level < 10) return 'levelMin';
   if (level < 60 && !hasSheet) return 'level';
-  if (!specKey || HEALERS.has(specKey)) return 'healer';
+  if (!specKey) return 'noSpec';
   return null;
 }
 

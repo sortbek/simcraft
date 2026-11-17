@@ -35,6 +35,10 @@ pub(super) fn configure(cfg: &mut web::ServiceConfig) {
     .route(
         "/api/forever/top-gear",
         web::post().to(forever_handlers::create_top_gear),
+    )
+    .route(
+        "/api/forever/talent-compare",
+        web::post().to(forever_handlers::create_talent_compare),
     );
     cfg.route("/api/sim", web::post().to(sim_handlers::create_sim))
         .route(

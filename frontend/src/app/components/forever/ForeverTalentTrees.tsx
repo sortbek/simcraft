@@ -13,14 +13,32 @@ const COLS = 4;
 const at = (n: number) => n * (CELL + GAP);
 const centre = (n: number) => at(n) + CELL / 2;
 
-function Node({ talent, locale }: { talent: ForeverTalent; locale: string }) {
+type Step = (by: 1 | -1) => void;
+
+function Node({
+  talent,
+  locale,
+  onStep,
+}: {
+  talent: ForeverTalent;
+  locale: string;
+  onStep?: Step;
+}) {
   const on = talent.rank > 0;
   return (
     <a
       href={getForeverWowheadUrl('spell', talent.spell_id, locale)}
       target="_blank"
       rel="noopener noreferrer"
-      onClick={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.preventDefault();
+        onStep?.(1);
+      }}
+      onContextMenu={(e) => {
+        if (!onStep) return;
+        e.preventDefault();
+        onStep(-1);
+      }}
       aria-label={`${talent.name} (${talent.rank}/${talent.max_ranks})`}
       className="absolute block"
       style={{ left: at(talent.col), top: at(talent.row), width: CELL, height: CELL }}
@@ -45,7 +63,15 @@ function Node({ talent, locale }: { talent: ForeverTalent; locale: string }) {
   );
 }
 
-function Tree({ tree, locale }: { tree: ForeverTalentTree; locale: string }) {
+function Tree({
+  tree,
+  locale,
+  onStep,
+}: {
+  tree: ForeverTalentTree;
+  locale: string;
+  onStep?: (talentIndex: number, by: 1 | -1) => void;
+}) {
   const rows = Math.max(0, ...tree.talents.map((t) => t.row)) + 1;
   const width = at(COLS) - GAP;
   const height = at(rows) - GAP;
@@ -76,8 +102,13 @@ function Tree({ tree, locale }: { tree: ForeverTalentTree; locale: string }) {
             ) : null
           )}
         </svg>
-        {tree.talents.map((t) => (
-          <Node key={`${t.row}:${t.col}`} talent={t} locale={locale} />
+        {tree.talents.map((t, i) => (
+          <Node
+            key={`${t.row}:${t.col}`}
+            talent={t}
+            locale={locale}
+            onStep={onStep && ((by) => onStep(i, by))}
+          />
         ))}
       </div>
     </div>
@@ -85,13 +116,25 @@ function Tree({ tree, locale }: { tree: ForeverTalentTree; locale: string }) {
 }
 
 /** The three calculator trees side by side, as the retail tree lays out its trees. */
-export default function ForeverTalentTrees({ trees }: { trees: ForeverTalentTree[] }) {
+export default function ForeverTalentTrees({
+  trees,
+  onStep,
+}: {
+  trees: ForeverTalentTree[];
+  /** Given, the trees are a calculator: a click adds a rank, a right-click takes one off. */
+  onStep?: (treeIndex: number, talentIndex: number, by: 1 | -1) => void;
+}) {
   const { locale } = useLanguage();
   useWowheadTooltips([trees]);
   return (
     <div className="flex flex-col items-center gap-6 lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-0 lg:[&>*+*]:shadow-[inset_1px_0_0_rgb(var(--c-line)/calc(0.06*var(--c-line-k)))]">
-      {trees.map((tree) => (
-        <Tree key={tree.name} tree={tree} locale={locale} />
+      {trees.map((tree, treeIndex) => (
+        <Tree
+          key={tree.name}
+          tree={tree}
+          locale={locale}
+          onStep={onStep && ((i, by) => onStep(treeIndex, i, by))}
+        />
       ))}
     </div>
   );

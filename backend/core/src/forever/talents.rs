@@ -85,6 +85,46 @@ impl Bits {
     }
 }
 
+/// A talent string someone edited (a digit per talent, trees split by `-`), checked against the
+/// trees: no more trees or talents than the class has and no rank above a talent's maximum.
+pub fn from_string(edited: &str, class: &ClassTalents) -> Result<DecodedTalents, String> {
+    let parts: Vec<&str> = edited.trim().split('-').collect();
+    if parts.len() > class.trees.len() {
+        return Err("more trees than the class has".into());
+    }
+    let mut ranks: Vec<Vec<u32>> = class
+        .trees
+        .iter()
+        .map(|tree| vec![0; tree.talents.len()])
+        .collect();
+    for (t, part) in parts.iter().enumerate() {
+        if part.len() > ranks[t].len() {
+            return Err(format!("{} has fewer talents", class.trees[t].name));
+        }
+        for (i, c) in part.chars().enumerate() {
+            let rank = c.to_digit(10).ok_or("only digits and dashes")?;
+            let talent = &class.trees[t].talents[i];
+            if rank > talent.max_ranks as u32 {
+                return Err(format!("{} has {} ranks", talent.name, talent.max_ranks));
+            }
+            ranks[t][i] = rank;
+        }
+    }
+    let trimmed: Vec<String> = ranks
+        .iter()
+        .map(|tree| {
+            let digits: String = tree.iter().map(u32::to_string).collect();
+            digits.trim_end_matches('0').to_string()
+        })
+        .collect();
+    Ok(DecodedTalents {
+        talents_string: trimmed.join("-").trim_end_matches('-').to_string(),
+        points_per_tree: ranks.iter().map(|tree| tree.iter().sum()).collect(),
+        ranks,
+        unknown_definitions: Vec::new(),
+    })
+}
+
 pub fn decode(loadout: &str, class: &ClassTalents) -> Result<DecodedTalents, String> {
     let mut bits = Bits::new(loadout.trim())?;
     let version = bits.read(8)?;

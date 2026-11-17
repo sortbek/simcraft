@@ -32,6 +32,7 @@ import {
 } from './topGearResultsUtils';
 
 export default function TopGearResults({
+  metric,
   playerName,
   playerClass,
   playerRealm,
@@ -129,6 +130,7 @@ export default function TopGearResults({
   return (
     <div className="space-y-6">
       <DpsHeroCard
+        metric={metric}
         playerName={playerName}
         playerClass={playerClass}
         playerRealm={playerRealm}

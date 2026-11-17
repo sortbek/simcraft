@@ -11,10 +11,10 @@ use crate::cancel::CancelToken;
 use crate::compute::local::{await_local_queue_permit, LocalSimQueue};
 use crate::db::JobRepo;
 use crate::forever::import::{
-    parse_export, summarize, ExportItem, ForeverCharacter, ImportSummary,
+    parse_export, summarize_with, ExportItem, ForeverCharacter, ImportSummary,
 };
 use crate::forever::request::{bulk_request, raid_request, SimSettings};
-use crate::forever::result::{engine_error, gear_result, quick_result, ResultMeta};
+use crate::forever::result::{compare_result, engine_error, gear_result, quick_result, ResultMeta};
 use crate::forever::{detect_game, runner, spec, ForeverData, ForeverEngine, Game};
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
@@ -24,6 +24,8 @@ type Engine = web::Data<Option<Arc<ForeverEngine>>>;
 #[derive(Deserialize)]
 pub(super) struct ImportRequest {
     simc_input: String,
+    /// Talents edited in the calculator, in place of the export's.
+    talents_string: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -46,7 +48,20 @@ pub(super) struct ForeverSimRequest {
     /// Ids of the buffs and debuffs to run with; without it the build's own set runs.
     buffs: Option<Vec<String>>,
     consumables: Option<bool>,
+    /// Talents edited in the calculator, in place of the export's.
+    talents_string: Option<String>,
+    /// Talent compare: the builds to sim side by side, the first one the baseline.
+    #[serde(default)]
+    builds: Vec<TalentBuild>,
 }
+
+#[derive(Deserialize)]
+pub(super) struct TalentBuild {
+    name: String,
+    talents_string: String,
+}
+
+const MAX_TALENT_BUILDS: usize = 12;
 
 #[derive(Debug)]
 pub(super) struct Prepared {
@@ -58,13 +73,14 @@ pub(super) struct Prepared {
 pub(super) fn prepare(
     simc_input: &str,
     spec_key: Option<&str>,
+    edited_talents: Option<&str>,
     data: &ForeverData,
 ) -> Result<Prepared, String> {
     if detect_game(simc_input) != Game::Forever {
         return Err("This is not a WoW Forever export".into());
     }
     let character = parse_export(simc_input)?;
-    let summary = summarize(&character, data);
+    let summary = summarize_with(&character, data, edited_talents);
     let spec_key = match spec_key {
         Some(key) if spec::spec_choices(&character.class).contains(&key) => Some(key.to_string()),
         Some(key) => return Err(format!("{key} is not a {} spec", character.class)),
@@ -102,7 +118,7 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
     }
     match parse_export(&body.simc_input) {
         Ok(ch) => {
-            let summary = summarize(&ch, &engine.data);
+            let summary = summarize_with(&ch, &engine.data, body.talents_string.as_deref());
             let options = sim_options(&engine, &summary).await;
             let mut body = serde_json::to_value(&summary).unwrap_or_default();
             body["sim_options"] = options;
@@ -179,7 +195,12 @@ async fn start_job(
         Ok(e) => e,
         Err(resp) => return resp,
     };
-    let prepared = match prepare(&req.simc_input, req.spec_key.as_deref(), &engine.data) {
+    let prepared = match prepare(
+        &req.simc_input,
+        req.spec_key.as_deref(),
+        req.talents_string.as_deref(),
+        &engine.data,
+    ) {
         Ok(p) => p,
         Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
     };
@@ -221,6 +242,22 @@ async fn start_job(
             "bulk",
             bulk_request(base, &bags, &engine.data),
             vec!["--max-combinations".to_string(), max.to_string()],
+        )
+    } else if sim_type == "talent_compare" {
+        if req.builds.len() < 2 || req.builds.len() > MAX_TALENT_BUILDS {
+            return HttpResponse::BadRequest().json(json!({
+                "detail": format!("Compare 2 to {MAX_TALENT_BUILDS} talent builds")
+            }));
+        }
+        let variants: Vec<serde_json::Value> = req
+            .builds
+            .iter()
+            .map(|b| json!({ "name": b.name, "talentsString": b.talents_string }))
+            .collect();
+        (
+            "compare",
+            json!({ "baseRequest": base, "variants": variants }),
+            Vec::new(),
         )
     } else {
         ("sim", base, Vec::new())
@@ -282,15 +319,22 @@ async fn start_job(
                     let _ = repo.set_error(&id, &e).await;
                 }
                 None => {
-                    let result = if command == "bulk" {
-                        gear_result(&raw, &engine.data, &meta)
-                    } else {
-                        quick_result(&raw, &engine.data, &meta)
+                    let result = match command {
+                        "bulk" => Ok(gear_result(&raw, &engine.data, &meta)),
+                        "compare" => compare_result(&raw, &meta),
+                        _ => Ok(quick_result(&raw, &engine.data, &meta)),
                     };
-                    let raw_text = raw.to_string();
-                    let _ = repo
-                        .set_result(&id, &result.to_string(), Some(&raw_text))
-                        .await;
+                    match result {
+                        Ok(result) => {
+                            let raw_text = raw.to_string();
+                            let _ = repo
+                                .set_result(&id, &result.to_string(), Some(&raw_text))
+                                .await;
+                        }
+                        Err(e) => {
+                            let _ = repo.set_error(&id, &e).await;
+                        }
+                    }
                 }
             },
             Err(e) if e == runner::CANCELLED => {}
@@ -321,6 +365,24 @@ pub(super) async fn create_top_gear(
     queue: web::Data<LocalSimQueue>,
 ) -> HttpResponse {
     start_job(body.into_inner(), "top_gear", engine, repo, logs, queue).await
+}
+
+pub(super) async fn create_talent_compare(
+    body: web::Json<ForeverSimRequest>,
+    engine: Engine,
+    repo: web::Data<JobRepo>,
+    logs: web::Data<Arc<LogBuffer>>,
+    queue: web::Data<LocalSimQueue>,
+) -> HttpResponse {
+    start_job(
+        body.into_inner(),
+        "talent_compare",
+        engine,
+        repo,
+        logs,
+        queue,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -354,7 +416,7 @@ mod tests {
 
     #[test]
     fn below_60_without_a_sheet_is_refused() {
-        let err = prepare(&input(27), None, crate::forever::test_data()).unwrap_err();
+        let err = prepare(&input(27), None, None, crate::forever::test_data()).unwrap_err();
         assert!(
             err.starts_with("Below level 60 the sim needs your character stats"),
             "{err}"
@@ -363,7 +425,7 @@ mod tests {
 
     #[test]
     fn spec_from_another_class_is_refused() {
-        let err = prepare(&input(60), Some("mage"), crate::forever::test_data()).unwrap_err();
+        let err = prepare(&input(60), Some("mage"), None, crate::forever::test_data()).unwrap_err();
         assert_eq!(err, "mage is not a paladin spec");
     }
 
@@ -372,6 +434,7 @@ mod tests {
         let p = prepare(
             &input(60),
             Some("retributionPaladin"),
+            None,
             crate::forever::test_data(),
         )
         .unwrap();
@@ -379,16 +442,22 @@ mod tests {
     }
 
     #[test]
-    fn healer_spec_is_refused() {
-        let err =
-            prepare(&input(60), Some("holyPaladin"), crate::forever::test_data()).unwrap_err();
-        assert_eq!(err, "holyPaladin is not a paladin spec");
+    fn a_healer_spec_can_be_picked() {
+        let prepared = prepare(
+            &input(60),
+            Some("holyPaladin"),
+            None,
+            crate::forever::test_data(),
+        )
+        .unwrap();
+        assert_eq!(prepared.spec_key, "holyPaladin");
     }
 
     #[test]
     fn retail_input_is_refused() {
         let err = prepare(
             "# WoW 12.0.5.66102, TOC 120005\npaladin=\"X\"\n",
+            None,
             None,
             crate::forever::test_data(),
         )

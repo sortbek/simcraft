@@ -71,6 +71,7 @@ export default function SimResultView({
   return isGearComparisonResult(result) ? (
     <>
       <TopGearResults
+        metric={result.metric}
         playerName={result.player_name}
         playerClass={result.player_class}
         playerRealm={result.realm}
@@ -92,6 +93,7 @@ export default function SimResultView({
   ) : (
     <>
       <DpsHeroCard
+        metric={result.metric}
         playerName={result.player_name}
         playerClass={result.player_class}
         playerRealm={result.realm}

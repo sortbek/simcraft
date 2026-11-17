@@ -349,6 +349,57 @@ mod tests {
             with_buffs > dps,
             "Trueshot Aura and Hunter's Mark: {with_buffs} against {dps} solo"
         );
+
+        // A healer sims for healing, and talent builds compare side by side.
+        let export = include_str!("testdata/sylfrey.simc").replace("level=27", "level=60");
+        let paladin = parse_export(&export).unwrap();
+        let healer_meta = ResultMeta {
+            spec_key: "holyPaladin".into(),
+            player_name: meta.player_name.clone(),
+            engine_commit: meta.engine_commit.clone(),
+            ..meta
+        };
+        let healer = raid_request(&paladin, &engine.data, "holyPaladin", "", &settings);
+        let raw = run_cli(
+            &engine.binary,
+            "sim",
+            &healer,
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let healing = quick_result(&raw, &engine.data, &healer_meta);
+        assert_eq!(healing["metric"], "hps");
+        assert!(healing["dps"].as_f64().unwrap() > 0.0, "{healing}");
+
+        let compare = serde_json::json!({
+            "baseRequest": raid_request(&ch, &engine.data, "hunter", "", &settings),
+            "variants": [
+                { "name": "Exported", "talentsString": summary.talents_string },
+                { "name": "No talents", "talentsString": "" },
+            ],
+        });
+        let raw = run_cli(
+            &engine.binary,
+            "compare",
+            &compare,
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let compared = crate::forever::result::compare_result(&raw, &healer_meta).unwrap();
+        let rows = compared["results"].as_array().unwrap();
+        assert_eq!(rows.len(), 2, "{compared}");
+        assert_eq!(
+            rows[0]["name"], "Exported",
+            "20 talent points beat none: {compared}"
+        );
     }
 
     #[cfg(unix)]

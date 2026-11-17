@@ -9,12 +9,55 @@ test('below level 60 needs the character stats from the export', () => {
   assert.equal(blockedReason(27, true, 'retributionPaladin'), null);
   assert.equal(blockedReason(9, true, 'retributionPaladin'), 'levelMin');
 });
-test('a healer spec is blocked, a picked damage spec is not', () => {
-  assert.equal(blockedReason(60, false, 'holyPaladin'), 'healer');
-  assert.equal(blockedReason(29, true, 'holyPaladin'), 'healer');
-  assert.equal(blockedReason(60, false, null), 'healer');
+test('a healer sims; only a missing spec is blocked', () => {
+  assert.equal(blockedReason(60, false, 'holyPaladin'), null);
+  assert.equal(blockedReason(29, true, 'holyPaladin'), null);
+  assert.equal(blockedReason(60, false, null), 'noSpec');
   assert.equal(blockedReason(60, false, 'retributionPaladin'), null);
-  assert.equal(blockedReason(60, false, 'dpsPriest'), null);
+});
+
+const { stepTalent, talentsString } = require('../src/app/components/forever/talentTrees.ts');
+const calcTalent = (row, col, max_ranks, rank = 0, prereq) => ({
+  name: `${row}:${col}`,
+  spell_id: 1,
+  icon: '',
+  row,
+  col,
+  max_ranks,
+  rank,
+  prereq,
+});
+const calculator = () => [
+  {
+    name: 'A',
+    points: 0,
+    talents: [calcTalent(0, 0, 5), calcTalent(1, 0, 3), calcTalent(1, 1, 1, 0, [0, 0])],
+  },
+  { name: 'B', points: 0, talents: [calcTalent(0, 0, 5)] },
+];
+const stepMany = (trees, tree, i, by, times, max = 51) => {
+  for (let n = 0; n < times; n++) trees = stepTalent(trees, tree, i, by, max);
+  return trees;
+};
+test('a row opens after five points above it, and a prerequisite must be maxed', () => {
+  let trees = calculator();
+  assert.equal(stepTalent(trees, 0, 1, 1, 51), null, 'row 1 with nothing above it');
+  trees = stepMany(trees, 0, 0, 1, 4);
+  assert.equal(stepTalent(trees, 0, 1, 1, 51), null, 'four points above');
+  assert.equal(stepTalent(trees, 0, 2, 1, 51), null, 'prerequisite at 4 of 5');
+  trees = stepMany(trees, 0, 0, 1, 1);
+  assert.equal(stepTalent(trees, 0, 0, 1, 51), null, 'above the talent maximum');
+  trees = stepTalent(trees, 0, 2, 1, 51);
+  assert.equal(talentsString(trees), '501');
+  assert.equal(stepTalent(trees, 0, 0, -1, 51), null, 'would strand the row below');
+  assert.equal(talentsString(stepTalent(trees, 0, 2, -1, 51)), '5');
+});
+test('the level caps the points, and trailing zeros and trees are cut', () => {
+  const trees = stepMany(calculator(), 0, 0, 1, 2, 2);
+  assert.equal(stepTalent(trees, 1, 0, 1, 2), null);
+  assert.equal(talentsString(stepTalent(trees, 1, 0, 1, 3)), '2-1');
+  assert.equal(talentsString(calculator()), '');
+  assert.equal(talentsString(stepTalent(calculator(), 1, 0, 1, 51)), '-1');
 });
 
 const { groupForTopGear } = require('../src/app/components/forever/topGearGroups.ts');

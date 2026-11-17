@@ -59,17 +59,37 @@ fn action_name(id: &Value, data: &ForeverData) -> String {
     }
 }
 
-fn action_damage(action: &Value) -> f64 {
+/// "hps" for a healer, else "dps": the unit metric and the ability rows follow it.
+fn metric_of(spec_key: &str) -> &'static str {
+    if super::spec::is_healer(spec_key) {
+        "hps"
+    } else {
+        "dps"
+    }
+}
+
+/// An action's damage, or for a healer its healing and absorbs.
+fn action_amount(action: &Value, metric: &str) -> f64 {
+    let fields: &[&str] = if metric == "hps" {
+        &["healing", "shielding"]
+    } else {
+        &["damage"]
+    };
     action["targets"]
         .as_array()
-        .map(|ts| ts.iter().filter_map(|t| t["damage"].as_f64()).sum())
+        .map(|ts| {
+            ts.iter()
+                .flat_map(|t| fields.iter().filter_map(|f| t[*f].as_f64()))
+                .sum()
+        })
         .unwrap_or(0.0)
 }
 
 /// One row per action, damage share of `unit_dps`; ranks of one spell merge into one row.
-fn unit_abilities(unit: &Value, unit_dps: f64, data: &ForeverData) -> Vec<Value> {
+fn unit_abilities(unit: &Value, unit_dps: f64, metric: &str, data: &ForeverData) -> Vec<Value> {
+    let action_damage = |a: &Value| action_amount(a, metric);
     let actions = unit["actions"].as_array().cloned().unwrap_or_default();
-    let total: f64 = actions.iter().map(action_damage).sum();
+    let total: f64 = actions.iter().map(&action_damage).sum();
     if total <= 0.0 {
         return Vec::new();
     }
@@ -95,24 +115,25 @@ fn unit_abilities(unit: &Value, unit_dps: f64, data: &ForeverData) -> Vec<Value>
 }
 
 pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value {
+    let metric = metric_of(&meta.spec_key);
     let unit = &raw["raidMetrics"]["parties"][0]["players"][0];
-    let dps = unit["dps"]["avg"].as_f64().unwrap_or(0.0);
+    let dps = unit[metric]["avg"].as_f64().unwrap_or(0.0);
     let n = raw["iterationsDone"]
         .as_f64()
         .filter(|n| *n > 0.0)
         .unwrap_or(meta.iterations as f64);
-    let err = error95(unit["dps"]["stdev"].as_f64().unwrap_or(0.0), n);
+    let err = error95(unit[metric]["stdev"].as_f64().unwrap_or(0.0), n);
     let pets = unit["pets"].as_array().cloned().unwrap_or_default();
-    let pet_dps: f64 = pets.iter().filter_map(|p| p["dps"]["avg"].as_f64()).sum();
-    let mut abilities = unit_abilities(unit, dps - pet_dps, data);
+    let pet_dps: f64 = pets.iter().filter_map(|p| p[metric]["avg"].as_f64()).sum();
+    let mut abilities = unit_abilities(unit, dps - pet_dps, metric, data);
     for pet in &pets {
-        let pd = pet["dps"]["avg"].as_f64().unwrap_or(0.0);
+        let pd = pet[metric]["avg"].as_f64().unwrap_or(0.0);
         if pd > 0.0 {
             abilities.push(json!({
                 "name": pet["name"].as_str().unwrap_or("Pet"),
                 "portion_dps": round1(pd),
                 "school": "",
-                "children": unit_abilities(pet, pd, data),
+                "children": unit_abilities(pet, pd, metric, data),
             }));
         }
     }
@@ -136,6 +157,7 @@ pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value
         "desired_targets": 1,
         "iterations": n as u64,
         "abilities": abilities,
+        "metric": metric,
         "setup": null,
         "engine": "forever",
         "engine_version": meta.engine_commit,
@@ -279,10 +301,79 @@ pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value 
         "player_class": spec_label(&meta.spec_key),
         "results": results,
         "equipped_gear": equipped,
+        "metric": metric_of(&meta.spec_key),
         "setup": null,
         "engine": "forever",
         "engine_version": meta.engine_commit,
     })
+}
+
+/// Talent builds ranked against the first one, in the gear comparison shape the result page shows.
+pub fn compare_result(raw: &Value, meta: &ResultMeta) -> Result<Value, String> {
+    let rows: Vec<&Value> = raw["results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["metrics"].is_object())
+        .collect();
+    let Some(base) = rows.first() else {
+        let reason = raw["results"][0]["error"]
+            .as_str()
+            .unwrap_or("no build could be simmed");
+        return Err(reason.to_string());
+    };
+    let base_metrics = &base["metrics"];
+    let base_dps = base_metrics["avg"].as_f64().unwrap_or(0.0);
+    let mut results: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            let dps = r["metrics"]["avg"].as_f64().unwrap_or(0.0);
+            json!({
+                "name": r["name"],
+                "items": [],
+                "talents_string": r["talentsString"],
+                "dps": round1(dps),
+                "delta": round1(dps - base_dps) + 0.0,
+                "precision_pct": precision_pct(&r["metrics"], meta.iterations),
+            })
+        })
+        .collect();
+    results.sort_by(|a, b| {
+        b["dps"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .total_cmp(&a["dps"].as_f64().unwrap_or(0.0))
+    });
+    let skipped: Vec<Value> = raw["results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["error"].is_string())
+        .map(|r| json!({ "name": r["name"], "error": r["error"] }))
+        .collect();
+    let base_err = error95(
+        base_metrics["stdev"].as_f64().unwrap_or(0.0),
+        metrics_n(base_metrics, meta.iterations),
+    );
+    Ok(json!({
+        "type": "talent_compare",
+        "result_kind": "gear_comparison",
+        "base_dps": round1(base_dps),
+        "dps_error": round1(base_err),
+        "dps_error_pct": if base_dps > 0.0 { round2(base_err / base_dps * 100.0) } else { 0.0 },
+        "fight_length": meta.fight_length,
+        "desired_targets": 1,
+        "iterations": metrics_n(base_metrics, meta.iterations) as u64,
+        "player_name": meta.player_name,
+        "player_class": spec_label(&meta.spec_key),
+        "results": results,
+        "skipped": skipped,
+        "equipped_gear": {},
+        "metric": metric_of(&meta.spec_key),
+        "setup": null,
+        "engine": "forever",
+        "engine_version": meta.engine_commit,
+    }))
 }
 
 #[cfg(test)]
@@ -297,6 +388,62 @@ mod tests {
             iterations: 200,
             engine_commit: "e3b44d0".into(),
         }
+    }
+
+    #[test]
+    fn compare_ranks_builds_against_the_first_and_lists_the_refused() {
+        let raw = json!({ "results": [
+            { "name": "Current", "talentsString": "5", "metrics": { "avg": 500.0, "stdev": 20.0 } },
+            { "name": "Deep", "talentsString": "55", "metrics": { "avg": 540.0, "stdev": 20.0 } },
+            { "name": "Broken", "talentsString": "9", "error": "Redoubt has 5 ranks" },
+        ]});
+        let r = compare_result(&raw, &meta()).unwrap();
+        assert_eq!(
+            (&r["type"], &r["result_kind"]),
+            (&json!("talent_compare"), &json!("gear_comparison"))
+        );
+        assert_eq!(r["base_dps"], 500.0);
+        let rows = r["results"].as_array().unwrap();
+        assert_eq!(
+            (&rows[0]["name"], &rows[0]["delta"]),
+            (&json!("Deep"), &json!(40.0))
+        );
+        assert_eq!(
+            (&rows[1]["name"], &rows[1]["delta"]),
+            (&json!("Current"), &json!(0.0))
+        );
+        assert_eq!(r["skipped"][0]["name"], "Broken");
+        let none = compare_result(
+            &json!({ "results": [{ "name": "x", "error": "boom" }] }),
+            &meta(),
+        );
+        assert_eq!(none.unwrap_err(), "boom");
+    }
+
+    #[test]
+    fn a_healer_reads_healing_and_absorbs() {
+        let raw = json!({
+            "iterationsDone": 100,
+            "raidMetrics": { "parties": [{ "players": [{
+                "dps": { "avg": 5.0, "stdev": 1.0 },
+                "hps": { "avg": 300.0, "stdev": 10.0 },
+                "actions": [
+                    { "id": { "spellId": 1 }, "targets": [{ "damage": 99.0, "healing": 200.0, "shielding": 100.0 }] },
+                ],
+            }] }] },
+        });
+        let healer = ResultMeta {
+            spec_key: "holyPaladin".into(),
+            ..meta()
+        };
+        let r = quick_result(&raw, crate::forever::test_data(), &healer);
+        assert_eq!((&r["metric"], &r["dps"]), (&json!("hps"), &json!(300.0)));
+        assert_eq!(r["abilities"][0]["portion_dps"], 300.0);
+        let damage = quick_result(&raw, crate::forever::test_data(), &meta());
+        assert_eq!(
+            (&damage["metric"], &damage["dps"]),
+            (&json!("dps"), &json!(5.0))
+        );
     }
 
     #[test]

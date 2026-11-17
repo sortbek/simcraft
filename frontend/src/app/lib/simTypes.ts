@@ -13,6 +13,7 @@ const LABEL_KEYS: Record<string, string> = {
   droptimizer: 'simType.dropFinder',
   upgrade_compare: 'simType.crestUpgrades',
   stat_weights: 'simType.statWeights',
+  talent_compare: 'simType.talentCompare',
 };
 
 export function getSimTypeLabel(simType: string, t: Translator): string {

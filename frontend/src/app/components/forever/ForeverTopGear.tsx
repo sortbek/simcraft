@@ -11,6 +11,7 @@ import { useSimContext } from '../sim-config/SimContext';
 import ForeverFooter from './ForeverFooter';
 import ForeverSettingsBlock from './ForeverSettingsBlock';
 import { useForeverBuffs } from './useForeverBuffs';
+import { useForeverTalents } from './useForeverTalents';
 import ForeverTalentCard from './ForeverTalentCard';
 import ForeverWarnings from './ForeverWarnings';
 import { blockedReason } from './specs';
@@ -25,7 +26,8 @@ const GROUP_LABEL: Record<string, string> = { finger: 'Rings', trinket: 'Trinket
 export default function ForeverTopGear() {
   const { simcInput } = useSimContext();
   const { t, locale } = useLanguage();
-  const { summary, error } = useForeverImport(simcInput);
+  const talents = useForeverTalents(simcInput);
+  const { summary, error } = useForeverImport(simcInput, talents.edited);
   const settings = useForeverSettings();
   const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -47,6 +49,7 @@ export default function ForeverTopGear() {
             iterations: settings.iterations,
             max_time: settings.fightLength,
             ...buffs?.payload,
+            talents_string: talents.edited ?? undefined,
             bag_items: [...selected].map((i) => ({
               item_id: summary.bags[i].item_id,
               enchant_id: summary.bags[i].enchant_id,
@@ -63,6 +66,7 @@ export default function ForeverTopGear() {
       settings.iterations,
       settings.fightLength,
       buffs,
+      talents.edited,
     ]
   );
   const {
@@ -70,6 +74,37 @@ export default function ForeverTopGear() {
     submitting,
     error: submitError,
   } = useForeverSubmit('/api/forever/top-gear', buildPayload);
+  const buildComparePayload = useCallback(
+    () =>
+      summary && !blocked
+        ? {
+            simc_input: simcInput,
+            spec_key: specKey,
+            iterations: settings.iterations,
+            max_time: settings.fightLength,
+            ...buffs?.payload,
+            builds: [
+              {
+                name: t('forever.exportedTalents'),
+                talents_string: summary.exported_talents_string,
+              },
+              ...talents.builds,
+            ],
+          }
+        : null,
+    [
+      summary,
+      blocked,
+      simcInput,
+      specKey,
+      settings.iterations,
+      settings.fightLength,
+      buffs,
+      talents.builds,
+      t,
+    ]
+  );
+  const compare = useForeverSubmit('/api/forever/talent-compare', buildComparePayload);
   const toggle = (index: number) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -94,7 +129,13 @@ export default function ForeverTopGear() {
             buffs={buffs}
             levelling={(summary?.level ?? 60) < 60}
           />
-          <ForeverTalentCard summary={summary} specKey={specKey} onSpecChange={setSpecKey} />
+          <ForeverTalentCard
+            summary={summary}
+            specKey={specKey}
+            onSpecChange={setSpecKey}
+            talents={talents}
+            compare={compare}
+          />
           <ForeverWarnings warnings={summary.warnings} />
           {groups.length === 0 ? (
             <p className="card px-6 py-5 text-sm text-outline">{t('forever.noBagItems')}</p>

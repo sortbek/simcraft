@@ -1,26 +1,32 @@
 //! Class, race, spec and slot names between the SimC export and the engine's protojson.
 
-/// Spec keys a class can sim with (no healers), preferred first.
+/// Spec keys a class can sim with, preferred first.
 pub fn spec_choices(class: &str) -> &'static [&'static str] {
     match class {
-        "druid" => &["balanceDruid", "feralCatDruid", "feralBearDruid"],
+        "druid" => &[
+            "balanceDruid",
+            "feralCatDruid",
+            "feralBearDruid",
+            "restorationDruid",
+        ],
         "hunter" => &["hunter"],
         "mage" => &["mage"],
-        "paladin" => &["retributionPaladin", "protectionPaladin"],
-        "priest" => &["dpsPriest"],
+        "paladin" => &["retributionPaladin", "protectionPaladin", "holyPaladin"],
+        "priest" => &["dpsPriest", "healerPriest"],
         "rogue" => &["rogue"],
-        "shaman" => &["elementalShaman", "enhancementShaman"],
+        "shaman" => &["elementalShaman", "enhancementShaman", "restorationShaman"],
         "warlock" => &["warlock"],
         "warrior" => &["dpsWarrior", "protectionWarrior"],
         _ => &[],
     }
 }
 
-pub fn is_supported(spec_key: &str) -> bool {
-    !matches!(
+/// Healers sim for healing per second.
+pub fn is_healer(spec_key: &str) -> bool {
+    matches!(
         spec_key,
         "holyPaladin" | "healerPriest" | "restorationDruid" | "restorationShaman"
-    ) && !spec_key.is_empty()
+    )
 }
 
 /// The spec of the tree with the most points (first tree on a tie). Healer trees map to the
@@ -46,6 +52,8 @@ pub fn derive_spec(class: &str, points_per_tree: &[u32]) -> Option<&'static str>
         ("shaman", 0) => "elementalShaman",
         ("shaman", 1) => "enhancementShaman",
         ("shaman", _) => "restorationShaman",
+        ("priest", 2) => "dpsPriest",
+        ("priest", _) => "healerPriest",
         ("warrior", 2) => "protectionWarrior",
         ("warrior", _) => "dpsWarrior",
         (c, _) => return spec_choices(c).first().copied(),
@@ -68,6 +76,10 @@ pub fn spec_label(spec_key: &str) -> &'static str {
         "warlock" => "Warlock",
         "dpsWarrior" => "Warrior",
         "protectionWarrior" => "Protection Warrior",
+        "holyPaladin" => "Holy Paladin",
+        "healerPriest" => "Healing Priest",
+        "restorationDruid" => "Restoration Druid",
+        "restorationShaman" => "Restoration Shaman",
         _ => "Unknown",
     }
 }
@@ -82,8 +94,8 @@ pub fn blocked_reason(level: u32, has_sheet: bool, spec_key: Option<&str>) -> Op
             "Below level 60 the sim needs your character stats. Update the SimC addon and export again"
                 .into(),
         )
-    } else if !spec_key.is_some_and(is_supported) {
-        Some("Healer specs can't be simmed yet".into())
+    } else if spec_key.is_none() {
+        Some("Pick a spec to sim".into())
     } else {
         None
     }

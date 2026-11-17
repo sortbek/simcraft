@@ -39,6 +39,8 @@ export interface ForeverImport {
   spec_key: string | null;
   spec_choices: string[];
   talents_string: string;
+  exported_talents_string: string;
+  max_talent_points: number;
   points_per_tree: number[];
   /** Empty with an engine bundle built before the calculator layout. */
   talent_trees: ForeverTalentTree[];

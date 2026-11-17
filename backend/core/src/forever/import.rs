@@ -294,6 +294,10 @@ pub struct ImportSummary {
     pub spec_key: Option<String>,
     pub spec_choices: Vec<String>,
     pub talents_string: String,
+    /// What the export itself carries; differs from `talents_string` once edited.
+    pub exported_talents_string: String,
+    /// Talent points a character of this level has.
+    pub max_talent_points: u32,
     pub points_per_tree: Vec<u32>,
     pub talent_trees: Vec<talents::TalentTreeView>,
     pub equipped: Vec<GearView>,
@@ -341,6 +345,15 @@ fn gear_view(item: &ExportItem, data: &ForeverData, warnings: &mut Vec<String>) 
 }
 
 pub fn summarize(ch: &ForeverCharacter, data: &ForeverData) -> ImportSummary {
+    summarize_with(ch, data, None)
+}
+
+/// [`summarize`] with the talents someone edited in the calculator in place of the export's.
+pub fn summarize_with(
+    ch: &ForeverCharacter,
+    data: &ForeverData,
+    edited_talents: Option<&str>,
+) -> ImportSummary {
     let mut warnings = Vec::new();
     let equipped: Vec<GearView> = ch
         .equipped
@@ -399,6 +412,18 @@ pub fn summarize(ch: &ForeverCharacter, data: &ForeverData) -> ImportSummary {
                 (String::new(), Vec::new(), Vec::new())
             }
         };
+    let exported_talents_string = talents_string.clone();
+    let (talents_string, points_per_tree, ranks) =
+        match edited_talents.zip(data.talents.get(&ch.class)) {
+            Some((edited, class)) => match talents::from_string(edited, class) {
+                Ok(d) => (d.talents_string, d.points_per_tree, d.ranks),
+                Err(e) => {
+                    warnings.push(format!("The edited talents could not be read: {e}"));
+                    (talents_string, points_per_tree, ranks)
+                }
+            },
+            None => (talents_string, points_per_tree, ranks),
+        };
     let spec_key = spec::derive_spec(&ch.class, &points_per_tree).map(str::to_string);
     let blocked_reason = spec::blocked_reason(ch.level, ch.sheet.is_some(), spec_key.as_deref());
     ImportSummary {
@@ -415,6 +440,8 @@ pub fn summarize(ch: &ForeverCharacter, data: &ForeverData) -> ImportSummary {
             .map(|s| s.to_string())
             .collect(),
         talents_string,
+        exported_talents_string,
+        max_talent_points: ch.level.saturating_sub(9),
         points_per_tree,
         talent_trees: data
             .talents
@@ -486,7 +513,7 @@ mod tests {
         assert_eq!(s.spec_key.as_deref(), Some("protectionPaladin"));
         assert_eq!(
             s.spec_choices,
-            vec!["retributionPaladin", "protectionPaladin"]
+            vec!["retributionPaladin", "protectionPaladin", "holyPaladin"]
         );
         assert_eq!(s.talents_string, "-05005133210012");
         assert!(!s.can_sim);
@@ -509,6 +536,30 @@ mod tests {
     }
 
     #[test]
+    fn edited_talents_replace_the_exports_and_bad_ones_warn() {
+        let ch = parse_export(&at60()).unwrap();
+        let data = crate::forever::test_data();
+        let s = summarize_with(&ch, data, Some("5-05"));
+        assert_eq!(s.talents_string, "5-05");
+        assert_eq!(s.exported_talents_string, "-05005133210012");
+        assert_eq!(s.points_per_tree, vec![5, 5, 0]);
+        assert_eq!(s.talent_trees[0].talents[0].rank, 5);
+        assert_eq!(s.max_talent_points, 51);
+        // Trailing zeros and trees are dropped, so the same build always reads the same.
+        assert_eq!(
+            summarize_with(&ch, data, Some("50-050-0")).talents_string,
+            "5-05"
+        );
+        let bad = summarize_with(&ch, data, Some("9"));
+        assert_eq!(bad.talents_string, "-05005133210012");
+        assert!(
+            bad.warnings.iter().any(|w| w.contains("edited talents")),
+            "{:?}",
+            bad.warnings
+        );
+    }
+
+    #[test]
     fn summary_carries_the_talent_trees() {
         let s = summarize(&parse_export(&at60()).unwrap(), crate::forever::test_data());
         assert_eq!(s.talent_trees.len(), 3);
@@ -516,10 +567,16 @@ mod tests {
     }
 
     #[test]
-    fn holy_tree_is_blocked_but_offers_dps_specs() {
+    fn healers_sim_and_a_missing_spec_is_blocked() {
         let s = summarize(&parse_export(&at60()).unwrap(), crate::forever::test_data());
-        assert!(spec::blocked_reason(60, false, Some("holyPaladin")).is_some());
-        assert!(s.spec_choices.iter().all(|k| spec::is_supported(k)));
+        assert_eq!(spec::blocked_reason(60, false, Some("holyPaladin")), None);
+        assert!(spec::blocked_reason(60, false, None).is_some());
+        assert!(s.spec_choices.contains(&"holyPaladin".to_string()));
+        assert_eq!(
+            spec::derive_spec("priest", &[20, 31, 0]),
+            Some("healerPriest")
+        );
+        assert_eq!(spec::derive_spec("priest", &[0, 20, 31]), Some("dpsPriest"));
     }
 
     #[test]
