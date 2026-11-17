@@ -34,6 +34,27 @@ export interface ForeverUptime {
   uptime_pct: number;
 }
 
+/** Mana gained from or spent on something, a fight. */
+export interface ForeverFlow {
+  name: string;
+  icon?: string | null;
+  amount: number;
+}
+
+/** One logged fight. Times are seconds from the pull; the prepull is negative. */
+export interface ForeverTimeline {
+  duration: number;
+  casts: { t: number; name: string; icon?: string | null; owner: string }[];
+  auras: {
+    name: string;
+    icon?: string | null;
+    on: 'player' | 'target';
+    spans: [number, number][];
+  }[];
+  /** [time, mana after the change]. */
+  mana: [number, number][];
+}
+
 /** Fields injected post-parse (helpers.rs) + Simmit provider metadata.
  *  Present on both result shapes, all optional. */
 interface InjectedResultFields {
@@ -110,6 +131,16 @@ export interface QuickSimResult extends CommonResultFields {
   buffs?: ForeverUptime[];
   debuffs?: ForeverUptime[];
   oom_seconds?: number;
+  dps_median?: number | null;
+  /** Spell and item casts a minute. */
+  apm?: number;
+  mana?: { gains: ForeverFlow[]; spends: ForeverFlow[]; wasted: number };
+  timeline?: ForeverTimeline | null;
+  rotation?: {
+    id: string | null;
+    prepull: { at: string; text: string }[];
+    lines: { text: string; condition: string | null }[];
+  } | null;
   sim_settings?: {
     level: number;
     target_level: number;
@@ -117,6 +148,14 @@ export interface QuickSimResult extends CommonResultFields {
     /** Chosen toggle ids; null ran the build's own set. */
     buffs: string[] | null;
     consumables: boolean | null;
+    /** The sets and target the runner filled in. */
+    applied?: {
+      target?: { level: number; armor: number };
+      raidBuffs?: Record<string, unknown>;
+      partyBuffs?: Record<string, unknown>;
+      playerBuffs?: Record<string, unknown>;
+      debuffs?: Record<string, unknown>;
+    };
   } | null;
 }
 

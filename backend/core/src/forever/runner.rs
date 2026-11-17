@@ -275,10 +275,14 @@ mod tests {
             &summary.talents_string,
             &settings,
         );
+        // As a Quick Sim asks: one logged fight and every fight's value.
+        let mut logged = base.clone();
+        logged["simOptions"]["debugFirstIteration"] = serde_json::json!(true);
+        logged["simOptions"]["saveAllValues"] = serde_json::json!(true);
         let raw = run_cli(
             &engine.binary,
             "sim",
-            &base,
+            &logged,
             &[],
             never_cancelled(),
             |_| {},
@@ -333,6 +337,37 @@ mod tests {
             hunter["debuffs"]
         );
         assert!(!hunter["buffs"].as_array().unwrap().is_empty());
+        let median = hunter["dps_median"].as_f64().unwrap();
+        assert!((median - dps).abs() < 10.0, "median {median} against {dps}");
+        let apm = hunter["apm"].as_f64().unwrap();
+        assert!((5.0..30.0).contains(&apm), "{apm} actions a minute");
+        assert!(!hunter["mana"]["spends"].as_array().unwrap().is_empty());
+        assert_eq!(hunter["mana"]["gains"][0]["name"], "Regeneration");
+        let timeline = &hunter["timeline"];
+        let casts = timeline["casts"].as_array().unwrap();
+        assert!(
+            casts.len() > 50,
+            "{} casts in the logged fight",
+            casts.len()
+        );
+        assert!(
+            casts[0]["t"].as_f64().unwrap() < 0.0,
+            "the prepull comes first"
+        );
+        assert!(casts.iter().any(|c| c["owner"] == "Raptor"));
+        assert!(timeline["auras"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["name"] == "Hunter's Mark" && a["on"] == "target"));
+        assert!(timeline["mana"].as_array().unwrap().len() > 10);
+        assert_eq!(hunter["rotation"]["id"], "hunter/dps/bm");
+        let lines = hunter["rotation"]["lines"].as_array().unwrap();
+        assert!(
+            lines.len() >= 5 && lines.iter().any(|l| l["text"] == "Cast Aimed Shot"),
+            "{lines:?}"
+        );
+        assert!(!hunter["rotation"]["prepull"].as_array().unwrap().is_empty());
         let bulk = bulk_request(base, &ch.bags, &engine.data);
         let raw = run_cli(
             &engine.binary,

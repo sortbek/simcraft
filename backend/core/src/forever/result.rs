@@ -271,6 +271,78 @@ fn histogram(metrics: &Value) -> Vec<Value> {
     buckets.into_iter().map(|(b, n)| json!([b, n])).collect()
 }
 
+/// The middle fight's value, when the engine was asked to keep every fight's.
+fn median(metrics: &Value) -> Option<f64> {
+    let mut values: Vec<f64> = metrics["allValues"]
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_f64)
+        .collect();
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    Some(values[values.len() / 2])
+}
+
+/// Spell and item casts a minute; swings and auto shots are not actions a player presses.
+fn actions_per_minute(unit: &Value, fights: f64, fight_length: f64) -> f64 {
+    let casts: f64 = unit["actions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|a| a["id"].get("otherId").is_none())
+        .flat_map(|a| a["targets"].as_array().into_iter().flatten())
+        .filter_map(|t| t["casts"].as_f64())
+        .sum();
+    if fights > 0.0 && fight_length > 0.0 {
+        casts / fights / (fight_length / 60.0)
+    } else {
+        0.0
+    }
+}
+
+/// A resource row: name, icon, amount a fight.
+type FlowRow = (String, Option<String>, f64);
+
+/// Where the mana came from and went, a fight: [{ name, icon, amount }] each, largest first, and
+/// what regeneration was lost to a full bar.
+fn mana_flow(unit: &Value, fights: f64, data: &ForeverData) -> Value {
+    let (mut gains, mut spends): (Vec<FlowRow>, Vec<FlowRow>) = (Vec::new(), Vec::new());
+    let mut wasted = 0.0;
+    for entry in unit["resources"].as_array().into_iter().flatten() {
+        if entry["type"] != "ResourceTypeMana" || fights <= 0.0 {
+            continue;
+        }
+        let (gain, actual) = (
+            entry["gain"].as_f64().unwrap_or(0.0),
+            entry["actualGain"].as_f64().unwrap_or(0.0),
+        );
+        let name = match entry["id"].get("otherId").and_then(Value::as_str) {
+            Some("OtherActionManaRegen") => "Regeneration".to_string(),
+            _ => action_name(&entry["id"], data),
+        };
+        let icon = action_icon(&entry["id"], data);
+        let list = if gain < 0.0 { &mut spends } else { &mut gains };
+        let amount = actual.abs() / fights;
+        if amount < 0.5 {
+            continue;
+        }
+        wasted += (gain - actual).max(0.0) / fights;
+        match list.iter_mut().find(|(n, ..)| *n == name) {
+            Some(row) => row.2 += amount,
+            None => list.push((name, icon, amount)),
+        }
+    }
+    let rows = |mut list: Vec<FlowRow>| -> Vec<Value> {
+        list.sort_by(|a, b| b.2.total_cmp(&a.2));
+        list.into_iter()
+            .map(|(name, icon, amount)| json!({ "name": name, "icon": icon, "amount": round1(amount) }))
+            .collect()
+    };
+    json!({ "gains": rows(gains), "spends": rows(spends), "wasted": round1(wasted) })
+}
+
 pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value {
     let metric = metric_of(&meta.spec_key);
     let unit = &raw["raidMetrics"]["parties"][0]["players"][0];
@@ -327,6 +399,14 @@ pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value
             );
         }
     }
+    // What the runner filled in: the sets and target the sim really ran with.
+    let applied = &raw["simhammer"];
+    let mut settings = meta.settings.clone();
+    if applied.is_object() && settings.is_object() {
+        let mut ran = applied.clone();
+        ran.as_object_mut().map(|o| o.remove("rotation"));
+        settings["applied"] = ran;
+    }
     json!({
         "player_name": meta.player_name,
         "player_class": spec_label(&meta.spec_key),
@@ -340,7 +420,17 @@ pub fn quick_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value
         "debuffs": uptimes(&raw["encounterMetrics"]["targets"][0]["auras"], fight_length, data),
         "oom_seconds": round1(unit["secondsOomAvg"].as_f64().unwrap_or(0.0)),
         "equipped_gear": equipped,
-        "sim_settings": meta.settings,
+        "sim_settings": settings,
+        "dps_median": median(&unit[metric]).map(round1),
+        "apm": round1(actions_per_minute(unit, fights, fight_length)),
+        "mana": mana_flow(unit, fights, data),
+        "timeline": raw["logs"].as_str().map(|logs| {
+            let logged = raw["firstIterationDuration"].as_f64().unwrap_or(fight_length);
+            super::report::timeline(logs, logged, data)
+        }),
+        "rotation": applied
+            .get("rotation")
+            .map(|_| super::report::rotation(applied, data)),
         "dps": round1(dps),
         "dps_error": round1(err),
         "dps_error_pct": if dps > 0.0 { round2(err / dps * 100.0) } else { 0.0 },

@@ -2,7 +2,13 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useLanguage } from '../../lib/i18n';
-import type { ForeverAbilityDetail, ForeverUptime, QuickSimResult } from '../../lib/simResultTypes';
+import type {
+  ForeverAbilityDetail,
+  ForeverFlow,
+  ForeverUptime,
+  QuickSimResult,
+} from '../../lib/simResultTypes';
+import ForeverTimeline, { ForeverOpener } from './ForeverTimeline';
 import { iconProps } from '../../lib/useItemInfo';
 
 function Icon({ icon }: { icon?: string | null }) {
@@ -125,6 +131,30 @@ function Uptimes({ title, rows }: { title: string; rows: ForeverUptime[] }) {
   );
 }
 
+function Flow({ title, rows }: { title: string; rows: ForeverFlow[] }) {
+  const most = Math.max(1, ...rows.map((r) => r.amount));
+  return (
+    <div className="min-w-0 flex-1 space-y-2.5 px-5 py-4">
+      <span className="lbl block">{title}</span>
+      {rows.map((r) => (
+        <div key={r.name} className="flex items-center gap-2.5 text-[13px]">
+          <Icon icon={r.icon} />
+          <span className="min-w-0 flex-1 truncate font-semibold text-on-surface">{r.name}</span>
+          <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface-container-highest">
+            <span
+              className="block h-full rounded-full bg-gold-fill"
+              style={{ width: `${(r.amount / most) * 100}%` }}
+            />
+          </span>
+          <span className="w-14 shrink-0 text-right tabular-nums text-on-surface-variant">
+            {Math.round(r.amount).toLocaleString()}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** `raid.giftOfTheWild` to "Gift of the Wild", as the settings block labels it. */
 function toggleLabel(id: string): string {
   const key = id.slice(id.indexOf('.') + 1);
@@ -145,7 +175,16 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
   const buffs = result.buffs ?? [];
   const debuffs = result.debuffs ?? [];
   const hist = result.dps_hist ?? [];
-  const chosen = settings?.buffs;
+  // What the runner really ran with, where it reports it; else the ids that were picked.
+  const ran = settings?.applied;
+  const sets = ran ? [ran.raidBuffs, ran.partyBuffs, ran.playerBuffs, ran.debuffs] : [];
+  const shown = ran
+    ? sets.flatMap((set) =>
+        Object.entries(set ?? {})
+          .filter(([, value]) => value && value !== 'TristateEffectMissing')
+          .map(([key]) => toggleLabel(key))
+      )
+    : (settings?.buffs?.map(toggleLabel) ?? null);
   return (
     <>
       <section className="card">
@@ -159,6 +198,12 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
             value={`± ${(result.dps_error ?? 0).toFixed(1)} (${(result.dps_error_pct ?? 0).toFixed(2)}%)`}
           />
           <Stat label={t('forever.details.stdev')} value={(result.dps_stdev ?? 0).toFixed(1)} />
+          {result.dps_median != null && (
+            <Stat label={t('forever.details.median')} value={result.dps_median.toFixed(1)} />
+          )}
+          {(result.apm ?? 0) > 0 && (
+            <Stat label={t('forever.details.apm')} value={(result.apm ?? 0).toFixed(1)} />
+          )}
           {(result.oom_seconds ?? 0) > 0 && (
             <Stat
               label={t('forever.details.oom')}
@@ -173,6 +218,22 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
           </div>
         )}
       </section>
+
+      {result.timeline && result.timeline.casts.length > 0 && (
+        <section className="card">
+          <div className="px-5 py-3.5">
+            <h2 className="h-card">{t('forever.details.timeline')}</h2>
+          </div>
+          <div className="space-y-5 border-t border-line/[0.06] px-5 py-4">
+            <div className="space-y-2.5">
+              <span className="lbl block">{t('forever.details.opener')}</span>
+              <ForeverOpener timeline={result.timeline} />
+            </div>
+            <ForeverTimeline timeline={result.timeline} />
+            <p className="text-xs text-outline">{t('forever.details.timelineHint')}</p>
+          </div>
+        </section>
+      )}
 
       <section className="card">
         <div className="px-5 py-3.5">
@@ -195,6 +256,68 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
         </section>
       )}
 
+      {result.mana && (result.mana.gains.length > 0 || result.mana.spends.length > 0) && (
+        <section className="card">
+          <div className="px-5 py-3.5">
+            <h2 className="h-card">{t('forever.details.mana')}</h2>
+          </div>
+          <div className="flex flex-col border-t border-line/[0.06] md:flex-row md:divide-x md:divide-line/[0.06]">
+            <Flow title={t('forever.details.manaGained')} rows={result.mana.gains} />
+            <Flow title={t('forever.details.manaSpent')} rows={result.mana.spends} />
+          </div>
+          {result.mana.wasted > 0 && (
+            <p className="border-t border-line/[0.06] px-5 py-3 text-xs text-outline">
+              {t('forever.details.manaWasted', { amount: Math.round(result.mana.wasted) })}
+            </p>
+          )}
+        </section>
+      )}
+
+      {result.rotation && result.rotation.lines.length > 0 && (
+        <section className="card">
+          <div className="flex flex-wrap items-baseline gap-x-3 px-5 py-3.5">
+            <h2 className="h-card">{t('forever.details.rotation')}</h2>
+            {result.rotation.id && (
+              <span className="text-xs text-outline">{result.rotation.id}</span>
+            )}
+          </div>
+          <div className="space-y-4 border-t border-line/[0.06] px-5 py-4 text-[13px]">
+            {result.rotation.prepull.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="lbl block">{t('forever.details.prepull')}</span>
+                {result.rotation.prepull.map((p, i) => (
+                  <div key={i} className="flex gap-3">
+                    <span className="w-12 shrink-0 text-right tabular-nums text-outline">
+                      {p.at}
+                    </span>
+                    <span className="font-semibold text-on-surface">{p.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <span className="lbl block">{t('forever.details.priority')}</span>
+              {result.rotation.lines.map((line, i) => (
+                <div key={i} className="flex gap-3">
+                  <span className="w-12 shrink-0 text-right tabular-nums text-outline">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="font-semibold text-on-surface">{line.text}</span>
+                    {line.condition && (
+                      <span className="text-on-surface-variant">
+                        {' '}
+                        {t('forever.details.when', { condition: line.condition })}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {settings && (
         <section className="card">
           <div className="px-5 py-3.5">
@@ -202,7 +325,17 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
           </div>
           <div className="flex flex-wrap divide-x divide-line/[0.06] border-t border-line/[0.06]">
             <Stat label={t('forever.details.level')} value={String(settings.level)} />
-            <Stat label={t('forever.details.target')} value={String(settings.target_level)} />
+            <Stat
+              label={t('forever.details.target')}
+              value={
+                ran?.target
+                  ? t('forever.details.targetArmor', {
+                      level: ran.target.level,
+                      armor: Math.round(ran.target.armor).toLocaleString(),
+                    })
+                  : String(settings.target_level)
+              }
+            />
             <Stat
               label={t('config.consumables')}
               value={
@@ -215,17 +348,17 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
           </div>
           <div className="border-t border-line/[0.06] px-5 py-4">
             <span className="lbl mb-2 block">{t('config.raidBuffs')}</span>
-            {chosen == null ? (
+            {shown == null ? (
               <span className="text-[13px] text-on-surface-variant">
                 {t('forever.details.buildDefault')}
               </span>
-            ) : chosen.length === 0 ? (
+            ) : shown.length === 0 ? (
               <span className="text-[13px] text-on-surface-variant">{t('simSettings.none')}</span>
             ) : (
               <span className="flex flex-wrap gap-1.5">
-                {chosen.map((id) => (
-                  <span key={id} className="chip chip-on">
-                    {toggleLabel(id)}
+                {shown.map((label) => (
+                  <span key={label} className="chip chip-on">
+                    {label}
                   </span>
                 ))}
               </span>

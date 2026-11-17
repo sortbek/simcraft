@@ -150,6 +150,21 @@ async fn sim_options(engine: &ForeverEngine, summary: &ImportSummary) -> serde_j
     .unwrap_or_else(|_| json!({}))
 }
 
+/// The raw result as kept with the job: without the fight log and the per-fight values, which
+/// are megabytes and already read into the result.
+fn slim_raw(mut raw: serde_json::Value) -> serde_json::Value {
+    if let Some(top) = raw.as_object_mut() {
+        top.remove("logs");
+    }
+    let unit = &mut raw["raidMetrics"]["parties"][0]["players"][0];
+    for metric in ["dps", "hps", "dtps", "tmi", "threat", "tto"] {
+        if let Some(values) = unit.get_mut(metric).and_then(|m| m.as_object_mut()) {
+            values.remove("allValues");
+        }
+    }
+    raw
+}
+
 /// Once a second: writes the latest progress when it moved (one ordered writer, at most one
 /// write a second) and flips the watch to true once the job is cancelled.
 fn watch_job(
@@ -264,6 +279,9 @@ async fn start_job(
             Vec::new(),
         )
     } else {
+        // One logged fight for the timeline and every fight's value for the median.
+        base["simOptions"]["debugFirstIteration"] = json!(true);
+        base["simOptions"]["saveAllValues"] = json!(true);
         ("sim", base, Vec::new())
     };
 
@@ -338,7 +356,7 @@ async fn start_job(
                     };
                     match result {
                         Ok(result) => {
-                            let raw_text = raw.to_string();
+                            let raw_text = slim_raw(raw).to_string();
                             let _ = repo
                                 .set_result(&id, &result.to_string(), Some(&raw_text))
                                 .await;

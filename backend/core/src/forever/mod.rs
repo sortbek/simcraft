@@ -4,6 +4,7 @@
 pub mod data;
 pub mod detect;
 pub mod import;
+pub mod report;
 pub mod request;
 pub mod result;
 pub mod runner;
