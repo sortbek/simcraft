@@ -88,6 +88,8 @@ pub struct ForeverCharacter {
     pub bags: Vec<ExportItem>,
     pub sheet: Option<CharacterSheet>,
     pub pet: Option<Pet>,
+    /// Item id of the arrows or bullets in the ammo slot.
+    pub ammo_id: u32,
 }
 
 /// `a:1:2/b:3` to name -> numbers.
@@ -198,6 +200,7 @@ pub fn parse_export(input: &str) -> Result<ForeverCharacter, String> {
         bags: Vec::new(),
         sheet: None,
         pet: None,
+        ammo_id: 0,
     };
     let mut info: HashMap<String, String> = HashMap::new();
     let mut pet_family = None;
@@ -228,6 +231,12 @@ pub fn parse_export(input: &str) -> Result<ForeverCharacter, String> {
             "level" => ch.level = value.parse().unwrap_or(0),
             "race" => ch.race = value.to_string(),
             "pet_family" => pet_family = Some(value.to_string()),
+            "ammo" => {
+                ch.ammo_id = value
+                    .split(',')
+                    .find_map(|opt| opt.strip_prefix("id=")?.parse().ok())
+                    .unwrap_or(0)
+            }
             "talents" if ch.talents_loadout.is_none() => {
                 ch.talents_loadout = Some(value.to_string())
             }
@@ -644,6 +653,7 @@ mod tests {
         let ch = parse_export(sortbek()).unwrap();
         let worn = |slot: &str| ch.equipped.iter().find(|i| i.slot == slot).unwrap();
         assert_eq!(worn("ranged").item_id, 273843);
+        assert_eq!(ch.ammo_id, 3030);
         assert_eq!(worn("main_hand").random_suffix, 12726);
         assert_eq!(worn("chest").enchant_id, 15);
         assert!(ch

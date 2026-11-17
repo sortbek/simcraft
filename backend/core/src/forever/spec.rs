@@ -125,6 +125,22 @@ pub fn engine_pet_type(family: &str) -> Option<&'static str> {
     })
 }
 
+/// The engine's HunterOptions.Ammo of an ammo item; it knows these and no others.
+pub fn engine_ammo(item_id: u32) -> Option<&'static str> {
+    Some(match item_id {
+        3030 => "RazorArrow",
+        3033 => "SolidShot",
+        11285 => "JaggedArrow",
+        11284 => "AccurateSlugs",
+        10513 => "MithrilGyroShot",
+        19316 => "IceThreadedArrow",
+        18042 => "ThoriumHeadedArrow",
+        19317 => "IceThreadedBullet",
+        15997 => "ThoriumShells",
+        _ => return None,
+    })
+}
+
 /// The engine's HunterOptions.PetAttackSpeed of a pet's swing time.
 pub fn engine_pet_attack_speed(seconds: f64) -> Option<&'static str> {
     Some(match (seconds * 10.0).round() as u32 {

@@ -56,6 +56,12 @@ export function useForeverBuffs(options: ForeverSimOptions | null) {
         change({ ...choice, on: all ? options.toggles.map((t) => t.id) : [] }),
       setConsumables: (consumables: boolean) => change({ ...choice, consumables }),
       reset: () => change(defaults),
+      /** A saved profile's set; ids this build does not list are dropped. */
+      apply: (ids: string[], consumables: boolean) =>
+        change({
+          on: options.toggles.map((t) => t.id).filter((id) => ids.includes(id)),
+          consumables,
+        }),
       /** What the sim request carries. */
       payload: { buffs: choice.on, consumables: choice.consumables },
     };

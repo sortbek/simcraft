@@ -62,6 +62,9 @@ pub fn raid_request(
         "talentsString": talents_string,
     });
     player[spec_key] = json!({});
+    if let Some(ammo) = spec::engine_ammo(ch.ammo_id).filter(|_| spec_key == "hunter") {
+        player[spec_key]["options"]["classOptions"]["ammo"] = json!(ammo);
+    }
     if let Some(pet) = ch.pet.as_ref().filter(|_| spec_key == "hunter") {
         let options = &mut player[spec_key]["options"]["classOptions"];
         if let Some(kind) = spec::engine_pet_type(&pet.family) {
@@ -172,6 +175,7 @@ mod tests {
             json!([{ "id": 273637, "randomSuffix": 12726 }])
         );
         let options = &p["hunter"]["options"]["classOptions"];
+        assert_eq!(options["ammo"], "RazorArrow");
         assert_eq!(
             (&options["petType"], &options["petAttackSpeed"]),
             (&json!("Raptor"), &json!("Two"))
