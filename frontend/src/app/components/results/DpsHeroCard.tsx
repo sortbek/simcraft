@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { API_URL } from '../../lib/api';
+import { formatDpsExact } from '../../lib/format';
 import { FOREVER_REALM } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import { useRealmSlug } from '../../lib/realms';
@@ -126,7 +127,7 @@ export default function DpsHeroCard({
         </p>
         <div className="mt-[26px] flex items-baseline gap-2.5">
           <span className="font-headline text-[92px] font-extrabold tabular-nums leading-[0.9] tracking-[-0.03em] text-gold [text-shadow:0_0_60px_rgb(var(--c-primary)/var(--hero-glow-a))]">
-            {Math.round(dps).toLocaleString()}
+            {formatDpsExact(dps, dps)}
           </span>
           <span className="font-headline text-xl font-extrabold tracking-[0.04em] text-gold-dark">
             {t(metric === 'hps' ? 'results.hps' : 'results.dps')}

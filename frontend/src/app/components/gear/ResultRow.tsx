@@ -9,6 +9,7 @@ import { useLanguage } from '../../lib/i18n';
 import type { TopGearResult } from './topGearResultsTypes';
 import ComboSummary from './ComboSummary';
 import Pill from '../ui/Pill';
+import { formatDpsExact } from '../../lib/format';
 
 /** Square icon button for a row's actions; shown on hover. */
 const ROW_ACTION =
@@ -208,16 +209,16 @@ export const ResultRow = memo(function ResultRow({
 
       <div className="relative text-right">
         <div className="flex items-center justify-end gap-1.5 font-headline text-[15px] font-extrabold tabular-nums">
-          {Math.round(result.dps).toLocaleString()}
+          {formatDpsExact(result.dps, result.dps)}
           {result.precision_pct != null && (
             <PrecisionDot pct={result.precision_pct} targetError={targetError} />
           )}
         </div>
         <div className={`mt-1 text-[11.5px] font-bold tabular-nums ${deltaTone}`}>
           {result.delta > 0
-            ? `+${Math.round(result.delta).toLocaleString()}`
+            ? `+${formatDpsExact(result.delta, result.dps)}`
             : result.delta < 0
-              ? Math.round(result.delta).toLocaleString()
+              ? formatDpsExact(result.delta, result.dps)
               : '—'}
           {baseDps > 0 && result.delta !== 0 && (
             <span className={`ml-1.5 font-medium ${deltaSubTone}`}>

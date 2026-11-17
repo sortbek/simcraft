@@ -138,3 +138,12 @@ test("Forever items and talents link to Wowhead's forever pages, on the locale d
     'https://de.wowhead.com/forever/spell=20262'
   );
 });
+
+const { formatDpsExact } = require('../src/app/lib/format.ts');
+test('Forever-sized DPS keeps one decimal; retail stays whole', () => {
+  assert.equal(formatDpsExact(0.2, 130), '0.2');
+  assert.equal(formatDpsExact(130.04, 130), '130.0');
+  assert.equal(formatDpsExact(-1.25, 130), '-1.3');
+  assert.equal(formatDpsExact(236071.4, 236071), (236071).toLocaleString());
+  assert.equal(formatDpsExact(412.6, 236071), '413');
+});
