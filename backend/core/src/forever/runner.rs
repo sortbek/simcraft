@@ -427,6 +427,48 @@ mod tests {
             "Trueshot Aura and Hunter's Mark: {with_buffs} against {dps} solo"
         );
 
+        // The same hunter from the MythicSim addon's export, which brings the spellbook. With the
+        // Raptor, MythicSim's own site gave 127 for this export.
+        let mythic = crate::forever::import::parse_export_with(
+            include_str!("testdata/sortbek.mythicsim.json"),
+            &engine.data,
+        )
+        .unwrap();
+        let mythic_summary = crate::forever::import::summarize(&mythic, &engine.data);
+        assert!(mythic_summary
+            .equipped
+            .iter()
+            .all(|g| g.known && !g.slot.is_empty()));
+        assert!(mythic_summary.equipped.iter().any(|g| g.slot == "ranged"));
+        assert_eq!(mythic_summary.points_per_tree, vec![20, 0, 0]);
+        let request = raid_request(
+            &mythic,
+            &engine.data,
+            "hunter",
+            &mythic_summary.talents_string,
+            &settings,
+        );
+        assert!(request["raid"]["parties"][0]["players"][0]["knownSpells"].is_array());
+        let raw = run_cli(
+            &engine.binary,
+            "sim",
+            &request,
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let with_book = raw["raidMetrics"]["parties"][0]["players"][0]["dps"]["avg"]
+            .as_f64()
+            .unwrap();
+        eprintln!("MythicSim export through SimHammer: {with_book:.1} dps");
+        assert!(
+            (124.0..130.0).contains(&with_book),
+            "MythicSim export at {with_book} dps; their site says 127"
+        );
+
         // A healer sims for healing, and talent builds compare side by side.
         let export = include_str!("testdata/sylfrey.simc").replace("level=27", "level=60");
         let paladin = parse_export(&export).unwrap();

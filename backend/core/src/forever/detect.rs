@@ -23,9 +23,18 @@ fn wow_header(simc_input: &str) -> Option<&str> {
         .find_map(|line| line.trim().strip_prefix("# WoW "))
 }
 
+/// The MythicSim addon's export: one JSON object with a `mythicsim` block. It only exists for
+/// Forever.
+pub fn is_mythicsim_export(input: &str) -> bool {
+    input.trim_start().starts_with('{') && input.contains("\"mythicsim\"")
+}
+
 /// Reads the `# WoW <version>, TOC <toc>` header the SimC addon writes. Forever runs a 1.x
 /// client (TOC 16001); anything else, or no header, is retail.
 pub fn detect_game(simc_input: &str) -> Game {
+    if is_mythicsim_export(simc_input) {
+        return Game::Forever;
+    }
     let Some(rest) = wow_header(simc_input) else {
         return Game::Retail;
     };

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::data::ForeverData;
 use super::detect::client_build;
@@ -40,8 +40,8 @@ pub struct ExportItem {
 
 /// What the addon's "Additional Character Info" block reads off the character sheet, in the
 /// engine's `CharacterSheet` shape. A character below level 60 sims from these.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct CharacterSheet {
     pub level: u32,
     /// Strength, Agility, Stamina, Intellect, Spirit without gear or buffs.
@@ -83,6 +83,8 @@ pub struct ForeverCharacter {
     pub level: u32,
     pub professions: Vec<(String, u32)>,
     pub talents_loadout: Option<String>,
+    /// Talents already in the engine's string form (the MythicSim export's).
+    pub talents_string: Option<String>,
     pub client_build: Option<String>,
     pub equipped: Vec<ExportItem>,
     pub bags: Vec<ExportItem>,
@@ -90,6 +92,8 @@ pub struct ForeverCharacter {
     pub pet: Option<Pet>,
     /// Item id of the arrows or bullets in the ammo slot.
     pub ammo_id: u32,
+    /// Spell ids the spellbook lists; empty when the export has no spellbook.
+    pub known_spells: Vec<u32>,
 }
 
 /// `a:1:2/b:3` to name -> numbers.
@@ -187,7 +191,147 @@ fn parse_item(line: &str) -> Option<ExportItem> {
     (item.item_id > 0).then_some(item)
 }
 
+/// The MythicSim addon's JSON export. Its gear has no slots (see [`place_items`]) and its talents
+/// are already the engine's string; it also carries the spellbook, which the SimC export lacks.
+fn parse_mythicsim(input: &str) -> Result<ForeverCharacter, String> {
+    let export: serde_json::Value = serde_json::from_str(input)
+        .map_err(|e| format!("The MythicSim export is not valid JSON: {e}"))?;
+    let extra = &export["mythicsim"];
+    let text = |value: &serde_json::Value| value.as_str().unwrap_or("").to_string();
+    let token = |value: &serde_json::Value| text(value).trim().to_lowercase().replace(' ', "_");
+    let items = |list: &serde_json::Value| -> Vec<ExportItem> {
+        list.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| {
+                Some(ExportItem {
+                    slot: String::new(),
+                    item_id: item["id"].as_u64().filter(|id| *id > 0)? as u32,
+                    enchant_id: item["enchant"].as_u64().unwrap_or(0) as u32,
+                    random_suffix: item["random_suffix"].as_u64().unwrap_or(0) as u32,
+                })
+            })
+            .collect()
+    };
+    let mut race = token(&export["race"]);
+    if race.contains("skyborne") {
+        let horde = text(&extra["faction"]).eq_ignore_ascii_case("horde");
+        race = if horde {
+            "skyborne_horde"
+        } else {
+            "skyborne_alliance"
+        }
+        .into();
+    }
+    let level = export["level"].as_u64().unwrap_or(0) as u32;
+    let ch = ForeverCharacter {
+        name: text(&export["name"]),
+        class: token(&export["class"]),
+        race,
+        level,
+        professions: export["professions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|p| (token(&p["name"]), p["level"].as_u64().unwrap_or(0) as u32))
+            .collect(),
+        talents_loadout: None,
+        talents_string: export["talents"].as_str().map(str::to_string),
+        client_build: match (
+            extra["clientVersion"].as_str(),
+            extra["clientBuild"].as_str(),
+        ) {
+            (Some(version), Some(build)) => Some(format!("{version}.{build}")),
+            _ => None,
+        },
+        equipped: items(&export["gear"]["items"]),
+        bags: items(&export["bags"]),
+        sheet: serde_json::from_value::<CharacterSheet>(extra["sheet"].clone())
+            .ok()
+            .map(|sheet| CharacterSheet { level, ..sheet }),
+        pet: extra["pet"]["family"].as_str().map(|family| Pet {
+            family: family.trim().to_lowercase().replace(' ', "_"),
+            attack_speed: extra["pet"]["attackSpeed"].as_f64().unwrap_or(0.0),
+        }),
+        // The export has no ammo slot; the arrows or bullets carried in the bags are what is shot.
+        ammo_id: export["bags"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| Some(item["id"].as_u64()? as u32))
+            .find(|id| spec::engine_ammo(*id).is_some())
+            .unwrap_or(0),
+        known_spells: extra["knownSpells"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|id| Some(id.as_u64()? as u32))
+            .collect(),
+    };
+    if spec::engine_class(&ch.class).is_none() {
+        return Err("No class found in the export".into());
+    }
+    if spec::engine_race(&ch.race).is_none() {
+        return Err(format!("Unsupported race \"{}\"", ch.race));
+    }
+    Ok(ch)
+}
+
+/// Gives items that came without a slot (the MythicSim export's) the slot their type fits: the
+/// first ring, trinket and weapon take the first slot of their pair, the next one the second.
+pub fn place_items(ch: &mut ForeverCharacter, data: &ForeverData) {
+    let slot_of = |item: &ExportItem, taken: &[String]| -> String {
+        let Some(known) = data.items.get(&item.item_id) else {
+            return String::new();
+        };
+        let pair = |first: &str, second: &str| {
+            if taken.iter().any(|slot| slot == first) {
+                second
+            } else {
+                first
+            }
+            .to_string()
+        };
+        match known.item_type {
+            1 => "head".into(),
+            2 => "neck".into(),
+            3 => "shoulder".into(),
+            4 => "back".into(),
+            5 => "chest".into(),
+            6 => "wrist".into(),
+            7 => "hands".into(),
+            8 => "waist".into(),
+            9 => "legs".into(),
+            10 => "feet".into(),
+            11 => pair("finger1", "finger2"),
+            12 => pair("trinket1", "trinket2"),
+            13 => pair("main_hand", "off_hand"),
+            spec::ITEM_TYPE_RANGED => "ranged".into(),
+            _ => String::new(),
+        }
+    };
+    let mut taken: Vec<String> = Vec::new();
+    for item in ch.equipped.iter_mut().filter(|i| i.slot.is_empty()) {
+        item.slot = slot_of(item, &taken);
+        taken.push(item.slot.clone());
+    }
+    // A bag item only needs the slot it could go in.
+    for item in ch.bags.iter_mut().filter(|i| i.slot.is_empty()) {
+        item.slot = slot_of(item, &[]);
+    }
+}
+
+/// [`parse_export`], with slotless items placed by the engine bundle's item types.
+pub fn parse_export_with(input: &str, data: &ForeverData) -> Result<ForeverCharacter, String> {
+    let mut ch = parse_export(input)?;
+    place_items(&mut ch, data);
+    Ok(ch)
+}
+
 pub fn parse_export(input: &str) -> Result<ForeverCharacter, String> {
+    if super::detect::is_mythicsim_export(input) {
+        return parse_mythicsim(input);
+    }
     let mut ch = ForeverCharacter {
         name: String::new(),
         class: String::new(),
@@ -195,12 +339,14 @@ pub fn parse_export(input: &str) -> Result<ForeverCharacter, String> {
         level: 0,
         professions: Vec::new(),
         talents_loadout: None,
+        talents_string: None,
         client_build: client_build(input),
         equipped: Vec::new(),
         bags: Vec::new(),
         sheet: None,
         pet: None,
         ammo_id: 0,
+        known_spells: Vec::new(),
     };
     let mut info: HashMap<String, String> = HashMap::new();
     let mut pet_family = None;
@@ -401,6 +547,15 @@ pub fn summarize_with(
     }
     let (talents_string, points_per_tree, ranks) =
         match (ch.talents_loadout.as_deref(), data.talents.get(&ch.class)) {
+            (None, Some(class)) if ch.talents_string.is_some() => {
+                match talents::from_string(ch.talents_string.as_deref().unwrap_or(""), class) {
+                    Ok(d) => (d.talents_string, d.points_per_tree, d.ranks),
+                    Err(e) => {
+                        warnings.push(format!("Talents could not be read: {e}"));
+                        (String::new(), Vec::new(), Vec::new())
+                    }
+                }
+            }
             (Some(loadout), Some(class)) => match talents::decode(loadout, class) {
                 Ok(d) => {
                     if !d.unknown_definitions.is_empty() {
@@ -709,6 +864,128 @@ mod tests {
             "{:?}",
             s.warnings
         );
+    }
+
+    fn mythicsim() -> &'static str {
+        include_str!("testdata/sortbek.mythicsim.json")
+    }
+
+    #[test]
+    fn mythicsim_export_reads_like_the_simc_one_and_brings_the_spellbook() {
+        assert_eq!(
+            crate::forever::detect_game(mythicsim()),
+            crate::forever::Game::Forever
+        );
+        let ch = parse_export(mythicsim()).unwrap();
+        assert_eq!(
+            (
+                ch.name.as_str(),
+                ch.class.as_str(),
+                ch.race.as_str(),
+                ch.level
+            ),
+            ("Sortbek", "hunter", "orc", 29)
+        );
+        assert_eq!(
+            ch.professions,
+            vec![
+                ("leatherworking".to_string(), 101),
+                ("skinning".to_string(), 170)
+            ]
+        );
+        assert_eq!(ch.client_build.as_deref(), Some("1.60.1.70938"));
+        assert_eq!(
+            ch.talents_string.as_deref(),
+            Some("5120221402100000-0000000000000000-000000000000000000")
+        );
+        assert_eq!(ch.equipped.len(), 13);
+        assert!(ch
+            .equipped
+            .iter()
+            .any(|i| i.item_id == 3210 && i.random_suffix == 12726));
+        assert!(ch
+            .equipped
+            .iter()
+            .any(|i| i.item_id == 270043 && i.enchant_id == 15));
+        assert!(ch
+            .bags
+            .iter()
+            .any(|i| i.item_id == 15117 && i.random_suffix == 12756));
+        assert_eq!(
+            ch.pet,
+            Some(Pet {
+                family: "raptor".into(),
+                attack_speed: 2.0
+            })
+        );
+        assert!(ch.known_spells.contains(&19434) && ch.known_spells.len() > 40);
+        assert_eq!(ch.ammo_id, 3030, "the Razor Arrows in the bags");
+        let sheet = ch.sheet.unwrap();
+        let simc = parse_export(sortbek()).unwrap().sheet.unwrap();
+        assert_eq!(
+            (sheet.level, sheet.base, sheet.attributes),
+            (29, simc.base, simc.attributes)
+        );
+        assert_eq!(
+            (sheet.attack_power, sheet.ranged_attack_power, sheet.armor),
+            (simc.attack_power, simc.ranged_attack_power, simc.armor)
+        );
+        assert_eq!(sheet.melee_crit, 3.8055);
+    }
+
+    #[test]
+    fn slotless_items_take_the_slot_of_their_type() {
+        let data = crate::forever::test_data();
+        // The paladin's items, as the MythicSim export lists them: no slots, pairs in order.
+        let ids = [273457, 6414, 6321, 273643, 280766, 273637, 6630];
+        let mut ch = parse_export(mythicsim()).unwrap();
+        ch.equipped = ids
+            .iter()
+            .map(|id| ExportItem {
+                slot: String::new(),
+                item_id: *id,
+                enchant_id: 0,
+                random_suffix: 0,
+            })
+            .collect();
+        ch.bags = vec![ExportItem {
+            slot: String::new(),
+            item_id: 6314,
+            enchant_id: 0,
+            random_suffix: 0,
+        }];
+        place_items(&mut ch, data);
+        let slots: Vec<&str> = ch.equipped.iter().map(|i| i.slot.as_str()).collect();
+        assert_eq!(
+            slots,
+            [
+                "neck",
+                "finger1",
+                "finger2",
+                "trinket1",
+                "trinket2",
+                "main_hand",
+                "off_hand"
+            ]
+        );
+        assert_eq!(ch.bags[0].slot, "back");
+    }
+
+    #[test]
+    fn mythicsim_talents_are_used_as_they_are() {
+        let export = mythicsim()
+            .replace("\"class\":\"hunter\"", "\"class\":\"paladin\"")
+            .replace(
+                "5120221402100000-0000000000000000-000000000000000000",
+                "0-05005",
+            );
+        let ch = parse_export(&export).unwrap();
+        let s = summarize(&ch, crate::forever::test_data());
+        assert_eq!(
+            (s.talents_string.as_str(), &s.points_per_tree),
+            ("-05005", &vec![0, 10, 0])
+        );
+        assert!(s.has_sheet && s.can_sim, "{:?}", s.blocked_reason);
     }
 
     #[test]

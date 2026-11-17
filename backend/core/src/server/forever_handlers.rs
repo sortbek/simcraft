@@ -11,7 +11,7 @@ use crate::cancel::CancelToken;
 use crate::compute::local::{await_local_queue_permit, LocalSimQueue};
 use crate::db::JobRepo;
 use crate::forever::import::{
-    parse_export, summarize_with, ExportItem, ForeverCharacter, ImportSummary,
+    parse_export_with, summarize_with, ExportItem, ForeverCharacter, ImportSummary,
 };
 use crate::forever::request::{bulk_request, raid_request, SimSettings};
 use crate::forever::result::{compare_result, engine_error, gear_result, quick_result, ResultMeta};
@@ -79,7 +79,7 @@ pub(super) fn prepare(
     if detect_game(simc_input) != Game::Forever {
         return Err("This is not a WoW Forever export".into());
     }
-    let character = parse_export(simc_input)?;
+    let character = parse_export_with(simc_input, data)?;
     let summary = summarize_with(&character, data, edited_talents);
     let spec_key = match spec_key {
         Some(key) if spec::spec_choices(&character.class).contains(&key) => Some(key.to_string()),
@@ -116,7 +116,7 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
         return HttpResponse::BadRequest()
             .json(json!({ "detail": "This is not a WoW Forever export" }));
     }
-    match parse_export(&body.simc_input) {
+    match parse_export_with(&body.simc_input, &engine.data) {
         Ok(ch) => {
             let summary = summarize_with(&ch, &engine.data, body.talents_string.as_deref());
             let options = sim_options(&engine, &summary).await;

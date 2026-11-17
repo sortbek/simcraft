@@ -86,6 +86,10 @@ pub fn raid_request(
         player["level"] = json!(ch.level);
         player["characterSheet"] = json!(sheet);
         player["characterSheet"]["equipment"] = json!({ "items": worn });
+        // The spellbook, when the export has one: the engine then casts the trained ranks.
+        if !ch.known_spells.is_empty() {
+            player["knownSpells"] = json!(ch.known_spells);
+        }
     }
     let profs: Vec<&str> = ch
         .professions

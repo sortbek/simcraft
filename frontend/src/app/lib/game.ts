@@ -8,6 +8,8 @@ export const GAME_STORAGE_KEY = 'simhammer_game';
 
 /** Same rule as the backend: a 1.x client or a TOC below 20000 is WoW Forever. */
 export function detectGame(simcInput: string): Game {
+  // The MythicSim addon's JSON export only exists for Forever.
+  if (/^\s*\{/.test(simcInput) && simcInput.includes('"mythicsim"')) return 'forever';
   const m = simcInput.match(/^#\s*WoW\s+(\d+)\.[^,\n]*,\s*TOC\s+(\d+)/m);
   if (!m) return 'retail';
   return Number(m[1]) === 1 || Number(m[2]) < 20000 ? 'forever' : 'retail';
