@@ -3,6 +3,7 @@
 import { useLanguage } from '../lib/i18n';
 import { useIsDesktop } from '../lib/useIsDesktop';
 import GeneralSettingsSection from './GeneralSettingsSection';
+import ForeverEngineSection from './ForeverEngineSection';
 import SimcEngineSection from './SimcEngineSection';
 import ComputeProvidersSection from './ComputeProvidersSection';
 import AppearanceSection from './AppearanceSection';
@@ -26,6 +27,7 @@ export default function SettingsPage() {
         <>
           <section className="space-y-4">
             <SimcEngineSection />
+            <ForeverEngineSection />
           </section>
           <GeneralSettingsSection />
         </>

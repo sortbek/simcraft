@@ -287,8 +287,8 @@ simc_update_loop() {
 }
 
 # ---------------------------------------------------------------------------
-# WoW Forever engine: latest release, fetched at startup only (the backend reads
-# FOREVER_DIR once, so a new engine arrives with the next restart).
+# WoW Forever engine: latest release, fetched at startup and then on the SimC check
+# interval. The backend reloads the engine when FOREVER_DIR/.active changes.
 # ---------------------------------------------------------------------------
 FOREVER_DIR="${FOREVER_DIR:-/app/resources/forever}"
 FOREVER_REPO="sortbek/forever-builds"
@@ -331,6 +331,14 @@ fetch_forever || echo "==> Forever: fetch failed, continuing without it"
 export FOREVER_DIR
 
 simc_update_loop &
+
+forever_update_loop() {
+    while true; do
+        sleep "$SIMC_CHECK_INTERVAL"
+        fetch_forever || echo "[forever-updater] check failed."
+    done
+}
+forever_update_loop &
 
 echo "==> Starting SimHammer Server..."
 exec "$@"

@@ -43,19 +43,60 @@ impl ForeverEngine {
             data: ForeverData::load(&base.join("data"))?,
         })
     }
+}
 
-    pub fn from_env() -> Option<Arc<Self>> {
-        let dir = std::env::var("FOREVER_DIR").ok()?;
-        match Self::locate(Path::new(&dir)) {
+/// The engine install the server sims with. It is read again whenever the install changes (the
+/// app or the container downloads a new release, or switches Forever off), so nothing restarts.
+pub struct ForeverInstall {
+    dir: Option<PathBuf>,
+    /// The `.active` tag the engine was loaded for, and the engine.
+    loaded: std::sync::Mutex<Option<(String, Arc<ForeverEngine>)>>,
+}
+
+impl ForeverInstall {
+    pub fn new(dir: Option<PathBuf>) -> Self {
+        Self {
+            dir,
+            loaded: std::sync::Mutex::new(None),
+        }
+    }
+
+    pub fn from_env() -> Self {
+        let install = Self::new(std::env::var("FOREVER_DIR").ok().map(PathBuf::from));
+        install.get();
+        install
+    }
+
+    /// The installed engine, or None without one or with Forever switched off (`.disabled`).
+    pub fn get(&self) -> Option<Arc<ForeverEngine>> {
+        let dir = self.dir.as_ref()?;
+        if dir.join(".disabled").exists() {
+            return None;
+        }
+        let tag = std::fs::read_to_string(dir.join(".active"))
+            .map(|t| t.trim().to_string())
+            .unwrap_or_default();
+        let mut loaded = self.loaded.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((current, engine)) = loaded.as_ref() {
+            if *current == tag {
+                return Some(engine.clone());
+            }
+        }
+        match ForeverEngine::locate(dir) {
             Ok(engine) => {
                 println!(
                     "Forever engine {} (client {}) from {}",
-                    engine.data.version.engine_commit, engine.data.version.client_build, dir
+                    engine.data.version.engine_commit,
+                    engine.data.version.client_build,
+                    dir.display()
                 );
-                Some(Arc::new(engine))
+                let engine = Arc::new(engine);
+                *loaded = Some((tag, engine.clone()));
+                Some(engine)
             }
             Err(e) => {
                 eprintln!("Forever engine unavailable: {e}");
+                *loaded = None;
                 None
             }
         }
@@ -70,4 +111,59 @@ pub(crate) fn test_data() -> &'static ForeverData {
             .expect("forever test bundle")
     });
     &DATA
+}
+
+#[cfg(test)]
+mod install_tests {
+    use super::*;
+
+    fn install_at(root: &Path, tag: &str) {
+        let dir = root.join(tag);
+        std::fs::create_dir_all(dir.join("data")).unwrap();
+        let name = if cfg!(windows) {
+            "simhammer-forever.exe"
+        } else {
+            "simhammer-forever"
+        };
+        std::fs::write(dir.join(name), "").unwrap();
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/forever/testdata/data");
+        for entry in std::fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            std::fs::copy(entry.path(), dir.join("data").join(entry.file_name())).unwrap();
+        }
+        std::fs::write(root.join(".active"), tag).unwrap();
+    }
+
+    #[test]
+    fn the_install_follows_what_is_on_disk() {
+        let root = tempfile::tempdir().unwrap();
+        let install = ForeverInstall::new(Some(root.path().to_path_buf()));
+        assert!(install.get().is_none(), "nothing installed yet");
+
+        install_at(root.path(), "forever-20261101-aaaaaaa");
+        let first = install.get().expect("picked up without a restart");
+        assert!(
+            Arc::ptr_eq(&first, &install.get().unwrap()),
+            "kept while nothing changes"
+        );
+
+        install_at(root.path(), "forever-20261102-bbbbbbb");
+        assert!(
+            !Arc::ptr_eq(&first, &install.get().unwrap()),
+            "a new release is loaded"
+        );
+
+        std::fs::write(root.path().join(".disabled"), "").unwrap();
+        assert!(install.get().is_none(), "switched off");
+        std::fs::remove_file(root.path().join(".disabled")).unwrap();
+        assert!(install.get().is_some());
+
+        std::fs::write(root.path().join(".active"), "forever-20261103-missing").unwrap();
+        assert!(install.get().is_none(), "an install that is not there");
+    }
+
+    #[test]
+    fn no_folder_configured_means_no_engine() {
+        assert!(ForeverInstall::new(None).get().is_none());
+    }
 }

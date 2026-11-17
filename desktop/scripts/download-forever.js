@@ -108,12 +108,31 @@ async function install(baseDir, tag, onProgress) {
   }
 }
 
-/** Installs or updates the engine. Forever is optional: failures are logged, never thrown. */
-async function ensureForever(baseDir, onProgress) {
+/** Writes or clears the marker that tells the backend Forever is switched off. */
+function setDisabled(baseDir, disabled) {
+  const marker = path.join(baseDir, ".disabled");
+  try {
+    if (disabled) {
+      fs.mkdirSync(baseDir, { recursive: true });
+      fs.writeFileSync(marker, "");
+    } else {
+      fs.rmSync(marker, { force: true });
+    }
+  } catch (err) {
+    console.warn(`[forever] ${err.message}`);
+  }
+}
+
+/** Installs or updates the engine. Forever is optional: failures are logged, never thrown.
+ *  Switched off it installs nothing; with auto-update off an installed engine is left as it is. */
+async function ensureForever(baseDir, { enabled = true, autoUpdate = true, onProgress } = {}) {
+  setDisabled(baseDir, !enabled);
+  if (!enabled) return null;
   try {
     fs.mkdirSync(baseDir, { recursive: true });
-    const tag = await latestTag();
-    if (tag !== activeTag(baseDir)) {
+    const installed = activeTag(baseDir);
+    const tag = installed && !autoUpdate ? installed : await latestTag();
+    if (tag !== installed) {
       console.log(`[forever] installing ${tag}`);
       await install(baseDir, tag, onProgress);
     }
@@ -124,4 +143,12 @@ async function ensureForever(baseDir, onProgress) {
   return active ? path.join(baseDir, active) : null;
 }
 
-module.exports = { ensureForever, tagFromLocation, BINARY_NAME };
+module.exports = {
+  ensureForever,
+  install,
+  latestTag,
+  activeTag,
+  setDisabled,
+  tagFromLocation,
+  BINARY_NAME,
+};

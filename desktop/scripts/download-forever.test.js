@@ -27,3 +27,28 @@ test("an unusable install folder gives null instead of throwing", async () => {
   fs.writeFileSync(file, "x");
   assert.equal(await ensureForever(path.join(file, "forever")), null);
 });
+
+test("switched off, nothing is installed and the backend is told", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { ensureForever, setDisabled } = require("./download-forever");
+  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "forever-test-")), "forever");
+  assert.equal(await ensureForever(dir, { enabled: false }), null);
+  assert.ok(fs.existsSync(path.join(dir, ".disabled")));
+  setDisabled(dir, false);
+  assert.ok(!fs.existsSync(path.join(dir, ".disabled")));
+});
+
+test("with auto-update off an installed engine is kept without asking GitHub", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { ensureForever, BINARY_NAME } = require("./download-forever");
+  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "forever-test-")), "forever");
+  const tag = "forever-20261015-e3b44d0";
+  fs.mkdirSync(path.join(dir, tag), { recursive: true });
+  fs.writeFileSync(path.join(dir, tag, BINARY_NAME), "");
+  fs.writeFileSync(path.join(dir, ".active"), tag);
+  assert.equal(await ensureForever(dir, { autoUpdate: false }), path.join(dir, tag));
+});

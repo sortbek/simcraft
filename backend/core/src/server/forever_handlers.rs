@@ -17,11 +17,11 @@ use crate::forever::request::{bulk_request, raid_request, SimSettings};
 use crate::forever::result::{
     add_armory_character, compare_result, engine_error, gear_result, quick_result, ResultMeta,
 };
-use crate::forever::{detect_game, runner, spec, ForeverData, ForeverEngine, Game};
+use crate::forever::{detect_game, runner, spec, ForeverData, ForeverEngine, ForeverInstall, Game};
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
 
-type Engine = web::Data<Option<Arc<ForeverEngine>>>;
+type Engine = web::Data<ForeverInstall>;
 
 #[derive(Deserialize)]
 pub(super) struct ImportRequest {
@@ -104,8 +104,10 @@ pub(super) fn prepare(
 }
 
 fn engine_or_503(engine: &Engine) -> Result<Arc<ForeverEngine>, HttpResponse> {
-    engine.get_ref().clone().ok_or_else(|| {
-        HttpResponse::ServiceUnavailable().json(json!({ "detail": "Forever engine not installed" }))
+    engine.get().ok_or_else(|| {
+        HttpResponse::ServiceUnavailable().json(json!({
+            "detail": "The WoW Forever engine is not installed. It downloads in the background; check Settings."
+        }))
     })
 }
 

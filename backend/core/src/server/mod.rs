@@ -185,7 +185,7 @@ pub async fn start_server(
     // (Simmit) don't use it — they queue server-side.
     let local_sim_queue = crate::compute::local::new_local_sim_queue();
     let local_queue_data = web::Data::new(local_sim_queue.clone());
-    let forever_engine = web::Data::new(crate::forever::ForeverEngine::from_env());
+    let forever_engine = web::Data::new(crate::forever::ForeverInstall::from_env());
     let provider_registry =
         web::Data::new(Arc::new(crate::compute::ProviderRegistry::new_default(
             simc_bins.clone(),
