@@ -125,9 +125,12 @@ export function useLootBrowserModel(
         // For Bonus Rolls, carrying an entry for a selected tier IS eligibility:
         // it drops the half whose tier is None, raid trash (which cannot be
         // rolled on), and anything the season's ladders do not price.
+        // A vendor tier (Soul Fragments) leaves the slots it does not sell out
+        // of `dungeon_info` for the same reason.
         details.isBonusRoll
           ? getTrackInfo(item, raidDiff, dungeonDiff) !== null
-          : !item.is_void_forge || getTrackInfo(item, raidDiff, dungeonDiff) !== null
+          : (!item.is_void_forge && (details.isRaid || !item.dungeon_info)) ||
+            getTrackInfo(item, raidDiff, dungeonDiff) !== null
       )
       .map((item) => ({ item, slot, uid: dropUid(item) }))
   );

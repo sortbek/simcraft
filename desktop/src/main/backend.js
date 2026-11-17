@@ -45,7 +45,8 @@ function createBackendController(config) {
     backend = spawn(config.getBackendBinary(), ["--desktop"], {
       env,
       cwd: config.getUserDataPath(),
-      stdio: ["ignore", "pipe", "pipe"],
+      // The backend exits on stdin EOF, i.e. when this process dies.
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     backend.stdout.on("data", (data) => {

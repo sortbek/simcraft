@@ -312,7 +312,7 @@
   "topGear.copyEnchantsTooltip": "Aplica el encantamiento equipado actualmente a los objetos alternativos sin encantar en la misma ranura, para que se comparen de forma justa. Las alternativas que ya tienen su propio encantamiento no se modifican.",
   "topGear.simHighestUpgradeTooltip": "Trata todo el equipo como si estuviera completamente mejorado a su nivel máximo, para que veas en qué piezas vale la pena invertir.",
   "topGear.revivalCatalystTooltip": "Añade versiones de conjunto de banda de tu equipo de raid a la comparación. Solo considera piezas que serían una mejora.",
-  "topGear.voidForge": "Armas y abalorios Void Forge",
+  "topGear.voidForge": "Armas, abalorios y collares Void Forge",
   "topGear.largeLocalSimTitle": "Simulación muy grande",
   "topGear.largeLocalSimBody": "Se simularán unas {count} combinaciones, lo que puede tardar muchas horas en este equipo. Deselecciona algunos objetos o aumenta el error objetivo.",
   "dropFinder.selectRaid": "Seleccionar banda",

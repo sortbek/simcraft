@@ -13,7 +13,11 @@ Thumbs.db
 *.log
 *.tsbuildinfo
 
+# Local agent tooling: skills, subagents, the factory and its job state.
+# Deliberately not shared — scripts/verify.sh is the part the repo depends on.
 .claude/
+factory/
+scripts/format-hook.sh
 docs/superpowers/
 .simc-version
 

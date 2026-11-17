@@ -1,4 +1,4 @@
-use crate::game_data;
+use crate::{game_data, item_db};
 use serde_json::{json, Value};
 
 /// Build droptimizer `drop_items` for one character: every eligible drop in the
@@ -27,6 +27,19 @@ pub fn build_drop_items(
     match game_data::get_instance_drops(instance_id, Some(class), Some(spec), true) {
         Some(mut by_slot) => {
             game_data::add_drop_variants(&mut by_slot, Some(class), void_forge, catalyst);
+            // A vendor tier (Soul Fragments) sells only some slots: the rest carry
+            // no entry for it and must not fall back to their base item level.
+            let slot_limited = item_db::season_cfg()
+                .get("dungeonDifficultyTracks")
+                .and_then(|d| d.get(difficulty))
+                .is_some_and(|e| e.get("inventoryTypes").is_some());
+            if slot_limited {
+                for items in by_slot.values_mut() {
+                    if let Some(arr) = items.as_array_mut() {
+                        arr.retain(|item| item["dungeon_info"].get(difficulty).is_some());
+                    }
+                }
+            }
             drop_items_from_slots(&by_slot, difficulty, upgrade_level, encounter_ids, tracks)
         }
         None => Vec::new(),
@@ -546,6 +559,47 @@ mod tests {
                 .iter()
                 .all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(298)),
             "upgrade level must be a no-op for fixed-difficulty raids"
+        );
+    }
+
+    #[test]
+    fn soul_fragment_tier_sells_only_armor_and_jewelry() {
+        crate::test_support::ensure_game_data_loaded();
+        // -98 = the Delves pool. Wah'du sells no weapons or trinkets, so those must
+        // drop out rather than sim at their base item level.
+        let tracks = game_data::get_upgrade_tracks();
+        let build = |difficulty| {
+            build_drop_items(
+                -98,
+                difficulty,
+                "hunter",
+                "marksmanship",
+                0,
+                &[],
+                &tracks,
+                false,
+                true,
+            )
+        };
+        let inv = |d: &Value| d.get("inventory_type").and_then(|v| v.as_u64()).unwrap();
+        let vault = build("delve-vault-8");
+        assert!(
+            vault.iter().any(|d| inv(d) == 12),
+            "the pool itself drops trinkets"
+        );
+
+        let soul = build("delve-soul-mythical");
+        assert!(soul.iter().any(|d| inv(d) == 11), "rings are sold");
+        assert!(soul.iter().any(|d| inv(d) == 2), "necks are sold");
+        assert!(
+            soul.iter()
+                .all(|d| ![12, 13, 14, 15, 17, 21, 22, 23, 26].contains(&inv(d))),
+            "no weapons, off-hands or trinkets"
+        );
+        assert!(
+            soul.iter()
+                .all(|d| d.get("ilevel").and_then(|v| v.as_u64()) == Some(321)),
+            "Mythical Soul Fragment gear is Myth 2/6"
         );
     }
 }

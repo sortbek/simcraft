@@ -312,7 +312,7 @@
   "topGear.copyEnchantsTooltip": "Aplica o encantamento equipado atualmente aos itens alternativos sem encantamento no mesmo slot, para uma comparação justa. Alternativas que já têm o próprio encantamento não são alteradas.",
   "topGear.simHighestUpgradeTooltip": "Trata todo o equipamento como se estivesse totalmente melhorado ao nível máximo, para ver em quais peças vale a pena investir.",
   "topGear.revivalCatalystTooltip": "Adiciona versões de conjunto de raide do seu equipamento à comparação. Considera apenas peças que seriam uma melhoria.",
-  "topGear.voidForge": "Armas e berloques Void Forge",
+  "topGear.voidForge": "Armas, berloques e colares Void Forge",
   "topGear.largeLocalSimTitle": "Simulação muito grande",
   "topGear.largeLocalSimBody": "Cerca de {count} combinações serão simuladas, o que pode levar muitas horas nesta máquina. Desmarque alguns itens ou aumente o erro alvo.",
   "dropFinder.selectRaid": "Selecionar Raide",

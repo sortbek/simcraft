@@ -118,33 +118,26 @@ pub fn compute_identity_key(input: &IdentityInput) -> String {
 }
 
 /// Filter a nominal gem assignment to slots whose CHOSEN item actually has
-/// sockets (inherent or via a crafted-socket bonus in `socketed_item_ids`), and
-/// truncate each list to that item's socket count — so a 2-multiset on a slot
-/// that resolved to a 1-socket alt keeps one gem and drops the rest.
+/// sockets, and truncate each list to that item's socket count — so a
+/// 2-multiset on a slot that resolved to a 1-socket alt keeps one gem and drops
+/// the rest. Mirrors `apply_item_gems`, which never gems a 0-socket item, even
+/// when a socketed variant of the same item id is among the candidates.
 pub fn effective_gems(
     gear_set: &HashMap<String, Arc<Value>>,
     nominal_gems: &HashMap<String, Vec<u64>>,
-    socketed_item_ids: &std::collections::HashSet<u64>,
 ) -> HashMap<String, Vec<u64>> {
     let mut out = HashMap::new();
     for (slot, gem_ids) in nominal_gems {
         let Some(item) = gear_set.get(slot) else {
             continue;
         };
-        let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-        let inherent_sockets = item.get("sockets").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-        let socketable = inherent_sockets > 0 || socketed_item_ids.contains(&item_id);
-        if !socketable {
+        let sockets = item.get("sockets").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        if sockets == 0 {
             continue;
         }
-        let cap = if inherent_sockets > 0 {
-            inherent_sockets
-        } else {
-            gem_ids.len()
-        };
         let kept: Vec<u64> = gem_ids
             .iter()
-            .take(cap)
+            .take(sockets)
             .copied()
             .filter(|g| *g > 0)
             .collect();
@@ -159,7 +152,6 @@ pub fn effective_gems(
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::collections::HashSet;
 
     fn arc_item(id: u64, sockets: u64) -> Arc<Value> {
         Arc::new(json!({ "item_id": id, "sockets": sockets, "bonus_ids": [] }))
@@ -225,9 +217,8 @@ mod tests {
         let nominal_gems_a = HashMap::from_iter([("head".to_string(), vec![5001u64])]);
         let nominal_gems_b = HashMap::from_iter([("head".to_string(), vec![5002u64])]);
 
-        let sockets = HashSet::new();
-        let eff_a = effective_gems(&gear, &nominal_gems_a, &sockets);
-        let eff_b = effective_gems(&gear, &nominal_gems_b, &sockets);
+        let eff_a = effective_gems(&gear, &nominal_gems_a);
+        let eff_b = effective_gems(&gear, &nominal_gems_b);
 
         assert!(eff_a.is_empty(), "socketless slot should filter out");
         assert!(eff_b.is_empty());
@@ -393,7 +384,7 @@ mod tests {
         let mut gear = HashMap::new();
         gear.insert("neck".to_string(), arc_item(100, 1));
         let nominal = HashMap::from_iter([("neck".to_string(), vec![10u64, 20u64])]);
-        let eff = effective_gems(&gear, &nominal, &HashSet::new());
+        let eff = effective_gems(&gear, &nominal);
         assert_eq!(eff.get("neck"), Some(&vec![10u64]));
     }
 }

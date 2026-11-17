@@ -461,7 +461,7 @@
   "topGear.changeCharges": "{count} catalyst charges, change",
   "topGear.simHighestUpgradeTooltip": "Treat all gear as fully upgraded to its maximum item level, so you can see which pieces are worth investing in.",
   "topGear.revivalCatalystTooltip": "Add tier-set versions of your raid gear to the comparison. Only considers pieces that would be an upgrade.",
-  "topGear.voidForge": "Void Forge weapons & trinkets",
+  "topGear.voidForge": "Void Forge weapons, trinkets & necklaces",
   "topGear.runCreditsAvailable": "~{credits} credits · {available} available",
   "topGear.runCreditsOnly": "~{credits} credits",
   "topGear.insufficientCredits": "insufficient credits",

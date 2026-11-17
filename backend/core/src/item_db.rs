@@ -103,6 +103,10 @@ static OMNIUM_TREE: OnceCell<Value> = OnceCell::new();
 static ITEM_NAMES: OnceCell<HashMap<u64, HashMap<String, String>>> = OnceCell::new();
 /// Void Forge map: max-upgrade base bonus_id → voidforged bonus_id
 static VOID_FORGE_MAP: OnceCell<HashMap<u64, u64>> = OnceCell::new();
+/// Crafted Void Forge: (bonus_id appended to max-quality crafted gear, ilvl gain).
+static CRAFTED_VOID_FORGE: OnceCell<Option<(u64, u64)>> = OnceCell::new();
+/// Active season's crafting spark item ids (seasons.json `upgradeItems`).
+static SEASON_SPARK_ITEMS: OnceCell<Vec<u64>> = OnceCell::new();
 /// "Add Embellishment" reagent slot id -> accepted reagent item ids.
 static CRAFTING_EMB_SLOTS: OnceCell<HashMap<u64, Vec<u64>>> = OnceCell::new();
 /// Crafting reagent id -> raw reagent record (name, icon, craftingBonusIds, …).
@@ -140,26 +144,33 @@ static TEMP_ENCHANTS: OnceCell<Vec<Value>> = OnceCell::new();
 
 // ---- Load ----
 
-fn build_void_forge_map() -> HashMap<u64, u64> {
+fn build_void_forge_map(bonuses: &HashMap<u64, Value>) -> HashMap<u64, u64> {
     use regex::Regex;
-    let bonuses = match BONUSES.get() {
-        Some(b) => b,
-        None => return HashMap::new(),
-    };
 
-    // First pass: collect "Voidforged: <Tier>" entries.
-    // Pattern matches "Ascendant Voidforged: Myth", "Galactic Void-Charged: Hero", etc.
+    // First pass: collect "<Name>forged: <Tier>" entries.
+    // Pattern matches "Ascendant Voidforged: Myth" (S1), "Ascendant Venomforged: Hero" (S2),
+    // "Galactic Void-Charged: Hero", etc. Old seasons' tags stay in the data, so per
+    // tier keep the highest-ilvl one (the current season).
     let tag_re =
-        Regex::new(r"^(?:Ascendant|Galactic)\s+Void(?:forged|-Charged):\s*(\w+)$").unwrap();
-    let mut vf_by_tier: HashMap<String, u64> = HashMap::new();
+        Regex::new(r"^(?:Ascendant|Galactic)\s+\w+?(?:forged|-Charged):\s*(\w+)$").unwrap();
+    let ilvl_of = |v: &Value| {
+        v.get("itemLevel")
+            .and_then(|i| i.get("amount"))
+            .and_then(|a| a.as_u64())
+            .unwrap_or(0)
+    };
+    let mut vf_by_tier: HashMap<String, (u64, u64)> = HashMap::new();
     for (bonus_id, value) in bonuses.iter() {
         if let Some(tag) = value.get("tag").and_then(|t| t.as_str()) {
             if let Some(caps) = tag_re.captures(tag) {
-                let tier = caps[1].to_string();
-                vf_by_tier.insert(tier, *bonus_id);
+                let cand = (ilvl_of(value), *bonus_id);
+                let best = vf_by_tier.entry(caps[1].to_string()).or_insert(cand);
+                *best = (*best).max(cand);
             }
         }
     }
+    let vf_by_tier: HashMap<String, u64> =
+        vf_by_tier.into_iter().map(|(t, (_, id))| (t, id)).collect();
 
     if vf_by_tier.is_empty() {
         return HashMap::new();
@@ -190,6 +201,26 @@ fn build_void_forge_map() -> HashMap<u64, u64> {
     }
 
     map
+}
+
+/// The crafted-gear Void Forge bonus and its ilvl gain: the bare tag of the
+/// current tier bonuses ("Ascendant Venomforged" for "Ascendant Venomforged: Myth"),
+/// which carries a `levelOffsetSecondary` instead of a fixed ilvl.
+fn build_crafted_void_forge(
+    bonuses: &HashMap<u64, Value>,
+    vf_map: &HashMap<u64, u64>,
+) -> Option<(u64, u64)> {
+    let tier_tag = vf_map
+        .values()
+        .find_map(|id| bonuses.get(id)?.get("tag")?.as_str())?;
+    let (base_tag, _) = tier_tag.split_once(':')?;
+    bonuses.iter().find_map(|(id, v)| {
+        if v.get("tag").and_then(|t| t.as_str()) != Some(base_tag) {
+            return None;
+        }
+        let gain = v.get("levelOffsetSecondary")?.get("amount")?.as_u64()?;
+        Some((*id, gain))
+    })
 }
 
 fn read_json_vec(path: &std::path::Path) -> Result<Vec<Value>, String> {
@@ -305,8 +336,13 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
         let _ = BONUSES.set(map);
         let _ = UPGRADE_MAX.set(upgrade_max);
 
-        let vf_map = build_void_forge_map();
+        let vf_map = BONUSES.get().map(build_void_forge_map).unwrap_or_default();
         println!("Derived {} void forge mappings", vf_map.len());
+        let _ = CRAFTED_VOID_FORGE.set(
+            BONUSES
+                .get()
+                .and_then(|b| build_crafted_void_forge(b, &vf_map)),
+        );
         let _ = VOID_FORGE_MAP.set(vf_map);
     }
 
@@ -339,6 +375,12 @@ pub fn load(data_dir: &Path) -> Result<(), String> {
                     .unwrap_or("unknown");
                 println!("Active season: {}, groups: {:?}", name, groups);
                 active_groups = Some(groups);
+                let sparks: Vec<u64> = active
+                    .get("upgradeItems")
+                    .and_then(|g| g.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
+                    .unwrap_or_default();
+                let _ = SEASON_SPARK_ITEMS.set(sparks);
             }
         }
 
@@ -983,6 +1025,35 @@ pub fn void_forge_for_track(track: &str) -> Option<(u64, u64)> {
     Some((vf_bonus, vf_ilvl))
 }
 
+/// Crafted Void Forge (bonus_id, ilvl gain), appended rather than swapped in.
+pub fn crafted_void_forge_bonus() -> Option<(u64, u64)> {
+    *CRAFTED_VOID_FORGE.get()?
+}
+
+/// Crafted Void Forge for an owned item: Some when it is max-quality crafted gear
+/// of this season (current spark + top crafting-quality offset) not yet forged.
+pub fn crafted_void_forge(bonus_ids: &[u64]) -> Option<(u64, u64)> {
+    let (vf_bonus, gain) = crafted_void_forge_bonus()?;
+    if bonus_ids.contains(&vf_bonus) {
+        return None;
+    }
+    let reagents = CRAFTING_REAGENTS.get()?;
+    let spark_bonuses: Vec<u64> = SEASON_SPARK_ITEMS
+        .get()?
+        .iter()
+        .filter_map(|id| reagents.get(id)?.get("craftingBonusIds")?.as_array())
+        .flatten()
+        .filter_map(|v| v.as_u64())
+        .collect();
+    let has_spark = bonus_ids.iter().any(|b| spark_bonuses.contains(b));
+    // craftingQuality is 0-based: 4 is the top rank.
+    let max_quality = bonus_ids.iter().any(|b| {
+        get_bonus(*b).and_then(|v| v.get("levelOffset")?.get("craftingQuality")?.as_u64())
+            == Some(4)
+    });
+    (has_spark && max_quality).then_some((vf_bonus, gain))
+}
+
 fn upgrade_max() -> &'static HashMap<u64, u64> {
     UPGRADE_MAX.get().expect("Game data not loaded")
 }
@@ -1410,6 +1481,14 @@ pub(crate) fn resolve_bonuses(bonus_ids: &[u64]) -> BonusResolved {
             }
             if let Some(offset) = bonus
                 .get("levelOffset")
+                .and_then(|lo| lo.get("amount"))
+                .and_then(|a| a.as_i64())
+            {
+                level_offset += offset;
+            }
+            // SimC applies this on top of everything (e.g. crafted Void Forge +7).
+            if let Some(offset) = bonus
+                .get("levelOffsetSecondary")
                 .and_then(|lo| lo.get("amount"))
                 .and_then(|a| a.as_i64())
             {
@@ -2549,7 +2628,80 @@ mod tests {
         let vf = void_forge_for_track("Myth");
         assert!(vf.is_some(), "Myth should have a voidforge mapping");
         let (_bonus, ilvl) = vf.unwrap();
-        assert!(ilvl > 0, "voidforged ilvl should be > 0");
+        let max_ilvl = UPGRADE_TRACKS
+            .get()
+            .unwrap()
+            .iter()
+            .filter(|((t, lvl, max), _)| t == "Myth" && lvl == max)
+            .map(|(_, (ilvl, _, _))| *ilvl)
+            .max()
+            .unwrap();
+        assert!(
+            ilvl > max_ilvl,
+            "voidforged {ilvl} must exceed Myth max {max_ilvl}"
+        );
+    }
+
+    #[test]
+    fn void_forge_map_prefers_current_season_tag() {
+        // S1 Voidforged and S2 Venomforged tags coexist; the base 6/6 bonus must
+        // map to the newest (highest ilvl) one regardless of HashMap order.
+        let bonuses: HashMap<u64, Value> = [
+            (
+                12854,
+                json!({"upgrade": {"fullName": "Myth 6/6"}, "itemLevel": {"amount": 334}}),
+            ),
+            (
+                12846,
+                json!({"upgrade": {"fullName": "Hero 6/6"}, "itemLevel": {"amount": 321}}),
+            ),
+            (
+                13654,
+                json!({"tag": "Ascendant Voidforged: Myth", "itemLevel": {"amount": 298}}),
+            ),
+            (
+                13653,
+                json!({"tag": "Ascendant Voidforged: Hero", "itemLevel": {"amount": 285}}),
+            ),
+            (
+                12856,
+                json!({"tag": "Ascendant Venomforged: Myth", "itemLevel": {"amount": 340}}),
+            ),
+            (
+                12848,
+                json!({"tag": "Ascendant Venomforged: Hero", "itemLevel": {"amount": 328}}),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let map = build_void_forge_map(&bonuses);
+        assert_eq!(map.get(&12854), Some(&12856));
+        assert_eq!(map.get(&12846), Some(&12848));
+    }
+
+    #[test]
+    fn crafted_void_forge_needs_current_spark_and_max_quality() {
+        ensure_game_data_loaded();
+        let (vf, gain) = crafted_void_forge_bonus().expect("crafted VF bonus derived");
+        assert_eq!(get_bonus(vf).unwrap()["tag"], "Ascendant Venomforged");
+        assert_eq!(gain, 7);
+        // 13751 = Spark of Tides, 13836 = Myth crest, 12497 = quality rank 5.
+        assert_eq!(
+            crafted_void_forge(&[12214, 13751, 13836, 12497]),
+            Some((vf, gain))
+        );
+        // Rank 4 (12496), S1 spark (12066), already forged: not eligible.
+        assert_eq!(crafted_void_forge(&[12214, 13751, 13836, 12496]), None);
+        assert_eq!(crafted_void_forge(&[12214, 12066, 13622, 12497]), None);
+        assert_eq!(crafted_void_forge(&[12214, 13751, 13836, 12497, vf]), None);
+    }
+
+    #[test]
+    fn resolve_bonuses_applies_level_offset_secondary() {
+        ensure_game_data_loaded();
+        let (vf, gain) = crafted_void_forge_bonus().unwrap();
+        let base = resolve_bonuses(&[12853]).ilevel.unwrap();
+        assert_eq!(resolve_bonuses(&[12853, vf]).ilevel, Some(base + gain));
     }
 
     #[test]

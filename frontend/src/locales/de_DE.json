@@ -312,7 +312,7 @@
   "topGear.copyEnchantsTooltip": "Überträgt deine aktuell angelegte Verzauberung auf unverzauberte alternative Gegenstände im selben Platz, damit der Vergleich fair ist. Alternativen mit eigener Verzauberung bleiben unverändert.",
   "topGear.simHighestUpgradeTooltip": "Behandelt alle Ausrüstung als vollständig auf das maximale Gegenstandslevel aufgewertet, damit du siehst, in welche Teile sich die Investition lohnt.",
   "topGear.revivalCatalystTooltip": "Fügt Tier-Set-Versionen deiner Raidausrüstung zum Vergleich hinzu. Berücksichtigt nur Teile, die eine Verbesserung wären.",
-  "topGear.voidForge": "Void-Forge-Waffen & -Schmuckstücke",
+  "topGear.voidForge": "Void-Forge-Waffen, -Schmuckstücke & -Halsketten",
   "topGear.largeLocalSimTitle": "Sehr große Simulation",
   "topGear.largeLocalSimBody": "Etwa {count} Kombinationen werden simuliert, was auf diesem Rechner viele Stunden dauern kann. Wähle einige Gegenstände ab oder erhöhe den Zielfehler.",
   "dropFinder.selectRaid": "Schlachtzug auswählen",

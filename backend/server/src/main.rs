@@ -29,6 +29,15 @@ async fn main() {
     db::init_limits();
     let desktop_mode = std::env::args().any(|a| a == "--desktop");
 
+    // Electron holds our stdin pipe open; EOF means it exited without killing
+    // us (crash, force-quit), so don't linger as an orphan.
+    if desktop_mode {
+        std::thread::spawn(|| {
+            let _ = std::io::copy(&mut std::io::stdin(), &mut std::io::sink());
+            std::process::exit(0);
+        });
+    }
+
     let data_dir = PathBuf::from(env_or("DATA_DIR", "./resources/data"));
     let frontend_dir = std::env::var("FRONTEND_DIR").ok().map(PathBuf::from);
 

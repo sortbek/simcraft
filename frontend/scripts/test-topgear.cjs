@@ -588,3 +588,58 @@ test('trimmed render headers parse into bounds, and the body centre stays centre
   // A crop centred on the canvas shifts by exactly half its width.
   assert.equal(renderCentreShift({ x: 700, y: 0, width: 200, height: 400, canvasWidth: 1600 }), 50);
 });
+
+const { addItemRequestBody } = require('../src/app/components/gear/addItemRequest.ts');
+
+const searchItem = (extra = {}) => ({
+  item_id: 237828,
+  name: "Spellbreaker's March",
+  icon: 'inv_boots',
+  inventory_type: 8,
+  quality: 4,
+  ilevel: 600,
+  ilvl_options: [
+    { ilvl: 285, bonus_id: 12001 },
+    { ilvl: 272, bonus_id: 12002 },
+  ],
+  accepts_preferred_stats: true,
+  ...extra,
+});
+
+test('an ineligible item sends no stat pair even with one remembered', () => {
+  const item = searchItem({ accepts_preferred_stats: false });
+  const body = addItemRequestBody('mage=x', item, item.ilvl_options[0], { stats: [36, 49] });
+  assert.equal('preferred_crafted_stats' in body, false);
+});
+
+test('an eligible item sends its row stat pair', () => {
+  const item = searchItem();
+  const body = addItemRequestBody('mage=x', item, item.ilvl_options[0], { stats: [36, 49] });
+  assert.deepEqual(body.preferred_crafted_stats, [36, 49]);
+});
+
+test('embellishment_id rides on the drop only when one is picked', () => {
+  const item = searchItem();
+  const plain = addItemRequestBody('mage=x', item, item.ilvl_options[0], { stats: [32, 36] });
+  assert.equal('embellishment_id' in plain.drop_items[0], false);
+  const picked = addItemRequestBody('mage=x', item, item.ilvl_options[0], {
+    stats: [32, 36],
+    embellishmentId: 244674,
+  });
+  assert.equal(picked.drop_items[0].embellishment_id, 244674);
+});
+
+test('the drop carries only the chosen item level bonus id', () => {
+  const item = searchItem();
+  const body = addItemRequestBody('mage=x', item, item.ilvl_options[1], {
+    stats: [36, 49],
+    embellishmentId: 244674,
+  });
+  assert.equal(body.simc_input, 'mage=x');
+  assert.deepEqual(body.drop_items[0].bonus_ids, [12002]);
+  assert.equal(body.drop_items[0].ilevel, 272);
+  assert.equal(body.drop_items[0].item_id, 237828);
+  const noOption = addItemRequestBody('mage=x', item, undefined, { stats: [36, 49] });
+  assert.deepEqual(noOption.drop_items[0].bonus_ids, []);
+  assert.equal(noOption.drop_items[0].ilevel, 600);
+});

@@ -143,7 +143,9 @@ pub(crate) fn build_iterator_config(
                         simc_socket_count(simc)
                     })
                     .unwrap_or(0);
-                let alt_count = items_by_slot
+                // Only the slot's actual candidates: an unselected bag item with an
+                // empty socket must not open the slot to gem changes.
+                let alt_count = slot_item_lists
                     .get(&slot_str)
                     .map(|items| {
                         items
@@ -204,8 +206,6 @@ pub(crate) fn build_iterator_config(
     let gem_combo_count = gem_combos.len();
     let gem_combos_resolver = GemCombosResolver::new(gem_combos);
 
-    let socketed_ids_owned: std::collections::HashSet<u64> =
-        socketed_item_ids.iter().copied().collect();
     let variants_owned: Vec<ProfileVariant> = variants.to_vec();
 
     ProfilesetIteratorConfig {
@@ -216,7 +216,6 @@ pub(crate) fn build_iterator_config(
         enchant_axes,
         gem_combo_count,
         gem_combos_resolver,
-        socketed_item_ids: socketed_ids_owned,
         variants: variants_owned,
         max_catalyst_charges: catalyst_charges,
     }

@@ -1,6 +1,5 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde_json::json;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::client_request::{parse_client_request, ClientRequest};
@@ -63,34 +62,12 @@ pub(super) async fn create_droptimizer_sim(
         };
 
     // Per-item embellishment picks ride `drop_items` (like the other variant
-    // markers), not a run-level field. Resolve each distinct id once into a
-    // cache keyed by embellishment id — NOT by item, since two items may
-    // share a pick.
-    let mut embellishments: HashMap<u64, profileset_generator::CraftedEmbellishment> =
-        HashMap::new();
-    for item in &req.drop_items {
-        let Some(pick) = item.get("embellishment_id") else {
-            continue;
-        };
-        // A present-but-non-numeric value (or 0) is malformed, not a valid
-        // pick: resolve() rejects both the same way an unlisted id would.
-        let id = pick.as_u64().unwrap_or(0);
-        let embellishment = match profileset_generator::CraftedEmbellishment::resolve(Some(id)) {
-            Ok(Some(e)) => e,
-            // resolve(Some(_)) only returns None for a None input, so this
-            // never fires — but a request handler must never be able to
-            // panic the worker if that contract ever drifts.
-            Ok(None) => continue,
+    // markers), not a run-level field.
+    let embellishments =
+        match profileset_generator::CraftedEmbellishment::resolve_picks(&req.drop_items) {
+            Ok(e) => e,
             Err(detail) => return HttpResponse::BadRequest().json(json!({ "detail": detail })),
         };
-        let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
-        if !crate::item_db::embellishment_applicable(item_id, id) {
-            return HttpResponse::BadRequest().json(json!({
-                "detail": "Embellishment cannot be crafted onto this item."
-            }));
-        }
-        embellishments.insert(id, embellishment);
-    }
 
     // Embellishments are crafting reagents — enforce crafted-only at the trust
     // boundary, not just via the frontend gate. A preferred stat pair needs no

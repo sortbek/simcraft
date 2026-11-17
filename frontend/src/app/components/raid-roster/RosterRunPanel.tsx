@@ -309,7 +309,7 @@ export default function RosterRunPanel({ roster }: { roster: Roster }) {
           )}
         </div>
 
-        {/* Drop variants: include Void Forged (weapons/trinkets) and/or Catalyst
+        {/* Drop variants: include Void Forged (weapons/trinkets/necks) and/or Catalyst
             (tier) sibling drops, matching the Drop Finder. */}
         <div className="flex flex-wrap items-center gap-4">
           {VOID_FORGE_ENABLED && (

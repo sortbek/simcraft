@@ -2161,7 +2161,7 @@ mod tests {
 mod orchestrator_tests {
     use super::*;
     use crate::profileset_generator::iterator::{GemCombosResolver, ProfilesetIteratorConfig};
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
     use std::sync::Mutex;
 
     async fn pool() -> sqlx::AnyPool {
@@ -2206,7 +2206,6 @@ mod orchestrator_tests {
             enchant_axes: vec![],
             gem_combo_count: 0,
             gem_combos_resolver: GemCombosResolver::new(vec![]),
-            socketed_item_ids: HashSet::new(),
             variants: vec![],
             max_catalyst_charges: None,
         }
@@ -2335,7 +2334,6 @@ mod orchestrator_tests {
             enchant_axes: vec![],
             gem_combo_count: 0,
             gem_combos_resolver: GemCombosResolver::new(vec![]),
-            socketed_item_ids: HashSet::new(),
             variants: vec![],
             max_catalyst_charges: None,
         }
@@ -2485,7 +2483,6 @@ mod orchestrator_tests {
             enchant_axes: vec![],
             gem_combo_count: 0,
             gem_combos_resolver: GemCombosResolver::new(vec![]),
-            socketed_item_ids: HashSet::new(),
             variants: vec![],
             max_catalyst_charges: None,
         };

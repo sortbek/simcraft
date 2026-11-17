@@ -312,7 +312,7 @@
   "topGear.copyEnchantsTooltip": "Applique l'enchantement actuellement équipé aux objets alternatifs sans enchantement dans le même emplacement, pour une comparaison équitable. Les alternatives qui ont déjà leur propre enchantement ne sont pas modifiées.",
   "topGear.simHighestUpgradeTooltip": "Traite tout l'équipement comme s'il était amélioré au maximum, pour voir quelles pièces méritent l'investissement.",
   "topGear.revivalCatalystTooltip": "Ajoute les versions set de raid de ton équipement à la comparaison. Ne considère que les pièces qui seraient une amélioration.",
-  "topGear.voidForge": "Armes et bijoux Void Forge",
+  "topGear.voidForge": "Armes, bijoux et colliers Void Forge",
   "topGear.largeLocalSimTitle": "Simulation très volumineuse",
   "topGear.largeLocalSimBody": "Environ {count} combinaisons seront simulées, ce qui peut prendre de nombreuses heures sur cette machine. Désélectionne des objets ou augmente l'erreur cible.",
   "dropFinder.selectRaid": "Sélectionner un raid",

@@ -5,7 +5,7 @@
 //! Cursor axis layout: `[gear per varying slot][enchant per axis][gem combo][profile variant]`.
 
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use super::gem_combos::GemCombo;
@@ -73,8 +73,6 @@ pub struct ProfilesetIteratorConfig {
     /// Total number of gem combos (from `GemCombosResolver::len()`).
     pub gem_combo_count: usize,
     pub gem_combos_resolver: GemCombosResolver,
-    /// Item IDs known to carry a socket.
-    pub socketed_item_ids: HashSet<u64>,
     /// Profile-variant axis: talent builds crossed with folio combinations.
     /// Empty → single pass with no profile-level override.
     pub variants: Vec<super::ProfileVariant>,
@@ -434,7 +432,7 @@ impl ProfilesetIterator {
             .nth(gem_combo_idx)
             .cloned()
             .unwrap_or_default();
-        let eff_gems = effective_gems(&gear_set, &nominal_gems, &self.cfg.socketed_item_ids);
+        let eff_gems = effective_gems(&gear_set, &nominal_gems);
 
         // Diamonds are unique-equipped, and only here is the pair known: the gem
         // combo was built without knowing which alternatives this set picked, so
@@ -874,7 +872,6 @@ mod tests {
             enchant_axes: vec![],
             gem_combo_count: 0,
             gem_combos_resolver: GemCombosResolver::new(vec![]),
-            socketed_item_ids: HashSet::new(),
             variants: vec![],
             max_catalyst_charges: None,
         }
@@ -890,7 +887,6 @@ mod tests {
             enchant_axes: vec![],
             gem_combo_count: 0,
             gem_combos_resolver: GemCombosResolver::new(vec![]),
-            socketed_item_ids: HashSet::new(),
             variants: vec![],
             max_catalyst_charges: None,
         };
@@ -914,8 +910,6 @@ mod tests {
 
         let mut slot_item_lists = HashMap::new();
         slot_item_lists.insert("head".to_string(), vec![arc_item(100, "head", true, 1)]);
-        let mut socketed_item_ids = HashSet::new();
-        socketed_item_ids.insert(100);
         let mut gem_combo = GemCombo::new();
         gem_combo.insert("head".to_string(), vec![240898]);
 
@@ -927,7 +921,6 @@ mod tests {
             enchant_axes: vec![],
             gem_combo_count: 1,
             gem_combos_resolver: GemCombosResolver::new(vec![gem_combo]),
-            socketed_item_ids,
             variants: vec![],
             max_catalyst_charges: None,
         };
@@ -964,8 +957,6 @@ mod tests {
             "head".to_string(),
             vec![arc_item_with_gem(100, "head", slot_gem)],
         );
-        let mut socketed_item_ids = HashSet::new();
-        socketed_item_ids.insert(100);
         let mut gem_combo = GemCombo::new();
         gem_combo.insert("head".to_string(), vec![combo_gem]);
 
@@ -977,7 +968,6 @@ mod tests {
             enchant_axes: vec![],
             gem_combo_count: 1,
             gem_combos_resolver: GemCombosResolver::new(vec![gem_combo]),
-            socketed_item_ids,
             variants: vec![],
             max_catalyst_charges: None,
         };
@@ -1018,8 +1008,6 @@ mod tests {
                 arc_item(200, "head", false, 1),
             ],
         );
-        let mut socketed_item_ids = HashSet::new();
-        socketed_item_ids.insert(200);
 
         // Enchant axis on head: index 0 = equipped (none), index 1 = override 9999.
         let enchant_axes = vec![EnchantAxis {
@@ -1038,7 +1026,6 @@ mod tests {
             enchant_axes,
             gem_combo_count: 1,
             gem_combos_resolver: GemCombosResolver::new(vec![gem_combo]),
-            socketed_item_ids,
             variants: vec![],
             max_catalyst_charges: None,
         };
@@ -1159,7 +1146,6 @@ mod tests {
                 enchant_axes: vec![],
                 gem_combo_count: 0,
                 gem_combos_resolver: GemCombosResolver::new(vec![]),
-                socketed_item_ids: HashSet::new(),
                 variants: vec![],
                 max_catalyst_charges: budget,
             }

@@ -1,6 +1,6 @@
 {
   "name": "simhammer",
-  "version": "5.0.0",
+  "version": "5.1.2",
   "private": true,
   "scripts": {
     "web": "docker compose up --build",

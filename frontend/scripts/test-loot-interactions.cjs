@@ -759,3 +759,39 @@ test('an owned row renders inert, and says why', async () => {
   assert.deepEqual(free.toggled, ['1']);
   await act(async () => free.tree.unmount());
 });
+
+test('raid difficulties name only their track, since the rank varies per boss', () => {
+  const text = (node) =>
+    node == null || typeof node === 'boolean'
+      ? ''
+      : typeof node === 'string'
+        ? node
+        : Array.isArray(node)
+          ? node.map(text).join('')
+          : text(node.children);
+  const tracks = {
+    Hero: [1, 2, 3, 4, 5, 6].map((level) => ({ level, max_level: 6, ilvl: 300 + level })),
+  };
+  const renderLabels = (difficulties) => {
+    const tree = create(
+      React.createElement(DifficultySelect, {
+        value: difficulties[0].key,
+        onChange: () => {},
+        difficulties,
+        difficultyGroups: null,
+        upgradeTracks: tracks,
+      })
+    );
+    return tree.root
+      .findByType(Select)
+      .props.options.map((option) => text(create(option.label).toJSON()));
+  };
+  assert.deepEqual(
+    renderLabels([{ key: 'heroic', label: 'Heroic', track: 'Hero', level: 0, sortOrder: 1 }]),
+    ['HeroicHero']
+  );
+  assert.deepEqual(
+    renderLabels([{ key: 'mythic+10', label: '+10', track: 'Hero', level: 3, sortOrder: 1 }]),
+    ['+10Hero 3/6']
+  );
+});

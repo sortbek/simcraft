@@ -307,6 +307,13 @@
             { "key": "delve-vault-7", "label": "7", "track": "Champion", "level": 4, "sortOrder": 7 },
             { "key": "delve-vault-8", "label": "8+", "track": "Hero", "level": 1, "sortOrder": 8 }
           ]
+        },
+        {
+          "label": "Soul Fragments",
+          "difficulties": [
+            { "key": "delve-soul-heroic", "label": "Heroic", "track": "Hero", "level": 2, "sortOrder": 1 },
+            { "key": "delve-soul-mythical", "label": "Mythical", "track": "Myth", "level": 2, "sortOrder": 2 }
+          ]
         }
       ]
     },
@@ -542,6 +549,7 @@
     "2887": 3,
     "2883": 4,
     "2895": 4,
+    "2896": 3,
     "2849": 1,
     "2739": 3,
     "2740": 4,
@@ -663,6 +671,8 @@
     "delve-vault-6": { "track": "Champion", "level": 3 },
     "delve-vault-7": { "track": "Champion", "level": 4 },
     "delve-vault-8": { "track": "Hero", "level": 1 },
+    "delve-soul-heroic": { "track": "Hero", "level": 2, "inventoryTypes": [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 16, 20] },
+    "delve-soul-mythical": { "track": "Myth", "level": 2, "inventoryTypes": [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 16, 20] },
     "prey-normal": { "track": "Adventurer", "level": 1 },
     "prey-hard": { "track": "Veteran", "level": 1 },
     "prey-nightmare": { "track": "Champion", "level": 1 },

@@ -358,7 +358,7 @@
   "topGear.copyEnchantsTooltip": "동일 부위의 마법부여가 없는 대체 아이템에 현재 착용 중인 마법부여를 적용하여 공정하게 비교합니다. 이미 자체 마법부여가 있는 대체 아이템은 그대로 유지됩니다.",
   "topGear.simHighestUpgradeTooltip": "모든 장비를 최대 아이템 레벨로 완전 강화된 것으로 취급하여 투자할 가치가 있는 아이템을 확인합니다.",
   "topGear.revivalCatalystTooltip": "공격대 장비의 티어 세트 변환 버전을 비교에 추가합니다. 업그레이드가 되는 부위만 고려합니다.",
-  "topGear.voidForge": "공허벼림 무기 및 장신구",
+  "topGear.voidForge": "공허벼림 무기, 장신구 및 목걸이",
   "topGear.runCreditsAvailable": "~{credits} 크레딧 · {available} 사용 가능",
   "topGear.runCreditsOnly": "~{credits} 크레딧",
   "topGear.insufficientCredits": "크레딧 부족",

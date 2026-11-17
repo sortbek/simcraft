@@ -47,8 +47,12 @@ All PRs to `master` and `dev` run automated checks:
 - **ESLint** — Frontend linting via `next lint`
 - **rustfmt** — Backend formatting must pass
 - **Clippy** — Backend linting must pass
+- **cargo test** — Backend test suite
+- **tsc** — Frontend typecheck
+- **node:test** — Frontend and desktop unit suites
 
-Fix any failures locally before pushing.
+Run them all locally with `bash scripts/verify.sh` before pushing, or activate
+the pre-commit gate once with `git config core.hooksPath hooks`.
 
 ## Development Setup
 

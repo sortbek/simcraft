@@ -356,18 +356,10 @@ pub(super) async fn catalyst_convert(
 pub(super) async fn void_forge_convert(
     req: web::Json<super::types::VoidForgeConvertRequest>,
 ) -> HttpResponse {
-    let vf_map = crate::item_db::void_forge_map();
-    // Find the first VF-mapped bonus_id on the item.
-    let Some(vf_target) = req
-        .item
-        .bonus_ids
-        .iter()
-        .find_map(|b| vf_map.get(b).copied())
-    else {
-        return HttpResponse::BadRequest().body("item is not Void Forge eligible");
-    };
-    let vf_item = gear_resolver::build_void_forge_item(&req.item, vf_target);
-    HttpResponse::Ok().json(vf_item)
+    match gear_resolver::build_void_forge_item(&req.item) {
+        Some(vf_item) => HttpResponse::Ok().json(vf_item),
+        None => HttpResponse::BadRequest().body("item is not Void Forge eligible"),
+    }
 }
 
 pub(super) async fn modify_item(req: web::Json<super::types::ModifyItemRequest>) -> HttpResponse {

@@ -312,7 +312,7 @@
   "topGear.copyEnchantsTooltip": "Applica l'incantamento attualmente equipaggiato agli oggetti alternativi privi di incantamento nello stesso slot, per un confronto equo. Le alternative che hanno già un proprio incantamento non vengono modificate.",
   "topGear.simHighestUpgradeTooltip": "Tratta tutto l'equipaggiamento come se fosse potenziato al massimo livello, per vedere su quali pezzi vale la pena investire.",
   "topGear.revivalCatalystTooltip": "Aggiunge versioni set di raid del tuo equipaggiamento al confronto. Considera solo i pezzi che sarebbero un miglioramento.",
-  "topGear.voidForge": "Armi e gingilli Void Forge",
+  "topGear.voidForge": "Armi, gingilli e collane Void Forge",
   "topGear.largeLocalSimTitle": "Simulazione molto grande",
   "topGear.largeLocalSimBody": "Verranno simulate circa {count} combinazioni e su questa macchina potrebbero volerci molte ore. Deseleziona qualche oggetto o aumenta l'errore target.",
   "dropFinder.selectRaid": "Seleziona Raid",
