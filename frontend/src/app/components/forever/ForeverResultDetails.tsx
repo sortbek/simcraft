@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable @next/next/no-img-element */
 
 import { useLanguage } from '../../lib/i18n';
 import type {
@@ -8,26 +7,15 @@ import type {
   ForeverUptime,
   QuickSimResult,
 } from '../../lib/simResultTypes';
-import ForeverTimeline, { ForeverOpener } from './ForeverTimeline';
-import { iconProps } from '../../lib/useItemInfo';
-
-function Icon({ icon }: { icon?: string | null }) {
-  return icon ? (
-    <img
-      alt=""
-      {...iconProps(icon)}
-      className="h-6 w-6 shrink-0 rounded-[5px] border border-line/[0.11] object-cover"
-    />
-  ) : (
-    <span className="h-6 w-6 shrink-0 rounded-[5px] border border-line/[0.11]" />
-  );
-}
+import CardHeader from '../ui/CardHeader';
+import Pill from '../ui/Pill';
+import ForeverTimeline, { ForeverOpener, Icon } from './ForeverTimeline';
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-[120px] flex-1 px-5 py-4">
+    <div className="min-w-[120px] flex-1 px-6 py-4">
       <span className="lbl block">{label}</span>
-      <b className="mt-1.5 block font-headline text-[17px] font-extrabold tabular-nums text-on-surface">
+      <b className="mt-[7px] block font-headline text-base font-extrabold tabular-nums text-on-surface">
         {value}
       </b>
     </div>
@@ -42,7 +30,7 @@ function Spread({ hist }: { hist: [number, number][] }) {
         <div key={bucket} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
           <div
             title={fights.toLocaleString()}
-            className="w-full rounded-t-[3px] bg-gold-fill"
+            className="w-full rounded-t-[3px] bg-gradient-to-t from-gold-dark to-gold-fill"
             style={{ height: `${Math.max(2, (fights / most) * 72)}px` }}
           />
           <span className="text-[11px] tabular-nums text-outline">{bucket}</span>
@@ -61,13 +49,13 @@ function Abilities({ rows, unit }: { rows: ForeverAbilityDetail[]; unit: string 
       <table className="w-full min-w-[640px] text-[13px]">
         <thead>
           <tr className="border-b border-line/[0.06]">
-            <th className="lbl px-5 py-2.5 text-left">{t('forever.details.ability')}</th>
+            <th className="lbl px-6 py-2.5 text-left">{t('forever.details.ability')}</th>
             <th className={`lbl ${num}`}>{unit}</th>
             <th className={`lbl ${num}`}>{t('forever.details.share')}</th>
             <th className={`lbl ${num}`}>{t('forever.details.casts')}</th>
             <th className={`lbl ${num}`}>{t('forever.details.perCast')}</th>
             <th className={`lbl ${num}`}>{t('forever.details.crit')}</th>
-            <th className={`lbl ${num} pr-5`}>{t('forever.details.miss')}</th>
+            <th className={`lbl ${num} pr-6`}>{t('forever.details.miss')}</th>
           </tr>
         </thead>
         <tbody>
@@ -76,7 +64,7 @@ function Abilities({ rows, unit }: { rows: ForeverAbilityDetail[]; unit: string 
               key={`${r.owner}:${r.name}`}
               className="border-b border-line/[0.06] last:border-b-0"
             >
-              <td className="px-5 py-2.5">
+              <td className="px-6 py-2.5">
                 <span className="flex min-w-0 items-center gap-2.5">
                   <Icon icon={r.icon} />
                   <span className="truncate font-semibold text-on-surface">
@@ -97,7 +85,7 @@ function Abilities({ rows, unit }: { rows: ForeverAbilityDetail[]; unit: string 
               <td className={`${num} text-on-surface-variant`}>
                 {r.casts ? `${r.crit_pct.toFixed(1)}%` : '-'}
               </td>
-              <td className={`${num} pr-5 text-on-surface-variant`}>
+              <td className={`${num} pr-6 text-on-surface-variant`}>
                 {r.casts ? `${r.miss_pct.toFixed(1)}%` : '-'}
               </td>
             </tr>
@@ -110,15 +98,15 @@ function Abilities({ rows, unit }: { rows: ForeverAbilityDetail[]; unit: string 
 
 function Uptimes({ title, rows }: { title: string; rows: ForeverUptime[] }) {
   return (
-    <div className="min-w-0 flex-1 space-y-2.5 px-5 py-4">
+    <div className="min-w-0 flex-1 space-y-2.5 px-6 py-4">
       <span className="lbl block">{title}</span>
       {rows.map((r) => (
         <div key={r.name} className="flex items-center gap-2.5 text-[13px]">
           <Icon icon={r.icon} />
           <span className="min-w-0 flex-1 truncate font-semibold text-on-surface">{r.name}</span>
-          <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface-container-highest">
+          <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-[6px] bg-surface-container-highest">
             <span
-              className="block h-full rounded-full bg-gold-fill"
+              className="block h-full rounded-[6px] bg-gradient-to-r from-gold-dark to-gold-fill"
               style={{ width: `${r.uptime_pct}%` }}
             />
           </span>
@@ -134,15 +122,15 @@ function Uptimes({ title, rows }: { title: string; rows: ForeverUptime[] }) {
 function Flow({ title, rows }: { title: string; rows: ForeverFlow[] }) {
   const most = Math.max(1, ...rows.map((r) => r.amount));
   return (
-    <div className="min-w-0 flex-1 space-y-2.5 px-5 py-4">
+    <div className="min-w-0 flex-1 space-y-2.5 px-6 py-4">
       <span className="lbl block">{title}</span>
       {rows.map((r) => (
         <div key={r.name} className="flex items-center gap-2.5 text-[13px]">
           <Icon icon={r.icon} />
           <span className="min-w-0 flex-1 truncate font-semibold text-on-surface">{r.name}</span>
-          <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface-container-highest">
+          <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-[6px] bg-surface-container-highest">
             <span
-              className="block h-full rounded-full bg-gold-fill"
+              className="block h-full rounded-[6px] bg-gradient-to-r from-gold-dark to-gold-fill"
               style={{ width: `${(r.amount / most) * 100}%` }}
             />
           </span>
@@ -161,7 +149,7 @@ function toggleLabel(id: string): string {
   return key
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, (c) => c.toUpperCase())
-    .replace(/ (Of|The) /g, (m) => m.toLowerCase());
+    .replace(/ (Of|The)(?= )/g, (m) => m.toLowerCase());
 }
 
 /** What the Forever engine reports beyond the damage breakdown: the spread of the fights, each
@@ -188,6 +176,7 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
   return (
     <>
       <section className="card">
+        <CardHeader title={t('forever.details.spread', { unit })} />
         <div className="flex flex-wrap divide-x divide-line/[0.06]">
           <Stat
             label={t('forever.details.range')}
@@ -212,8 +201,7 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
           )}
         </div>
         {hist.length > 1 && (
-          <div className="border-t border-line/[0.06] px-5 py-4">
-            <span className="lbl mb-3 block">{t('forever.details.spread', { unit })}</span>
+          <div className="border-t border-line/[0.06] px-6 py-4">
             <Spread hist={hist} />
           </div>
         )}
@@ -221,10 +209,8 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
 
       {result.timeline && result.timeline.casts.length > 0 && (
         <section className="card">
-          <div className="px-5 py-3.5">
-            <h2 className="h-card">{t('forever.details.timeline')}</h2>
-          </div>
-          <div className="space-y-5 border-t border-line/[0.06] px-5 py-4">
+          <CardHeader title={t('forever.details.timeline')} />
+          <div className="space-y-5 px-6 py-4">
             <div className="space-y-2.5">
               <span className="lbl block">{t('forever.details.opener')}</span>
               <ForeverOpener timeline={result.timeline} />
@@ -236,20 +222,14 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
       )}
 
       <section className="card">
-        <div className="px-5 py-3.5">
-          <h2 className="h-card">{t('forever.details.abilities')}</h2>
-        </div>
-        <div className="border-t border-line/[0.06]">
-          <Abilities rows={details} unit={unit} />
-        </div>
+        <CardHeader title={t('forever.details.abilities')} />
+        <Abilities rows={details} unit={unit} />
       </section>
 
       {(buffs.length > 0 || debuffs.length > 0) && (
         <section className="card">
-          <div className="px-5 py-3.5">
-            <h2 className="h-card">{t('forever.details.uptimes')}</h2>
-          </div>
-          <div className="flex flex-col border-t border-line/[0.06] md:flex-row md:divide-x md:divide-line/[0.06]">
+          <CardHeader title={t('forever.details.uptimes')} />
+          <div className="flex flex-col md:flex-row md:divide-x md:divide-line/[0.06]">
             {buffs.length > 0 && <Uptimes title={t('forever.buffs')} rows={buffs} />}
             {debuffs.length > 0 && <Uptimes title={t('forever.debuffs')} rows={debuffs} />}
           </div>
@@ -258,15 +238,13 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
 
       {result.mana && (result.mana.gains.length > 0 || result.mana.spends.length > 0) && (
         <section className="card">
-          <div className="px-5 py-3.5">
-            <h2 className="h-card">{t('forever.details.mana')}</h2>
-          </div>
-          <div className="flex flex-col border-t border-line/[0.06] md:flex-row md:divide-x md:divide-line/[0.06]">
+          <CardHeader title={t('forever.details.mana')} />
+          <div className="flex flex-col md:flex-row md:divide-x md:divide-line/[0.06]">
             <Flow title={t('forever.details.manaGained')} rows={result.mana.gains} />
             <Flow title={t('forever.details.manaSpent')} rows={result.mana.spends} />
           </div>
           {result.mana.wasted > 0 && (
-            <p className="border-t border-line/[0.06] px-5 py-3 text-xs text-outline">
+            <p className="border-t border-line/[0.06] px-6 py-3 text-xs text-outline">
               {t('forever.details.manaWasted', { amount: Math.round(result.mana.wasted) })}
             </p>
           )}
@@ -275,13 +253,15 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
 
       {result.rotation && result.rotation.lines.length > 0 && (
         <section className="card">
-          <div className="flex flex-wrap items-baseline gap-x-3 px-5 py-3.5">
-            <h2 className="h-card">{t('forever.details.rotation')}</h2>
-            {result.rotation.id && (
-              <span className="text-xs text-outline">{result.rotation.id}</span>
-            )}
-          </div>
-          <div className="space-y-4 border-t border-line/[0.06] px-5 py-4 text-[13px]">
+          <CardHeader
+            title={t('forever.details.rotation')}
+            right={
+              result.rotation.id && (
+                <span className="text-xs text-outline">{result.rotation.id}</span>
+              )
+            }
+          />
+          <div className="space-y-4 px-6 py-4 text-[13px]">
             {result.rotation.prepull.length > 0 && (
               <div className="space-y-1.5">
                 <span className="lbl block">{t('forever.details.prepull')}</span>
@@ -320,10 +300,8 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
 
       {settings && (
         <section className="card">
-          <div className="px-5 py-3.5">
-            <h2 className="h-card">{t('forever.details.settings')}</h2>
-          </div>
-          <div className="flex flex-wrap divide-x divide-line/[0.06] border-t border-line/[0.06]">
+          <CardHeader title={t('forever.details.settings')} />
+          <div className="flex flex-wrap divide-x divide-line/[0.06]">
             <Stat label={t('forever.details.level')} value={String(settings.level)} />
             <Stat
               label={t('forever.details.target')}
@@ -346,7 +324,7 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
             />
             <Stat label={t('talent.points')} value={settings.talents_string || '-'} />
           </div>
-          <div className="border-t border-line/[0.06] px-5 py-4">
+          <div className="border-t border-line/[0.06] px-6 py-4">
             <span className="lbl mb-2 block">{t('config.raidBuffs')}</span>
             {shown == null ? (
               <span className="text-[13px] text-on-surface-variant">
@@ -357,9 +335,7 @@ export default function ForeverResultDetails({ result }: { result: QuickSimResul
             ) : (
               <span className="flex flex-wrap gap-1.5">
                 {shown.map((label) => (
-                  <span key={label} className="chip chip-on">
-                    {label}
-                  </span>
+                  <Pill key={label}>{label}</Pill>
                 ))}
               </span>
             )}

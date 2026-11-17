@@ -5,16 +5,16 @@ import { useLanguage } from '../../lib/i18n';
 import type { ForeverTimeline as Timeline } from '../../lib/simResultTypes';
 import { iconProps } from '../../lib/useItemInfo';
 
-function Icon({ icon, title }: { icon?: string | null; title?: string }) {
-  return icon ? (
-    <img
-      alt=""
+/** A spell icon in the damage breakdown's frame. */
+export function Icon({ icon, title }: { icon?: string | null; title?: string }) {
+  return (
+    <span
       title={title}
-      {...iconProps(icon)}
-      className="h-6 w-6 shrink-0 rounded-[5px] border border-line/[0.11] object-cover"
-    />
-  ) : (
-    <span title={title} className="h-6 w-6 shrink-0 rounded-[5px] border border-line/[0.11]" />
+      className="relative h-6 w-6 shrink-0 overflow-hidden rounded-[5px] border border-line/[0.11] bg-surface-container-high"
+    >
+      {icon && <img alt="" {...iconProps(icon)} className="h-full w-full object-cover" />}
+      <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
+    </span>
   );
 }
 
