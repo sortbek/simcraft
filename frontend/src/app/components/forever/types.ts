@@ -2,6 +2,7 @@ export interface ForeverGear {
   slot: string;
   item_id: number;
   enchant_id: number;
+  random_suffix: number;
   name: string;
   icon: string;
   quality: number;
@@ -33,6 +34,7 @@ export interface ForeverImport {
   class: string;
   race: string;
   level: number;
+  has_sheet: boolean;
   client_build: string | null;
   spec_key: string | null;
   spec_choices: string[];

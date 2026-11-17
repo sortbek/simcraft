@@ -250,6 +250,61 @@ mod tests {
         let gear = gear_result(&raw, &engine.data, &meta);
         assert!(gear["base_dps"].as_f64().unwrap() > 0.0, "{gear}");
         assert!(gear["results"].as_array().unwrap().len() >= 2, "{gear}");
+
+        // A live level 29 hunter: talents read with the live bundle, sheet, pet and bags.
+        let ch = parse_export(include_str!("testdata/sortbek.simc")).unwrap();
+        let summary = crate::forever::import::summarize(&ch, &engine.data);
+        assert!(summary.can_sim, "{:?}", summary.blocked_reason);
+        assert_eq!(
+            summary.points_per_tree,
+            vec![20, 0, 0],
+            "{:?}",
+            summary.warnings
+        );
+        assert!(
+            summary.equipped.iter().all(|g| g.known),
+            "{:?}",
+            summary.warnings
+        );
+        let base = raid_request(
+            &ch,
+            &engine.data,
+            "hunter",
+            &summary.talents_string,
+            &settings,
+        );
+        let raw = run_cli(
+            &engine.binary,
+            "sim",
+            &base,
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let unit = &raw["raidMetrics"]["parties"][0]["players"][0];
+        let dps = unit["dps"]["avg"].as_f64().unwrap();
+        assert!(
+            (100.0..250.0).contains(&dps),
+            "level 29 hunter at {dps} dps"
+        );
+        assert!(unit["pets"][0]["dps"]["avg"].as_f64().unwrap() > 0.0);
+        let bulk = bulk_request(base, &ch.bags, &engine.data);
+        let raw = run_cli(
+            &engine.binary,
+            "bulk",
+            &bulk,
+            &["--max-combinations".to_string(), "500".to_string()],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let gear = gear_result(&raw, &engine.data, &meta);
+        assert!(gear["results"].as_array().unwrap().len() >= 2, "{gear}");
     }
 
     #[cfg(unix)]

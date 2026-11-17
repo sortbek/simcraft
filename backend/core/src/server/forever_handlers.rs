@@ -31,6 +31,8 @@ pub(super) struct BagItem {
     item_id: u32,
     #[serde(default)]
     enchant_id: u32,
+    #[serde(default)]
+    random_suffix: u32,
 }
 
 #[derive(Deserialize)]
@@ -65,7 +67,11 @@ pub(super) fn prepare(
         Some(key) => return Err(format!("{key} is not a {} spec", character.class)),
         None => summary.spec_key.clone(),
     };
-    if let Some(reason) = spec::blocked_reason(character.level, spec_key.as_deref()) {
+    if let Some(reason) = spec::blocked_reason(
+        character.level,
+        character.sheet.is_some(),
+        spec_key.as_deref(),
+    ) {
         return Err(reason);
     }
     let spec_key = spec_key.expect("blocked_reason refuses a missing spec");
@@ -165,6 +171,7 @@ async fn start_job(
                 slot: String::new(),
                 item_id: b.item_id,
                 enchant_id: b.enchant_id,
+                random_suffix: b.random_suffix,
             })
             .collect();
         if bags.is_empty() {
@@ -308,9 +315,12 @@ mod tests {
     }
 
     #[test]
-    fn below_60_is_refused() {
+    fn below_60_without_a_sheet_is_refused() {
         let err = prepare(&input(27), None, crate::forever::test_data()).unwrap_err();
-        assert_eq!(err, "Forever sims work from level 60");
+        assert!(
+            err.starts_with("Below level 60 the sim needs your character stats"),
+            "{err}"
+        );
     }
 
     #[test]

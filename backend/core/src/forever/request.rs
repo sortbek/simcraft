@@ -17,6 +17,9 @@ fn item_spec(item: &ExportItem) -> Value {
     if item.enchant_id > 0 {
         spec["enchant"] = json!(item.enchant_id);
     }
+    if item.random_suffix > 0 {
+        spec["randomSuffix"] = json!(item.random_suffix);
+    }
     spec
 }
 
@@ -59,6 +62,28 @@ pub fn raid_request(
         "talentsString": talents_string,
     });
     player[spec_key] = json!({});
+    if let Some(pet) = ch.pet.as_ref().filter(|_| spec_key == "hunter") {
+        let options = &mut player[spec_key]["options"]["classOptions"];
+        if let Some(kind) = spec::engine_pet_type(&pet.family) {
+            options["petType"] = json!(kind);
+        }
+        if let Some(speed) = spec::engine_pet_attack_speed(pet.attack_speed) {
+            options["petAttackSpeed"] = json!(speed);
+        }
+    }
+    // Below 60 the engine scales the character from its sheet, read in the gear it was worn in.
+    if let Some(sheet) = ch.sheet.as_ref().filter(|_| ch.level < 60) {
+        let worn: Vec<Value> = player["equipment"]["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|i| i.get("id").is_some())
+            .cloned()
+            .collect();
+        player["level"] = json!(ch.level);
+        player["characterSheet"] = json!(sheet);
+        player["characterSheet"]["equipment"] = json!({ "items": worn });
+    }
     let profs: Vec<&str> = ch
         .professions
         .iter()
@@ -125,6 +150,44 @@ mod tests {
     }
 
     #[test]
+    fn a_levelling_hunter_sends_its_level_sheet_pet_and_suffix() {
+        let mut ch = parse_export(include_str!("testdata/sortbek.simc")).unwrap();
+        // The test bundle knows the paladin's items; wear two of them in the hunter's slots.
+        ch.equipped.retain(|i| i.slot == "main_hand");
+        ch.equipped[0].item_id = 273637;
+        let req = raid_request(&ch, crate::forever::test_data(), "hunter", "", &settings());
+        let p = &req["raid"]["parties"][0]["players"][0];
+        assert_eq!(p["level"], 29);
+        assert_eq!(p["equipment"]["items"][14]["randomSuffix"], 12726);
+        assert_eq!(
+            p["characterSheet"]["base"],
+            json!([36.0, 58.0, 50.0, 33.0, 43.0])
+        );
+        assert_eq!(
+            p["characterSheet"]["rangedAttackPower"],
+            json!([224.0, 41.0, 0.0])
+        );
+        assert_eq!(
+            p["characterSheet"]["equipment"]["items"],
+            json!([{ "id": 273637, "randomSuffix": 12726 }])
+        );
+        let options = &p["hunter"]["options"]["classOptions"];
+        assert_eq!(
+            (&options["petType"], &options["petAttackSpeed"]),
+            (&json!("Raptor"), &json!("Two"))
+        );
+    }
+
+    #[test]
+    fn a_level_60_character_sends_no_sheet() {
+        let export = include_str!("testdata/sortbek.simc").replace("level=29", "level=60");
+        let ch = parse_export(&export).unwrap();
+        let req = raid_request(&ch, crate::forever::test_data(), "hunter", "", &settings());
+        let p = &req["raid"]["parties"][0]["players"][0];
+        assert!(p.get("level").is_none() && p.get("characterSheet").is_none());
+    }
+
+    #[test]
     fn unknown_items_are_left_out_of_the_gear() {
         let mut ch = sylfrey();
         ch.equipped[0].item_id = 999_999;
@@ -156,6 +219,7 @@ mod tests {
             slot: "back".into(),
             item_id: 999_999,
             enchant_id: 0,
+            random_suffix: 0,
         });
         let bulk = bulk_request(base.clone(), &bags, crate::forever::test_data());
         assert_eq!(bulk["baseRequest"], base);

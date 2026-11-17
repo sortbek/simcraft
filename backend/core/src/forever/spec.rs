@@ -72,15 +72,62 @@ pub fn spec_label(spec_key: &str) -> &'static str {
     }
 }
 
-/// Why a character cannot sim with this spec, or None. The frontend mirrors this rule.
-pub fn blocked_reason(level: u32, spec_key: Option<&str>) -> Option<String> {
-    if level < 60 {
-        Some("Forever sims work from level 60".into())
+/// Why a character cannot sim with this spec, or None. Below level 60 the engine needs the
+/// character sheet, which newer SimC addons export.
+pub fn blocked_reason(level: u32, has_sheet: bool, spec_key: Option<&str>) -> Option<String> {
+    if level < 10 {
+        Some("Forever sims work from level 10".into())
+    } else if level < 60 && !has_sheet {
+        Some(
+            "Below level 60 the sim needs your character stats. Update the SimC addon and export again"
+                .into(),
+        )
     } else if !spec_key.is_some_and(is_supported) {
         Some("Healer specs can't be simmed yet".into())
     } else {
         None
     }
+}
+
+/// The engine's HunterOptions.PetType of an addon pet family token.
+pub fn engine_pet_type(family: &str) -> Option<&'static str> {
+    Some(match family {
+        "cat" => "Cat",
+        "wind_serpent" => "WindSerpent",
+        "wolf" => "Wolf",
+        "bat" => "Bat",
+        "bear" => "Bear",
+        "owl" => "Owl",
+        "boar" => "Boar",
+        "carrion_bird" => "CarrionBird",
+        "crab" => "Crab",
+        "crocolisk" => "Crocolisk",
+        "gorilla" => "Gorilla",
+        "hyena" => "Hyena",
+        "raptor" => "Raptor",
+        "scorpid" => "Scorpid",
+        "spider" => "Spider",
+        "tallstrider" => "Tallstrider",
+        "turtle" => "Turtle",
+        _ => return None,
+    })
+}
+
+/// The engine's HunterOptions.PetAttackSpeed of a pet's swing time.
+pub fn engine_pet_attack_speed(seconds: f64) -> Option<&'static str> {
+    Some(match (seconds * 10.0).round() as u32 {
+        10 => "One",
+        12 => "OneTwo",
+        13 => "OneThree",
+        14 => "OneFour",
+        15 => "OneFive",
+        16 => "OneSix",
+        17 => "OneSeven",
+        20 => "Two",
+        24 => "TwoFour",
+        25 => "TwoFive",
+        _ => return None,
+    })
 }
 
 pub fn engine_class(class: &str) -> Option<&'static str> {
@@ -140,6 +187,7 @@ pub fn engine_slot(slot: &str, item_type: u8) -> Option<usize> {
         "trinket2" => 13,
         "main_hand" => 14,
         "off_hand" => 15,
+        "ranged" => 16,
         _ => return None,
     })
 }

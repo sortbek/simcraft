@@ -26,7 +26,7 @@ export default function ForeverQuickSim() {
   const { summary, error } = useForeverImport(simcInput);
   const settings = useForeverSettings();
   const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
-  const blocked = summary ? blockedReason(summary.level, specKey) : null;
+  const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
 
   const gear = useMemo<Record<string, GearItem>>(
     () =>

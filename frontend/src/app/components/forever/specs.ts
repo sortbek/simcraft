@@ -14,8 +14,13 @@ export const SPEC_LABEL_KEYS: Record<string, string> = {
 const HEALERS = new Set(['holyPaladin', 'healerPriest', 'restorationDruid', 'restorationShaman']);
 
 /** Mirror of the backend's spec::blocked_reason, applied to the spec the user picked. */
-export function blockedReason(level: number, specKey: string | null): 'level' | 'healer' | null {
-  if (level < 60) return 'level';
+export function blockedReason(
+  level: number,
+  hasSheet: boolean,
+  specKey: string | null
+): 'levelMin' | 'level' | 'healer' | null {
+  if (level < 10) return 'levelMin';
+  if (level < 60 && !hasSheet) return 'level';
   if (!specKey || HEALERS.has(specKey)) return 'healer';
   return null;
 }

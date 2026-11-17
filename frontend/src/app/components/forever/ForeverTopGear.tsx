@@ -35,7 +35,7 @@ export default function ForeverTopGear() {
     [summary]
   );
 
-  const blocked = summary ? blockedReason(summary.level, specKey) : null;
+  const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
   const buildPayload = useCallback(
     () =>
       summary && !blocked && selected.size > 0
@@ -47,6 +47,7 @@ export default function ForeverTopGear() {
             bag_items: [...selected].map((i) => ({
               item_id: summary.bags[i].item_id,
               enchant_id: summary.bags[i].enchant_id,
+              random_suffix: summary.bags[i].random_suffix,
             })),
           }
         : null,
