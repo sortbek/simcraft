@@ -1,10 +1,10 @@
 import RemountOnRestore from '../components/share/RemountOnRestore';
-import DropFinderContent from './DropFinderContent';
+import DropFinderGameSwitch from './DropFinderGameSwitch';
 
 export default function DropFinderPage() {
   return (
     <RemountOnRestore>
-      <DropFinderContent />
+      <DropFinderGameSwitch />
     </RemountOnRestore>
   );
 }

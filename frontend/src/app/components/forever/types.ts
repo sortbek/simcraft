@@ -68,3 +68,29 @@ export interface ForeverSimOptions {
   toggles: ForeverToggle[];
   consumables: boolean;
 }
+
+/** One source in the Drop Finder (an instance, quest zone, vendor, faction, ...), for a character. */
+export interface ForeverDropSource {
+  key: string;
+  category: 'dungeon' | 'raid' | 'quest' | 'reputation' | 'crafted' | 'vendor' | 'pvp' | 'world';
+  name: string;
+  zone: string;
+  /** An instance's entry level; 0 for other sources. */
+  level: number;
+  /** Added in Forever. */
+  new: boolean;
+  /** Gear this source has for anyone. */
+  total: number;
+  /** Gear from here the character can wear. */
+  count: number;
+  min_level: number | null;
+  max_level: number | null;
+  /** Lowest and highest reputation standing its items need. */
+  standings: [string, string] | null;
+}
+
+export interface ForeverDropSources {
+  /** False with an engine built before item sources. */
+  available: boolean;
+  groups: ForeverDropSource[];
+}

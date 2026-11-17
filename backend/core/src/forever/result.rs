@@ -3,6 +3,7 @@
 use serde_json::{json, Map, Value};
 
 use super::data::ForeverData;
+use super::drops::DropItem;
 use super::spec::{spec_label, SLOT_NAMES};
 
 pub struct ResultMeta {
@@ -506,24 +507,13 @@ fn precision_pct(metrics: &Value, fallback_n: u32) -> f64 {
 
 pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value {
     let baseline = &raw["baseline"];
-    let base_metrics = &baseline["dpsMetrics"];
-    let base_dps = base_metrics["avg"].as_f64().unwrap_or(0.0);
-    let base_gear = gear_items(&baseline["gear"]);
-    let base_keys: Vec<(u64, u64)> = base_gear
+    let base_dps = baseline["dpsMetrics"]["avg"].as_f64().unwrap_or(0.0);
+    let base_keys: Vec<(u64, u64)> = gear_items(&baseline["gear"])
         .iter()
         .filter(|s| s["id"].as_u64().unwrap_or(0) > 0)
         .map(item_key)
         .collect();
-    let mut equipped = Map::new();
-    for (slot, spec) in base_gear.iter().enumerate().take(SLOT_NAMES.len()) {
-        if spec["id"].as_u64().unwrap_or(0) > 0 {
-            equipped.insert(
-                SLOT_NAMES[slot].to_string(),
-                gear_entry(slot, spec, data, true),
-            );
-        }
-    }
-    let mut results: Vec<Value> = raw["topResults"]
+    let results: Vec<Value> = raw["topResults"]
         .as_array()
         .cloned()
         .unwrap_or_default()
@@ -561,6 +551,65 @@ pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value 
             }))
         })
         .collect();
+    gear_comparison("top_gear", baseline, results, data, meta)
+}
+
+/// Drop Finder: one row per item worn on its own, with the source it comes from (`picked` is the
+/// request's items in order, each with its source's name).
+pub fn drop_result(
+    raw: &Value,
+    data: &ForeverData,
+    meta: &ResultMeta,
+    picked: &[(DropItem, String)],
+) -> Value {
+    let baseline = &raw["baseline"];
+    let base_dps = baseline["dpsMetrics"]["avg"].as_f64().unwrap_or(0.0);
+    let results = raw["results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            let (drop, source) = picked.get(r["index"].as_u64()? as usize)?;
+            let slot = (r["slot"].as_u64()? as usize).min(SLOT_NAMES.len() - 1);
+            let mut entry = gear_entry(slot, &json!({ "id": drop.item_id }), data, false);
+            entry["encounter"] = json!(drop.from);
+            entry["instance"] = json!(source);
+            let dps = r["dpsMetrics"]["avg"].as_f64().unwrap_or(0.0);
+            Some(json!({
+                "name": entry["name"].clone(),
+                "items": [entry],
+                "dps": round1(dps),
+                "delta": round1(dps - base_dps) + 0.0,
+                "precision_pct": precision_pct(&r["dpsMetrics"], meta.iterations),
+            }))
+        })
+        .collect();
+    gear_comparison("droptimizer", baseline, results, data, meta)
+}
+
+/// The gear comparison result around the rows: the worn gear, the baseline row, best first.
+fn gear_comparison(
+    kind: &str,
+    baseline: &Value,
+    mut results: Vec<Value>,
+    data: &ForeverData,
+    meta: &ResultMeta,
+) -> Value {
+    let base_metrics = &baseline["dpsMetrics"];
+    let base_dps = base_metrics["avg"].as_f64().unwrap_or(0.0);
+    let mut equipped = Map::new();
+    for (slot, spec) in gear_items(&baseline["gear"])
+        .iter()
+        .enumerate()
+        .take(SLOT_NAMES.len())
+    {
+        if spec["id"].as_u64().unwrap_or(0) > 0 {
+            equipped.insert(
+                SLOT_NAMES[slot].to_string(),
+                gear_entry(slot, spec, data, true),
+            );
+        }
+    }
     results.push(json!({
         "name": "Currently Equipped",
         "items": [],
@@ -579,7 +628,7 @@ pub fn gear_result(raw: &Value, data: &ForeverData, meta: &ResultMeta) -> Value 
         metrics_n(base_metrics, meta.iterations),
     );
     json!({
-        "type": "top_gear",
+        "type": kind,
         "result_kind": "gear_comparison",
         "base_dps": round1(base_dps),
         "dps_error": round1(base_err),
@@ -796,6 +845,46 @@ mod tests {
                 assert!(item["quality"].is_u64() && item["icon"].is_string());
             }
         }
+        assert!(r["equipped_gear"].is_object());
+    }
+
+    #[test]
+    fn drop_result_has_a_row_per_item_with_its_source() {
+        let bulk: Value = serde_json::from_str(include_str!("testdata/bulk_result.json")).unwrap();
+        let raw = json!({
+            "baseline": bulk["baseline"],
+            "results": [
+                { "index": 1, "slot": 14, "dpsMetrics": { "avg": 900.0, "stdev": 50.0, "aggregatorData": { "n": 1000 } } },
+                { "index": 0, "slot": 0, "dpsMetrics": { "avg": 1.0, "stdev": 0.0, "aggregatorData": { "n": 1000 } } },
+            ],
+        });
+        let drop = |id: u32, from: &str| DropItem {
+            item_id: id,
+            from: from.into(),
+            standing: String::new(),
+            slots: vec![0],
+        };
+        let picked = vec![
+            (drop(1, "Trash"), "Shadowfang Keep".to_string()),
+            (
+                drop(273637, "Baron Silverlaine"),
+                "Shadowfang Keep".to_string(),
+            ),
+            (drop(3, "Never simmed"), "Shadowfang Keep".to_string()),
+        ];
+        let r = drop_result(&raw, crate::forever::test_data(), &meta(), &picked);
+        assert_eq!(r["type"], "droptimizer");
+        let rows = r["results"].as_array().unwrap();
+        assert_eq!(rows.len(), 3, "two items and the baseline");
+        let blade = rows
+            .iter()
+            .find(|row| row["name"] == "Blade of Silverlaine")
+            .unwrap();
+        let item = &blade["items"][0];
+        assert_eq!(item["slot"], "main_hand");
+        assert_eq!(item["encounter"], "Baron Silverlaine");
+        assert_eq!(item["instance"], "Shadowfang Keep");
+        assert_eq!(blade["dps"], 900.0);
         assert!(r["equipped_gear"].is_object());
     }
 

@@ -236,7 +236,7 @@ export default function Sidebar() {
             icon={icon}
             pathname={pathname}
             collapsed={collapsed}
-            disabled={game === 'forever' && href !== ROUTES.topGear}
+            disabled={game === 'forever' && href !== ROUTES.topGear && href !== ROUTES.dropFinder}
             disabledLabel={t('nav.retailOnly')}
           />
         ))}

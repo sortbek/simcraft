@@ -16,6 +16,56 @@ pub struct ForeverItem {
     /// Can carry a random suffix ("of the …"), which the export never includes.
     #[serde(default)]
     pub suffix: bool,
+    /// 0 when there is none or the bundle predates it.
+    #[serde(default)]
+    pub req_level: u32,
+    /// cloth, leather, mail or plate; empty for jewelry, weapons and older bundles.
+    #[serde(default)]
+    pub armor: String,
+    /// Melee or ranged kind: sword, staff, shield, off_hand (held in the off hand), bow, wand, ...
+    #[serde(default)]
+    pub weapon: String,
+    /// one_hand, main_hand, off_hand or two_hand.
+    #[serde(default)]
+    pub hand: String,
+    /// The classes the item is limited to; empty for any.
+    #[serde(default)]
+    pub classes: Vec<String>,
+}
+
+/// Where items come from (AllTheThings' Forever database): an instance, quest zone, vendor,
+/// faction, profession, PvP vendor or world drop list.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SourceGroup {
+    /// dungeon, raid, crafted, reputation, pvp, vendor, quest or world.
+    pub category: String,
+    pub name: String,
+    #[serde(default)]
+    pub zone: String,
+    /// An instance's entry level.
+    #[serde(default)]
+    pub level: u32,
+    /// Added in Forever.
+    #[serde(default)]
+    pub new: bool,
+    pub items: Vec<SourceItem>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SourceItem {
+    pub id: u32,
+    /// Boss, vendor, quest or mob.
+    #[serde(default)]
+    pub from: String,
+    /// horde or alliance when only one side can get it.
+    #[serde(default)]
+    pub side: String,
+    /// The reputation standing it needs.
+    #[serde(default)]
+    pub standing: String,
+    /// A class quest's classes.
+    #[serde(default)]
+    pub classes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,6 +126,8 @@ pub struct ForeverData {
     /// Icon name or FileDataID per spell; empty with a bundle built before spell icons.
     pub spell_icons: HashMap<u32, String>,
     pub talents: HashMap<String, ClassTalents>,
+    /// Empty with a bundle built before item sources; the Drop Finder is off then.
+    pub sources: Vec<SourceGroup>,
 }
 
 #[derive(Deserialize)]
@@ -108,6 +160,11 @@ impl ForeverData {
                 .collect(),
             spells: spells.into_iter().map(|s| (s.id, s.name)).collect(),
             talents: read(dir, "talents.json")?,
+            sources: if dir.join("sources.json").is_file() {
+                read(dir, "sources.json")?
+            } else {
+                Vec::new()
+            },
         })
     }
 }

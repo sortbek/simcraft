@@ -181,6 +181,69 @@ mod tests {
     /// The real engine, when FOREVER_DIR names an install: the request it takes and the results
     /// the result pages are built from.
     #[tokio::test]
+    async fn installed_engine_finds_drop_upgrades() {
+        use crate::forever::drops::{catalog, chosen, DropItem};
+        use crate::forever::import::parse_export;
+        use crate::forever::request::{drops_request, raid_request, SimSettings};
+        use crate::forever::result::{drop_result, ResultMeta};
+
+        let Some(engine) = std::env::var("FOREVER_DIR")
+            .ok()
+            .and_then(|dir| crate::forever::ForeverEngine::locate(Path::new(&dir)).ok())
+            .filter(|e| !e.data.sources.is_empty())
+        else {
+            eprintln!("skipped: FOREVER_DIR names no Forever engine with item sources");
+            return;
+        };
+        // A live level 29 orc hunter.
+        let ch = parse_export(include_str!("testdata/sortbek.simc")).unwrap();
+        let groups = catalog(&ch, &engine.data);
+        let keys = vec![
+            "dungeon:Shadowfang Keep".to_string(),
+            "dungeon:Deadmines".to_string(),
+        ];
+        let picked = chosen(&groups, &keys);
+        assert!(picked.len() >= 5, "{picked:?}");
+        for (item, _) in &picked {
+            let known = &engine.data.items[&item.item_id];
+            assert!(known.req_level <= 29 && known.armor != "mail", "{known:?}");
+        }
+        let settings = SimSettings {
+            iterations: 1000,
+            duration_seconds: 120.0,
+        };
+        let base = raid_request(&ch, &engine.data, "hunter", "", &settings);
+        let items: Vec<DropItem> = picked.iter().map(|(i, _)| i.clone()).collect();
+        let raw = run_cli(
+            &engine.binary,
+            "drops",
+            &drops_request(base, &items),
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let meta = ResultMeta {
+            player_name: ch.name.clone(),
+            spec_key: "hunter".into(),
+            fight_length: 120.0,
+            iterations: 1000,
+            engine_commit: engine.data.version.engine_commit.clone(),
+            gear: Vec::new(),
+            settings: Value::Null,
+        };
+        let result = drop_result(&raw, &engine.data, &meta, &picked);
+        let rows = result["results"].as_array().unwrap();
+        assert!(rows.len() >= 5, "{result}");
+        assert!(rows
+            .iter()
+            .filter(|r| r["name"] != "Currently Equipped")
+            .all(|r| r["items"][0]["instance"].is_string() && r["dps"].as_f64().unwrap() > 0.0));
+    }
+
+    #[tokio::test]
     async fn installed_engine_sims_and_ranks_gear() {
         use crate::forever::import::parse_export;
         use crate::forever::request::{bulk_request, raid_request, SimSettings};

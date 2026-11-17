@@ -24,7 +24,7 @@ import { useCharacterJobs, useRecentJobs, useSeasonRotation, zoneBackground } fr
 import { useIsDesktop } from '../../lib/useIsDesktop';
 import { useForeverSd } from '../forever/useForeverSd';
 
-const FOREVER_TOOLS = new Set(['quick', 'top_gear']);
+const FOREVER_TOOLS = new Set(['quick', 'top_gear', 'droptimizer']);
 
 const TOOLS: { simType: string; route: string; question: string; icon: ToolIconName }[] = [
   { simType: 'quick', route: ROUTES.quickSim, question: 'home.qQuick', icon: 'quick' },

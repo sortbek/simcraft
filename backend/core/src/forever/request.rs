@@ -4,6 +4,7 @@
 use serde_json::{json, Value};
 
 use super::data::ForeverData;
+use super::drops::DropItem;
 use super::import::{ExportItem, ForeverCharacter};
 use super::spec;
 
@@ -116,6 +117,15 @@ pub fn bulk_request(base: Value, bag_items: &[ExportItem], data: &ForeverData) -
         .map(item_spec)
         .collect();
     json!({ "baseRequest": base, "bulkSettings": { "items": items } })
+}
+
+/// Drop Finder: each item with the slots the character may wear it in.
+pub fn drops_request(base: Value, items: &[DropItem]) -> Value {
+    let items: Vec<Value> = items
+        .iter()
+        .map(|i| json!({ "item": { "id": i.item_id }, "slots": i.slots }))
+        .collect();
+    json!({ "baseRequest": base, "items": items })
 }
 
 #[cfg(test)]

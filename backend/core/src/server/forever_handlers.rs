@@ -10,12 +10,14 @@ use super::types::SimResponse;
 use crate::cancel::CancelToken;
 use crate::compute::local::{await_local_queue_permit, LocalSimQueue};
 use crate::db::JobRepo;
+use crate::forever::drops::{self, DropItem};
 use crate::forever::import::{
     parse_export_with, summarize_with, ExportItem, ForeverCharacter, ImportSummary,
 };
-use crate::forever::request::{bulk_request, raid_request, SimSettings};
+use crate::forever::request::{bulk_request, drops_request, raid_request, SimSettings};
 use crate::forever::result::{
-    add_armory_character, compare_result, engine_error, gear_result, quick_result, ResultMeta,
+    add_armory_character, compare_result, drop_result, engine_error, gear_result, quick_result,
+    ResultMeta,
 };
 use crate::forever::{detect_game, runner, spec, ForeverData, ForeverEngine, ForeverInstall, Game};
 use crate::log_buffer::LogBuffer;
@@ -55,6 +57,9 @@ pub(super) struct ForeverSimRequest {
     /// Talent compare: the builds to sim side by side, the first one the baseline.
     #[serde(default)]
     builds: Vec<TalentBuild>,
+    /// Drop Finder: the keys of the sources whose wearable items to sim.
+    #[serde(default)]
+    sources: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -247,6 +252,7 @@ async fn start_job(
         .as_array()
         .cloned()
         .unwrap_or_default();
+    let mut picked: Vec<(DropItem, String)> = Vec::new();
     let (command, request, extra) = if sim_type == "top_gear" {
         let bags: Vec<ExportItem> = req
             .bag_items
@@ -268,6 +274,18 @@ async fn start_job(
             bulk_request(base, &bags, &engine.data),
             vec!["--max-combinations".to_string(), max.to_string()],
         )
+    } else if sim_type == "droptimizer" {
+        // The items come from the character and the chosen sources, never from the client.
+        picked = drops::chosen(
+            &drops::catalog(&prepared.character, &engine.data),
+            &req.sources,
+        );
+        if picked.is_empty() {
+            return HttpResponse::BadRequest()
+                .json(json!({ "detail": "Pick at least one source with gear you can wear" }));
+        }
+        let items: Vec<DropItem> = picked.iter().map(|(item, _)| item.clone()).collect();
+        ("drops", drops_request(base, &items), Vec::new())
     } else if sim_type == "talent_compare" {
         if req.builds.len() < 2 || req.builds.len() > MAX_TALENT_BUILDS {
             return HttpResponse::BadRequest().json(json!({
@@ -358,6 +376,7 @@ async fn start_job(
                 None => {
                     let result = match command {
                         "bulk" => Ok(gear_result(&raw, &engine.data, &meta)),
+                        "drops" => Ok(drop_result(&raw, &engine.data, &meta, &picked)),
                         "compare" => compare_result(&raw, &meta),
                         _ => Ok(quick_result(&raw, &engine.data, &meta)),
                     };
@@ -403,6 +422,78 @@ pub(super) async fn create_top_gear(
     queue: web::Data<LocalSimQueue>,
 ) -> HttpResponse {
     start_job(body.into_inner(), "top_gear", engine, repo, logs, queue).await
+}
+
+pub(super) async fn create_drop_finder(
+    body: web::Json<ForeverSimRequest>,
+    engine: Engine,
+    repo: web::Data<JobRepo>,
+    logs: web::Data<Arc<LogBuffer>>,
+    queue: web::Data<LocalSimQueue>,
+) -> HttpResponse {
+    start_job(body.into_inner(), "droptimizer", engine, repo, logs, queue).await
+}
+
+#[derive(Deserialize)]
+pub(super) struct DropSourcesRequest {
+    simc_input: String,
+}
+
+const STANDINGS: [&str; 5] = ["neutral", "friendly", "honored", "revered", "exalted"];
+
+/// The Drop Finder's sources for a character: per source how many of its items the character
+/// can wear, from what level, and the reputation they need. `available` is false with an engine
+/// built before item sources.
+pub(super) async fn drop_sources(
+    body: web::Json<DropSourcesRequest>,
+    engine: Engine,
+) -> HttpResponse {
+    let engine = match engine_or_503(&engine) {
+        Ok(e) => e,
+        Err(resp) => return resp,
+    };
+    if detect_game(&body.simc_input) != Game::Forever {
+        return HttpResponse::BadRequest()
+            .json(json!({ "detail": "This is not a WoW Forever export" }));
+    }
+    let character = match parse_export_with(&body.simc_input, &engine.data) {
+        Ok(ch) => ch,
+        Err(e) => return HttpResponse::BadRequest().json(json!({ "detail": e })),
+    };
+    let groups: Vec<serde_json::Value> = drops::catalog(&character, &engine.data)
+        .into_iter()
+        .map(|g| {
+            let levels: Vec<u32> = g
+                .items
+                .iter()
+                .filter_map(|i| engine.data.items.get(&i.item_id).map(|it| it.req_level))
+                .collect();
+            let standings: Vec<usize> = g
+                .items
+                .iter()
+                .filter_map(|i| STANDINGS.iter().position(|s| *s == i.standing))
+                .collect();
+            json!({
+                "key": g.key,
+                "category": g.category,
+                "name": g.name,
+                "zone": g.zone,
+                "level": g.level,
+                "new": g.new,
+                "total": g.total,
+                "count": g.items.len(),
+                "min_level": levels.iter().min(),
+                "max_level": levels.iter().max(),
+                "standings": standings.iter().min().map(|lo| {
+                    [STANDINGS[*lo], STANDINGS[*standings.iter().max().unwrap_or(lo)]]
+                }),
+            })
+        })
+        .collect();
+    HttpResponse::Ok().json(json!({
+        "available": !engine.data.sources.is_empty(),
+        "groups": groups,
+    }))
 }
 
 pub(super) async fn create_talent_compare(

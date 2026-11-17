@@ -3,6 +3,7 @@
 
 pub mod data;
 pub mod detect;
+pub mod drops;
 pub mod import;
 pub mod report;
 pub mod request;
