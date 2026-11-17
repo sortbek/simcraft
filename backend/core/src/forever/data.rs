@@ -66,6 +66,9 @@ pub struct SourceItem {
     /// A class quest's classes.
     #[serde(default)]
     pub classes: Vec<String>,
+    /// The level its quest can be done from; quest rewards often need no level themselves.
+    #[serde(default)]
+    pub level: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]

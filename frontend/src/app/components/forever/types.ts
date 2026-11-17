@@ -87,6 +87,23 @@ export interface ForeverDropSource {
   max_level: number | null;
   /** Lowest and highest reputation standing its items need. */
   standings: [string, string] | null;
+  items: ForeverDropItem[];
+}
+
+/** An item from a source that the character can wear. */
+export interface ForeverDropItem {
+  item_id: number;
+  name: string;
+  icon: string;
+  quality: number;
+  ilevel: number;
+  /** The level it can be had from: its own required level or its quest's. */
+  level: number;
+  /** The Drop Finder's slot name: Head, Finger, Main Hand, Ranged, ... */
+  slot: string;
+  /** Boss, quest, vendor or mob. */
+  from: string;
+  standing: string;
 }
 
 export interface ForeverDropSources {

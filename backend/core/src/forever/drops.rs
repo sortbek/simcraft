@@ -173,6 +173,8 @@ pub struct DropItem {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub standing: String,
     pub slots: Vec<usize>,
+    /// The level it can be had from: its required level or its quest's, whichever is higher.
+    pub level: u32,
 }
 
 /// One source as the Drop Finder lists it for a character.
@@ -207,12 +209,16 @@ pub fn catalog(ch: &ForeverCharacter, data: &ForeverData) -> Vec<DropGroup> {
                 .filter(|e| e.classes.is_empty() || e.classes.contains(&ch.class))
                 .filter_map(|e| {
                     let item = data.items.get(&e.id).filter(|i| !i.suffix)?;
+                    let level = item.req_level.max(e.level);
                     let slots = slots_for(item, &ch.class, ch.level);
-                    (!slots.is_empty() && seen.insert(e.id)).then(|| DropItem {
-                        item_id: e.id,
-                        from: e.from.clone(),
-                        standing: e.standing.clone(),
-                        slots,
+                    (level <= ch.level && !slots.is_empty() && seen.insert(e.id)).then(|| {
+                        DropItem {
+                            item_id: e.id,
+                            from: e.from.clone(),
+                            standing: e.standing.clone(),
+                            slots,
+                            level,
+                        }
                     })
                 })
                 .collect();
@@ -234,15 +240,39 @@ pub fn group_key(category: &str, name: &str) -> String {
     format!("{category}:{name}")
 }
 
-/// The items of the chosen sources, each once (with the first source that has it).
-pub fn chosen(catalog: &[DropGroup], keys: &[String]) -> Vec<(DropItem, String)> {
+/// The picked items (source key, item id) that the catalog has for the character, each once,
+/// with its source's name. Picks it doesn't have are dropped.
+pub fn chosen(catalog: &[DropGroup], picks: &[(String, u32)]) -> Vec<(DropItem, String)> {
     let mut seen = HashSet::new();
-    catalog
+    picks
         .iter()
-        .filter(|g| keys.contains(&g.key))
-        .flat_map(|g| g.items.iter().map(move |i| (i.clone(), g.name.clone())))
-        .filter(|(i, _)| seen.insert(i.item_id))
+        .filter_map(|(key, id)| {
+            let group = catalog.iter().find(|g| &g.key == key)?;
+            let item = group.items.iter().find(|i| i.item_id == *id)?;
+            seen.insert(*id).then(|| (item.clone(), group.name.clone()))
+        })
         .collect()
+}
+
+/// The slot a source item is listed under, in the Drop Finder's names.
+pub fn slot_label(item: &ForeverItem) -> &'static str {
+    match item.item_type {
+        1 => "Head",
+        2 => "Neck",
+        3 => "Shoulder",
+        4 => "Back",
+        5 => "Chest",
+        6 => "Wrist",
+        7 => "Hands",
+        8 => "Waist",
+        9 => "Legs",
+        10 => "Feet",
+        11 => "Finger",
+        12 => "Trinket",
+        13 if item.hand == "off_hand" => "Off Hand",
+        13 => "Main Hand",
+        _ => "Ranged",
+    }
 }
 
 #[cfg(test)]
@@ -352,6 +382,7 @@ mod tests {
             side: side.into(),
             standing: String::new(),
             classes: classes.iter().map(|c| c.to_string()).collect(),
+            level: 0,
         }
     }
 
@@ -366,6 +397,7 @@ mod tests {
                 item(3, 2, "", "", "", 20),
                 item(4, 2, "", "", "", 20),
                 suffixed,
+                item(6, 2, "", "", "", 0),
             ],
             vec![SourceGroup {
                 category: "dungeon".into(),
@@ -380,6 +412,11 @@ mod tests {
                     entry(3, "Arugal Must Die", "alliance", &[]),
                     entry(4, "Class quest", "", &["mage"]),
                     entry(5, "Trash", "", &[]),
+                    // A reward without a level of its own, from a level 40 quest.
+                    SourceItem {
+                        level: 40,
+                        ..entry(6, "The Hidden Path", "", &[])
+                    },
                 ],
             }],
         );
@@ -390,18 +427,25 @@ mod tests {
         ch.level = 29;
         let groups = catalog(&ch, &data);
         assert_eq!(groups[0].key, "dungeon:Shadowfang Keep");
-        assert_eq!(groups[0].total, 5);
+        assert_eq!(groups[0].total, 6);
         let got: Vec<(u32, &str)> = groups[0]
             .items
             .iter()
             .map(|i| (i.item_id, i.from.as_str()))
             .collect();
         assert_eq!(got, vec![(1, "Baron Silverlaine")]);
+        let sfk = "dungeon:Shadowfang Keep".to_string();
         let picked = chosen(
             &groups,
-            &["dungeon:Shadowfang Keep".into(), "dungeon:Other".into()],
+            &[
+                (sfk.clone(), 1),
+                (sfk.clone(), 1),
+                (sfk.clone(), 2), // mail: not in the catalog for this hunter
+                ("dungeon:Other".into(), 1),
+            ],
         );
         assert_eq!(picked.len(), 1);
+        assert_eq!(picked[0].0.from, "Baron Silverlaine");
         assert_eq!(picked[0].1, "Shadowfang Keep");
     }
 }

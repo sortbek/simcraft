@@ -57,9 +57,15 @@ pub(super) struct ForeverSimRequest {
     /// Talent compare: the builds to sim side by side, the first one the baseline.
     #[serde(default)]
     builds: Vec<TalentBuild>,
-    /// Drop Finder: the keys of the sources whose wearable items to sim.
+    /// Drop Finder: the picked items, each with the key of the source it was picked from.
     #[serde(default)]
-    sources: Vec<String>,
+    drops: Vec<PickedDrop>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct PickedDrop {
+    source: String,
+    item_id: u32,
 }
 
 #[derive(Deserialize)]
@@ -275,14 +281,16 @@ async fn start_job(
             vec!["--max-combinations".to_string(), max.to_string()],
         )
     } else if sim_type == "droptimizer" {
-        // The items come from the character and the chosen sources, never from the client.
-        picked = drops::chosen(
-            &drops::catalog(&prepared.character, &engine.data),
-            &req.sources,
-        );
+        // Only items the character's catalog has for the named source are simmed.
+        let picks: Vec<(String, u32)> = req
+            .drops
+            .iter()
+            .map(|d| (d.source.clone(), d.item_id))
+            .collect();
+        picked = drops::chosen(&drops::catalog(&prepared.character, &engine.data), &picks);
         if picked.is_empty() {
             return HttpResponse::BadRequest()
-                .json(json!({ "detail": "Pick at least one source with gear you can wear" }));
+                .json(json!({ "detail": "Pick at least one item you can wear" }));
         }
         let items: Vec<DropItem> = picked.iter().map(|(item, _)| item.clone()).collect();
         ("drops", drops_request(base, &items), Vec::new())
@@ -441,9 +449,9 @@ pub(super) struct DropSourcesRequest {
 
 const STANDINGS: [&str; 5] = ["neutral", "friendly", "honored", "revered", "exalted"];
 
-/// The Drop Finder's sources for a character: per source how many of its items the character
-/// can wear, from what level, and the reputation they need. `available` is false with an engine
-/// built before item sources.
+/// The Drop Finder's sources for a character: per source the items the character can wear (with
+/// what the item table shows), from what level, and the reputation they need. `available` is false
+/// with an engine built before item sources.
 pub(super) async fn drop_sources(
     body: web::Json<DropSourcesRequest>,
     engine: Engine,
@@ -463,15 +471,29 @@ pub(super) async fn drop_sources(
     let groups: Vec<serde_json::Value> = drops::catalog(&character, &engine.data)
         .into_iter()
         .map(|g| {
-            let levels: Vec<u32> = g
-                .items
-                .iter()
-                .filter_map(|i| engine.data.items.get(&i.item_id).map(|it| it.req_level))
-                .collect();
+            let levels: Vec<u32> = g.items.iter().map(|i| i.level).collect();
             let standings: Vec<usize> = g
                 .items
                 .iter()
                 .filter_map(|i| STANDINGS.iter().position(|s| *s == i.standing))
+                .collect();
+            let items: Vec<serde_json::Value> = g
+                .items
+                .iter()
+                .filter_map(|i| {
+                    let item = engine.data.items.get(&i.item_id)?;
+                    Some(json!({
+                        "item_id": i.item_id,
+                        "name": item.name,
+                        "icon": item.icon,
+                        "quality": item.quality,
+                        "ilevel": item.ilvl,
+                        "level": i.level,
+                        "slot": drops::slot_label(item),
+                        "from": i.from,
+                        "standing": i.standing,
+                    }))
+                })
                 .collect();
             json!({
                 "key": g.key,
@@ -482,6 +504,7 @@ pub(super) async fn drop_sources(
                 "new": g.new,
                 "total": g.total,
                 "count": g.items.len(),
+                "items": items,
                 "min_level": levels.iter().min(),
                 "max_level": levels.iter().max(),
                 "standings": standings.iter().min().map(|lo| {

@@ -863,6 +863,7 @@ mod tests {
             from: from.into(),
             standing: String::new(),
             slots: vec![0],
+            level: 0,
         };
         let picked = vec![
             (drop(1, "Trash"), "Shadowfang Keep".to_string()),

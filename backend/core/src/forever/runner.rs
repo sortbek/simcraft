@@ -198,11 +198,12 @@ mod tests {
         // A live level 29 orc hunter.
         let ch = parse_export(include_str!("testdata/sortbek.simc")).unwrap();
         let groups = catalog(&ch, &engine.data);
-        let keys = vec![
-            "dungeon:Shadowfang Keep".to_string(),
-            "dungeon:Deadmines".to_string(),
-        ];
-        let picked = chosen(&groups, &keys);
+        let picks: Vec<(String, u32)> = groups
+            .iter()
+            .filter(|g| g.name == "Shadowfang Keep" || g.name == "Deadmines")
+            .flat_map(|g| g.items.iter().map(|i| (g.key.clone(), i.item_id)))
+            .collect();
+        let picked = chosen(&groups, &picks);
         assert!(picked.len() >= 5, "{picked:?}");
         for (item, _) in &picked {
             let known = &engine.data.items[&item.item_id];
