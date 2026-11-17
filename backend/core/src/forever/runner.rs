@@ -178,6 +178,80 @@ mod tests {
         assert!(err.contains("could not start"), "{err}");
     }
 
+    /// The real engine, when FOREVER_DIR names an install: the request it takes and the results
+    /// the result pages are built from.
+    #[tokio::test]
+    async fn installed_engine_sims_and_ranks_gear() {
+        use crate::forever::import::parse_export;
+        use crate::forever::request::{bulk_request, raid_request, SimSettings};
+        use crate::forever::result::{gear_result, quick_result, ResultMeta};
+
+        let Some(engine) = std::env::var("FOREVER_DIR")
+            .ok()
+            .and_then(|dir| crate::forever::ForeverEngine::locate(Path::new(&dir)).ok())
+        else {
+            eprintln!("skipped: FOREVER_DIR names no Forever engine");
+            return;
+        };
+        let export = include_str!("testdata/sylfrey.simc").replace("level=27", "level=60");
+        let ch = parse_export(&export).unwrap();
+        let settings = SimSettings {
+            iterations: 1000,
+            duration_seconds: 120.0,
+        };
+        let meta = ResultMeta {
+            player_name: ch.name.clone(),
+            spec_key: "protectionPaladin".into(),
+            fight_length: 120.0,
+            iterations: 1000,
+            engine_commit: engine.data.version.engine_commit.clone(),
+        };
+        let base = raid_request(&ch, &engine.data, "protectionPaladin", "", &settings);
+        let worn = base["raid"]["parties"][0]["players"][0]["equipment"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|i| i["id"].as_u64().unwrap_or(0) > 0)
+            .count();
+        assert!(worn >= 10, "the bundle knows {worn} of the worn items");
+
+        let raw = run_cli(
+            &engine.binary,
+            "sim",
+            &base,
+            &[],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let quick = quick_result(&raw, &engine.data, &meta);
+        assert!(quick["dps"].as_f64().unwrap() > 0.0, "{quick}");
+        let abilities = quick["abilities"].as_array().unwrap();
+        assert!(!abilities.is_empty());
+        assert!(abilities
+            .iter()
+            .all(|a| !a["name"].as_str().unwrap().starts_with("Spell ")));
+
+        let bulk = bulk_request(base, &ch.bags, &engine.data);
+        assert!(!bulk["bulkSettings"]["items"].as_array().unwrap().is_empty());
+        let raw = run_cli(
+            &engine.binary,
+            "bulk",
+            &bulk,
+            &["--max-combinations".to_string(), "500".to_string()],
+            never_cancelled(),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let gear = gear_result(&raw, &engine.data, &meta);
+        assert!(gear["base_dps"].as_f64().unwrap() > 0.0, "{gear}");
+        assert!(gear["results"].as_array().unwrap().len() >= 2, "{gear}");
+    }
+
     #[cfg(unix)]
     fn fake_engine(dir: &Path, body: &str) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt;

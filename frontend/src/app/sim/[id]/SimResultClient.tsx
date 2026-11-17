@@ -530,12 +530,12 @@ export default function SimResultClient() {
             <span>
               {t('forever.poweredBy')}{' '}
               <a
-                href="https://github.com/ElliotWood/Forever"
+                href="https://github.com/sage3648/mythicsim-forever-engine"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gold transition-colors hover:text-gold-light"
               >
-                WoW Forever Simulator
+                MythicSim Forever engine
               </a>
             </span>
           </>

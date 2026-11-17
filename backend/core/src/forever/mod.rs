@@ -1,4 +1,5 @@
-//! WoW Forever: a second game, simmed by the wowsims-based `simhammer-forever` CLI.
+//! WoW Forever: a second game, simmed by the `simhammer-forever` CLI (forever-builds), which
+//! runs the MythicSim Forever engine.
 
 pub mod data;
 pub mod detect;
