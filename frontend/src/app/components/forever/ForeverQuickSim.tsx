@@ -3,9 +3,11 @@
 import { useCallback, useMemo } from 'react';
 import ErrorAlert from '../ui/ErrorAlert';
 import GearOverview from '../gear/GearOverview';
+import { getCharacterRenderUrl } from '../gear/topGearResultsUtils';
 import type { GearItem } from '../gear/gearOverviewTypes';
 import { formatFightLength } from '../sim-config/settingsUi';
 import { useSimContext } from '../sim-config/SimContext';
+import { FOREVER_REALM } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import ForeverCharacterCard from './ForeverCharacterCard';
 import ForeverFooter from './ForeverFooter';
@@ -140,6 +142,11 @@ export default function ForeverQuickSim() {
             <GearOverview
               gear={gear}
               title={t('gear.equippedGear')}
+              characterRenderUrl={
+                summary.region
+                  ? getCharacterRenderUrl(FOREVER_REALM, summary.name, summary.region)
+                  : null
+              }
               itemInfoMap={NO_INFO}
               enchantInfoMap={NO_INFO}
               gemInfoMap={NO_INFO}

@@ -1,11 +1,13 @@
 'use client';
 
 import Pill from '../ui/Pill';
+import { getCharacterAvatarUrl } from '../gear/topGearResultsUtils';
+import { FOREVER_REALM } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import { SPEC_LABEL_KEYS } from './specs';
 import type { ForeverImport } from './types';
 
-/** The retail Quick Sim character card; Forever has no armory render and no realm. */
+/** The retail Quick Sim character card; Forever has no realm. */
 export default function ForeverCharacterCard({
   summary,
   specKey,
@@ -15,8 +17,22 @@ export default function ForeverCharacterCard({
 }) {
   const { t } = useLanguage();
   const spec = specKey && SPEC_LABEL_KEYS[specKey] ? `${t(SPEC_LABEL_KEYS[specKey])} ` : '';
+  const avatarUrl = summary.region
+    ? getCharacterAvatarUrl(FOREVER_REALM, summary.name, summary.region)
+    : null;
   return (
     <div className="card flex items-center gap-[18px] px-6 py-5">
+      {avatarUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={avatarUrl}
+          alt=""
+          className="h-14 w-14 shrink-0 rounded-[10px] border border-line/[0.11] object-cover"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = 'none';
+          }}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <h2 className="font-headline text-xl font-extrabold leading-[1.1] tracking-[-0.01em] text-on-surface">
           {summary.name}

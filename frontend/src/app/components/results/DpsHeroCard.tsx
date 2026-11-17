@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { API_URL } from '../../lib/api';
+import { FOREVER_REALM } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import { useRealmSlug } from '../../lib/realms';
 import Pill from '../ui/Pill';
@@ -118,7 +119,7 @@ export default function DpsHeroCard({
       <div className="relative z-10 px-9 pb-[30px] pt-[34px]">
         <h1 className="font-headline text-[34px] font-extrabold uppercase leading-none tracking-[-0.01em] text-on-surface">
           {playerName}
-          {playerRealm ? `-${playerRealm}` : ''}
+          {playerRealm && playerRealm !== FOREVER_REALM ? `-${playerRealm}` : ''}
         </h1>
         <p className="mt-2.5 font-headline text-[13px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
           {playerClass}

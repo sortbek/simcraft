@@ -6,6 +6,10 @@ export type Game = 'retail' | 'forever';
 
 export const GAME_STORAGE_KEY = 'simhammer_game';
 
+/** The realm under which simhammer.com's character API finds a Forever character, by name and
+ *  surname (Forever has no realms). */
+export const FOREVER_REALM = 'forever';
+
 /** Same rule as the backend: a 1.x client or a TOC below 20000 is WoW Forever. */
 export function detectGame(simcInput: string): Game {
   // The MythicSim addon's JSON export only exists for Forever.

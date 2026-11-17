@@ -78,6 +78,8 @@ pub struct Pet {
 #[derive(Debug, Clone)]
 pub struct ForeverCharacter {
     pub name: String,
+    /// Battle.net region (`eu`, `us`, ...); empty when the export names none.
+    pub region: String,
     pub class: String,
     pub race: String,
     pub level: u32,
@@ -239,6 +241,7 @@ fn parse_mythicsim(input: &str) -> Result<ForeverCharacter, String> {
     let level = export["level"].as_u64().unwrap_or(0) as u32;
     let ch = ForeverCharacter {
         name: mythicsim_name(&text(&export["name"]), &text(&export["realm"])),
+        region: text(&extra["region"]).trim().to_lowercase(),
         class: token(&export["class"]),
         race,
         level,
@@ -347,6 +350,7 @@ pub fn parse_export(input: &str) -> Result<ForeverCharacter, String> {
     }
     let mut ch = ForeverCharacter {
         name: String::new(),
+        region: String::new(),
         class: String::new(),
         race: String::new(),
         level: 0,
@@ -388,6 +392,7 @@ pub fn parse_export(input: &str) -> Result<ForeverCharacter, String> {
         };
         match key {
             "level" => ch.level = value.parse().unwrap_or(0),
+            "region" => ch.region = value.trim().to_lowercase(),
             "race" => ch.race = value.to_string(),
             "pet_family" => pet_family = Some(value.to_string()),
             "ammo" => {
@@ -453,6 +458,7 @@ pub struct GearView {
 pub struct ImportSummary {
     pub game: &'static str,
     pub name: String,
+    pub region: String,
     pub class: String,
     pub race: String,
     pub level: u32,
@@ -615,6 +621,7 @@ pub fn summarize_with(
     ImportSummary {
         game: "forever",
         name: ch.name.clone(),
+        region: ch.region.clone(),
         class: ch.class.clone(),
         race: ch.race.clone(),
         level: ch.level,
@@ -829,6 +836,7 @@ mod tests {
     fn live_export_gives_the_ranged_slot_suffix_pet_and_sheet() {
         let ch = parse_export(sortbek()).unwrap();
         let worn = |slot: &str| ch.equipped.iter().find(|i| i.slot == slot).unwrap();
+        assert_eq!(ch.region, "eu");
         assert_eq!(worn("ranged").item_id, 273843);
         assert_eq!(ch.ammo_id, 3030);
         assert_eq!(worn("main_hand").random_suffix, 12726);
@@ -908,6 +916,7 @@ mod tests {
             ),
             ("Sortbek Hunter", "hunter", "orc", 29)
         );
+        assert_eq!(ch.region, "eu");
         assert_eq!(
             mythicsim_name("Sortbek", "camwow_eu5_realm_6_pvp"),
             "Sortbek"

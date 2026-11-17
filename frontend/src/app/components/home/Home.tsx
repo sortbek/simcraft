@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useSimContext } from '../sim-config/SimContext';
-import type { Game } from '../../lib/game';
+import { FOREVER_REALM, type Game } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import { parseCharacterInfo } from '../../lib/character';
 import { useRealmSlug } from '../../lib/realms';
@@ -175,9 +175,11 @@ export default function Home() {
         classColor={CLASS_COLORS[info.className]}
         race={race && titleCase(race)}
         realm={info.realm && titleCase(info.realm)}
-        renderUrl={
-          game === 'forever' ? null : getCharacterRenderUrl(realmSlug, info.name, info.region)
-        }
+        renderUrl={getCharacterRenderUrl(
+          game === 'forever' ? FOREVER_REALM : realmSlug,
+          info.name,
+          info.region
+        )}
         backdrop={backdrop}
         dps={last.quick?.dps ?? null}
         itemLevel={gear ? averageItemLevel(gear) : null}
@@ -205,10 +207,11 @@ export default function Home() {
             </p>
           ) : (
             recent.map((job, i) => {
-              const avatar =
-                job.game === 'forever'
-                  ? null
-                  : getCharacterAvatarUrl(job.realm, job.player_name, job.region ?? 'eu');
+              const avatar = getCharacterAvatarUrl(
+                job.game === 'forever' ? FOREVER_REALM : job.realm,
+                job.player_name,
+                job.region ?? 'eu'
+              );
               return (
                 <Link
                   key={job.id}

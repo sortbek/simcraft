@@ -31,6 +31,8 @@ export interface ForeverTalentTree {
 export interface ForeverImport {
   game: 'forever';
   name: string;
+  /** Battle.net region; empty when the export names none. */
+  region: string;
   class: string;
   race: string;
   level: number;

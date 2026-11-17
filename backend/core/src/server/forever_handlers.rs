@@ -14,7 +14,9 @@ use crate::forever::import::{
     parse_export_with, summarize_with, ExportItem, ForeverCharacter, ImportSummary,
 };
 use crate::forever::request::{bulk_request, raid_request, SimSettings};
-use crate::forever::result::{compare_result, engine_error, gear_result, quick_result, ResultMeta};
+use crate::forever::result::{
+    add_armory_character, compare_result, engine_error, gear_result, quick_result, ResultMeta,
+};
 use crate::forever::{detect_game, runner, spec, ForeverData, ForeverEngine, Game};
 use crate::log_buffer::LogBuffer;
 use crate::models::{Job, JobStatus};
@@ -322,6 +324,7 @@ async fn start_job(
         queue.into_inner(),
         job.id,
     );
+    let region = prepared.character.region.clone();
     tokio::spawn(async move {
         let token = CancelToken::new((*repo).clone(), id.clone());
         let Ok(_permit) = await_local_queue_permit(&queue, Some(&token)).await else {
@@ -355,7 +358,8 @@ async fn start_job(
                         _ => Ok(quick_result(&raw, &engine.data, &meta)),
                     };
                     match result {
-                        Ok(result) => {
+                        Ok(mut result) => {
+                            add_armory_character(&mut result, &region);
                             let raw_text = slim_raw(raw).to_string();
                             let _ = repo
                                 .set_result(&id, &result.to_string(), Some(&raw_text))

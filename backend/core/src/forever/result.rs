@@ -17,6 +17,15 @@ pub struct ResultMeta {
     pub settings: Value,
 }
 
+/// simhammer.com's character API finds a Forever character under realm "forever" by name and
+/// surname, so the result pages show its render and faction as they do for retail.
+pub fn add_armory_character(result: &mut Value, region: &str) {
+    if !region.is_empty() {
+        result["realm"] = json!("forever");
+        result["region"] = json!(region);
+    }
+}
+
 fn round1(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
@@ -836,5 +845,17 @@ mod tests {
         let raw = serde_json::json!({ "error": { "message": "boom" } });
         assert_eq!(engine_error(&raw).as_deref(), Some("boom"));
         assert_eq!(engine_error(&serde_json::json!({ "error": null })), None);
+    }
+
+    #[test]
+    fn a_result_names_the_forever_realm_only_with_a_region() {
+        let mut r = json!({ "player_name": "Sortbek Hunter" });
+        add_armory_character(&mut r, "");
+        assert!(r.get("realm").is_none() && r.get("region").is_none());
+        add_armory_character(&mut r, "eu");
+        assert_eq!(
+            (&r["realm"], &r["region"]),
+            (&json!("forever"), &json!("eu"))
+        );
     }
 }
