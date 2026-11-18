@@ -191,6 +191,7 @@
   "results.showLogs": "Показать логи",
   "results.hideLogs": "Скрыть логи",
   "results.simcOutput": "Вывод SimC",
+  "results.engineOutput": "Вывод движка",
   "results.logLines": "{count} строк",
   "results.damageBreakdown": "Разбивка урона",
   "results.scenarios": "Сценарии",

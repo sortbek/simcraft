@@ -191,6 +191,7 @@
   "results.showLogs": "Mostra Log",
   "results.hideLogs": "Nascondi Log",
   "results.simcOutput": "Output SimC",
+  "results.engineOutput": "Output del motore",
   "results.logLines": "{count} righe",
   "results.damageBreakdown": "Ripartizione Danni",
   "results.scenarios": "Scenari",

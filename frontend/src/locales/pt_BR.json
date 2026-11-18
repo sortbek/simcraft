@@ -191,6 +191,7 @@
   "results.showLogs": "Mostrar Logs",
   "results.hideLogs": "Ocultar Logs",
   "results.simcOutput": "Saída SimC",
+  "results.engineOutput": "Saída do motor",
   "results.logLines": "{count} linhas",
   "results.damageBreakdown": "Detalhamento de Dano",
   "results.scenarios": "Cenários",

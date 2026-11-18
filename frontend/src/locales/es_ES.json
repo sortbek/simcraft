@@ -191,6 +191,7 @@
   "results.showLogs": "Mostrar registros",
   "results.hideLogs": "Ocultar registros",
   "results.simcOutput": "Salida de SimC",
+  "results.engineOutput": "Salida del motor",
   "results.logLines": "{count} líneas",
   "results.damageBreakdown": "Desglose de daño",
   "results.scenarios": "Escenarios",

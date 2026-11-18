@@ -237,6 +237,7 @@
   "results.showLogs": "로그 보기",
   "results.hideLogs": "로그 숨기기",
   "results.simcOutput": "SimC 출력",
+  "results.engineOutput": "엔진 출력",
   "results.logLines": "{count}줄",
   "results.damageBreakdown": "피해량 세부 내역",
   "results.scenarios": "시나리오",

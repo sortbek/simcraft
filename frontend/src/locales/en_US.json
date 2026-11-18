@@ -395,6 +395,7 @@
   "results.showLogs": "Show Logs",
   "results.hideLogs": "Hide Logs",
   "results.simcOutput": "SimC Output",
+  "results.engineOutput": "Engine Output",
   "results.logLines": "{count} lines",
   "results.damageBreakdown": "Damage Breakdown",
   "results.scenarios": "Scenarios",

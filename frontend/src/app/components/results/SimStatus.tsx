@@ -22,6 +22,8 @@ interface SimStatusProps {
   pauseRequested?: boolean;
   onPause?: () => void;
   logLines?: string[];
+  /** The log console's header, when the lines are not SimC's. */
+  logTitle?: string;
   showLogs?: boolean;
   onToggleLogs?: () => void;
   /** State folded from the SimC output; with combos, the live view replaces the spinner. */
@@ -82,6 +84,7 @@ export default function SimStatus({
   pauseRequested = false,
   onPause,
   logLines,
+  logTitle,
   showLogs,
   onToggleLogs,
   live,
@@ -243,7 +246,9 @@ export default function SimStatus({
         </div>
       )}
 
-      {showLogs && logLines && logLines.length > 0 && <LogConsole lines={logLines} />}
+      {showLogs && logLines && logLines.length > 0 && (
+        <LogConsole lines={logLines} title={logTitle} />
+      )}
     </div>
   );
 }

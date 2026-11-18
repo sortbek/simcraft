@@ -316,6 +316,7 @@ export default function SimResultClient() {
             pauseRequested={!!job.pause_requested}
             onPause={handlePause}
             logLines={logLines}
+            logTitle={job.game === 'forever' ? t('results.engineOutput') : undefined}
             showLogs={showLogs}
             onToggleLogs={handleToggleLogs}
             live={live}

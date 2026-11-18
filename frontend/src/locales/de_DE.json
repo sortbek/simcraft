@@ -191,6 +191,7 @@
   "results.showLogs": "Logs anzeigen",
   "results.hideLogs": "Logs ausblenden",
   "results.simcOutput": "SimC-Ausgabe",
+  "results.engineOutput": "Engine-Ausgabe",
   "results.logLines": "{count} Zeilen",
   "results.damageBreakdown": "Schadensaufteilung",
   "results.scenarios": "Szenarien",
