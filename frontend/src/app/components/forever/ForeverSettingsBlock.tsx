@@ -183,7 +183,8 @@ export default function ForeverSettingsBlock({
     { label: t('config.iterations'), value: iterations.toLocaleString() },
     {
       label: t('config.consumables'),
-      value: buffs ? t(buffs.consumables ? 'forever.on' : 'forever.off') : auto,
+      // Below 60 the server keeps them off whatever the toggle says.
+      value: buffs ? t(buffs.consumables && !levelling ? 'forever.on' : 'forever.off') : auto,
     },
     {
       label: t('config.raidBuffs'),

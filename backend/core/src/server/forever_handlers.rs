@@ -114,6 +114,12 @@ pub(super) fn prepare(
     })
 }
 
+/// Raid consumables are a level 60 thing: below it they stay off, whatever was asked (a profile
+/// saved on a level 60 character can ask for them).
+fn consumables_for(level: u32, asked: Option<bool>) -> Option<bool> {
+    asked.map(|on| on && level >= 60)
+}
+
 fn engine_or_503(engine: &Engine) -> Result<Arc<ForeverEngine>, HttpResponse> {
     engine.get().ok_or_else(|| {
         HttpResponse::ServiceUnavailable().json(json!({
@@ -251,7 +257,8 @@ async fn start_job(
     if let Some(buffs) = &req.buffs {
         base["simhammer"]["buffs"] = json!(buffs);
     }
-    if let Some(consumables) = req.consumables {
+    let consumables = consumables_for(prepared.character.level, req.consumables);
+    if let Some(consumables) = consumables {
         base["simhammer"]["consumables"] = json!(consumables);
     }
     let worn_gear = base["raid"]["parties"][0]["players"][0]["equipment"]["items"]
@@ -345,7 +352,7 @@ async fn start_job(
             "target_level": if prepared.character.level < 60 { prepared.character.level + 2 } else { 63 },
             "talents_string": prepared.summary.talents_string,
             "buffs": req.buffs,
-            "consumables": req.consumables,
+            "consumables": consumables,
         }),
     };
     let (repo, logs, queue, id) = (
@@ -539,6 +546,14 @@ pub(super) async fn create_talent_compare(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn consumables_stay_off_below_60() {
+        assert_eq!(consumables_for(29, Some(true)), Some(false));
+        assert_eq!(consumables_for(60, Some(true)), Some(true));
+        assert_eq!(consumables_for(60, Some(false)), Some(false));
+        assert_eq!(consumables_for(29, None), None);
+    }
 
     fn input(level: u32) -> String {
         include_str!("../forever/testdata/sylfrey.simc")
