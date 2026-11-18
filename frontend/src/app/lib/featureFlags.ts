@@ -9,3 +9,6 @@ export const VOID_FORGE_ENABLED = true;
 
 /** Static share viewer hosted on simhammer.com/viewer — no app backend to call. */
 export const VIEWER_BUILD = !!process.env.NEXT_PUBLIC_VIEWER_BUILD;
+
+/** The whole app on simhammer.com/showcase, answering from a recorded session. */
+export const SHOWCASE_BUILD = !!process.env.NEXT_PUBLIC_SHOWCASE_BUILD;
