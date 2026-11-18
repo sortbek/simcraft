@@ -1454,8 +1454,8 @@ main_hand=,id=237839,bonus_id={MAX_CRAFTED}"
             .iter()
             .find(|a| a.is_void_forge)
             .expect("void forged weapon");
-        let (vf_bonus, _) = item_db::crafted_void_forge_bonus().unwrap();
-        assert_eq!(vf.ilevel, 338);
+        let (vf_bonus, gain) = item_db::crafted_void_forge_bonus().unwrap();
+        assert_eq!(vf.ilevel, 331 + gain);
         assert!(vf.bonus_ids.contains(&vf_bonus) && vf.bonus_ids.contains(&13836));
         assert!(vf.simc_string.contains(&vf_bonus.to_string()));
     }
