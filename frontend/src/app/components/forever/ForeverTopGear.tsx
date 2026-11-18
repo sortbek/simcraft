@@ -7,29 +7,31 @@ import { qualityHex } from '../../lib/qualityColors';
 import { getForeverWowheadUrl } from '../../lib/useItemInfo';
 import { SLOT_LABELS } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
-import { useSimContext } from '../sim-config/SimContext';
 import ForeverFooter from './ForeverFooter';
 import ForeverSettingsBlock from './ForeverSettingsBlock';
-import { useForeverBuffs } from './useForeverBuffs';
-import { useForeverTalents } from './useForeverTalents';
 import ForeverTalentCard from './ForeverTalentCard';
 import ForeverWarnings from './ForeverWarnings';
-import { blockedReason } from './specs';
 import { groupForTopGear } from './topGearGroups';
-import { useForeverImport } from './useForeverImport';
-import { useForeverSettings } from './useForeverSettings';
-import { useForeverSpec } from './useForeverSpec';
+import { useForeverPage } from './useForeverPage';
 import { useForeverSubmit } from './useForeverSubmit';
 
 const GROUP_LABEL: Record<string, string> = { finger: 'Rings', trinket: 'Trinkets' };
 
 export default function ForeverTopGear() {
-  const { simcInput } = useSimContext();
   const { t, locale } = useLanguage();
-  const talents = useForeverTalents(simcInput);
-  const { summary, error } = useForeverImport(simcInput, talents.edited);
-  const settings = useForeverSettings();
-  const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
+  const {
+    simcInput,
+    summary,
+    error,
+    talents,
+    settings,
+    specKey,
+    setSpecKey,
+    blocked,
+    buffs,
+    base,
+    compare,
+  } = useForeverPage();
   const [selected, setSelected] = useState<Set<number>>(new Set());
   useEffect(() => setSelected(new Set()), [simcInput]);
 
@@ -38,17 +40,11 @@ export default function ForeverTopGear() {
     [summary]
   );
 
-  const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
-  const buffs = useForeverBuffs((specKey && summary?.sim_options?.[specKey]) || null);
   const buildPayload = useCallback(
     () =>
-      summary && !blocked && selected.size > 0
+      base && summary && selected.size > 0
         ? {
-            simc_input: simcInput,
-            spec_key: specKey,
-            iterations: settings.iterations,
-            max_time: settings.fightLength,
-            ...buffs?.payload,
+            ...base,
             talents_string: talents.edited ?? undefined,
             bag_items: [...selected].map((i) => ({
               item_id: summary.bags[i].item_id,
@@ -57,54 +53,13 @@ export default function ForeverTopGear() {
             })),
           }
         : null,
-    [
-      summary,
-      blocked,
-      selected,
-      simcInput,
-      specKey,
-      settings.iterations,
-      settings.fightLength,
-      buffs,
-      talents.edited,
-    ]
+    [base, summary, selected, talents.edited]
   );
   const {
     submit,
     submitting,
     error: submitError,
   } = useForeverSubmit('/api/forever/top-gear', buildPayload);
-  const buildComparePayload = useCallback(
-    () =>
-      summary && !blocked
-        ? {
-            simc_input: simcInput,
-            spec_key: specKey,
-            iterations: settings.iterations,
-            max_time: settings.fightLength,
-            ...buffs?.payload,
-            builds: [
-              {
-                name: t('forever.exportedTalents'),
-                talents_string: summary.exported_talents_string,
-              },
-              ...talents.builds,
-            ],
-          }
-        : null,
-    [
-      summary,
-      blocked,
-      simcInput,
-      specKey,
-      settings.iterations,
-      settings.fightLength,
-      buffs,
-      talents.builds,
-      t,
-    ]
-  );
-  const compare = useForeverSubmit('/api/forever/talent-compare', buildComparePayload);
   const toggle = (index: number) =>
     setSelected((prev) => {
       const next = new Set(prev);

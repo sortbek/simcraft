@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../ui/ErrorAlert';
 import Checkbox from '../ui/Checkbox';
+import Pill from '../ui/Pill';
 import CategorySelector from '../loot/CategorySelector';
 import ItemTable from '../loot/ItemTable';
 import SlotFilter from '../loot/SlotFilter';
@@ -14,20 +15,14 @@ import { cn } from '../../lib/cn';
 import { useLanguage } from '../../lib/i18n';
 import { getForeverWowheadUrl } from '../../lib/useItemInfo';
 import type { DungeonCategory } from '../../lib/types';
-import { useSimContext } from '../sim-config/SimContext';
 import ForeverFooter from './ForeverFooter';
 import ForeverSettingsBlock from './ForeverSettingsBlock';
 import ForeverTalentCard from './ForeverTalentCard';
 import ForeverWarnings from './ForeverWarnings';
-import { blockedReason } from './specs';
 import type { ForeverDropSource } from './types';
-import { useForeverBuffs } from './useForeverBuffs';
 import { useForeverDropSources } from './useForeverDropSources';
-import { useForeverImport } from './useForeverImport';
-import { useForeverSettings } from './useForeverSettings';
-import { useForeverSpec } from './useForeverSpec';
+import { useForeverPage } from './useForeverPage';
 import { useForeverSubmit } from './useForeverSubmit';
-import { useForeverTalents } from './useForeverTalents';
 
 type Category = ForeverDropSource['category'];
 const CATEGORIES: Category[] = [
@@ -103,10 +98,11 @@ function SourceRow({
         {/* A vendor's <title> is in the tooltip. */}
         {source.name.replace(/\s*<.*>$/, '')}
         {source.new && (
-          <span
-            title={t('forever.drops.new')}
-            className="ml-[7px] inline-block h-1.5 w-1.5 rounded-full bg-primary align-[2px]"
-          />
+          <span title={t('forever.drops.new')}>
+            <Pill variant="info" size="sm" className="ml-2 align-[1px]">
+              Forever
+            </Pill>
+          </span>
         )}
       </span>
       <span className="shrink-0 text-xs tabular-nums text-fg-4">{level || ''}</span>
@@ -115,13 +111,21 @@ function SourceRow({
 }
 
 export default function ForeverDropFinder() {
-  const { simcInput } = useSimContext();
   const { t, locale } = useLanguage();
-  const talents = useForeverTalents(simcInput);
-  const { summary, error } = useForeverImport(simcInput, talents.edited);
+  const {
+    simcInput,
+    summary,
+    error,
+    talents,
+    settings,
+    specKey,
+    setSpecKey,
+    blocked,
+    buffs,
+    base,
+    compare,
+  } = useForeverPage();
   const { sources, error: sourcesError } = useForeverDropSources(simcInput);
-  const settings = useForeverSettings();
-  const [specKey, setSpecKey] = useForeverSpec(simcInput, summary?.spec_key ?? null);
 
   const [category, setCategory] = useState<Category>('dungeon');
   const [pool, setPool] = useState<Set<string>>(new Set());
@@ -221,17 +225,11 @@ export default function ForeverDropFinder() {
   const selectedRows = rows.filter((r) => r.selected);
   const itemCount = new Set(selectedRows.map((r) => r.itemId)).size;
 
-  const blocked = summary ? blockedReason(summary.level, summary.has_sheet, specKey) : null;
-  const buffs = useForeverBuffs((specKey && summary?.sim_options?.[specKey]) || null);
   const buildPayload = useCallback(
     () =>
-      summary && !blocked && selectedRows.length > 0
+      base && selectedRows.length > 0
         ? {
-            simc_input: simcInput,
-            spec_key: specKey,
-            iterations: settings.iterations,
-            max_time: settings.fightLength,
-            ...buffs?.payload,
+            ...base,
             talents_string: talents.edited ?? undefined,
             drops: selectedRows.map((r) => ({
               source: r.uid.slice(0, r.uid.lastIndexOf('|')),
@@ -239,54 +237,13 @@ export default function ForeverDropFinder() {
             })),
           }
         : null,
-    [
-      summary,
-      blocked,
-      selectedRows,
-      simcInput,
-      specKey,
-      settings.iterations,
-      settings.fightLength,
-      buffs,
-      talents.edited,
-    ]
+    [base, selectedRows, talents.edited]
   );
   const {
     submit,
     submitting,
     error: submitError,
   } = useForeverSubmit('/api/forever/drop-finder', buildPayload);
-  const buildComparePayload = useCallback(
-    () =>
-      summary && !blocked
-        ? {
-            simc_input: simcInput,
-            spec_key: specKey,
-            iterations: settings.iterations,
-            max_time: settings.fightLength,
-            ...buffs?.payload,
-            builds: [
-              {
-                name: t('forever.exportedTalents'),
-                talents_string: summary.exported_talents_string,
-              },
-              ...talents.builds,
-            ],
-          }
-        : null,
-    [
-      summary,
-      blocked,
-      simcInput,
-      specKey,
-      settings.iterations,
-      settings.fightLength,
-      buffs,
-      talents.builds,
-      t,
-    ]
-  );
-  const compare = useForeverSubmit('/api/forever/talent-compare', buildComparePayload);
 
   const toggleIn = (set: Set<string>, keys: string[], on?: boolean) => {
     const next = new Set(set);
