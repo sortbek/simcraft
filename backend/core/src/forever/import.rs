@@ -294,7 +294,9 @@ fn parse_mythicsim(input: &str) -> Result<ForeverCharacter, String> {
 }
 
 /// Gives items that came without a slot (the MythicSim export's) the slot their type fits: the
-/// first ring, trinket and weapon take the first slot of their pair, the next one the second.
+/// first ring, trinket and one-hander take the first slot of their pair, the next one the second.
+/// A shield or off-hand item goes to the off hand and a main-hand or two-hand weapon to the main
+/// hand, whatever the order; one-handers take what those leave.
 pub fn place_items(ch: &mut ForeverCharacter, data: &ForeverData) {
     let slot_of = |item: &ExportItem, taken: &[String]| -> String {
         let Some(known) = data.items.get(&item.item_id) else {
@@ -321,15 +323,30 @@ pub fn place_items(ch: &mut ForeverCharacter, data: &ForeverData) {
             10 => "feet".into(),
             11 => pair("finger1", "finger2"),
             12 => pair("trinket1", "trinket2"),
-            13 => pair("main_hand", "off_hand"),
+            13 => match known.hand.as_str() {
+                "off_hand" => "off_hand".into(),
+                "main_hand" | "two_hand" => "main_hand".into(),
+                _ => pair("main_hand", "off_hand"),
+            },
             spec::ITEM_TYPE_RANGED => "ranged".into(),
             _ => String::new(),
         }
     };
+    let one_hander = |item: &ExportItem| {
+        data.items.get(&item.item_id).is_some_and(|i| {
+            i.item_type == 13 && !matches!(i.hand.as_str(), "off_hand" | "main_hand" | "two_hand")
+        })
+    };
     let mut taken: Vec<String> = Vec::new();
-    for item in ch.equipped.iter_mut().filter(|i| i.slot.is_empty()) {
-        item.slot = slot_of(item, &taken);
-        taken.push(item.slot.clone());
+    for second_pass in [false, true] {
+        for item in ch
+            .equipped
+            .iter_mut()
+            .filter(|i| i.slot.is_empty() && one_hander(i) == second_pass)
+        {
+            item.slot = slot_of(item, &taken);
+            taken.push(item.slot.clone());
+        }
     }
     // A bag item only needs the slot it could go in.
     for item in ch.bags.iter_mut().filter(|i| i.slot.is_empty()) {
@@ -1006,6 +1023,56 @@ mod tests {
             ]
         );
         assert_eq!(ch.bags[0].slot, "back");
+    }
+
+    #[test]
+    fn a_shield_listed_before_the_weapon_still_goes_to_the_off_hand() {
+        let base = crate::forever::test_data();
+        let mut data = crate::forever::data::ForeverData {
+            version: base.version.clone(),
+            items: Default::default(),
+            enchants: Default::default(),
+            spells: Default::default(),
+            spell_icons: Default::default(),
+            talents: Default::default(),
+            sources: Vec::new(),
+        };
+        let weapon = |id: u32, hand: &str| {
+            let mut item = base.items[&6630].clone();
+            item.id = id;
+            item.item_type = 13;
+            item.hand = hand.into();
+            item
+        };
+        let items = [
+            weapon(1, "off_hand"),
+            weapon(2, "one_hand"),
+            weapon(3, "main_hand"),
+            weapon(4, "off_hand"),
+        ];
+        for item in items {
+            data.items.insert(item.id, item);
+        }
+        let slotless = |item_id: u32| ExportItem {
+            slot: String::new(),
+            item_id,
+            enchant_id: 0,
+            random_suffix: 0,
+        };
+        let mut ch = parse_export(mythicsim()).unwrap();
+        // A shield, then a one-hander: the one-hander takes the main hand.
+        ch.equipped = vec![slotless(1), slotless(2)];
+        // A one-hander, then a main-hand weapon: the one-hander moves to the off hand.
+        ch.bags = vec![slotless(4)];
+        place_items(&mut ch, &data);
+        let slots: Vec<&str> = ch.equipped.iter().map(|i| i.slot.as_str()).collect();
+        assert_eq!(slots, ["off_hand", "main_hand"]);
+        assert_eq!(ch.bags[0].slot, "off_hand");
+
+        ch.equipped = vec![slotless(2), slotless(3)];
+        place_items(&mut ch, &data);
+        let slots: Vec<&str> = ch.equipped.iter().map(|i| i.slot.as_str()).collect();
+        assert_eq!(slots, ["off_hand", "main_hand"]);
     }
 
     #[test]
