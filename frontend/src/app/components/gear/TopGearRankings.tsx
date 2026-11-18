@@ -138,6 +138,7 @@ export default function TopGearRankings({
                       gemInfoMap={gemInfoMap}
                       targetError={targetError}
                       sourceJobId={sourceJobId}
+                      showSource={groupMode !== 'encounter'}
                     />
                   ))}
                 </div>
@@ -240,6 +241,7 @@ function RankedResults({
           enchantInfoMap={enchantInfoMap}
           gemInfoMap={gemInfoMap}
           sourceJobId={sourceJobId}
+          showSource
         />
       ))}
       {visibleCount < results.length && <div ref={sentinelRef} className="h-px" />}

@@ -664,3 +664,30 @@ test('the drop carries only the chosen item level bonus id', () => {
   assert.deepEqual(noOption.drop_items[0].bonus_ids, []);
   assert.equal(noOption.drop_items[0].ilevel, 600);
 });
+
+test('same-named sources in different instances stay apart', () => {
+  const { groupResults, sourceOf } = require('../src/app/components/gear/topGearResultsUtils.ts');
+  const trash = (instance, delta) => {
+    const result = res('Trash', delta);
+    result.items[0].instance = instance;
+    return result;
+  };
+  const results = [trash('Deadmines', 300), trash('Shadowfang Keep', 200), trash('Deadmines', 100)];
+  const rows = summarizeByEncounter(results, 'expected', 100000);
+  assert.deepEqual(
+    rows.map((row) => [row.key, row.encounter, row.instance, row.results.length]),
+    [
+      ['Trash · Deadmines', 'Trash', 'Deadmines', 2],
+      ['Trash · Shadowfang Keep', 'Trash', 'Shadowfang Keep', 1],
+    ]
+  );
+  assert.deepEqual(
+    groupResults(results, 'encounter').map(([key, group]) => [key, group.length]),
+    [
+      ['Trash · Deadmines', 2],
+      ['Trash · Shadowfang Keep', 1],
+    ]
+  );
+  assert.equal(sourceOf(res('Boss', 0).items[0]), 'Boss', 'no instance, just the boss');
+  assert.equal(sourceOf({ item_id: 1, slot: 'head' }), '', 'not a drop');
+});

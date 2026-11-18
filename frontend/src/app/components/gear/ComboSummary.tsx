@@ -18,6 +18,7 @@ import { useLanguage } from '../../lib/i18n';
 import { cn } from '../../lib/cn';
 import { useConsumableLookup } from '../sim-config/ConsumablePickers';
 import type { ResultItem, TopGearResult } from './topGearResultsTypes';
+import { sourceOf } from './topGearResultsUtils';
 
 const MAX_TILES = 6;
 const TILE = 'relative block h-[34px] w-[34px] shrink-0 overflow-hidden rounded-[6px] border';
@@ -113,6 +114,7 @@ interface ComboSummaryProps {
   itemInfoMap: Record<number, ItemInfo>;
   gemInfoMap: Record<number, GemInfo>;
   badge?: ReactNode;
+  showSource?: boolean;
 }
 
 /** A ranked combination as an icon strip plus two lines: what changes, and how. */
@@ -125,6 +127,7 @@ export default function ComboSummary({
   itemInfoMap,
   gemInfoMap,
   badge,
+  showSource,
 }: ComboSummaryProps) {
   const { t, locale } = useLanguage();
   const lookup = useConsumableLookup();
@@ -223,6 +226,7 @@ export default function ComboSummary({
   const parts: ReactNode[] = [];
   if (changedItems.length)
     parts.push(changedItems.map((i) => SLOT_LABELS[i.slot] || i.slot).join(', '));
+  if (showSource && sourceOf(first)) parts.push(sourceOf(first));
   if (catalysts)
     parts.push(<span className="text-info">{t('gear.catalystCount', { count: catalysts })}</span>);
   if (voidForged)

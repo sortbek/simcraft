@@ -112,6 +112,7 @@ export const ResultRow = memo(function ResultRow({
   enchantInfoMap,
   gemInfoMap,
   sourceJobId,
+  showSource,
 }: {
   result: TopGearResult;
   rank?: number;
@@ -128,6 +129,8 @@ export const ResultRow = memo(function ResultRow({
   gemInfoMap: Record<number, GemInfo>;
   /** When present, "Combo N" rows show a "Sim" button re-running the combo as a Quick Sim. */
   sourceJobId?: string;
+  /** Names where the drop comes from, for lists not already grouped by source. */
+  showSource?: boolean;
 }) {
   const { t } = useLanguage();
   const router = useRouter();
@@ -204,6 +207,7 @@ export const ResultRow = memo(function ResultRow({
           itemInfoMap={itemInfoMap}
           gemInfoMap={gemInfoMap}
           badge={isBest && <Pill variant="gold">{t('gear.best')}</Pill>}
+          showSource={showSource}
         />
       </div>
 

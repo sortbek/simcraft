@@ -56,7 +56,7 @@ export function dedupeEncounterResults(
     // for that slot while also moving the partner, so the partner is what tells
     // those two gear sets apart.
     const key = [
-      item.encounter || '',
+      sourceOf(item),
       ...result.items.map(
         (moved) =>
           `${moved.item_id}_${moved.ilevel}_${moved.slot || ''}_${moved.source_item_id || ''}`
@@ -69,6 +69,13 @@ export function dedupeEncounterResults(
   }
 
   return [...bestByItem.values()].sort((a, b) => b.delta - a.delta);
+}
+
+/** Where a drop comes from: its boss, and the instance when the result names one, so
+ *  same-named sources (every dungeon's trash) stay apart. Empty for non-drops. */
+export function sourceOf(item?: ResultItem): string {
+  if (!item?.encounter) return '';
+  return item.instance ? `${item.encounter} · ${item.instance}` : item.encounter;
 }
 
 export function groupResults(
@@ -84,7 +91,7 @@ export function groupResults(
     const key =
       groupMode === 'slot'
         ? result.items[0]?.slot || 'Unknown'
-        : result.items[0]?.encounter || 'Unknown';
+        : sourceOf(result.items[0]) || 'Unknown';
     groups[key] ??= [];
     groups[key].push(result);
   }
@@ -358,6 +365,8 @@ export function getCharacterAvatarUrl(
 
 /** What one source (boss, dungeon, vendor) is worth across everything it drops. */
 export interface EncounterSummaryRow {
+  /** `sourceOf` the row's drops: identifies it where boss names repeat. */
+  key: string;
   encounter: string;
   /** Raid or dungeon the encounter sits in. Absent on results simmed before the
    *  droptimizer started carrying it. */
@@ -388,7 +397,7 @@ export function bestPerItem(results: TopGearResult[]): TopGearResult[] {
   for (const result of results) {
     const item = result.items[0];
     if (!item) continue;
-    const key = `${item.item_id}_${item.ilevel}_${item.encounter || ''}_${item.source_item_id || ''}`;
+    const key = `${item.item_id}_${item.ilevel}_${sourceOf(item)}_${item.source_item_id || ''}`;
     const existing = best.get(key);
     if (!existing || result.delta > existing.delta) best.set(key, result);
   }
@@ -403,7 +412,7 @@ export function expectedDelta(results: TopGearResult[]): number {
   for (const result of results) {
     const item = result.items[0];
     if (!item) continue;
-    const key = `${item.source_item_id || item.item_id}_${item.encounter || ''}`;
+    const key = `${item.source_item_id || item.item_id}_${sourceOf(item)}`;
     perDrop.set(key, Math.max(perDrop.get(key) ?? 0, result.delta, 0));
   }
   if (!perDrop.size) return 0;
@@ -429,16 +438,17 @@ export function summarizeByEncounter(
 ): EncounterSummaryRow[] {
   const groups: Record<string, TopGearResult[]> = {};
   for (const result of results) {
-    const key = result.items[0]?.encounter;
+    const key = sourceOf(result.items[0]);
     if (!key) continue;
     (groups[key] ??= []).push(result);
   }
 
-  const rows = Object.entries(groups).map(([encounter, group]) => {
+  const rows = Object.entries(groups).map(([key, group]) => {
     // Collapse per-slot rows first: everything below counts each item once.
     const items = bestPerItem(group);
     return {
-      encounter,
+      key,
+      encounter: group[0].items[0].encounter ?? '',
       instance: group.find((result) => result.items[0]?.instance)?.items[0]?.instance,
       results: items,
       combos: [...group].sort((a, b) => b.delta - a.delta),

@@ -249,19 +249,19 @@ export default function EncounterSummary({
 
       <div className="divide-y divide-outline-variant/15">
         {rows.map((row: EncounterSummaryRow) => {
-          const open = expanded.has(row.encounter);
-          const panelId = `source-${row.encounter.replace(/\W+/g, '-')}`;
+          const open = expanded.has(row.key);
+          const panelId = `source-${row.key.replace(/\W+/g, '-')}`;
           return (
-            <div key={row.encounter} className="py-3 first:pt-0">
+            <div key={row.key} className="py-3 first:pt-0">
               <div
-                onClick={() => toggle(row.encounter)}
+                onClick={() => toggle(row.key)}
                 className="flex cursor-pointer flex-wrap items-center gap-x-5 gap-y-3 rounded-lg px-1 transition-colors hover:bg-overlay/[0.03]"
               >
                 <button
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    toggle(row.encounter);
+                    toggle(row.key);
                   }}
                   aria-expanded={open}
                   aria-controls={panelId}
