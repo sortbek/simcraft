@@ -21,6 +21,8 @@ pub use detect::{detect_game, Game};
 pub struct ForeverEngine {
     pub binary: PathBuf,
     pub data: ForeverData,
+    /// The engine's `options` answers by request, so the same paste starts no new process.
+    pub options: std::sync::Mutex<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 impl ForeverEngine {
@@ -42,6 +44,7 @@ impl ForeverEngine {
         Ok(Self {
             binary,
             data: ForeverData::load(&base.join("data"))?,
+            options: Default::default(),
         })
     }
 }

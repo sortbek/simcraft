@@ -140,7 +140,15 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
     match parse_export_with(&body.simc_input, &engine.data) {
         Ok(ch) => {
             let summary = summarize_with(&ch, &engine.data, body.talents_string.as_deref());
-            let options = sim_options(&engine, &summary).await;
+            let options = sim_options(
+                &engine,
+                json!({
+                    "specKeys": summary.spec_choices,
+                    "talentsString": summary.talents_string,
+                    "level": summary.level,
+                }),
+            )
+            .await;
             let mut body = serde_json::to_value(&summary).unwrap_or_default();
             body["sim_options"] = options;
             HttpResponse::Ok().json(body)
@@ -149,16 +157,31 @@ pub(super) async fn import(body: web::Json<ImportRequest>, engine: Engine) -> Ht
     }
 }
 
+/// `options` answers in well under a second; one that hangs must not hold an import open.
+const OPTIONS_TIMEOUT: Duration = Duration::from_secs(15);
+/// Engine processes imports run at once, outside the sim queue.
+static OPTIONS_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+/// Answers kept per engine before the memory starts over.
+const OPTIONS_KEPT: usize = 256;
+
 /// Per spec the character can sim as: the buffs and debuffs with the build's starting state.
-/// Empty with an engine that has no `options` command; the settings block shows Auto then.
-async fn sim_options(engine: &ForeverEngine, summary: &ImportSummary) -> serde_json::Value {
-    let request = json!({
-        "specKeys": summary.spec_choices,
-        "talentsString": summary.talents_string,
-        "level": summary.level,
-    });
+/// Empty with an engine that has no `options` command, or one that fails or hangs; the settings
+/// block shows Auto then.
+async fn sim_options(engine: &ForeverEngine, request: serde_json::Value) -> serde_json::Value {
+    let key = request.to_string();
+    if let Some(known) = engine
+        .options
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&key)
+    {
+        return known.clone();
+    }
+    let Ok(_slot) = OPTIONS_SLOTS.acquire().await else {
+        return json!({});
+    };
     let (_keep, never) = tokio::sync::watch::channel(false);
-    runner::run_cli(
+    let run = runner::run_cli(
         &engine.binary,
         "options",
         &request,
@@ -166,9 +189,16 @@ async fn sim_options(engine: &ForeverEngine, summary: &ImportSummary) -> serde_j
         never,
         |_| {},
         |_| {},
-    )
-    .await
-    .unwrap_or_else(|_| json!({}))
+    );
+    let Ok(Ok(options)) = tokio::time::timeout(OPTIONS_TIMEOUT, run).await else {
+        return json!({});
+    };
+    let mut known = engine.options.lock().unwrap_or_else(|e| e.into_inner());
+    if known.len() >= OPTIONS_KEPT {
+        known.clear();
+    }
+    known.insert(key, options.clone());
+    options
 }
 
 /// The raw result as kept with the job: without the fight log and the per-fight values, which
@@ -546,6 +576,56 @@ pub(super) async fn create_talent_compare(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn the_same_options_request_runs_the_engine_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = dir.path().join("calls");
+        let (binary, script) = if cfg!(windows) {
+            (
+                dir.path().join("fake-engine.cmd"),
+                format!(
+                    "@echo x>> \"{}\"\r\n@echo {{\"ok\":1}}> %5\r\n",
+                    calls.display()
+                ),
+            )
+        } else {
+            (
+                dir.path().join("fake-engine"),
+                format!(
+                    "#!/bin/sh\necho x >> '{}'\necho '{{\"ok\":1}}' > \"$5\"\n",
+                    calls.display()
+                ),
+            )
+        };
+        std::fs::write(&binary, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let base = crate::forever::test_data();
+        let engine = ForeverEngine {
+            binary,
+            data: ForeverData {
+                version: base.version.clone(),
+                items: Default::default(),
+                enchants: Default::default(),
+                spells: Default::default(),
+                spell_icons: Default::default(),
+                talents: Default::default(),
+                sources: Vec::new(),
+            },
+            options: Default::default(),
+        };
+        let request = json!({ "specKeys": ["hunter"], "level": 29 });
+        assert_eq!(
+            sim_options(&engine, request.clone()).await,
+            json!({ "ok": 1 })
+        );
+        assert_eq!(sim_options(&engine, request).await, json!({ "ok": 1 }));
+        assert_eq!(std::fs::read_to_string(&calls).unwrap().lines().count(), 1);
+    }
 
     #[test]
     fn consumables_stay_off_below_60() {
