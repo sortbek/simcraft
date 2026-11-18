@@ -729,5 +729,9 @@
   "forever.drops.category.crafted": "제작",
   "forever.drops.category.vendor": "상인",
   "forever.drops.category.pvp": "PvP",
+  "forever.ruleset.normal": "일반 서버",
+  "forever.ruleset.pvp": "전쟁 서버",
+  "forever.ruleset.roleplay": "역할 수행 서버",
+  "forever.ruleset.roleplayPvp": "역할 수행 전쟁 서버",
   "forever.drops.category.world": "필드 드롭"
 }

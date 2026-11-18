@@ -729,5 +729,9 @@
   "forever.drops.category.crafted": "Fabricado",
   "forever.drops.category.vendor": "Vendedores",
   "forever.drops.category.pvp": "JcJ",
+  "forever.ruleset.normal": "Reino normal",
+  "forever.ruleset.pvp": "Reino JcJ",
+  "forever.ruleset.roleplay": "Reino de rol",
+  "forever.ruleset.roleplayPvp": "Reino de rol JcJ",
   "forever.drops.category.world": "Botín del mundo"
 }

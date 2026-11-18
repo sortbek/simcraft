@@ -729,5 +729,9 @@
   "forever.drops.category.crafted": "Ремесло",
   "forever.drops.category.vendor": "Торговцы",
   "forever.drops.category.pvp": "PvP",
+  "forever.ruleset.normal": "Обычный мир",
+  "forever.ruleset.pvp": "PvP-мир",
+  "forever.ruleset.roleplay": "Ролевой мир",
+  "forever.ruleset.roleplayPvp": "Ролевой PvP-мир",
   "forever.drops.category.world": "Добыча в мире"
 }

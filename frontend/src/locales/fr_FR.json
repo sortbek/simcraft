@@ -729,5 +729,9 @@
   "forever.drops.category.crafted": "Artisanat",
   "forever.drops.category.vendor": "Marchands",
   "forever.drops.category.pvp": "JcJ",
+  "forever.ruleset.normal": "Royaume normal",
+  "forever.ruleset.pvp": "Royaume JcJ",
+  "forever.ruleset.roleplay": "Royaume JdR",
+  "forever.ruleset.roleplayPvp": "Royaume JdR JcJ",
   "forever.drops.category.world": "Butin du monde"
 }

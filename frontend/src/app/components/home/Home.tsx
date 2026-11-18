@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useSimContext } from '../sim-config/SimContext';
-import { FOREVER_REALM, type Game } from '../../lib/game';
+import { FOREVER_REALM, foreverRuleset, type Game } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import { parseCharacterInfo } from '../../lib/character';
 import { useRealmSlug } from '../../lib/realms';
@@ -176,7 +176,12 @@ export default function Home() {
         className={titleCase(info.className)}
         classColor={CLASS_COLORS[info.className]}
         race={race && titleCase(race)}
-        realm={info.realm && titleCase(info.realm)}
+        realm={
+          // Forever realm names are technical (CAMWOW EU5 Realm 6 PvP); its ruleset says more.
+          game === 'forever'
+            ? info.realm && t(`forever.ruleset.${foreverRuleset(info.realm)}`)
+            : info.realm && titleCase(info.realm)
+        }
         renderUrl={getCharacterRenderUrl(
           game === 'forever' ? FOREVER_REALM : realmSlug,
           info.name,

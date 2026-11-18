@@ -10,6 +10,16 @@ export const GAME_STORAGE_KEY = 'simhammer_game';
  *  surname (Forever has no realms). */
 export const FOREVER_REALM = 'forever';
 
+export type ForeverRuleset = 'normal' | 'pvp' | 'roleplay' | 'roleplayPvp';
+
+/** A Forever realm's ruleset, from the words in its server slug (`camwow_eu5_realm_6_pvp`). */
+export function foreverRuleset(server: string): ForeverRuleset {
+  const words = server.toLowerCase().split(/[_\s-]+/);
+  const pvp = words.includes('pvp') || words.includes('rppvp');
+  const rp = words.some((w) => w === 'rp' || w === 'roleplay' || w === 'rppvp');
+  return rp ? (pvp ? 'roleplayPvp' : 'roleplay') : pvp ? 'pvp' : 'normal';
+}
+
 /** Same rule as the backend: a 1.x client or a TOC below 20000 is WoW Forever. */
 export function detectGame(simcInput: string): Game {
   // The MythicSim addon's JSON export only exists for Forever.

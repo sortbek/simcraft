@@ -729,5 +729,9 @@
   "forever.drops.category.crafted": "Hergestellt",
   "forever.drops.category.vendor": "Händler",
   "forever.drops.category.pvp": "PvP",
+  "forever.ruleset.normal": "Normaler Realm",
+  "forever.ruleset.pvp": "PvP-Realm",
+  "forever.ruleset.roleplay": "Rollenspiel-Realm",
+  "forever.ruleset.roleplayPvp": "Rollenspiel-PvP-Realm",
   "forever.drops.category.world": "Weltbeute"
 }

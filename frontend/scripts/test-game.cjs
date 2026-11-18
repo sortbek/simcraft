@@ -40,3 +40,12 @@ test('a MythicSim export names its character, second name and all', () => {
   assert.equal(mythicSimName('Sortbek', 'Realm 6'), 'Sortbek');
   assert.equal(exportPreview('# Sylfrey - 2026\nlevel=27'), '# Sylfrey - 2026');
 });
+
+test('a Forever realm reads as its ruleset', () => {
+  const { foreverRuleset } = require('../src/app/lib/game.ts');
+  assert.equal(foreverRuleset('camwow_eu5_realm_6_pvp'), 'pvp');
+  assert.equal(foreverRuleset('camwow_eu5_realm_2'), 'normal');
+  assert.equal(foreverRuleset('camwow_eu5_realm_3_rp'), 'roleplay');
+  assert.equal(foreverRuleset('camwow_eu5_realm_4_rp_pvp'), 'roleplayPvp');
+  assert.equal(foreverRuleset('camwow_eu5_realm_4_rppvp'), 'roleplayPvp');
+});

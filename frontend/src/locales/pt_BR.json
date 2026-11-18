@@ -729,5 +729,9 @@
   "forever.drops.category.crafted": "Criados",
   "forever.drops.category.vendor": "Vendedores",
   "forever.drops.category.pvp": "JxJ",
+  "forever.ruleset.normal": "Reino normal",
+  "forever.ruleset.pvp": "Reino JxJ",
+  "forever.ruleset.roleplay": "Reino de RP",
+  "forever.ruleset.roleplayPvp": "Reino de RP JxJ",
   "forever.drops.category.world": "Saque do mundo"
 }

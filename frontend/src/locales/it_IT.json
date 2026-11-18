@@ -729,5 +729,9 @@
   "forever.drops.category.crafted": "Creati",
   "forever.drops.category.vendor": "Mercanti",
   "forever.drops.category.pvp": "PvP",
+  "forever.ruleset.normal": "Reame normale",
+  "forever.ruleset.pvp": "Reame PvP",
+  "forever.ruleset.roleplay": "Reame GdR",
+  "forever.ruleset.roleplayPvp": "Reame GdR PvP",
   "forever.drops.category.world": "Bottino del mondo"
 }
