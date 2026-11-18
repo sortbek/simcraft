@@ -647,8 +647,16 @@ fn gear_comparison(
     })
 }
 
-/// Talent builds ranked against the first one, in the gear comparison shape the result page shows.
+/// Talent builds ranked against the first one (the exported build), in the gear comparison shape
+/// the result page shows. Without that first build there is nothing to measure against.
 pub fn compare_result(raw: &Value, meta: &ResultMeta) -> Result<Value, String> {
+    let first = &raw["results"][0];
+    if let Some(reason) = first["error"].as_str() {
+        return Err(match first["name"].as_str() {
+            Some(name) => format!("{name}: {reason}"),
+            None => reason.to_string(),
+        });
+    }
     let rows: Vec<&Value> = raw["results"]
         .as_array()
         .into_iter()
@@ -656,10 +664,7 @@ pub fn compare_result(raw: &Value, meta: &ResultMeta) -> Result<Value, String> {
         .filter(|r| r["metrics"].is_object())
         .collect();
     let Some(base) = rows.first() else {
-        let reason = raw["results"][0]["error"]
-            .as_str()
-            .unwrap_or("no build could be simmed");
-        return Err(reason.to_string());
+        return Err("no build could be simmed".into());
     };
     let base_metrics = &base["metrics"];
     let base_dps = base_metrics["avg"].as_f64().unwrap_or(0.0);
@@ -758,7 +763,19 @@ mod tests {
             &json!({ "results": [{ "name": "x", "error": "boom" }] }),
             &meta(),
         );
-        assert_eq!(none.unwrap_err(), "boom");
+        assert_eq!(none.unwrap_err(), "x: boom");
+        // The other builds simmed, but not the exported one they are measured against.
+        let no_base = compare_result(
+            &json!({ "results": [
+                { "name": "Exported talents", "error": "Redoubt has 5 ranks" },
+                { "name": "Deep", "talentsString": "55", "metrics": { "avg": 540.0, "stdev": 20.0 } },
+            ]}),
+            &meta(),
+        );
+        assert_eq!(
+            no_base.unwrap_err(),
+            "Exported talents: Redoubt has 5 ranks"
+        );
     }
 
     #[test]
