@@ -297,7 +297,8 @@ export default function Home() {
             )}
           </section>
 
-          {rotation && (
+          {/* WoW Forever has no Mythic+. */}
+          {rotation && game !== 'forever' && (
             // Grows to meet the bottom of Recent sims.
             <section className={`${CARD} flex flex-1 flex-col`}>
               <CardHeader title={t('home.thisWeek')} />
