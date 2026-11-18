@@ -53,8 +53,9 @@ impl ForeverEngine {
 /// app or the container downloads a new release, or switches Forever off), so nothing restarts.
 pub struct ForeverInstall {
     dir: Option<PathBuf>,
-    /// The `.active` tag the engine was loaded for, and the engine.
-    loaded: std::sync::Mutex<Option<(String, Arc<ForeverEngine>)>>,
+    /// The `.active` tag last loaded, and the engine, or None when that tag failed to load (so a
+    /// broken release is not parsed again on every request).
+    loaded: std::sync::Mutex<Option<(String, Option<Arc<ForeverEngine>>)>>,
 }
 
 impl ForeverInstall {
@@ -83,7 +84,7 @@ impl ForeverInstall {
         let mut loaded = self.loaded.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((current, engine)) = loaded.as_ref() {
             if *current == tag {
-                return Some(engine.clone());
+                return engine.clone();
             }
         }
         match ForeverEngine::locate(dir) {
@@ -95,12 +96,13 @@ impl ForeverInstall {
                     dir.display()
                 );
                 let engine = Arc::new(engine);
-                *loaded = Some((tag, engine.clone()));
+                *loaded = Some((tag, Some(engine.clone())));
                 Some(engine)
             }
             Err(e) => {
                 eprintln!("Forever engine unavailable: {e}");
-                *loaded = None;
+                // Without a tag the folder itself is the install, which may still be filled in.
+                *loaded = (!tag.is_empty()).then_some((tag, None));
                 None
             }
         }
@@ -164,6 +166,22 @@ mod install_tests {
 
         std::fs::write(root.path().join(".active"), "forever-20261103-missing").unwrap();
         assert!(install.get().is_none(), "an install that is not there");
+    }
+
+    #[test]
+    fn a_release_that_fails_to_load_is_not_read_again() {
+        let root = tempfile::tempdir().unwrap();
+        let install = ForeverInstall::new(Some(root.path().to_path_buf()));
+        install_at(root.path(), "forever-20261101-broken");
+        let items = root.path().join("forever-20261101-broken/data/items.json");
+        let good = std::fs::read(&items).unwrap();
+        std::fs::write(&items, "not json").unwrap();
+        assert!(install.get().is_none());
+        // Repaired in place, same tag: still the failure it remembered, no second parse.
+        std::fs::write(&items, good).unwrap();
+        assert!(install.get().is_none());
+        install_at(root.path(), "forever-20261102-fixed");
+        assert!(install.get().is_some(), "the next release loads");
     }
 
     #[test]
