@@ -72,7 +72,7 @@ export function useSimSettingsSummary() {
   };
 }
 
-const Chevron = ({ up }: { up: boolean }) => (
+export const Chevron = ({ up }: { up: boolean }) => (
   <svg
     className="h-3.5 w-3.5"
     viewBox="0 0 16 16"
@@ -86,18 +86,10 @@ const Chevron = ({ up }: { up: boolean }) => (
   </svg>
 );
 
-/** The shared sim config as one block on every sim page: fight, consumables,
- *  raid buffs and an Advanced fold-out, with the active profile and its save
- *  state in the header. Replaces the footer's options drawer. */
-export default function SimSettingsBlock() {
-  const { t } = useLanguage();
-  const { activeProfile, profileDirty, profileDirtySections, raidBuffs } = useSimContext();
-  const summary = useSimSettingsSummary();
-  const actions = useProfileActions();
+/** Open state of a Sim settings block (remembered, shared by every block), kept in
+ *  place while it toggles and opened by the footer's "Edit settings". */
+export function useSimSettingsOpen() {
   const [open, setOpen] = useState(true);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuMode, setMenuMode] = useState<ProfileMenuMode>('list');
   const rootRef = useRef<HTMLElement>(null);
 
   // Read after mount: the server render has no localStorage, and reading it in
@@ -143,6 +135,22 @@ export default function SimSettingsBlock() {
     window.addEventListener(OPEN_SIM_SETTINGS_EVENT, reveal);
     return () => window.removeEventListener(OPEN_SIM_SETTINGS_EVENT, reveal);
   }, [changeOpen]);
+
+  return { open, changeOpen, rootRef, keepTopRef };
+}
+
+/** The shared sim config as one block on every sim page: fight, consumables,
+ *  raid buffs and an Advanced fold-out, with the active profile and its save
+ *  state in the header. Replaces the footer's options drawer. */
+export default function SimSettingsBlock() {
+  const { t } = useLanguage();
+  const { activeProfile, profileDirty, profileDirtySections, raidBuffs } = useSimContext();
+  const summary = useSimSettingsSummary();
+  const actions = useProfileActions();
+  const { open, changeOpen, rootRef, keepTopRef } = useSimSettingsOpen();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuMode, setMenuMode] = useState<ProfileMenuMode>('list');
 
   const dot = (section: ProfileSection) =>
     profileDirtySections.includes(section) && (

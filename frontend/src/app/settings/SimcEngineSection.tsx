@@ -1,10 +1,26 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLanguage } from '../lib/i18n';
-import Switch from '../components/ui/Switch';
+import { timeAgo } from '../sims/_components/shared';
 import CardHeader from '../components/ui/CardHeader';
 import Button from '../components/ui/Button';
+import {
+  AutoSwitch,
+  EngineError,
+  EngineFooter,
+  EngineRow,
+  ICON,
+  ProgressBar,
+  RemoveButton,
+  StatusStrip,
+  UpToDateMark,
+  Version,
+  VersionText,
+  tagCommit,
+  tagDate,
+  type EngineStatus,
+} from './EngineCard';
 
 interface DesktopAvailableUpdate {
   tag: string;
@@ -13,20 +29,26 @@ interface DesktopAvailableUpdate {
   installed: boolean;
 }
 
-function formatVersionTag(tag: string): string {
-  return tag.replace(/^(weekly|nightly)-/, '').replace(/^source-/, '');
-}
+type Branch = 'weekly' | 'nightly';
+const BRANCHES: Branch[] = ['weekly', 'nightly'];
+// The keys predate per-branch switches; desktop reads them the same way.
+const AUTO_KEY: Record<Branch, string> = {
+  weekly: 'simc_auto_update',
+  nightly: 'simc_use_nightly',
+};
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 export default function SimcEngineSection() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [versions, setVersions] = useState<SimcVersion[]>([]);
-  const [updates, setUpdates] = useState<DesktopAvailableUpdate[]>([]);
-  const [checking, setChecking] = useState(false);
-  const [installing, setInstalling] = useState<string | null>(null);
+  // Latest release per branch, from the last check; null until checked.
+  const [latest, setLatest] = useState<DesktopAvailableUpdate[] | null>(null);
+  const [check, setCheck] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+  const [checkedAt, setCheckedAt] = useState('');
+  const [installing, setInstalling] = useState<Branch | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
-  const [autoUpdate, setAutoUpdate] = useState(true);
-  const [useNightly, setUseNightly] = useState(false);
+  const [auto, setAuto] = useState<Record<Branch, boolean>>({ weekly: true, nightly: false });
 
   const loadVersions = useCallback(async () => {
     const result = await window.electronAPI!.listSimcVersions();
@@ -35,44 +57,46 @@ export default function SimcEngineSection() {
 
   useEffect(() => {
     loadVersions();
-    window.electronAPI!.getSetting('simc_auto_update', true).then(setAutoUpdate);
-    window.electronAPI!.getSetting('simc_use_nightly', false).then(setUseNightly);
+    window
+      .electronAPI!.getSetting(AUTO_KEY.weekly, true)
+      .then((weekly) => setAuto((a) => ({ ...a, weekly })));
+    window
+      .electronAPI!.getSetting(AUTO_KEY.nightly, false)
+      .then((nightly) => setAuto((a) => ({ ...a, nightly })));
     const unsubscribe = window.electronAPI!.onSimcDownloadProgress((value) => setProgress(value));
     return () => unsubscribe();
   }, [loadVersions]);
 
-  const handleCheckUpdates = async () => {
-    setChecking(true);
+  const runCheck = async () => {
+    setCheck('checking');
     setError('');
     try {
       const result = await window.electronAPI!.checkSimcUpdates();
-      setUpdates(result);
-      if (result.length === 0) {
-        setError(t('settings.noReleasesFound'));
-      }
+      if (result.length === 0) throw new Error(t('settings.noReleasesFound'));
+      setLatest(result);
+      setCheck('ok');
+      setCheckedAt(new Date().toISOString());
+      return result;
     } catch (err) {
+      setCheck('error');
       setError(err instanceof Error ? err.message : t('settings.checkUpdatesFailed'));
-    } finally {
-      setChecking(false);
+      return null;
     }
   };
 
-  const handleInstall = async (update: DesktopAvailableUpdate) => {
-    setInstalling(update.tag);
+  const install = async (branch: Branch) => {
+    const release = (latest ?? (await runCheck()))?.find((r) => r.type === branch);
+    if (!release) return;
+    setInstalling(branch);
     setProgress(0);
     setError('');
     try {
       const result = await window.electronAPI!.installSimcVersion({
-        tag: update.tag,
-        assetUrl: update.assetUrl,
+        tag: release.tag,
+        assetUrl: release.assetUrl,
       });
-      if (!result.success) {
-        throw new Error(result.error);
-      }
+      if (!result.success) throw new Error(result.error);
       await loadVersions();
-      setUpdates((current) =>
-        current.map((item) => (item.tag === update.tag ? { ...item, installed: true } : item))
-      );
     } catch (err) {
       setError(err instanceof Error ? err.message : t('settings.installFailed'));
     } finally {
@@ -80,32 +104,120 @@ export default function SimcEngineSection() {
     }
   };
 
-  const handleRemove = async (tag: string) => {
+  const remove = async (tag: string) => {
     setError('');
     try {
       const result = await window.electronAPI!.removeSimcVersion(tag);
-      if (!result.success) {
-        throw new Error(result.error);
-      }
+      if (!result.success) throw new Error(result.error);
       await loadVersions();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('settings.removeFailed'));
     }
   };
 
-  const sourceVersion = useMemo(() => versions.find((v) => v.type === 'source'), [versions]);
+  const toggleAuto = (branch: Branch, value: boolean) => {
+    setAuto((a) => ({ ...a, [branch]: value }));
+    window.electronAPI!.setSetting(AUTO_KEY[branch], value);
+  };
 
-  const branchData = useMemo(() => {
-    const branches = ['weekly', 'nightly'] as const;
-    return branches.map((branch) => ({
-      branch,
-      installed: versions.find((version) => version.type === branch),
-      available: updates.find((update) => update.type === branch && !update.installed),
-    }));
-  }, [versions, updates]);
+  const source = versions.find((v) => v.type === 'source');
+  const installed = (b: Branch) => versions.find((v) => v.type === b);
+  const known = (b: Branch) => latest?.find((r) => r.type === b);
+  const hasUpdate = (b: Branch) => {
+    const k = known(b);
+    return !!installed(b) && !!k && k.tag !== installed(b)!.tag;
+  };
+  const pct = `${Math.round(progress * 100)}%`;
+  const update = BRANCHES.find(hasUpdate);
+
+  let status: EngineStatus;
+  if (source) {
+    status = {
+      tone: 'info',
+      icon: ICON.code,
+      title: t('settings.simc.sourceTitle'),
+      sub: t('settings.simc.sourceSub', {
+        build: tagDate(source.tag, locale) ?? source.tag.replace(/^source-/, ''),
+      }),
+    };
+  } else if (installing) {
+    status = {
+      tone: 'busy',
+      title: t(installed(installing) ? 'settings.simc.updating' : 'settings.simc.installing', {
+        branch: cap(installing),
+        pct,
+      }),
+      sub: t('settings.simc.buildOf', { date: tagDate(known(installing)?.tag, locale) ?? '' }),
+      progress,
+    };
+  } else if (check === 'checking') {
+    status = {
+      tone: 'busy',
+      title: t('settings.engine.checkingTitle'),
+      sub: t('settings.simc.checkingSub'),
+    };
+  } else if (check === 'error') {
+    status = {
+      tone: 'err',
+      icon: ICON.alert,
+      title: t('settings.engine.checkFailed'),
+      sub: t('settings.simc.checkFailedSub'),
+    };
+  } else if (update) {
+    status = {
+      tone: 'info',
+      icon: ICON.down,
+      title: t('settings.simc.newBuild', { branch: cap(update) }),
+      sub: t('settings.engine.readyToInstall', { date: tagDate(known(update)!.tag, locale) ?? '' }),
+    };
+  } else if (!BRANCHES.some(installed)) {
+    status = {
+      tone: 'warn',
+      icon: ICON.alert,
+      title: t('settings.simc.noneTitle'),
+      sub: t('settings.simc.noneSub'),
+    };
+  } else if (check === 'ok') {
+    status = {
+      tone: 'ok',
+      icon: ICON.check,
+      title: t('settings.engine.upToDate'),
+      sub: t('settings.engine.checkedAgo', { time: timeAgo(checkedAt, t) }),
+    };
+  } else {
+    status = {
+      tone: 'idle',
+      icon: ICON.dot,
+      title: t('settings.engine.installed'),
+      sub: t('settings.engine.notChecked'),
+    };
+  }
+
+  const action = source ? (
+    <Button size="sm" variant="quiet" onClick={() => remove(source.tag)}>
+      {t('settings.simc.removeBuild')}
+    </Button>
+  ) : installing ? null : check === 'checking' ? (
+    <Button size="sm" variant="quiet" disabled>
+      {t('settings.checking')}
+    </Button>
+  ) : check === 'error' ? (
+    <Button size="sm" onClick={runCheck}>
+      {ICON.refresh}
+      {t('settings.engine.tryAgain')}
+    </Button>
+  ) : check === 'ok' ? (
+    <Button size="sm" variant="quiet" onClick={runCheck}>
+      {t('settings.engine.checkAgain')}
+    </Button>
+  ) : (
+    <Button size="sm" variant={BRANCHES.some(installed) ? 'gold' : 'quiet'} onClick={runCheck}>
+      {t('settings.checkForUpdates')}
+    </Button>
+  );
 
   return (
-    <div className="card">
+    <div className="card overflow-hidden">
       <CardHeader
         title={
           <span className="inline-flex items-center gap-2">
@@ -115,121 +227,77 @@ export default function SimcEngineSection() {
             SimC Engine
           </span>
         }
-        right={
-          <Button
-            size="sm"
-            variant="quiet"
-            onClick={handleCheckUpdates}
-            disabled={checking || !!sourceVersion}
-          >
-            {checking ? t('settings.checking') : t('settings.checkForUpdates')}
-          </Button>
-        }
       />
-
-      <div className="space-y-3 p-6">
-        {sourceVersion && (
-          <div className="rounded-[8px] border border-gold/35 bg-gold/[0.05] p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
-                  </svg>
-                  <p className="text-sm font-semibold text-primary">
-                    {t('settings.builtFromSource')}
-                  </p>
-                </div>
-                <p className="mt-0.5 text-[11px] text-on-surface-variant/70">
-                  {formatVersionTag(sourceVersion.tag)}
-                </p>
-              </div>
-              <Button size="sm" variant="danger" onClick={() => handleRemove(sourceVersion.tag)}>
-                {t('settings.remove')}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center border-b border-line/[0.06] px-3 pb-2">
-          <span className="lbl w-12 shrink-0 text-center">{t('settings.auto')}</span>
-          <span className="lbl ml-4 flex-1">{t('settings.branchVersion')}</span>
-          <span className="lbl">{t('settings.actions')}</span>
-        </div>
-
-        <div className={`space-y-2 ${sourceVersion ? 'pointer-events-none opacity-40' : ''}`}>
-          {branchData.map(({ branch, installed, available }) => (
-            <div
-              key={branch}
-              className="flex items-center justify-between rounded-[8px] border border-line/[0.06] bg-surface-container-low p-3"
-            >
-              <div className="flex w-12 shrink-0 justify-center">
-                <Switch
-                  checked={branch === 'weekly' ? autoUpdate : useNightly}
-                  onChange={(value) => {
-                    if (branch === 'weekly') {
-                      setAutoUpdate(value);
-                      window.electronAPI!.setSetting('simc_auto_update', value);
-                    } else {
-                      setUseNightly(value);
-                      window.electronAPI!.setSetting('simc_use_nightly', value);
-                    }
-                  }}
+      <StatusStrip status={status} action={action} />
+      <div>
+        {BRANCHES.map((b) => {
+          const v = installed(b);
+          const busy = installing === b;
+          const locked = !!source;
+          const k = known(b);
+          return (
+            <EngineRow
+              key={b}
+              name={cap(b)}
+              dim={locked}
+              control={
+                <AutoSwitch
+                  checked={auto[b]}
+                  onChange={(value) => toggleAuto(b, value)}
+                  label={t('settings.engine.autoUpdate')}
+                  ariaLabel={`${t('settings.engine.autoUpdate')} ${cap(b)}`}
+                  tip={t('settings.simc.autoTip')}
+                  disabled={locked}
                 />
-              </div>
-
-              <div className="ml-4 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold capitalize text-on-surface">{branch}</p>
-                </div>
-                {installed ? (
-                  <p className="text-[11px] text-on-surface-variant/70">
-                    {t('settings.installedTag', { tag: formatVersionTag(installed.tag) })}
-                    {available && (
-                      <span className="ml-2 text-primary">
-                        {t('settings.updateAvailableTag', { tag: formatVersionTag(available.tag) })}
-                      </span>
+              }
+              actions={
+                !locked &&
+                !busy && (
+                  <>
+                    {v && (
+                      <RemoveButton onClick={() => remove(v.tag)} label={t('settings.remove')} />
                     )}
-                  </p>
+                    {(!v || hasUpdate(b)) && (
+                      <Button
+                        size="sm"
+                        onClick={() => install(b)}
+                        disabled={!!installing || check === 'checking'}
+                      >
+                        {t(v ? 'settings.update' : 'settings.install')}
+                      </Button>
+                    )}
+                  </>
+                )
+              }
+            >
+              <VersionText>
+                {busy ? (
+                  <>
+                    <span className="text-outline">{t('settings.engine.downloading')}</span>
+                    <span className="font-semibold tabular-nums text-on-surface">{pct}</span>
+                    <ProgressBar value={progress} className="w-[120px]" />
+                  </>
+                ) : !v ? (
+                  <span className="text-outline">{t('settings.notInstalled')}</span>
                 ) : (
-                  <p className="text-[11px] text-on-surface-variant/50">
-                    {available
-                      ? t('settings.availableTag', { tag: formatVersionTag(available.tag) })
-                      : t('settings.notInstalled')}
-                  </p>
+                  <>
+                    <Version date={tagDate(v.tag, locale)} commit={tagCommit(v.tag)} />
+                    {hasUpdate(b) ? (
+                      <span className="whitespace-nowrap font-semibold text-gold">
+                        → {tagDate(k!.tag, locale)}
+                      </span>
+                    ) : (
+                      k && check === 'ok' && <UpToDateMark title={t('settings.engine.upToDate')} />
+                    )}
+                  </>
                 )}
-              </div>
-
-              <div className="flex gap-2">
-                {available && (
-                  <Button
-                    size="sm"
-                    onClick={() => handleInstall(available)}
-                    disabled={installing === available.tag}
-                  >
-                    {installing === available.tag
-                      ? `${Math.round(progress * 100)}%`
-                      : installed
-                        ? t('settings.update')
-                        : t('settings.install')}
-                  </Button>
-                )}
-                {installed && (
-                  <Button size="sm" variant="danger" onClick={() => handleRemove(installed.tag)}>
-                    {t('settings.remove')}
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {sourceVersion && (
-          <p className="text-[11px] text-on-surface-variant/50">{t('settings.sourceBuildNote')}</p>
-        )}
-
-        {error && <p className="pt-1 text-xs text-negative">{error}</p>}
+              </VersionText>
+            </EngineRow>
+          );
+        })}
       </div>
+      <EngineError message={error} />
+      <EngineFooter>{t('settings.simc.note')}</EngineFooter>
     </div>
   );
 }

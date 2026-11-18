@@ -15,6 +15,7 @@ import type { ActiveRoute } from '../../lib/active-route';
 import { folioSelectionForImport, type OmniumSelection } from '../omnium/omniumSelection';
 import { useOmniumTree } from '../../lib/useOmniumTree';
 import { effectiveSpec, specIsSimmable } from '../../lib/simcDetect';
+import { detectGame, GAME_STORAGE_KEY, type Game } from '../../lib/game';
 import {
   readSessionJson,
   readSessionString,
@@ -60,6 +61,8 @@ interface SimContextType {
   setSimcInput: (v: string) => void;
   /** Whether simcInput has enough content to be worth sending to the server. */
   hasInput: boolean;
+  /** Retail or WoW Forever, read from the paste's `# WoW` header. */
+  game: Game;
   /** The class/spec SimC can't sim, or `null`. Reads the EFFECTIVE spec, so a
    *  selected talent loadout that overrides `spec=` is honoured. Gates every
    *  run button; the backend rejects the same profiles with a 400. */
@@ -175,6 +178,8 @@ export function SimProvider({ children }: { children: ReactNode }) {
   // Profile-captured fields start at the shared defaults, so an untouched config
   // matches a normalized blob exactly (a mismatch reads as a phantom dirty dot).
   const [simcInput, _setSimcInput] = useState('');
+  // False until the paste is read back from sessionStorage (first effect pass).
+  const [pasteRestored, setPasteRestored] = useState(false);
   const [fightStyle, _setFightStyle] = useState(DEFAULT_PROFILE_DATA.fightStyle);
   const [threads, _setThreads] = useState(DEFAULT_PROFILE_DATA.threads);
   const [selectedTalent, setSelectedTalent] = useState('');
@@ -219,6 +224,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [suspendedFight, _setSuspendedFight] = useState<FightSetup | null>(null);
 
   useEffect(() => {
+    setPasteRestored(true);
     try {
       _setSimcInput(readSessionString('simhammer_simc_input', ''));
 
@@ -346,6 +352,17 @@ export function SimProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasInput = simcInput.trim().length >= 50;
+  const game = useMemo(() => detectGame(simcInput), [simcInput]);
+  useEffect(() => {
+    // Before the restore the paste is still '', which would undo the pre-paint data-game.
+    if (!pasteRestored) return;
+    document.documentElement.dataset.game = game;
+    try {
+      localStorage.setItem(GAME_STORAGE_KEY, game);
+    } catch {
+      // storage blocked: the attribute still follows the paste
+    }
+  }, [game, pasteRestored]);
 
   const unsimmableSpec = useMemo(() => {
     const className = simcInput.match(/^(\w+)="/m)?.[1]?.toLowerCase();
@@ -712,6 +729,7 @@ export function SimProvider({ children }: { children: ReactNode }) {
         simcInput,
         setSimcInput,
         hasInput,
+        game,
         unsimmableSpec,
         fightStyle,
         setFightStyle,

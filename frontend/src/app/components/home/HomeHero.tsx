@@ -112,7 +112,8 @@ export default function HomeHero({
             className="rounded-[6px] bg-overlay/[0.06] px-2 py-[3px] text-[11.5px] font-semibold"
             style={{ color: classColor }}
           >
-            {specDisplayName(spec)} {className}
+            {/* Classic-era exports (WoW Forever) name no spec. */}
+            {spec === 'unknown' ? className : `${specDisplayName(spec)} ${className}`}
           </span>
           <span>{[race, realm].filter(Boolean).join(' · ')}</span>
         </div>

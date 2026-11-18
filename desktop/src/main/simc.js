@@ -4,6 +4,7 @@ const {
   getLatestNightlyRelease,
   getLatestWeeklyRelease,
   getActiveBinaryPath,
+  getActiveVersion,
   installVersion,
   listInstalledVersions,
   removeVersion,
@@ -92,38 +93,34 @@ function createSimcController(ipcMain, config, settingsStore, getMainWindow) {
   }
 
   async function autoUpdateInstalledVersion() {
-    const autoUpdate = settingsStore.getSetting("simc_auto_update", true);
-    const useNightly = settingsStore.getSetting("simc_use_nightly", false);
+    const simcDir = config.getSimcDir();
+    const branches = autoUpdateBranches(
+      (key, fallback) => settingsStore.getSetting(key, fallback),
+      listInstalledVersions(simcDir)
+    );
 
-    if (!autoUpdate) {
-      return;
-    }
+    for (const branch of branches) {
+      try {
+        const fetcher = branch === "nightly" ? getLatestNightlyRelease : getLatestWeeklyRelease;
+        const release = await fetcher();
+        if (!release || listInstalledVersions(simcDir).some((v) => v.tag === release.tag)) {
+          continue;
+        }
 
-    try {
-      const fetcher = useNightly ? getLatestNightlyRelease : getLatestWeeklyRelease;
-      const release = await fetcher();
-      if (!release) {
-        return;
+        // Installing drops the branch's old build, which may be the active one.
+        const wasActive = (getActiveVersion(simcDir) ?? "").startsWith(`${branch}-`);
+        console.log(`[simc] Auto-updating to ${release.tag}...`);
+        setStatus({ ...simcStatus, downloading: true, progress: 0 }, false);
+        await installVersion(simcDir, release, (progress) => {
+          emitDownloadProgress(progress);
+        });
+        if (wasActive) setActiveVersion(simcDir, release.tag);
+        setStatus({ ready: true, downloading: false, progress: 1, error: null }, false);
+        console.log(`[simc] Auto-updated to ${release.tag}`);
+      } catch (err) {
+        setStatus({ ...simcStatus, downloading: false }, false);
+        console.warn(`[simc] Auto-update of ${branch} failed:`, err.message);
       }
-
-      const simcDir = config.getSimcDir();
-      const installed = listInstalledVersions(simcDir);
-      const alreadyInstalled = installed.some((version) => version.tag === release.tag);
-
-      if (alreadyInstalled) {
-        return;
-      }
-
-      console.log(`[simc] Auto-updating to ${release.tag}...`);
-      setStatus({ ...simcStatus, downloading: true, progress: 0 }, false);
-      await installVersion(simcDir, release, (progress) => {
-        emitDownloadProgress(progress);
-      });
-      setActiveVersion(simcDir, release.tag);
-      setStatus({ ready: true, downloading: false, progress: 1, error: null }, false);
-      console.log(`[simc] Auto-updated to ${release.tag}`);
-    } catch (err) {
-      console.warn("[simc] Auto-update check failed:", err.message);
     }
   }
 
@@ -134,6 +131,19 @@ function createSimcController(ipcMain, config, settingsStore, getMainWindow) {
   };
 }
 
+/** Branches to update at startup: each one installed with its own switch on.
+ *  The keys predate per-branch switches: simc_auto_update is Weekly's, simc_use_nightly Nightly's. */
+function autoUpdateBranches(getSetting, installed) {
+  const on = {
+    weekly: getSetting("simc_auto_update", true),
+    nightly: getSetting("simc_use_nightly", false),
+  };
+  return ["weekly", "nightly"].filter(
+    (branch) => on[branch] && installed.some((v) => v.type === branch)
+  );
+}
+
 module.exports = {
+  autoUpdateBranches,
   createSimcController,
 };

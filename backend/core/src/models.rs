@@ -153,6 +153,8 @@ pub struct Job {
     pub share_id: Option<String>,
     pub share_delete_token: Option<String>,
     pub rerun_of: Option<String>,
+    /// "retail" (SimC) or "forever" (WoW Forever engine).
+    pub game: String,
 }
 
 /// Slim view of a Job row used by the status polling endpoint.
@@ -173,6 +175,7 @@ pub struct JobStatusSummary {
     pub provider_id: String,
     pub share_id: Option<String>,
     pub rerun_of: Option<String>,
+    pub game: String,
 }
 
 /// Slim row for the sims-overview endpoint. Excludes large columns
@@ -201,6 +204,7 @@ pub struct JobOverviewSummary {
     pub dps: Option<f64>,
     pub batch_id: Option<String>,
     pub provider_id: String,
+    pub game: String,
 }
 
 pub struct ResultSummary {
@@ -340,6 +344,7 @@ impl Job {
             share_id: None,
             share_delete_token: None,
             rerun_of: None,
+            game: "retail".to_string(),
         }
     }
 }

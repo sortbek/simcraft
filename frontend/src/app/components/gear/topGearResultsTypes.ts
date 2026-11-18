@@ -28,6 +28,8 @@ export interface TopGearResult {
 }
 
 export interface TopGearResultsProps {
+  /** "hps" when the numbers are healing per second. */
+  metric?: string;
   playerName: string;
   playerClass: string;
   playerRealm?: string;

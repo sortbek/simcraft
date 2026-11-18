@@ -286,7 +286,59 @@ simc_update_loop() {
     done
 }
 
+# ---------------------------------------------------------------------------
+# WoW Forever engine: latest release, fetched at startup and then on the SimC check
+# interval. The backend reloads the engine when FOREVER_DIR/.active changes.
+# ---------------------------------------------------------------------------
+FOREVER_DIR="${FOREVER_DIR:-/app/resources/forever}"
+FOREVER_REPO="sortbek/forever-builds"
+
+fetch_forever() {
+    local asset tag dir tmp
+    case "$(uname -m)" in
+        x86_64) asset="simhammer-forever-linux-x64.tar.gz" ;;
+        aarch64|arm64) asset="simhammer-forever-linux-arm64.tar.gz" ;;
+        *) echo "==> Forever: unsupported arch $(uname -m)"; return 0 ;;
+    esac
+    tag=$(curl -fsSI --max-time 20 "https://github.com/$FOREVER_REPO/releases/latest" \
+        | tr -d '\r' | sed -n 's#^[Ll]ocation: .*/releases/tag/\(.*\)$#\1#p')
+    # Only a real release tag: it becomes a folder name under FOREVER_DIR.
+    [[ "$tag" =~ ^forever-[0-9]{8}-[0-9a-f]+$ ]] || tag=""
+    if [ -z "$tag" ]; then
+        echo "==> Forever: no release found, continuing without it"
+        return 0
+    fi
+    mkdir -p "$FOREVER_DIR"
+    if [ "$(cat "$FOREVER_DIR/.active" 2>/dev/null)" = "$tag" ] && [ -f "$FOREVER_DIR/$tag/simhammer-forever" ]; then
+        echo "==> Forever engine $tag already installed"
+        return 0
+    fi
+    dir="$FOREVER_DIR/$tag"
+    tmp=$(mktemp -d)
+    if curl -fsSL --max-time 300 "https://github.com/$FOREVER_REPO/releases/download/$tag/$asset" | tar -xz -C "$tmp" \
+        && [ -f "$tmp/simhammer-forever" ]; then
+        chmod 755 "$tmp/simhammer-forever"
+        rm -rf "$dir" && mv "$tmp" "$dir"
+        echo "$tag" > "$FOREVER_DIR/.active"
+        find "$FOREVER_DIR" -mindepth 1 -maxdepth 1 -type d ! -name "$tag" -exec rm -rf {} +
+        echo "==> Forever engine $tag installed"
+    else
+        rm -rf "$tmp"
+        echo "==> Forever: download of $tag failed, keeping the installed version"
+    fi
+}
+fetch_forever || echo "==> Forever: fetch failed, continuing without it"
+export FOREVER_DIR
+
 simc_update_loop &
+
+forever_update_loop() {
+    while true; do
+        sleep "$SIMC_CHECK_INTERVAL"
+        fetch_forever || echo "[forever-updater] check failed."
+    done
+}
+forever_update_loop &
 
 echo "==> Starting SimHammer Server..."
 exec "$@"

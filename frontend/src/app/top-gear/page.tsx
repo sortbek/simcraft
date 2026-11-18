@@ -1,10 +1,10 @@
 import RemountOnRestore from '../components/share/RemountOnRestore';
-import TopGearScreen from './TopGearScreen';
+import TopGearGameSwitch from './TopGearGameSwitch';
 
 export default function TopGearPage() {
   return (
     <RemountOnRestore>
-      <TopGearScreen />
+      <TopGearGameSwitch />
     </RemountOnRestore>
   );
 }

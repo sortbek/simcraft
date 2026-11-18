@@ -106,6 +106,22 @@ RUN set -e; \
       echo "$ACTIVE" > /out/.active; \
     fi
 
+# --- WoW Forever engine (optional: an outage leaves it empty, the API then answers 503) ---
+FROM debian:bookworm-slim AS forever
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+ARG TARGETARCH
+RUN set -eu; mkdir -p /out; \
+    case "$TARGETARCH" in arm64) ASSET=simhammer-forever-linux-arm64.tar.gz ;; *) ASSET=simhammer-forever-linux-x64.tar.gz ;; esac; \
+    TAG=$(curl -fsSI --max-time 20 https://github.com/sortbek/forever-builds/releases/latest | tr -d '\r' | sed -n 's#^[Ll]ocation: .*/releases/tag/\(.*\)$#\1#p') || true; \
+    echo "$TAG" | grep -Eq '^forever-[0-9]{8}-[0-9a-f]+$' || TAG=""; \
+    if [ -n "$TAG" ] && mkdir -p "/out/$TAG" \
+       && curl -fsSL "https://github.com/sortbek/forever-builds/releases/download/$TAG/$ASSET" | tar -xz -C "/out/$TAG" \
+       && chmod 755 "/out/$TAG/simhammer-forever"; then \
+      echo "$TAG" > /out/.active; \
+    else \
+      rm -rf /out/*; echo "Forever engine unavailable at build time"; \
+    fi
+
 # --- Runtime ---
 FROM debian:trixie-slim
 
@@ -115,6 +131,7 @@ ENV LANG=en_US.UTF-8
 
 COPY --from=builder /build/target/release/simhammer-server /usr/local/bin/simhammer-server
 COPY --from=simc /out/ /app/resources/simc/
+COPY --from=forever /out/ /app/resources/forever/
 COPY --from=fetcher /data/compact /app/resources/data
 COPY server/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
@@ -122,6 +139,7 @@ RUN chmod +x /app/entrypoint.sh
 WORKDIR /app
 ENV DATA_DIR=/app/resources/data
 ENV SIMC_DIR=/app/resources/simc
+ENV FOREVER_DIR=/app/resources/forever
 ENV PORT=8000
 
 EXPOSE 8000

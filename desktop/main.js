@@ -7,6 +7,7 @@ const { createClipboardController } = require("./src/main/clipboard");
 const { createAppConfig } = require("./src/main/config");
 const { PROTOCOL, parseDeepLink, findDeepLinkInArgv } = require("./src/main/deeplink");
 const { createSettingsStore } = require("./src/main/settings");
+const { createForeverController } = require("./src/main/forever");
 const { createSimcController } = require("./src/main/simc");
 const { setupAutoUpdater } = require("./src/main/updater");
 const { createWindowController } = require("./src/main/window");
@@ -42,6 +43,13 @@ const simcController = createSimcController(
 windowController.registerIpcHandlers();
 clipboardController.registerIpcHandlers();
 simcController.registerIpcHandlers();
+const foreverController = createForeverController(
+  ipcMain,
+  config,
+  settingsStore,
+  windowController.getMainWindow
+);
+foreverController.registerIpcHandlers();
 
 let pendingShareId = findDeepLinkInArgv(process.argv);
 
@@ -90,6 +98,8 @@ ipcMain.handle("settings:set", (_event, key, value) => {
 
 app.whenReady().then(async () => {
   await clearCacheIfVersionChanged(app);
+  // The Forever engine installs and updates in the background; the backend picks it up.
+  foreverController.start();
   await simcController.ensureReady();
   await simcController.autoUpdateInstalledVersion();
 

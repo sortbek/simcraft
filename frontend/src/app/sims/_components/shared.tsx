@@ -11,6 +11,7 @@ export const SIM_TYPE_LABELS: Record<string, string> = {
   top_gear: 'Top Gear',
   droptimizer: 'Drop Finder',
   upgrade_compare: 'Crest Upgrades',
+  talent_compare: 'Talent Compare',
 };
 
 export const SIM_TYPE_PILL: Record<string, PillVariant> = {

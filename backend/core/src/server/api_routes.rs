@@ -6,6 +6,7 @@ use super::armory_handlers;
 use super::character_handlers;
 use super::cloud_estimate;
 use super::droptimizer_handlers;
+use super::forever_handlers;
 use super::game_data_handlers;
 use super::job_handlers;
 use super::mdt_handlers;
@@ -23,6 +24,30 @@ use super::top_gear_handlers;
 use super::upgrade_compare;
 
 pub(super) fn configure(cfg: &mut web::ServiceConfig) {
+    cfg.route(
+        "/api/forever/import",
+        web::post().to(forever_handlers::import),
+    )
+    .route(
+        "/api/forever/sim",
+        web::post().to(forever_handlers::create_sim),
+    )
+    .route(
+        "/api/forever/top-gear",
+        web::post().to(forever_handlers::create_top_gear),
+    )
+    .route(
+        "/api/forever/talent-compare",
+        web::post().to(forever_handlers::create_talent_compare),
+    )
+    .route(
+        "/api/forever/drop-sources",
+        web::post().to(forever_handlers::drop_sources),
+    )
+    .route(
+        "/api/forever/drop-finder",
+        web::post().to(forever_handlers::create_drop_finder),
+    );
     cfg.route("/api/sim", web::post().to(sim_handlers::create_sim))
         .route(
             "/api/sim/{id}/sim-row",

@@ -42,6 +42,7 @@ interface JobData {
   provider_id: string;
   share_id?: string | null;
   rerun_of?: string | null;
+  game?: 'retail' | 'forever';
 }
 
 // Consecutive status-poll failures tolerated before giving up (~2 min at 2s).
@@ -315,10 +316,11 @@ export default function SimResultClient() {
             pauseRequested={!!job.pause_requested}
             onPause={handlePause}
             logLines={logLines}
+            logTitle={job.game === 'forever' ? t('results.engineOutput') : undefined}
             showLogs={showLogs}
             onToggleLogs={handleToggleLogs}
             live={live}
-            liveExpected={job.provider_id === 'local'}
+            liveExpected={job.provider_id === 'local' && job.game !== 'forever'}
           />
         )}
         <div className="flex items-center justify-center text-[11px] uppercase tracking-wider text-on-surface-variant/40">
@@ -340,6 +342,7 @@ export default function SimResultClient() {
   }
 
   const r = job.result;
+  const isForever = job.game === 'forever';
   const isTopGear = isGearComparisonResult(r);
   const hasTopGearState = isTopGear && getTopGearState() !== null;
 
@@ -370,7 +373,7 @@ export default function SimResultClient() {
 
       <SimResultView
         result={r}
-        sourceJobId={id}
+        sourceJobId={isForever ? undefined : id}
         backLink={
           hasTopGearState ? (
             <a href={ROUTES.topGear} className={buttonClass('quiet')}>
@@ -391,12 +394,14 @@ export default function SimResultClient() {
           ) : undefined
         }
         actions={
-          <ShareButton
-            jobId={id}
-            result={r}
-            shareId={job.share_id ?? null}
-            onChange={(shareId) => setJob((cur) => (cur ? { ...cur, share_id: shareId } : cur))}
-          />
+          isForever ? undefined : (
+            <ShareButton
+              jobId={id}
+              result={r}
+              shareId={job.share_id ?? null}
+              onChange={(shareId) => setJob((cur) => (cur ? { ...cur, share_id: shareId } : cur))}
+            />
+          )
         }
       />
 
@@ -491,31 +496,51 @@ export default function SimResultClient() {
         >
           {t('results.rawInput')}
         </a>
-        <span className="h-3 w-px bg-overlay/[0.11]" />
-        <a
-          href={`${API_URL}/api/sim/${id}/data.csv`}
-          className="transition-colors hover:text-on-surface"
-        >
-          {t('results.csv')}
-        </a>
-        <span className="h-3 w-px bg-overlay/[0.11]" />
-        <a
-          href={`${API_URL}/api/sim/${id}/html`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:text-on-surface"
-        >
-          {t('results.htmlReport')}
-        </a>
-        <span className="h-3 w-px bg-overlay/[0.11]" />
-        <a
-          href={`${API_URL}/api/sim/${id}/output.txt`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-colors hover:text-on-surface"
-        >
-          {t('results.textOutput')}
-        </a>
+        {!isForever && (
+          <>
+            <span className="h-3 w-px bg-overlay/[0.11]" />
+            <a
+              href={`${API_URL}/api/sim/${id}/data.csv`}
+              className="transition-colors hover:text-on-surface"
+            >
+              {t('results.csv')}
+            </a>
+            <span className="h-3 w-px bg-overlay/[0.11]" />
+            <a
+              href={`${API_URL}/api/sim/${id}/html`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-on-surface"
+            >
+              {t('results.htmlReport')}
+            </a>
+            <span className="h-3 w-px bg-overlay/[0.11]" />
+            <a
+              href={`${API_URL}/api/sim/${id}/output.txt`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-on-surface"
+            >
+              {t('results.textOutput')}
+            </a>
+          </>
+        )}
+        {isForever && (
+          <>
+            <span className="h-3 w-px bg-overlay/[0.11]" />
+            <span>
+              {t('forever.poweredBy')}{' '}
+              <a
+                href="https://github.com/sage3648/mythicsim-forever-engine"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gold transition-colors hover:text-gold-light"
+              >
+                MythicSim Forever engine
+              </a>
+            </span>
+          </>
+        )}
       </div>
 
       {/* Provider footer (non-local jobs only) */}

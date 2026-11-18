@@ -107,6 +107,7 @@ fn job_to_overview_summary(
         dps: s.dps,
         batch_id: j.batch_id.clone(),
         provider_id: j.provider_id.clone(),
+        game: j.game.clone(),
     }
 }
 
@@ -151,6 +152,7 @@ fn row_to_job(r: &sqlx::any::AnyRow) -> Job {
         share_id: r.try_get("share_id").ok().flatten(),
         share_delete_token: r.try_get("share_delete_token").ok().flatten(),
         rerun_of: r.try_get("rerun_of").ok().flatten(),
+        game: r.get("game"),
     }
 }
 
@@ -196,6 +198,7 @@ fn row_to_overview_summary(
         provider_id: r
             .try_get("provider_id")
             .unwrap_or_else(|_| "local".to_string()),
+        game: r.get("game"),
     }
 }
 
@@ -264,9 +267,9 @@ impl JobRepo {
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, batch_id,
                      request_json, simc_input_mode, checkpoint, pause_requested, provider_id,
-                     client_request, share_id, share_delete_token, rerun_of, seq)
+                     client_request, share_id, share_delete_token, rerun_of, game, seq)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                             $16, $17, $18, $19, $20, $21, $22, $23, $24,
+                             $16, $17, $18, $19, $20, $21, $22, $23, $24, $25,
                              (SELECT COALESCE(MAX(seq), 0) + 1 FROM jobs))",
                 )
                 .bind(&job.id)
@@ -293,6 +296,7 @@ impl JobRepo {
                 .bind(&job.share_id)
                 .bind(&job.share_delete_token)
                 .bind(&job.rerun_of)
+                .bind(&job.game)
                 .execute(pool)
                 .await?;
 
@@ -324,7 +328,7 @@ impl JobRepo {
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
                      request_json, simc_input_mode, checkpoint, pause_requested, provider_id,
-                     client_request, share_id, share_delete_token, rerun_of
+                     client_request, share_id, share_delete_token, rerun_of, game
                      FROM jobs WHERE id = $1",
                 )
                 .bind(id)
@@ -361,7 +365,7 @@ impl JobRepo {
                      error_message, progress_pct, progress_stage, progress_detail, stages_completed,
                      iterations, fight_style, target_error, created_at, raw_json, html_report, text_output, batch_id,
                      request_json, simc_input_mode, checkpoint, pause_requested, provider_id,
-                     client_request, share_id, share_delete_token, rerun_of
+                     client_request, share_id, share_delete_token, rerun_of, game
                      FROM jobs WHERE id IN ({placeholders})"
                 );
                 let mut query = sqlx::query(&sql);
@@ -755,7 +759,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, provider_id, \
+                            iterations, batch_id, provider_id, game, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('pending', 'running', 'paused') \
@@ -768,7 +772,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, result_json, provider_id, \
+                            iterations, batch_id, result_json, provider_id, game, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('done', 'failed', 'cancelled') \
@@ -832,7 +836,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, result_json, provider_id, \
+                            iterations, batch_id, result_json, provider_id, game, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE {status_clause} \
@@ -924,7 +928,7 @@ impl JobRepo {
                 let row = sqlx::query(
                     "SELECT id, status, progress_pct, progress_stage, progress_detail,
                      stages_completed, result_json, error_message, simc_input_mode,
-                     pause_requested, provider_id, share_id, rerun_of
+                     pause_requested, provider_id, share_id, rerun_of, game
                      FROM jobs WHERE id = $1",
                 )
                 .bind(id)
@@ -961,6 +965,7 @@ impl JobRepo {
                             .unwrap_or_else(|_| "local".to_string()),
                         share_id: r.try_get("share_id").ok().flatten(),
                         rerun_of: r.try_get("rerun_of").ok().flatten(),
+                        game: r.get("game"),
                     }
                 }))
             }
@@ -988,6 +993,7 @@ impl JobRepo {
                         provider_id: j.provider_id.clone(),
                         share_id: j.share_id.clone(),
                         rerun_of: j.rerun_of.clone(),
+                        game: j.game.clone(),
                     }))
             }
         }
@@ -1027,6 +1033,7 @@ mod tests {
             share_id: None,
             share_delete_token: None,
             rerun_of: None,
+            game: "retail".into(),
         }
     }
 
@@ -1325,6 +1332,44 @@ mod tests {
         assert_eq!(ids[0], "chatty-1");
         let chatty_summary = summaries.iter().find(|s| s.id == "chatty-1").unwrap();
         assert_eq!(chatty_summary.player_name.as_deref(), Some("Tester"));
+    }
+
+    async fn assert_game_round_trips(repo: JobRepo) {
+        let mut job = Job::new("x".into(), "quick".into(), 100, "Patchwerk".into(), 0.1);
+        job.game = "forever".into();
+        repo.insert(&job).await.unwrap();
+        assert_eq!(repo.get(&job.id).await.unwrap().unwrap().game, "forever");
+        assert_eq!(
+            repo.get_status_summary(&job.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .game,
+            "forever"
+        );
+        let active = repo.list_active(10).await.unwrap();
+        assert!(
+            active.iter().any(|j| j.id == job.id && j.game == "forever"),
+            "list_active"
+        );
+        let listed = repo.list_jobs(ListJobsFilter::default()).await.unwrap();
+        assert!(
+            listed.iter().any(|j| j.id == job.id && j.game == "forever"),
+            "list_jobs"
+        );
+        let retail = Job::new("y".into(), "quick".into(), 100, "Patchwerk".into(), 0.1);
+        repo.insert(&retail).await.unwrap();
+        assert_eq!(repo.get(&retail.id).await.unwrap().unwrap().game, "retail");
+    }
+
+    #[tokio::test]
+    async fn game_round_trips_sqlite() {
+        assert_game_round_trips(sqlite_repo().await).await;
+    }
+
+    #[tokio::test]
+    async fn game_round_trips_memory() {
+        assert_game_round_trips(JobRepo::new_memory()).await;
     }
 
     async fn assert_share_columns_round_trip(repo: JobRepo) {

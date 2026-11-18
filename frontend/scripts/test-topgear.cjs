@@ -563,6 +563,27 @@ test('character media URLs use the Blizzard realm slug from the SimC server= val
   assert.equal(renderUrl('Argent Dawn', 'Name', 'eu'), `${base}/argent-dawn/name/media/render`);
 });
 
+test('only a Forever character asks for its SD model', () => {
+  const {
+    getCharacterRenderUrl: renderUrl,
+    getCharacterAvatarUrl: avatarUrl,
+  } = require('../src/app/components/gear/topGearResultsUtils.ts');
+  const base = 'https://simhammer.com/api/blizzard/character/eu';
+  assert.equal(
+    renderUrl('forever', 'Sortbek Hunter', 'eu', true),
+    `${base}/forever/sortbek%20hunter/media/render?sd=1`
+  );
+  assert.equal(
+    avatarUrl('forever', 'Sortbek Hunter', 'eu', true),
+    `${base}/forever/sortbek%20hunter/media/avatar?sd=1`
+  );
+  assert.equal(
+    avatarUrl('forever', 'Sortbek Hunter', 'eu'),
+    `${base}/forever/sortbek%20hunter/media/avatar`
+  );
+  assert.equal(renderUrl('draenor', 'Name', 'eu', true), `${base}/draenor/name/media/render`);
+});
+
 test('a compacted SimC realm resolves to its Blizzard slug through the realm list', () => {
   const { resolveRealmSlug } = require('../src/app/lib/realms.ts');
   const { regions } = require('../src/app/lib/realms.json');
@@ -642,4 +663,31 @@ test('the drop carries only the chosen item level bonus id', () => {
   const noOption = addItemRequestBody('mage=x', item, undefined, { stats: [36, 49] });
   assert.deepEqual(noOption.drop_items[0].bonus_ids, []);
   assert.equal(noOption.drop_items[0].ilevel, 600);
+});
+
+test('same-named sources in different instances stay apart', () => {
+  const { groupResults, sourceOf } = require('../src/app/components/gear/topGearResultsUtils.ts');
+  const trash = (instance, delta) => {
+    const result = res('Trash', delta);
+    result.items[0].instance = instance;
+    return result;
+  };
+  const results = [trash('Deadmines', 300), trash('Shadowfang Keep', 200), trash('Deadmines', 100)];
+  const rows = summarizeByEncounter(results, 'expected', 100000);
+  assert.deepEqual(
+    rows.map((row) => [row.key, row.encounter, row.instance, row.results.length]),
+    [
+      ['Trash · Deadmines', 'Trash', 'Deadmines', 2],
+      ['Trash · Shadowfang Keep', 'Trash', 'Shadowfang Keep', 1],
+    ]
+  );
+  assert.deepEqual(
+    groupResults(results, 'encounter').map(([key, group]) => [key, group.length]),
+    [
+      ['Trash · Deadmines', 2],
+      ['Trash · Shadowfang Keep', 1],
+    ]
+  );
+  assert.equal(sourceOf(res('Boss', 0).items[0]), 'Boss', 'no instance, just the boss');
+  assert.equal(sourceOf({ item_id: 1, slot: 'head' }), '', 'not a drop');
 });

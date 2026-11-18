@@ -17,6 +17,9 @@ export interface GearItem {
   is_kept?: boolean;
   upgrade_levels?: number;
   origin?: string;
+  /** Set by results that bring their own item data (WoW Forever); retail items have neither. */
+  icon?: string;
+  quality?: number;
 }
 
 export const GEAR_ORDER_LEFT = ['head', 'neck', 'shoulder', 'back', 'chest', 'wrist'];

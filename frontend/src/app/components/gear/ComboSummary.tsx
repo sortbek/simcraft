@@ -6,6 +6,7 @@ import { SLOT_LABELS, specDisplayName } from '../../lib/types';
 import {
   QUALITY_COLORS,
   getWowheadData,
+  getForeverWowheadUrl,
   getWowheadUrl,
   iconProps,
   localizedItemName,
@@ -17,6 +18,7 @@ import { useLanguage } from '../../lib/i18n';
 import { cn } from '../../lib/cn';
 import { useConsumableLookup } from '../sim-config/ConsumablePickers';
 import type { ResultItem, TopGearResult } from './topGearResultsTypes';
+import { sourceOf } from './topGearResultsUtils';
 
 const MAX_TILES = 6;
 const TILE = 'relative block h-[34px] w-[34px] shrink-0 overflow-hidden rounded-[6px] border';
@@ -61,12 +63,21 @@ function GlyphTile({
 }
 
 function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; locale: string }) {
-  const color = info ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
-  const href = item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined;
+  // WoW Forever items carry their own icon and quality, and link to Wowhead's Forever pages.
+  const own = item.quality !== undefined;
+  const quality = own ? item.quality : info?.quality;
+  const color =
+    quality !== undefined ? QUALITY_COLORS[quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
+  const href =
+    item.item_id > 0
+      ? own
+        ? getForeverWowheadUrl('item', item.item_id, locale)
+        : getWowheadUrl(item.item_id, locale)
+      : undefined;
   return (
     <a
       href={href}
-      data-wowhead={item.item_id > 0 ? getWowheadData(item) : undefined}
+      data-wowhead={item.item_id > 0 && !own ? getWowheadData(item) : undefined}
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.preventDefault()}
@@ -74,7 +85,7 @@ function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; l
       style={{ borderColor: color }}
     >
       <img
-        {...iconProps(info?.icon || 'inv_misc_questionmark')}
+        {...iconProps((own ? item.icon : info?.icon) || 'inv_misc_questionmark')}
         alt=""
         width={34}
         height={34}
@@ -103,6 +114,7 @@ interface ComboSummaryProps {
   itemInfoMap: Record<number, ItemInfo>;
   gemInfoMap: Record<number, GemInfo>;
   badge?: ReactNode;
+  showSource?: boolean;
 }
 
 /** A ranked combination as an icon strip plus two lines: what changes, and how. */
@@ -115,6 +127,7 @@ export default function ComboSummary({
   itemInfoMap,
   gemInfoMap,
   badge,
+  showSource,
 }: ComboSummaryProps) {
   const { t, locale } = useLanguage();
   const lookup = useConsumableLookup();
@@ -188,15 +201,20 @@ export default function ComboSummary({
 
   // First line: the first changed item, else the first other change.
   const first = changedItems[0];
-  const firstInfo = first && first.item_id > 0 ? itemInfoMap[first.item_id] : undefined;
+  const firstOwn = first?.quality !== undefined;
+  const firstInfo =
+    first && first.item_id > 0 && !firstOwn ? itemInfoMap[first.item_id] : undefined;
+  const firstQuality = firstOwn ? first.quality : firstInfo?.quality;
   const titleLabel = first ? null : labels[0];
   const otherCount = changedItems.length + labels.length - 1;
   const title = first ? (
     <span
-      style={{ color: firstInfo ? QUALITY_COLORS[firstInfo.quality] : undefined }}
+      style={{ color: firstQuality !== undefined ? QUALITY_COLORS[firstQuality] : undefined }}
       className="truncate"
     >
-      {localizedItemName(first.item_id, firstInfo?.name || first.name || '', locale)}
+      {firstOwn
+        ? first.name
+        : localizedItemName(first.item_id, firstInfo?.name || first.name || '', locale)}
     </span>
   ) : titleLabel ? (
     <span className={cn('truncate', titleLabel.className)}>{titleLabel.text}</span>
@@ -208,6 +226,7 @@ export default function ComboSummary({
   const parts: ReactNode[] = [];
   if (changedItems.length)
     parts.push(changedItems.map((i) => SLOT_LABELS[i.slot] || i.slot).join(', '));
+  if (showSource && sourceOf(first)) parts.push(sourceOf(first));
   if (catalysts)
     parts.push(<span className="text-info">{t('gear.catalystCount', { count: catalysts })}</span>);
   if (voidForged)

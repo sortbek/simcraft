@@ -46,6 +46,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("simc:status-changed", handler);
   },
 
+  // WoW Forever engine
+  getForeverStatus: () => ipcRenderer.invoke("forever:status"),
+  checkForeverUpdate: () => ipcRenderer.invoke("forever:check-update"),
+  installForeverLatest: () => ipcRenderer.invoke("forever:install-latest"),
+  setForeverEnabled: (value) => ipcRenderer.invoke("forever:set-enabled", value),
+  setForeverAutoUpdate: (value) => ipcRenderer.invoke("forever:set-auto-update", value),
+  onForeverDownloadProgress: (callback) => {
+    const handler = (_event, progress) => callback(progress);
+    ipcRenderer.on("forever:download-progress", handler);
+    return () => ipcRenderer.removeListener("forever:download-progress", handler);
+  },
+
   // simhammer://sim/<id> while the app is open
   onOpenShare: (callback) => {
     const handler = (_event, id) => callback(id);

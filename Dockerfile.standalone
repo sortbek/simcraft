@@ -63,10 +63,11 @@ COPY standalone-entrypoint.sh /app/standalone-entrypoint.sh
 RUN chmod +x /app/standalone-entrypoint.sh
 
 # Volumes for persistent caching of fetched game data, the simc binary, and the SQLite db
-VOLUME ["/app/resources/data", "/app/resources/data_full", "/app/resources/simc", "/app/db"]
+VOLUME ["/app/resources/data", "/app/resources/data_full", "/app/resources/simc", "/app/resources/forever", "/app/db"]
 
 ENV DATA_DIR=/app/resources/data
 ENV SIMC_PATH=/usr/local/bin/simc
+ENV FOREVER_DIR=/app/resources/forever
 ENV FRONTEND_DIR=/app/frontend
 ENV DATABASE_URL=/app/db/simhammer.db
 ENV BIND_HOST=0.0.0.0

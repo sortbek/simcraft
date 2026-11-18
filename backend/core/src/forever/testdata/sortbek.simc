@@ -1,0 +1,116 @@
+# Sortbek Hunter - 2026-11-17 18:10 - EU/CAMWOW EU5 Realm 6 PvP
+# SimC Addon 12.1.5-04
+# WoW 1.60.1.70938, TOC 16001
+# Requires SimulationCraft 1000-01 or newer
+
+hunter="Sortbek Hunter"
+level=29
+race=orc
+region=eu
+server=camwow_eu5_realm_6_pvp
+role=
+professions=leatherworking=101/skinning=170
+spec=unknown
+
+talents=C0cBZcHs6hiHBl7Csp3hvR+3ROg5CcCzMmHAAAAAAA
+
+# Primary Talents
+# talents=C0cBZcHs6hiHBl7Csp3hvR+3ROg5CcCzMmHAAAAAAA
+
+legacy_talents=
+
+# Hooded Cowl (30)
+head=,id=3732
+# Rugged Spaulders (22)
+shoulder=,id=5254,content_tuning=5249
+# Boar Hunter's Cape (20)
+back=,id=5314
+# Dreamer's Chestguard (32)
+chest=,id=270043,enchant_id=15
+# Trapper's Shirt (1)
+shirt=,id=127
+# Wolf Bracers (25)
+wrist=,id=4794
+# Gloves of the Moon (20)
+hands=,id=5299,enchant_id=15
+# Fine Leather Belt (16)
+waist=,id=4246
+# Stalking Pants (26)
+legs=,id=4831
+# Stomping Boots (24)
+feet=,id=3741,enchant_id=15
+# Seal of Sylvanas (29)
+finger1=,id=6414
+# Band of the Fist (28)
+finger2=,id=17694
+# Brutal War Axe of the Wolf (30)
+main_hand=,id=3210,bonus_id=12726,content_tuning=5237
+# Razor Arrow
+ammo=,id=3030
+# ammo_count=358
+# Fallenroot Longbow (28)
+ranged=,id=273843,content_tuning=5237
+
+bag1=,id=221498
+bag2=,id=6446
+bag3=,id=918
+bag4=,id=7278
+
+# Raptor - Raptor (28)
+pet_family=raptor
+pet_creature_id=165189
+pet_level=28
+pet_happiness=3
+pet_abilities=4190/14917/16829/17256/23992/24446/24488/24492/24493/24551
+# pet_training_points=79/140
+
+### Gear from Bags
+#
+# Hulking Bands (22)
+# wrist=,id=14743
+#
+# Sanguine Cuffs (25)
+# wrist=,id=14375
+#
+# Oilrag Handwraps (31)
+# hands=,id=16741
+#
+# Rigid Leggings of Arcane Wrath (24)
+# legs=,id=15117,bonus_id=12756
+#
+# Skinning Knife (4)
+# main_hand=,id=7005
+
+### Additional Character Info
+#
+# character_stats=health:1028/power_type:0/mana:960/rage:0/focus:0/energy:0/strength:54/agility:93/stamina:83/intellect:33/spirit:61
+# character_stats_base=strength:36/agility:58/stamina:50/intellect:33/spirit:43
+# character_stats_bonus=strength:18/agility:35/stamina:33/intellect:0/spirit:18
+# character_stats_gear=agility:35/arcane_resistance:2/attack_power:6/damage_per_second:34.14/fire_resistance:2/frost_resistance:2/nature_resistance:2/shadow_resistance:2/spirit:18/stamina:30/strength:18/armor:502/resistance2:2/resistance3:2/resistance4:2/resistance5:2/resistance6:2
+# attack_power=melee:185:6:0/ranged:224:41:0
+# spell_power=holy:0/fire:0/nature:0/frost:0/shadow:0/arcane:0
+# spell_stats=healing:0/penetration:0
+# regen=health:7.95:0/health_from_spirit:10.60:0/mana:13.88:0.00/mana_from_spirit:13.88:0/mana_power:13.88:0.00/rage_power:-12.50:0.00/focus_power:10.00:10.00/energy_power:10.00:10.00
+# crit=melee:3.81/ranged:4.01/spell:4.65
+# hit=melee_rating_bonus:0/melee_modifier:0/ranged_rating_bonus:0/ranged_modifier:0/spell_rating_bonus:0/spell_modifier:0
+# haste=melee:0/ranged:0/ranged_ammo:10.00/spell:0
+# combat_modifiers=expertise:0/expertise_offhand:0/expertise_ranged:0/armor_penetration:0/mastery:0
+# combat_ratings=
+# defense=armor_base:44/armor_effective:712/armor:712/armor_bonus:668/defense_skill:129/defense_modifier:0/dodge:7.45/parry:4.36/block:0/block_value:1
+# resistances=holy:0/fire:2/nature:2/frost:2/shadow:2/arcane:2
+# weapon_damage=mainhand:109.26:139.86:3.60/pos_buff:0/neg_buff:0/percent:1.02/ranged:79.90:100.28:2/ranged_pos_buff:0/ranged_neg_buff:0/ranged_percent:1.02
+# pet_info=type:beast/talent_tree:default/loyalty:best_friend/loyalty_rate:20
+# pet_stats=health:1107/power_type:2/mana:0/rage:0/focus:100/energy:0/strength:0/agility:0/stamina:0/intellect:0/spirit:0
+# pet_stats_base=strength:0/agility:0/stamina:0/intellect:0/spirit:0
+# pet_stats_bonus=strength:0/agility:0/stamina:0/intellect:0/spirit:0
+# pet_attack_power=melee:96:26:0/ranged:0:0:0
+# pet_modifiers=spell_power:0/haste_melee:0/hit_melee_modifier:0/hit_spell_modifier:0
+# pet_defense=armor_base:1629/armor_effective:1664/armor:1664/armor_bonus:35/defense_skill:140/defense_modifier:0
+# pet_resistances=holy:0/fire:31/nature:31/frost:31/shadow:31/arcane:31
+# pet_weapon_damage=mainhand:71.09:92.28:2/pos_buff:0/neg_buff:0/percent:1
+#
+# skills=44:53:0:145/45:144:0:145/50:1:0:1/51:1:0:1/55:74:0:145/95:129:0:145/109:300:0:300/129:138:0:225/136:1:0:145/162:2:0:145/163:1:0:1/165:101:0:150/172:139:0:145/173:1:0:145/185:2:0:75/393:170:0:225/414:1:0:1/415:1:0:1/2939:2:0:75/2942:138:0:225/2945:101:0:150/2947:170:0:225
+#
+# buffs=14318:0/19883:0
+
+# Checksum: 6c057507

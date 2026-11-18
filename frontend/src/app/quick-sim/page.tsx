@@ -12,6 +12,7 @@ import TalentPicker from '../components/talents/TalentPicker';
 import GearOverview from '../components/gear/GearOverview';
 import ConfigFooter from '../components/sim-config/ConfigPanel';
 import SimSettingsBlock from '../components/sim-config/SimSettingsBlock';
+import ForeverQuickSim from '../components/forever/ForeverQuickSim';
 import { specDisplayName } from '../lib/types';
 import { API_URL } from '../lib/api';
 import { useResolvedGear, equippedGearItems } from '../lib/useResolvedGear';
@@ -57,7 +58,7 @@ function useLastSim(name: string | null, realm: string | null): LastSim | null {
   return lastSim;
 }
 
-export default function QuickSimPage() {
+function RetailQuickSim() {
   const { simcInput, hasInput, statWeights, unsimmableSpec } = useSimContext();
   const { t } = useLanguage();
   const [compute, setCompute] = useComputeChoice('quick');
@@ -183,6 +184,22 @@ export default function QuickSimPage() {
         compute={compute}
         onComputeChange={setCompute}
       />
+    </div>
+  );
+}
+
+export default function QuickSimPage() {
+  const { game } = useSimContext();
+  const { t } = useLanguage();
+  if (game !== 'forever') return <RetailQuickSim />;
+  return (
+    <div className="space-y-5 pb-20">
+      <PageHeader
+        eyebrow={t('nav.simTools')}
+        title={t('nav.quickSim')}
+        subtitle={t('page.quickSimSubtitle')}
+      />
+      <ForeverQuickSim />
     </div>
   );
 }

@@ -23,8 +23,11 @@ export default function LogConsole({
   lines,
   totalLines,
   headerRight,
+  title,
 }: {
   lines: string[];
+  /** The header; SimC's output unless another engine wrote the lines. */
+  title?: string;
   /** Line count shown in the header, when `lines` is a filtered view. */
   totalLines?: number;
   headerRight?: ReactNode;
@@ -48,7 +51,7 @@ export default function LogConsole({
   return (
     <section className="card w-full overflow-hidden">
       <CardHeader
-        title={t('results.simcOutput')}
+        title={title ?? t('results.simcOutput')}
         right={
           <div className="flex items-center gap-3">
             {headerRight}

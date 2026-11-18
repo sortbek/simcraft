@@ -15,6 +15,13 @@ function createAppConfig(app) {
     return path.join(app.getPath("userData"), "simc");
   }
 
+  function getForeverDir() {
+    if (isDev) {
+      return path.join(__dirname, "..", "..", "..", "backend", "resources", "forever");
+    }
+    return path.join(app.getPath("userData"), "forever");
+  }
+
   function getResourcePath(type, ...segments) {
     if (isDev) {
       return path.join(__dirname, "..", "..", "..", "backend", "resources", type, ...segments);
@@ -64,6 +71,7 @@ function createAppConfig(app) {
     getFrontendUrl,
     getResourcePath,
     getSimcDir,
+    getForeverDir,
     getUserDataPath,
     isLocalUrl,
   };

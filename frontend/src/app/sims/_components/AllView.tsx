@@ -71,6 +71,11 @@ function HistoryRow({ job, trailing }: { job: JobOverviewSummary; trailing: Reac
         <Pill variant={SIM_TYPE_PILL[job.sim_type] ?? 'neutral'}>
           {SIM_TYPE_LABELS[job.sim_type] || job.sim_type}
         </Pill>
+        {job.game === 'forever' && (
+          <span className="ml-1.5 rounded-[4px] bg-[rgb(22_140_146/0.15)] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[rgb(22_140_146)]">
+            {t('game.forever')}
+          </span>
+        )}
       </td>
       <td className={`${TD} text-right`}>
         {job.dps ? (

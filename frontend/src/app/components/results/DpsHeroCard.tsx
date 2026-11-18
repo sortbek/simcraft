@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { API_URL } from '../../lib/api';
+import { formatDpsExact } from '../../lib/format';
+import { FOREVER_REALM } from '../../lib/game';
 import { useLanguage } from '../../lib/i18n';
 import { useRealmSlug } from '../../lib/realms';
 import Pill from '../ui/Pill';
@@ -31,6 +33,8 @@ function heroGlow(faction: string | null): string {
 }
 
 interface DpsHeroCardProps {
+  /** "hps" for a healer's result; the number is then healing per second. */
+  metric?: string;
   playerName: string;
   playerClass: string;
   playerRealm?: string;
@@ -49,6 +53,7 @@ interface DpsHeroCardProps {
 }
 
 export default function DpsHeroCard({
+  metric,
   playerName,
   playerClass,
   playerRealm,
@@ -115,17 +120,17 @@ export default function DpsHeroCard({
       <div className="relative z-10 px-9 pb-[30px] pt-[34px]">
         <h1 className="font-headline text-[34px] font-extrabold uppercase leading-none tracking-[-0.01em] text-on-surface">
           {playerName}
-          {playerRealm ? `-${playerRealm}` : ''}
+          {playerRealm && playerRealm !== FOREVER_REALM ? `-${playerRealm}` : ''}
         </h1>
         <p className="mt-2.5 font-headline text-[13px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
           {playerClass}
         </p>
         <div className="mt-[26px] flex items-baseline gap-2.5">
           <span className="font-headline text-[92px] font-extrabold tabular-nums leading-[0.9] tracking-[-0.03em] text-gold [text-shadow:0_0_60px_rgb(var(--c-primary)/var(--hero-glow-a))]">
-            {Math.round(dps).toLocaleString()}
+            {formatDpsExact(dps, dps)}
           </span>
           <span className="font-headline text-xl font-extrabold tracking-[0.04em] text-gold-dark">
-            {t('results.dps')}
+            {t(metric === 'hps' ? 'results.hps' : 'results.dps')}
           </span>
         </div>
         {dpsDelta != null && dpsDeltaPct != null && (

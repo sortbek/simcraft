@@ -541,6 +541,12 @@ export function getWowheadSpellUrl(spellId: number, locale?: string): string {
   return `https://${domain}/spell=${spellId}`;
 }
 
+/** Wowhead's WoW Forever pages; Forever items and talents have no retail page. */
+export function getForeverWowheadUrl(kind: 'item' | 'spell', id: number, locale?: string): string {
+  const domain = (locale && WOWHEAD_DOMAINS[locale]) || 'www.wowhead.com';
+  return `https://${domain}/forever/${kind}=${id}`;
+}
+
 /** Normalize the two gem-id shapes (legacy `gem_id`, full `gem_ids` array) into one
  *  filtered list. Use whenever rendering or querying Wowhead with a slot's gems. */
 export function toGemIdList(opts: { gem_id?: number; gem_ids?: number[] }): number[] {

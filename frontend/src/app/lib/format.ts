@@ -11,3 +11,13 @@ export function formatDps(value: number, decimals: 0 | 1 = 1): string {
   }
   return Math.round(value).toLocaleString();
 }
+
+/** A whole number, or one decimal while the sim's DPS is under 10k (WoW Forever), where a
+ *  single point is already a real step. `scale` is the DPS the value belongs to. */
+export function formatDpsExact(value: number, scale: number): string {
+  const decimals = Math.abs(scale) < 10_000 ? 1 : 0;
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}

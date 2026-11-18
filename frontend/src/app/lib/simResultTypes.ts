@@ -12,6 +12,49 @@ export interface AbilityBreakdown {
   children?: AbilityBreakdown[];
 }
 
+/** A Forever ability with what the engine counted for it. */
+export interface ForeverAbilityDetail {
+  name: string;
+  /** The pet whose ability it is; empty for the player's own. */
+  owner: string;
+  spell_id?: number | null;
+  icon?: string | null;
+  dps: number;
+  /** Casts a fight. */
+  casts: number;
+  per_cast: number;
+  crit_pct: number;
+  miss_pct: number;
+}
+
+export interface ForeverUptime {
+  name: string;
+  spell_id?: number | null;
+  icon?: string | null;
+  uptime_pct: number;
+}
+
+/** Mana gained from or spent on something, a fight. */
+export interface ForeverFlow {
+  name: string;
+  icon?: string | null;
+  amount: number;
+}
+
+/** One logged fight. Times are seconds from the pull; the prepull is negative. */
+export interface ForeverTimeline {
+  duration: number;
+  casts: { t: number; name: string; icon?: string | null; owner: string }[];
+  auras: {
+    name: string;
+    icon?: string | null;
+    on: 'player' | 'target';
+    spans: [number, number][];
+  }[];
+  /** [time, mana after the change]. */
+  mana: [number, number][];
+}
+
 /** Fields injected post-parse (helpers.rs) + Simmit provider metadata.
  *  Present on both result shapes, all optional. */
 interface InjectedResultFields {
@@ -54,6 +97,8 @@ export interface SimSetup {
 interface CommonResultFields extends InjectedResultFields {
   player_name: string;
   player_class: string;
+  /** "hps" when the numbers are healing per second (Forever healers). */
+  metric?: string;
   dps_error?: number;
   dps_error_pct?: number;
   fight_length: number;
@@ -76,6 +121,42 @@ export interface QuickSimResult extends CommonResultFields {
   base_dps?: number;
   abilities?: AbilityBreakdown[];
   stat_weights?: Record<string, number>;
+  /** Forever only: what its engine reports beyond the breakdown. */
+  dps_min?: number;
+  dps_max?: number;
+  dps_stdev?: number;
+  /** [bucket, fights], lowest bucket first. */
+  dps_hist?: [number, number][];
+  ability_details?: ForeverAbilityDetail[];
+  buffs?: ForeverUptime[];
+  debuffs?: ForeverUptime[];
+  oom_seconds?: number;
+  dps_median?: number | null;
+  /** Spell and item casts a minute. */
+  apm?: number;
+  mana?: { gains: ForeverFlow[]; spends: ForeverFlow[]; wasted: number };
+  timeline?: ForeverTimeline | null;
+  rotation?: {
+    id: string | null;
+    prepull: { at: string; text: string }[];
+    lines: { text: string; condition: string | null }[];
+  } | null;
+  sim_settings?: {
+    level: number;
+    target_level: number;
+    talents_string: string;
+    /** Chosen toggle ids; null ran the build's own set. */
+    buffs: string[] | null;
+    consumables: boolean | null;
+    /** The sets and target the runner filled in. */
+    applied?: {
+      target?: { level: number; armor: number };
+      raidBuffs?: Record<string, unknown>;
+      partyBuffs?: Record<string, unknown>;
+      playerBuffs?: Record<string, unknown>;
+      debuffs?: Record<string, unknown>;
+    };
+  } | null;
 }
 
 /** Top Gear / Drop Finder / Upgrade Compare / Enchant-Gem result. */

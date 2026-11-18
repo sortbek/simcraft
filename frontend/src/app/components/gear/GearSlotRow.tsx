@@ -4,6 +4,7 @@
 import {
   QUALITY_COLORS,
   getWowheadData,
+  getForeverWowheadUrl,
   getWowheadUrl,
   localizedEnchantName,
   localizedGemName,
@@ -66,14 +67,22 @@ export default function GearSlotRow({
   const enchant = item.enchant_id ? enchantInfoMap[item.enchant_id] : undefined;
   const gemIdList = toGemIdList(item);
   const gems = gemIdList.map((id) => gemInfoMap[id]).filter((g): g is GemInfo => !!g);
-  const qualityColor = info ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
-  const name = localizedItemName(
-    item.item_id,
-    info?.name || item.name || `Item ${item.item_id}`,
-    locale
-  );
-  const icon = info?.icon || 'inv_misc_questionmark';
-  const wowheadData = item.item_id > 0 ? getWowheadData(item) : undefined;
+  // WoW Forever items carry their own name, icon and quality; the retail lookup does not know them.
+  const own = item.quality !== undefined;
+  const quality = own ? item.quality : info?.quality;
+  const qualityColor =
+    quality !== undefined ? QUALITY_COLORS[quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
+  const name = own
+    ? item.name
+    : localizedItemName(item.item_id, info?.name || item.name || `Item ${item.item_id}`, locale);
+  const icon = (own ? item.icon : info?.icon) || 'inv_misc_questionmark';
+  const wowheadData = item.item_id > 0 && !own ? getWowheadData(item) : undefined;
+  const wowheadUrl =
+    item.item_id > 0
+      ? own
+        ? getForeverWowheadUrl('item', item.item_id, locale)
+        : getWowheadUrl(item.item_id, locale)
+      : undefined;
   const fadeDir = rtl ? 'to left' : 'to right';
 
   return (
@@ -106,7 +115,7 @@ export default function GearSlotRow({
         />
       )}
       <a
-        href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
+        href={wowheadUrl}
         data-wowhead={wowheadData}
         className="relative block h-[38px] w-[38px] shrink-0 overflow-hidden rounded-[5px] border"
         style={{ borderColor: qualityColor }}
@@ -127,7 +136,7 @@ export default function GearSlotRow({
       <div className={`min-w-0 flex-1 ${rtl ? 'text-right' : ''}`}>
         <div className={`flex items-center gap-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
           <a
-            href={item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
+            href={wowheadUrl}
             data-wowhead={wowheadData}
             className="truncate text-sm font-semibold leading-tight no-underline"
             style={{ color: qualityColor }}

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import {
+  getForeverWowheadUrl,
   getWowheadData,
   getWowheadUrl,
   iconProps,
@@ -62,6 +63,8 @@ function ItemPip({
   const { t, locale } = useLanguage();
   const item = result.items[0];
   const info = item ? itemInfoMap[item.item_id] : undefined;
+  // WoW Forever items carry their own icon and link to Wowhead's Forever pages.
+  const own = item?.quality !== undefined;
   const pct = baseDps > 0 ? (result.delta / baseDps) * 100 : 0;
   const notable = pct >= NOTABLE_PCT;
   const source = item?.is_catalyst && item.source_item_id ? item.source_item_id : 0;
@@ -79,8 +82,14 @@ function ItemPip({
           advertise its gems or its conversion any brighter than itself. */}
       <div className={`relative ${notable ? '' : 'opacity-35'}`}>
         <a
-          href={item && item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
-          data-wowhead={item && item.item_id > 0 ? getWowheadData(item) : undefined}
+          href={
+            item && item.item_id > 0
+              ? own
+                ? getForeverWowheadUrl('item', item.item_id, locale)
+                : getWowheadUrl(item.item_id, locale)
+              : undefined
+          }
+          data-wowhead={item && item.item_id > 0 && !own ? getWowheadData(item) : undefined}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(event) => event.preventDefault()}
@@ -90,7 +99,7 @@ function ItemPip({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            {...iconProps(info?.icon || 'inv_misc_questionmark')}
+            {...iconProps((own ? item.icon : info?.icon) || 'inv_misc_questionmark')}
             alt=""
             width={32}
             height={32}
@@ -240,19 +249,19 @@ export default function EncounterSummary({
 
       <div className="divide-y divide-outline-variant/15">
         {rows.map((row: EncounterSummaryRow) => {
-          const open = expanded.has(row.encounter);
-          const panelId = `source-${row.encounter.replace(/\W+/g, '-')}`;
+          const open = expanded.has(row.key);
+          const panelId = `source-${row.key.replace(/\W+/g, '-')}`;
           return (
-            <div key={row.encounter} className="py-3 first:pt-0">
+            <div key={row.key} className="py-3 first:pt-0">
               <div
-                onClick={() => toggle(row.encounter)}
+                onClick={() => toggle(row.key)}
                 className="flex cursor-pointer flex-wrap items-center gap-x-5 gap-y-3 rounded-lg px-1 transition-colors hover:bg-overlay/[0.03]"
               >
                 <button
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    toggle(row.encounter);
+                    toggle(row.key);
                   }}
                   aria-expanded={open}
                   aria-controls={panelId}

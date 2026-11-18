@@ -137,6 +137,45 @@
   --c-route-boss: 176 120 0;
 }
 
+/* WoW Forever: the Forever site's teal on neutral graphite surfaces. Swapped by data-game on <html>. */
+:root[data-game='forever'][data-theme='forge'] {
+  --c-background: 10 11 12;
+  --c-surface-container-lowest: 7 8 9;
+  --c-surface-container-low: 14 15 16;
+  --c-surface-container: 17 18 20;
+  --c-surface-container-high: 22 24 26;
+  --c-surface-container-highest: 31 33 36;
+  --c-popover: 21 23 25;
+  --c-on-surface: 234 236 236;
+  --c-on-surface-variant: 182 187 189;
+  --c-outline: 118 124 128;
+  --c-outline-variant: 100 106 110;
+  --c-fg-4: 80 85 89;
+  --c-primary: 64 182 186;
+  --c-primary-container: 38 146 150;
+  --c-primary-fill: 16 100 104;
+  --c-primary-fill-hover: 22 122 126;
+  --c-gold-light: 120 206 209;
+  --c-on-primary: 255 255 255;
+  --c-on-badge: 29 19 0;
+  --gold-edge: rgb(64 182 186 / 0.4);
+}
+/* Parchment keeps its surfaces (they already match the site); text uses a darker teal for contrast. */
+:root[data-game='forever'][data-theme='parchment'] {
+  --c-primary: 12 88 92;
+  --c-primary-container: 16 100 104;
+  --c-primary-fill: 16 100 104;
+  --c-primary-fill-hover: 22 122 126;
+  --c-gold-light: 9 70 73;
+  --c-on-primary: 255 255 255;
+  --gold-tint: rgb(220 237 235);
+  --gold-sel: rgb(228 241 239);
+  --gold-edge: rgb(16 100 104);
+  --cb-ring: rgb(228 241 239);
+  --btn-solid-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 2px 6px rgb(12 88 92 / 0.25);
+  --nav-on-bg: linear-gradient(rgb(230 241 239), rgb(230 241 239));
+}
+
 @layer base {
   html {
     scrollbar-gutter: stable;

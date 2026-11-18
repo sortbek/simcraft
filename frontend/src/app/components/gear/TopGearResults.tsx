@@ -8,8 +8,10 @@ import GearOverview from './GearOverview';
 import TopGearRankings from './TopGearRankings';
 import EncounterSummary from './EncounterSummary';
 import { useEnchantInfo, useGemInfo, useItemInfo } from '../../lib/useItemInfo';
+import { formatDpsExact } from '../../lib/format';
 import { useLanguage } from '../../lib/i18n';
 import { useRealmSlug } from '../../lib/realms';
+import { useForeverSd } from '../forever/useForeverSd';
 import { useWowheadTooltips, wowheadKeyFor } from '../../lib/useWowheadTooltips';
 import type { GearItem } from './gearOverviewTypes';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
@@ -32,6 +34,7 @@ import {
 } from './topGearResultsUtils';
 
 export default function TopGearResults({
+  metric,
   playerName,
   playerClass,
   playerRealm,
@@ -123,12 +126,14 @@ export default function TopGearResults({
   const characterRenderUrl = getCharacterRenderUrl(
     useRealmSlug(playerRealm),
     playerName,
-    playerRegion
+    playerRegion,
+    useForeverSd()[0]
   );
 
   return (
     <div className="space-y-6">
       <DpsHeroCard
+        metric={metric}
         playerName={playerName}
         playerClass={playerClass}
         playerRealm={playerRealm}
@@ -145,7 +150,7 @@ export default function TopGearResults({
         {heroResult ? (
           <div className="mt-3.5 inline-flex items-center gap-1.5 rounded-md bg-positive/10 px-3 py-1.5 text-positive">
             <span className="text-sm font-semibold tabular-nums">
-              +{Math.round(heroResult.delta).toLocaleString()}
+              +{formatDpsExact(heroResult.delta, heroResult.dps)}
             </span>
             <span className="text-xs opacity-60">{t('gear.upgradeText')}</span>
           </div>
@@ -285,7 +290,7 @@ function CompareOverview({
             }`}
           >
             {delta > 0 ? '+' : ''}
-            {Math.round(delta).toLocaleString()} ({delta > 0 ? '+' : ''}
+            {formatDpsExact(delta, selectedResult.dps)} ({delta > 0 ? '+' : ''}
             {deltaPct.toFixed(2)}%)
           </span>
         </div>

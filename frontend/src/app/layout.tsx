@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             // The share viewer on simhammer.com is dark-only, so it keeps the default theme.
             __html: VIEWER_BUILD
               ? ''
-              : `if(window.electronAPI)document.documentElement.setAttribute("data-desktop","");try{var t=localStorage.getItem("simhammer_theme");if(t==="daylight")t="parchment";if(t!=="forge"&&t!=="parchment")t="forge";localStorage.setItem("simhammer_theme",t);document.documentElement.setAttribute("data-theme",t);if(localStorage.getItem("simhammer_sidebar")==="collapsed")document.documentElement.setAttribute("data-sidebar","collapsed")}catch(e){document.documentElement.setAttribute("data-theme","forge")}`,
+              : `if(window.electronAPI)document.documentElement.setAttribute("data-desktop","");try{var t=localStorage.getItem("simhammer_theme");if(t==="daylight")t="parchment";if(t!=="forge"&&t!=="parchment")t="forge";localStorage.setItem("simhammer_theme",t);document.documentElement.setAttribute("data-theme",t);if(localStorage.getItem("simhammer_sidebar")==="collapsed")document.documentElement.setAttribute("data-sidebar","collapsed");if(localStorage.getItem("simhammer_game")==="forever")document.documentElement.setAttribute("data-game","forever")}catch(e){document.documentElement.setAttribute("data-theme","forge")}`,
           }}
         />
         <Script
