@@ -694,7 +694,8 @@ mod tests {
         let bin = fake_engine(dir.path(), "sleep 30");
         let (tx, rx) = tokio::sync::watch::channel(false);
         let started = std::time::Instant::now();
-        let run = run_cli(&bin, "sim", &serde_json::json!({}), &[], rx, |_| {}, |_| {});
+        let request = serde_json::json!({});
+        let run = run_cli(&bin, "sim", &request, &[], rx, |_| {}, |_| {});
         let cancel = async {
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             tx.send(true).unwrap();
