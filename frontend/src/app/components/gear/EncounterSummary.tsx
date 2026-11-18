@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useLanguage } from '../../lib/i18n';
 import {
+  getForeverWowheadUrl,
   getWowheadData,
   getWowheadUrl,
   iconProps,
@@ -62,6 +63,8 @@ function ItemPip({
   const { t, locale } = useLanguage();
   const item = result.items[0];
   const info = item ? itemInfoMap[item.item_id] : undefined;
+  // WoW Forever items carry their own icon and link to Wowhead's Forever pages.
+  const own = item?.quality !== undefined;
   const pct = baseDps > 0 ? (result.delta / baseDps) * 100 : 0;
   const notable = pct >= NOTABLE_PCT;
   const source = item?.is_catalyst && item.source_item_id ? item.source_item_id : 0;
@@ -79,8 +82,14 @@ function ItemPip({
           advertise its gems or its conversion any brighter than itself. */}
       <div className={`relative ${notable ? '' : 'opacity-35'}`}>
         <a
-          href={item && item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined}
-          data-wowhead={item && item.item_id > 0 ? getWowheadData(item) : undefined}
+          href={
+            item && item.item_id > 0
+              ? own
+                ? getForeverWowheadUrl('item', item.item_id, locale)
+                : getWowheadUrl(item.item_id, locale)
+              : undefined
+          }
+          data-wowhead={item && item.item_id > 0 && !own ? getWowheadData(item) : undefined}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(event) => event.preventDefault()}
@@ -90,7 +99,7 @@ function ItemPip({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            {...iconProps(info?.icon || 'inv_misc_questionmark')}
+            {...iconProps((own ? item.icon : info?.icon) || 'inv_misc_questionmark')}
             alt=""
             width={32}
             height={32}
