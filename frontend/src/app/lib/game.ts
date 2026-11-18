@@ -20,13 +20,21 @@ export function foreverRuleset(server: string): ForeverRuleset {
   return rp ? (pvp ? 'roleplayPvp' : 'roleplay') : pvp ? 'pvp' : 'normal';
 }
 
-/** Same rule as the backend: a 1.x client or a TOC below 20000 is WoW Forever. */
+/** Same rule as the backend's `detect_game`: a `# WoW` header in the first 20 lines with a 1.x
+ *  client, or a TOC below 20000, is WoW Forever. */
 export function detectGame(simcInput: string): Game {
   // The MythicSim addon's JSON export only exists for Forever.
   if (/^\s*\{/.test(simcInput) && simcInput.includes('"mythicsim"')) return 'forever';
-  const m = simcInput.match(/^#\s*WoW\s+(\d+)\.[^,\n]*,\s*TOC\s+(\d+)/m);
-  if (!m) return 'retail';
-  return Number(m[1]) === 1 || Number(m[2]) < 20000 ? 'forever' : 'retail';
+  const header = simcInput
+    .split(/\r?\n/, 20)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('# WoW '));
+  if (!header) return 'retail';
+  const rest = header.slice('# WoW '.length);
+  const number = (part: string | undefined) =>
+    part !== undefined && /^\d+$/.test(part.trim()) ? Number(part.trim()) : null;
+  const toc = number(rest.split('TOC')[1]);
+  return number(rest.split('.')[0]) === 1 || (toc !== null && toc < 20000) ? 'forever' : 'retail';
 }
 
 const read = (): Game =>

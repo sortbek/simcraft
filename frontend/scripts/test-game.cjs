@@ -15,6 +15,12 @@ test('retail header', () => {
 test('no header', () => {
   assert.equal(detectGame('paladin="X"\nlevel=80\n'), 'retail');
 });
+test('a 1.x client is Forever without a TOC; a header past line 20 is not read', () => {
+  assert.equal(detectGame('# WoW 1.15.7.61186\n'), 'forever');
+  assert.equal(detectGame('# WoW 12.0.5.66102\n'), 'retail');
+  assert.equal(detectGame('\n'.repeat(20) + '# WoW 1.60.1.70374, TOC 16001\n'), 'retail');
+  assert.equal(detectGame('\r\n'.repeat(19) + '# WoW 1.60.1.70374, TOC 16001\r\n'), 'forever');
+});
 
 test('the MythicSim addon export is a Forever export', () => {
   assert.equal(
