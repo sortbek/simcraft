@@ -588,6 +588,7 @@ pub fn drop_result(
 }
 
 /// The gear comparison result around the rows: the worn gear, the baseline row, best first.
+/// A row's `dpsMetrics` holds the metric the engine ranked by: HPS for a healer.
 fn gear_comparison(
     kind: &str,
     baseline: &Value,
