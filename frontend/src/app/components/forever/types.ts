@@ -83,7 +83,7 @@ export interface ForeverDropSource {
   total: number;
   /** Gear from here the character can wear. */
   count: number;
-  min_level: number | null;
+  /** Highest level the gear from here that the character can wear needs; 0 or null when none says. */
   max_level: number | null;
   /** Lowest and highest reputation standing its items need. */
   standings: [string, string] | null;

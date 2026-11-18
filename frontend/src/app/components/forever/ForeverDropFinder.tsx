@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorAlert from '../ui/ErrorAlert';
 import Checkbox from '../ui/Checkbox';
-import Pill from '../ui/Pill';
 import CategorySelector from '../loot/CategorySelector';
 import ItemTable from '../loot/ItemTable';
 import SlotFilter from '../loot/SlotFilter';
@@ -46,38 +45,30 @@ const tabKey = (c: Category) => (c === 'raid' ? 'raids' : `forever-${c}`);
 /** Above this many sources the picker gets a search box. */
 const SEARCH_ABOVE = 12;
 
-/** Sources with gear that fits first, then by level (an instance's entry level, else the lowest
- *  its items need), then by name. */
+/** Where a source sits: an instance's entry level, else the highest level its gear for you needs.
+ *  0 when nothing it has for you names a level. */
+const entryLevel = (s: ForeverDropSource) => s.level || s.max_level || 0;
+
+/** By level, sources without one last, then by name. */
 function bySourceOrder(a: ForeverDropSource, b: ForeverDropSource) {
-  if (a.count > 0 !== b.count > 0) return a.count > 0 ? -1 : 1;
-  const level = (s: ForeverDropSource) => s.level || (s.min_level ?? 0);
-  return level(a) - level(b) || a.name.localeCompare(b.name);
+  return (entryLevel(a) || 99) - (entryLevel(b) || 99) || a.name.localeCompare(b.name);
 }
 
 const bossKey = (source: string, from: string) => `boss:${source}:${from}`;
 const rowUid = (source: string, itemId: number) => `${source}|${itemId}`;
 
-function SourceChip({
+/** One line per source: checkbox, name, level. The rest is in its tooltip. */
+function SourceRow({
   source,
   checked,
   onToggle,
-  level,
 }: {
   source: ForeverDropSource;
   checked: boolean;
   onToggle: () => void;
-  level: number;
 }) {
   const { t } = useLanguage();
   const fits = source.count > 0;
-  const levels =
-    source.level > 0
-      ? `L${source.level}`
-      : fits && source.min_level != null && source.max_level != null
-        ? source.min_level === source.max_level
-          ? `L${source.min_level}`
-          : `L${source.min_level}–${source.max_level}`
-        : '';
   const standing = (s: string) => t(`forever.drops.standing.${s}`);
   const standings = source.standings
     ? source.standings[0] === source.standings[1]
@@ -87,54 +78,38 @@ function SourceChip({
           to: standing(source.standings[1]),
         })
     : '';
-  const detail = [levels, source.zone, standings].filter(Boolean).join(' · ');
+  const items = fits
+    ? t('forever.drops.itemsForYou', { count: source.count })
+    : source.total === 0
+      ? t('forever.drops.noneKnown')
+      : t('forever.drops.noneFit');
+  const level = entryLevel(source);
   return (
     <button
       type="button"
       disabled={!fits}
       onClick={onToggle}
       aria-pressed={checked}
-      className={cn(
-        'flex w-full min-w-0 items-center gap-2.5 rounded-[6px] px-2.5 py-2 text-left transition-colors',
-        checked ? 'bg-gold/[0.08]' : 'hover:bg-surface-container-highest',
-        !fits && 'cursor-default opacity-45 hover:bg-transparent'
-      )}
+      title={[source.name, source.zone, standings, items].filter(Boolean).join(' · ')}
+      className="flex w-full break-inside-avoid items-center gap-2.5 rounded-[6px] px-2 py-[7px] text-left transition-colors hover:bg-surface-container-high disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent"
     >
       <Checkbox checked={checked} size="sm" aria-label={source.name} />
-      <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate text-[13.5px]',
+          checked ? 'text-on-surface' : 'text-on-surface-variant'
+        )}
+      >
+        {/* A vendor's <title> is in the tooltip. */}
+        {source.name.replace(/\s*<.*>$/, '')}
+        {source.new && (
           <span
-            className={cn(
-              'truncate text-[13px] font-semibold',
-              checked ? 'text-on-surface' : 'text-on-surface-variant'
-            )}
-          >
-            {source.name}
-          </span>
-          {source.new && (
-            <Pill size="sm" variant="info" className="shrink-0">
-              {t('forever.drops.new')}
-            </Pill>
-          )}
-        </span>
-        {detail && (
-          <span
-            className={cn(
-              'block truncate text-[11px] tabular-nums',
-              source.level > level ? 'text-outline' : 'text-on-surface-variant'
-            )}
-          >
-            {detail}
-          </span>
+            title={t('forever.drops.new')}
+            className="ml-[7px] inline-block h-1.5 w-1.5 rounded-full bg-primary align-[2px]"
+          />
         )}
       </span>
-      <span className="shrink-0 text-[11px] font-bold tabular-nums text-outline">
-        {fits
-          ? source.count
-          : source.total === 0
-            ? t('forever.drops.noneKnown')
-            : t('forever.drops.noneFit')}
-      </span>
+      <span className="shrink-0 text-xs tabular-nums text-fg-4">{level || ''}</span>
     </button>
   );
 }
@@ -151,7 +126,7 @@ export default function ForeverDropFinder() {
   const [category, setCategory] = useState<Category>('dungeon');
   const [pool, setPool] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
-  const [showEmpty, setShowEmpty] = useState(false);
+  const [showLater, setShowLater] = useState(false);
   const [excludedBosses, setExcludedBosses] = useState<Set<string>>(new Set());
   const [excludedSlots, setExcludedSlots] = useState<Set<string>>(new Set());
   const [deselected, setDeselected] = useState<Set<string>>(new Set());
@@ -181,13 +156,14 @@ export default function ForeverDropFinder() {
     () => groups.filter((g) => g.category === category).sort(bySourceOrder),
     [groups, category]
   );
-  const fitting = inCategory.filter((g) => g.count > 0);
-  const emptyCount = inCategory.length - fitting.length;
+  // Gear for later: nothing wearable yet, or an instance the character is below.
+  const usable = (g: ForeverDropSource) => g.count > 0 && entryLevel(g) <= (summary?.level ?? 0);
+  const now = inCategory.filter(usable);
+  const later = inCategory.filter((g) => !usable(g));
   const query = search.trim().toLocaleLowerCase();
-  const listed = (showEmpty ? inCategory : fitting).filter(
+  const listed = (showLater ? [...now, ...later] : now).filter(
     (g) => !query || g.name.toLocaleLowerCase().includes(query)
   );
-  const pickedHere = fitting.filter((g) => pool.has(g.key)).length;
 
   // The picked sources, across every tab, in the order the server lists them.
   const picked = useMemo(() => groups.filter((g) => pool.has(g.key)), [groups, pool]);
@@ -326,7 +302,7 @@ export default function ForeverDropFinder() {
     if (!next) return;
     setCategory(next);
     setSearch('');
-    setShowEmpty(false);
+    setShowLater(false);
   };
 
   const status = blocked
@@ -359,75 +335,52 @@ export default function ForeverDropFinder() {
           )}
           {sources?.available && (
             <>
-              <CategorySelector
-                category={tabKey(category)}
-                onChange={selectCategory}
-                dungeonCats={tabs}
-                className="-mx-8 !mt-3 px-8"
-              />
-              <div className="card">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line/[0.06] px-5 py-3">
-                  <span className="lbl">{t('forever.drops.sources')}</span>
-                  <Pill className="tabular-nums">
-                    {pickedHere}/{fitting.length}
-                  </Pill>
-                  {inCategory.length > SEARCH_ABOVE && (
+              <div className="-mx-8 !mt-3 flex px-8">
+                <CategorySelector
+                  category={tabKey(category)}
+                  onChange={selectCategory}
+                  dungeonCats={tabs}
+                  className="min-w-0 flex-1"
+                />
+                {inCategory.length > SEARCH_ABOVE && (
+                  <div className="flex items-center border-b border-line/[0.06] pl-4">
                     <input
                       type="text"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder={t('forever.drops.searchSources')}
-                      className="input-field h-8 max-w-[240px] flex-[1_1_160px] py-0 !text-[13px]"
+                      className="w-44 border-b border-line/15 bg-transparent py-1.5 text-[13px] text-on-surface placeholder:text-fg-4 focus:border-primary focus:outline-none"
                     />
-                  )}
-                  <span className="ml-auto flex items-center gap-4">
-                    {emptyCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowEmpty((v) => !v)}
-                        className="text-xs text-on-surface-variant transition-colors hover:text-on-surface"
-                      >
-                        {showEmpty
-                          ? t('forever.drops.hideEmpty')
-                          : t('forever.drops.showEmpty', { count: emptyCount })}
-                      </button>
-                    )}
-                    {fitting.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPool((p) =>
-                            toggleIn(
-                              p,
-                              fitting.map((g) => g.key)
-                            )
-                          )
-                        }
-                        className="font-headline text-[10px] font-extrabold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-light"
-                      >
-                        {pickedHere === fitting.length
-                          ? t('dropFinder.deselectAll')
-                          : t('dropFinder.selectAll')}
-                      </button>
-                    )}
-                  </span>
-                </div>
+                  </div>
+                )}
+              </div>
+              <div className="card p-3">
                 {listed.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-0.5 p-2 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="columns-1 gap-2 sm:columns-2 xl:columns-3">
                     {listed.map((g) => (
-                      <SourceChip
+                      <SourceRow
                         key={g.key}
                         source={g}
                         checked={pool.has(g.key)}
                         onToggle={() => setPool((p) => toggleIn(p, [g.key]))}
-                        level={summary.level}
                       />
                     ))}
                   </div>
                 ) : (
-                  <p className="px-5 py-4 text-sm text-outline">
+                  <p className="px-2 py-1.5 text-sm text-outline">
                     {query ? t('loot.noItemsMatch') : t('forever.drops.nothingHere')}
                   </p>
+                )}
+                {later.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowLater((v) => !v)}
+                    className="mx-2 mt-2 text-[12.5px] text-fg-4 transition-colors hover:text-on-surface-variant"
+                  >
+                    {showLater
+                      ? t('forever.drops.hideLater')
+                      : t('forever.drops.showLater', { count: later.length })}
+                  </button>
                 )}
               </div>
               {picked.length > 0 ? (

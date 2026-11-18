@@ -505,7 +505,6 @@ pub(super) async fn drop_sources(
                 "total": g.total,
                 "count": g.items.len(),
                 "items": items,
-                "min_level": levels.iter().min(),
                 "max_level": levels.iter().max(),
                 "standings": standings.iter().min().map(|lo| {
                     [STANDINGS[*lo], STANDINGS[*standings.iter().max().unwrap_or(lo)]]

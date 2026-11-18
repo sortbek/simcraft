@@ -208,7 +208,11 @@ pub fn catalog(ch: &ForeverCharacter, data: &ForeverData) -> Vec<DropGroup> {
                 .filter(|e| e.side.is_empty() || Some(e.side.as_str()) == side)
                 .filter(|e| e.classes.is_empty() || e.classes.contains(&ch.class))
                 .filter_map(|e| {
-                    let item = data.items.get(&e.id).filter(|i| !i.suffix)?;
+                    // Grey items are vendor trash, never an upgrade worth simming.
+                    let item = data
+                        .items
+                        .get(&e.id)
+                        .filter(|i| !i.suffix && i.quality > 0)?;
                     let level = item.req_level.max(e.level);
                     let slots = slots_for(item, &ch.class, ch.level);
                     (level <= ch.level && !slots.is_empty() && seen.insert(e.id)).then(|| {
@@ -390,6 +394,8 @@ mod tests {
     fn the_catalog_keeps_what_the_character_can_get_and_wear() {
         let mut suffixed = item(5, 2, "", "", "", 0);
         suffixed.suffix = true;
+        let mut grey = item(7, 2, "", "", "", 0);
+        grey.quality = 0;
         let data = data_with(
             vec![
                 item(1, 1, "leather", "", "", 20),
@@ -398,6 +404,7 @@ mod tests {
                 item(4, 2, "", "", "", 20),
                 suffixed,
                 item(6, 2, "", "", "", 0),
+                grey,
             ],
             vec![SourceGroup {
                 category: "dungeon".into(),
@@ -417,6 +424,7 @@ mod tests {
                         level: 40,
                         ..entry(6, "The Hidden Path", "", &[])
                     },
+                    entry(7, "Trash", "", &[]),
                 ],
             }],
         );
@@ -427,7 +435,7 @@ mod tests {
         ch.level = 29;
         let groups = catalog(&ch, &data);
         assert_eq!(groups[0].key, "dungeon:Shadowfang Keep");
-        assert_eq!(groups[0].total, 6);
+        assert_eq!(groups[0].total, 7);
         let got: Vec<(u32, &str)> = groups[0]
             .items
             .iter()
