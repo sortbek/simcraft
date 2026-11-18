@@ -2684,7 +2684,12 @@ mod tests {
         ensure_game_data_loaded();
         let (vf, gain) = crafted_void_forge_bonus().expect("crafted VF bonus derived");
         assert_eq!(get_bonus(vf).unwrap()["tag"], "Ascendant Venomforged");
-        assert_eq!(gain, 7);
+        // Blizzard tunes the gain (it went from 7 to 6); it is read from the bonus.
+        assert_eq!(
+            Some(gain),
+            get_bonus(vf).unwrap()["levelOffsetSecondary"]["amount"].as_u64()
+        );
+        assert!((1..=15).contains(&gain), "gain {gain}");
         // 13751 = Spark of Tides, 13836 = Myth crest, 12497 = quality rank 5.
         assert_eq!(
             crafted_void_forge(&[12214, 13751, 13836, 12497]),
