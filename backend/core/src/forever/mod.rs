@@ -18,6 +18,12 @@ use std::sync::Arc;
 pub use data::ForeverData;
 pub use detect::{detect_game, Game};
 
+const BINARY: &str = if cfg!(windows) {
+    "simhammer-forever.exe"
+} else {
+    "simhammer-forever"
+};
+
 pub struct ForeverEngine {
     pub binary: PathBuf,
     pub data: ForeverData,
@@ -32,12 +38,7 @@ impl ForeverEngine {
             Ok(tag) if !tag.trim().is_empty() => dir.join(tag.trim()),
             _ => dir.to_path_buf(),
         };
-        let name = if cfg!(windows) {
-            "simhammer-forever.exe"
-        } else {
-            "simhammer-forever"
-        };
-        let binary = base.join(name);
+        let binary = base.join(BINARY);
         if !binary.is_file() {
             return Err(format!("{} not found", binary.display()));
         }
@@ -101,8 +102,10 @@ impl ForeverInstall {
             }
             Err(e) => {
                 eprintln!("Forever engine unavailable: {e}");
-                // Without a tag the folder itself is the install, which may still be filled in.
-                *loaded = (!tag.is_empty()).then_some((tag, None));
+                // Remembered only when the binary is there and its data would not parse: the
+                // installer puts a missing binary back under the same tag.
+                let parsed = !tag.is_empty() && dir.join(&tag).join(BINARY).is_file();
+                *loaded = parsed.then_some((tag, None));
                 None
             }
         }
@@ -182,6 +185,13 @@ mod install_tests {
         assert!(install.get().is_none());
         install_at(root.path(), "forever-20261102-fixed");
         assert!(install.get().is_some(), "the next release loads");
+
+        // A binary missing is retried: the installer puts it back under the same tag.
+        install_at(root.path(), "forever-20261103-gone");
+        std::fs::remove_file(root.path().join("forever-20261103-gone").join(BINARY)).unwrap();
+        assert!(install.get().is_none());
+        std::fs::write(root.path().join("forever-20261103-gone").join(BINARY), "").unwrap();
+        assert!(install.get().is_some(), "picked up once the binary is back");
     }
 
     #[test]
