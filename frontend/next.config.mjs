@@ -2,16 +2,21 @@ import path from 'path';
 
 // VIEWER_BUILD=1: static share viewer served by simhammer.com under /viewer.
 const viewer = !!process.env.VIEWER_BUILD;
-const staticExport = !!process.env.DESKTOP_BUILD || viewer;
+// SHOWCASE_BUILD=1: the whole app on simhammer.com/showcase, answering from a
+// recorded session instead of a backend (see lib/showcase.ts).
+const showcase = !!process.env.SHOWCASE_BUILD;
+const staticExport = !!process.env.DESKTOP_BUILD || viewer || showcase;
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: staticExport ? "export" : "standalone",
   ...(viewer ? { basePath: "/viewer" } : {}),
+  ...(showcase ? { basePath: "/showcase" } : {}),
   outputFileTracingRoot: path.join(process.cwd(), '..'),
   env: {
-    NEXT_PUBLIC_API_URL: viewer ? "" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"),
+    NEXT_PUBLIC_API_URL: viewer || showcase ? "" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"),
     NEXT_PUBLIC_VIEWER_BUILD: viewer ? "1" : "",
+    NEXT_PUBLIC_SHOWCASE_BUILD: showcase ? "1" : "",
   },
   async rewrites() {
     // In dev, the renderer loads from the Next dev server (localhost:3000) but

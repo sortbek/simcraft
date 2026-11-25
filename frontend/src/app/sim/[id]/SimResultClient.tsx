@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollWhileVisible } from '../../lib/usePollWhileVisible';
 import SimResultView from '../../components/results/SimResultView';
@@ -51,13 +51,17 @@ const MAX_POLL_FAILURES = 60;
 export default function SimResultClient() {
   const { t } = useLanguage();
   const params = useParams();
+  const pathname = usePathname();
   const paramId = params.id as string;
 
-  // In static export, useParams() may initially return "_" (the generateStaticParams
-  // placeholder) before the router reconciles with the actual URL. Fall back to the URL.
+  // In static export, useParams() returns "_" (the generateStaticParams placeholder):
+  // the id is in the URL. During an in-app navigation the address bar still shows the
+  // previous page, so the router's pathname comes first.
   let id = paramId;
-  if ((!paramId || paramId === '_') && typeof window !== 'undefined') {
-    const match = window.location.pathname.match(/\/sim\/(.+)/);
+  if (!paramId || paramId === '_') {
+    const match =
+      pathname?.match(/\/sim\/([^/]+)/) ??
+      (typeof window !== 'undefined' ? window.location.pathname.match(/\/sim\/(.+)/) : null);
     if (match) id = match[1];
   }
 
